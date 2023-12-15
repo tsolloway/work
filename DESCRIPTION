@@ -1,0 +1,17 @@
+Package: work
+Title: R work easier
+Version: 0.1.0
+Description: Utilities to make R work easier
+Encoding: UTF-8
+Depends: 
+  R (>= 3.5.0),
+  magrittr
+Imports:
+  devtools,
+  glue,
+  pak,
+  purrr,
+  shiny,
+  stringi,
+  usethis
+RoxygenNote: 7.2.3
