@@ -14,7 +14,7 @@ set_r_profile <- function(
 
   if( is.null(path) ) stop("Couldn't find Rprofile path")
 
-  old_lines <- readLines(path) %>% work::not_empty()
+  old_lines <- readLines(path) %>% work::remove_empty()
 
   init_lines <- c(
     ".First <- function(){",
