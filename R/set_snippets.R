@@ -3,13 +3,17 @@
 #' @export
 set_snippets <- function(path = NULL, on_exit_restart = TRUE){
 
-  if(on_exit_restart) on.exit(work::restart(obs_keep = TRUE))
+  if(on_exit_restart) on.exit(work::restart(keep = TRUE))
+
 
   if( is.null(path) ){
-    path <- work:::get_path_r("r_snippets")
+
+    path <- work::get_path("snippets_r")
 
   }else if( !is.null(path) ){
+
     path <- path %>% normalizePath(mustWork = TRUE)
+
   }
 
 
@@ -75,8 +79,12 @@ snippet restart
 	work::restart()
 
 
+snippet install
+	work::install_pkg("foo")
+
+
 snippet winstall
-	work::install_pkg("work")
+	work::install_pkg_local("work")
 
 
 snippet mehh
@@ -88,36 +96,20 @@ snippet moo
 
 
 snippet init
-	###############################
-	# Get work
-	###############################
 	install.packages("pak")
 	pak::pkg_install("rstudioapi")
 	Sys.setenv("GITHUB_PAT" = rstudioapi::askForPassword())
-	pak::pkg_install("Material-Dev/material-r-analytics", ask = FALSE, upgrade = FALSE, dependencies = TRUE)
+	.rs.restartR()
+	pak::pkg_install("tsolloway/work", ask = FALSE, upgrade = FALSE, dependencies = TRUE)
 	.rs.restartR()
 
-
-	###############################
-	# Option 1: Use Wrapper
-	###############################
-	analytics::install_r() # check if R is up to date and install proper version if necessary
-	analytics::init_install() # init wrapper function that does the steps below
-	#restart Rstudio
-
-
-	###############################
-	# Option 2: Step through setup
-	###############################
-	analytics::install_r() # check if R is up to date and install proper version if necessary
-	analytics::install_initial_recommended_r_pkgs() # installs a bunch of common R packages
-	analytics::install_material(type = "all") # installs the material packages
-	analytics:::set_r_environ("init") # sets your r environment
-	analytics:::set_r_profile("init") # sets your r to load magrittr on startup
-	analytics:::set_rstudio_prefs() # activates good productivity Rstudio preferences
-	analytics:::set_snippets() # sets productivity snippets
-	analytics::restart()
-	#restart Rstudio
+	library(work)
+	set_r_environment("git_local_dir", "~/Documents/GitHub/")
+	set_r_profile("my")
+	set_rstudio_prefs()
+	set_snippets()
+  install_init_pkgs()
+	restart()
 '
 
   writeLines(init_lines, path)
