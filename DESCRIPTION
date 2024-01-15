@@ -8,10 +8,15 @@ Depends:
   magrittr
 Imports:
   devtools,
+  dplyr,
   glue,
+  lubridate,
   pak,
   purrr,
+  rvest,
   shiny,
   stringi,
+  stringr,
+  tibble,
   usethis
 RoxygenNote: 7.2.3
