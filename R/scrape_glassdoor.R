@@ -1,15 +1,16 @@
 #' scrape_glassdoor
 #' @description Returns logical if all values in vector are unique
-#' @param company vector of glassdoor company name.
-#' @param company_number vector of glassdoor company number.
-#' @param gd_base  vector of glassdoor address base. Default to "https://www.glassdoor.com/Reviews/".
-#' @param url_instructions  vector of glassdoor url instructions. Default to "sort.sortType=RD&sort.ascending=false&filter.iso3Language=eng"
+#' @param company character vector of glassdoor company name.
+#' @param company_number character vector of glassdoor company number.
+#' @param gd_base  character vector of glassdoor address base. Default to "https://www.glassdoor.com/Reviews/".
+#' @param url_instructions  character vector of glassdoor url instructions. Default to "sort.sortType=RD&sort.ascending=false&filter.iso3Language=eng"
 #' @export
 scrape_glassdoor <- function(
     company = "Wilshrie Law Firm",
     company_number = "E799887",
     gd_base = "https://www.glassdoor.com/Reviews/",
-    url_instructions = "sort.sortType=RD&sort.ascending=false&filter.iso3Language=eng"
+    url_instructions = "sort.sortType=RD&sort.ascending=false&filter.iso3Language=eng",
+    sleep_page = 2
   ){
 
   require(rvest)
@@ -40,17 +41,24 @@ scrape_glassdoor <- function(
 
 
   reviews <- purrr::map(url_pages, ~{
-    Sys.sleep(3)
+
+    Sys.sleep(sleep_page)
+
     x <- .x %>% rvest::read_html() %>% html_elements(".empReviews") %>% html_text2()
 
     dplyr::tibble(
       "rating" = x %>% stringr::str_extract_all("\\d+\\.0") %>% unlist(),
       "date" = x %>% stringr::str_extract_all("\\b\\w{3} \\d{1,2}, \\d{4}\\b") %>% unlist(),
-      "pro" = page %>% html_elements(".empReviews") %>% html_text2() %>% stringr::str_extract_all("Pros\\n\\n([^\\n]+)\\n\\n") %>%
-        unlist() %>% gsub("(Pros\n\n|\n)", "", .) %>% gsub('\"', "'", .) %>% stringr::str_trim(),
+      "pro" = x %>% stringr::str_extract_all("Pros\\n\\n([^\\n]+)\\n\\n") %>%
+        unlist() %>% gsub("(Pros\n\n|\n)", "", .) %>% gsub('\"', "'", .) %>%
+        gsub('\r', "", .) %>% gsub(" ,", ",", .) %>% stringr::str_squish() %>%
+        stringr::str_trim(),
       "con" = x %>% stringr::str_extract_all("Cons\\n\\n([^\\n]+)\\n\\n") %>%
-        unlist() %>% gsub("(Cons\n\n|\n)", "", .) %>% gsub('\"', "'", .) %>% stringr::str_trim()
+        unlist() %>% gsub("(Cons\n\n|\n)", "", .) %>% gsub('\"', "'", .) %>%
+        gsub('\r', "", .) %>% gsub(" ,", ",", .) %>% stringr::str_squish() %>%
+        stringr::str_trim()
     )
+
   }) %>% purrr::list_rbind() %>% dplyr::distinct()
 
 

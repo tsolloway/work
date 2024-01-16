@@ -8,17 +8,18 @@ scrape_glassdoor(
   company = "Wilshrie Law Firm",
   company_number = "E799887",
   gd_base = "https://www.glassdoor.com/Reviews/",
-  url_instructions = "sort.sortType=RD&sort.ascending=false&filter.iso3Language=eng"
+  url_instructions = "sort.sortType=RD&sort.ascending=false&filter.iso3Language=eng",
+  sleep_page = 2
 )
 }
 \arguments{
-\item{company}{vector of glassdoor company name.}
+\item{company}{character vector of glassdoor company name.}
 
-\item{company_number}{vector of glassdoor company number.}
+\item{company_number}{character vector of glassdoor company number.}
 
-\item{gd_base}{vector of glassdoor address base. Default to "https://www.glassdoor.com/Reviews/".}
+\item{gd_base}{character vector of glassdoor address base. Default to "https://www.glassdoor.com/Reviews/".}
 
-\item{url_instructions}{vector of glassdoor url instructions. Default to "sort.sortType=RD&sort.ascending=false&filter.iso3Language=eng"}
+\item{url_instructions}{character vector of glassdoor url instructions. Default to "sort.sortType=RD&sort.ascending=false&filter.iso3Language=eng"}
 }
 \description{
 Returns logical if all values in vector are unique
