@@ -44,7 +44,7 @@ get_path <- function(
 
   if( type == "git" && ( !is_truthy(path) || !dir.exists(path) ) ){
 
-    stop("git path not set or is not valid. Please use `mutil::set_r_environment('git_local_dir')`")
+    stop("git path not set or is not valid. Please use `work::set_r_environment('git_local_dir')`")
 
   }else{
 
