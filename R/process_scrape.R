@@ -73,7 +73,7 @@ process_scrape <- function(type = c("glassdoor"), where = NULL, subtitle = "wils
   }
   
   
-  saveRDS(output, file = save_name)
+  saveRDS(output, file = save_name_r)
   
   output %>% 
     dplyr::select(date, time, score_overall, score_recommendation_to_friend, score_ceo_approve) %>% 
