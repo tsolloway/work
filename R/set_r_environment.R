@@ -31,11 +31,11 @@ set_r_environment <- function(
 
     if( is_truthy(x) ){
 
-      git_dir_exists <- x %>% normalizePath() %>% dir.exists() %>% suppressWarnings()
+      git_dir_exists <- x %>% normalizePath(winslash = "/") %>% dir.exists() %>% suppressWarnings()
 
       if( git_dir_exists ){
 
-        x <- x %>% normalizePath()
+        x <- x %>% normalizePath(winslash = "/")
 
       }else if( !git_dir_exists ){
 
@@ -47,9 +47,9 @@ set_r_environment <- function(
     if( !git_dir_exists ){
 
       x <- rstudioapi::showPrompt("Local git dir", "Path to local git respository") %>%
-        normalizePath() %>% suppressWarnings()
+        normalizePath(winslash = "/") %>% suppressWarnings()
 
-      git_dir_exists <- x %>% normalizePath() %>% dir.exists() %>% suppressWarnings()
+      git_dir_exists <- x %>% normalizePath(winslash = "/") %>% dir.exists() %>% suppressWarnings()
     }
 
 
