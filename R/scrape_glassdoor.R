@@ -22,7 +22,8 @@ scrape_glassdoor <- function(
   url_base <- glue::glue("{gd_base}{company}-Reviews-{company_number}.html")
 
 
-  page <- url_base %>% rvest::read_html()
+  con <- url(url_base, "rb")
+  page <- con %>% rvest::read_html()
 
 
   review_count <- page %>% html_elements(".paginationFooter") %>% html_text2() %>% strsplit(" ") %>%
@@ -43,8 +44,10 @@ scrape_glassdoor <- function(
   reviews <- purrr::map(url_pages, ~{
 
     Sys.sleep(sleep_page)
+    
+    con <- url(.x, "rb")
 
-    x <- .x %>% rvest::read_html() %>% html_elements(".empReviews") %>% html_text2()
+    x <- con %>% rvest::read_html() %>% html_elements(".empReviews") %>% html_text2()
 
     dplyr::tibble(
       "rating" = x %>% stringr::str_extract_all("\\d+\\.0") %>% unlist(),
