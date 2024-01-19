@@ -48,7 +48,7 @@ get_path <- function(
 
   }else{
 
-    path <- path %>% normalizePath(mustWork = TRUE)
+    path <- path %>% normalizePath(mustWork = TRUE, winslash = "/")
   }
 
 
