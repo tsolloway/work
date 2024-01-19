@@ -39,7 +39,7 @@ install_pkg_local <- function(
         pkg %>% pak::pkg_install(ask = ask, upgrade = upgrade)
       }, 
       error = function(e){
-        pkg %>% devtools::install(ask = ask, upgrade = upgrade)
+        pkg %>% devtools::install(upgrade = upgrade)
       }
     )
     
