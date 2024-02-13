@@ -19,4 +19,5 @@ Imports:
   stringr,
   tibble,
   usethis
-RoxygenNote: 7.3.0
+RoxygenNote: 7.3.1
+LazyData: true
