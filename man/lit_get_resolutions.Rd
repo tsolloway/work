@@ -12,15 +12,23 @@ lit_get_resolutions(
     "Resolution_Group__c", "Resolution_Reason__c"),
   select_matter = c("Id", "Needles_CaseID__c", "Policy_Limit__c",
     "litify_pm__Incident_date__c", "Received_Signed_Agreement__c"),
-  select_client = c("Name"),
-  select_payor = c("Name"),
+  select_client = "Name",
+  select_payor = "Name",
   predetermined_names = c("id_matter", "date_incident", "case", "policy_limit",
     "date_signed_agreement", "client_name", "id_resolution", "id_payor",
     "date_resolution", "resolution_type", "resolution_amount", "resolution_group",
     "resolution_reason"),
-  sort_predetermined_names = TRUE,
+  sort_predetermined_names = c("case", "client_name", "date_incident",
+    "resolution_amount", "policy_limit", "date_signed_agreement", "date_resolution",
+    "resolution_type", "resolution_group", "resolution_group", "resolution_reason",
+    "id_payor", "id_matter", "id_resolution"),
   apply_translate_limits = TRUE,
-  nested_structure = TRUE
+  add_links = list(link_resolution = "id_resolution", link_matter = "id_matter"),
+  nested_structure = list(by = "id_matter", data_name = "resolution_data", id_matter =
+    "resolution_data \%>\% purrr::map_vec(function(x)x[1,\\"id_matter\\"]) \%>\% unlist()",
+    case =
+    "resolution_data \%>\% purrr::map_vec(function(x)x[1,\\"case\\"]) \%>\% unlist()",
+    resolution_count = "resolution_data \%>\% purrr::map_vec(nrow)")
 )
 }
 \arguments{

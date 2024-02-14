@@ -6,6 +6,8 @@
 #' @param select_object_parent fields from from_object_parent
 #' @param select_object_child_parent fields from from_object_child_parent
 #' @param predetermined_names character vector of predetermined col_names.  Tricky to use unless with defaults
+#' @param filter_syntax syntax to go into dplyr::filter
+#' @param nested_structure listed instructions for nested tibble list(by = , data_name = ...)
 #' @export
 lit_get_data <- function(
     from_object,
@@ -20,20 +22,24 @@ lit_get_data <- function(
     limit = NULL,
     predetermined_names = NULL,
     sort_predetermined_names = NULL,
+    filter_syntax = NULL,
     apply_translate_limits = TRUE,
     add_links = TRUE,
-    nested_structure = TRUE
+    nested_structure = NULL
 ){
 
   require(glue)
   require(salesforcer)
 
-  if( is.null(predetermined_names) && nested_structure){
+  if( is.null(predetermined_names) && (!is.null(nested_structure) || isFALSE(predetermined_names)) ){
     warning("can't have nested structure within function without predetermined names / structure")
     nested_structure <- FALSE
   }
 
 
+  #######################
+  ##  prep the selects
+  #######################
 
   if( !is.null(from_object_parent) && !is.null(select_object_parent) ){
     select_object_parent <- glue("{from_object_parent}.{select_object_parent}")
@@ -44,13 +50,16 @@ lit_get_data <- function(
   }
 
 
-
   if( length(select_object)>1 ) select_object <- select_object %>% glue_sql_collapse(",")
   if( length(select_object_child)>1 ) select_object_child <- select_object_child %>% glue_sql_collapse(",")
   if( length(select_object_parent)>1 ) select_object_parent <- select_object_parent %>% glue_sql_collapse(",")
   if( length(select_object_child_parent)>1 ) select_object_child_parent <- select_object_child_parent %>% glue_sql_collapse(",")
 
 
+
+  #######################
+  ##  write query
+  #######################
 
   if(length(select_object) > 0 && length(select_object_parent) > 0){
 
@@ -67,14 +76,13 @@ lit_get_data <- function(
 
 
 
-
   if(length(select_object_child) > 0 && length(select_object_child_parent) > 0){
 
-    second_line <- glue("(SELECT {select_object_child},{select_object_child_parent} FROM litify_pm__LitifyResolutions__r)")
+    second_line <- glue("(SELECT {select_object_child},{select_object_child_parent} FROM {from_object_child})")
 
   }else if(length(select_object_child) > 0 && length(select_object_child_parent) == 0){
 
-    second_line <- glue("(SELECT {select_object_child} FROM litify_pm__LitifyResolutions__r)")
+    second_line <- glue("(SELECT {select_object_child} FROM {from_object_child})")
 
   }else if(length(select_object_child) == 0 || is.na(select_object_child) || is.null(select_object_child) ){
 
@@ -84,7 +92,6 @@ lit_get_data <- function(
 
     stop("unsupported resolution & payor select combination")
   }
-
 
 
 
@@ -99,6 +106,9 @@ lit_get_data <- function(
 
 
 
+  #######################
+  ##  add where & limit
+  #######################
 
   if (!is.null(cases) ){
 
@@ -110,7 +120,6 @@ lit_get_data <- function(
 
 
 
-
   if( !is.null(limit) && is.numeric(limit) && limit > 0 ){
 
     cases <- cases %>% work::where_cases_equal()
@@ -119,6 +128,11 @@ lit_get_data <- function(
                    LIMIT {limit}")
   }
 
+
+
+  #######################
+  ##  do query
+  #######################
 
   df <- querry %>% sf_query()
 
@@ -137,8 +151,18 @@ lit_get_data <- function(
   }
 
 
+  #######################
+  ##  apply filter
+  #######################
+
+  if( !is.null(filter_syntax) ){
+    df <- tryCatch(df %>% dplyr::filter( eval(parse(text = filter_syntax)) ), error = function(e)df)
+  }
 
 
+  #######################
+  ##  translate limits
+  #######################
   if( !is.null(apply_translate_limits) && is.character(apply_translate_limits) && length(apply_translate_limits) == 1  ){
 
     df[[apply_translate_limits]] <- df[[apply_translate_limits]] %>% work::translate_limits()
@@ -159,6 +183,9 @@ lit_get_data <- function(
   }
 
 
+  #######################
+  ##  add linkts
+  #######################
   if( isTRUE(add_links) ){
 
     warning("add_links == TRUE parameter is over inclusive")
@@ -166,7 +193,7 @@ lit_get_data <- function(
     add_links <- names(df)[grep("id", names(df), ignore.case = TRUE)]
 
     for(i in add_links){
-      df[[paste0("link_",i)]] <- paste0("https://wilshirelawfirm.lightning.force.com/lightning/r/", df[[add_links[[i]]]], "/view")
+      df[[paste0("link_",i)]] <- paste0("https://wilshirelawfirm.lightning.force.com/lightning/r/", df[[i]], "/view")
     }
 
   }else if( is.list(add_links) && length(add_links) > 0 ){
@@ -178,20 +205,33 @@ lit_get_data <- function(
   }
 
 
-  if(nested_structure){
+  #######################
+  ##  nest the data
+  #######################
+  if( !is.null(nested_structure) && is.list(nested_structure) ){
 
     df <- df %>%
-      dplyr::group_split(id_matter) %>%
-      tibble::tibble(
-        resolution_data = .,
-        "id_matter" = resolution_data %>% purrr::map_vec(function(x)x[1,"id_matter"]) %>% unlist(),
-        "case" = resolution_data %>% purrr::map_vec(function(x)x[1,"case"]) %>% unlist(),
-        resolution_count = resolution_data %>% purrr::map_vec(nrow)
-      ) %>%
-      dplyr::select(id_matter, case, resolution_count, resolution_data)
+      dplyr::group_split( eval(parse(text = nested_structure[["by"]])) ) %>%
+      tibble::tibble() %>%
+      setNames(nested_structure[["data_name"]])
 
+    assign(nested_structure[["data_name"]], df[[nested_structure[["data_name"]]]])
+
+    for(i in names(nested_structure[-c(1:2)])){
+      df <- df %>% dplyr::bind_cols(
+        !!i := eval(parse(text=nested_structure[[i]]))
+      )
+    }
+
+    df <- df %>% dplyr::select(
+      names(nested_structure[-c(1:2)]), nested_structure[["data_name"]]
+    )
   }
 
+
+  #######################
+  ##  return
+  #######################
 
   return(df)
 }

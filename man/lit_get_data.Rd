@@ -17,9 +17,10 @@ lit_get_data(
   limit = NULL,
   predetermined_names = NULL,
   sort_predetermined_names = NULL,
+  filter_syntax = NULL,
   apply_translate_limits = TRUE,
   add_links = TRUE,
-  nested_structure = TRUE
+  nested_structure = NULL
 )
 }
 \arguments{
@@ -34,6 +35,10 @@ lit_get_data(
 \item{cases}{vector of case numbers}
 
 \item{predetermined_names}{character vector of predetermined col_names.  Tricky to use unless with defaults}
+
+\item{filter_syntax}{syntax to go into dplyr::filter}
+
+\item{nested_structure}{listed instructions for nested tibble list(by = , data_name = ...)}
 }
 \description{
 queries litify for resolution data
