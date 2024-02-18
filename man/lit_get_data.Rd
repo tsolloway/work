@@ -14,13 +14,15 @@ lit_get_data(
   from_object_child_parent = NULL,
   select_object_child_parent = NULL,
   cases = NULL,
+  cases_field = "Needles_CaseID__c",
   limit = NULL,
   predetermined_names = NULL,
   sort_predetermined_names = NULL,
   filter_syntax = NULL,
-  apply_translate_limits = TRUE,
-  add_links = TRUE,
-  nested_structure = NULL
+  apply_translate_limits = FALSE,
+  add_links = FALSE,
+  nested_structure = NULL,
+  col_name_clean = T
 )
 }
 \arguments{

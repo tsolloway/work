@@ -19,13 +19,15 @@ lit_get_data <- function(
     from_object_child_parent = NULL,
     select_object_child_parent = NULL,
     cases = NULL,
+    cases_field = "Needles_CaseID__c",
     limit = NULL,
     predetermined_names = NULL,
     sort_predetermined_names = NULL,
     filter_syntax = NULL,
-    apply_translate_limits = TRUE,
-    add_links = TRUE,
-    nested_structure = NULL
+    apply_translate_limits = FALSE,
+    add_links = FALSE,
+    nested_structure = NULL,
+    col_name_clean = T
 ){
 
   require(glue)
@@ -96,11 +98,11 @@ lit_get_data <- function(
 
 
   if( !is.null(second_line) ){
-    querry <- glue("{first_line},
+    query <- glue("{first_line},
                  {second_line}
                  FROM {from_object}")
   }else{
-    querry <- glue("{first_line}
+    query <- glue("{first_line}
                  FROM {from_object}")
   }
 
@@ -112,20 +114,40 @@ lit_get_data <- function(
 
   if (!is.null(cases) ){
 
-    cases <- cases %>% work::where_cases_equal()
+    cases <- cases %>% unlist() %>% unique()
 
-    querry <- glue("{querry}
-                   WHERE {cases}")
+    cases <- cases[!is.na(cases)]
+
+    cases_list <- split(cases, rep(seq(ceiling(length(cases)/400)), length.out = length(cases), each = 400))
+
+    cases_list <- cases_list %>% lapply(work::where_cases_equal, api_field = cases_field)
+
+    query <- cases_list %>% lapply(function(x)glue::glue(
+      "{query}
+      WHERE {x}"
+      ))
+
+    if( is.list(query) && length(query) == 1 ){
+      query <- query %>% unlist()
+    }
+
   }
 
 
 
   if( !is.null(limit) && is.numeric(limit) && limit > 0 ){
 
-    cases <- cases %>% work::where_cases_equal()
-
-    querry <- glue("{querry}
+    if( is.character(query) && !is.list(query) ){
+      query <- glue("{query}
                    LIMIT {limit}")
+    }else if( is.list(query) ){
+
+      query <- query %>% lapply(function(x)glue::glue(
+        "{x}
+      LIMIT {limit}"
+      ))
+    }
+
   }
 
 
@@ -134,12 +156,20 @@ lit_get_data <- function(
   ##  do query
   #######################
 
-  df <- querry %>% sf_query()
+  if( is.character(query) && !is.list(query) ){
+
+    df <- query %>% sf_query()
+
+    }else if( is.list(query) && length(query) > 1 ){
+
+    df <- query %>% lapply(sf_query)
+
+    df <- dplyr::bind_rows(df)
+  }
 
   df <- set_attr(df, "api_names", names(df))
 
-  df <- df %>% work::names_clean()
-
+  if(col_name_clean) df <- df %>% work::names_clean()
 
   if( !is.null(predetermined_names) ){
 

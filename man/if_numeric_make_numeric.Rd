@@ -9,7 +9,7 @@ if_numeric_make_numeric(x, if_perc_divide = TRUE, divide_by_number = 100)
 \arguments{
 \item{x}{input vector, assumes numeric or character}
 
-\item{if_perc_divide}{Logical.  Divides by 'divide_by_number' if it finds a character percentage using '%'}
+\item{if_perc_divide}{Logical.  Divides by 'divide_by_number' if it finds a character percentage using percentage symbol}
 
 \item{divide_by_number}{numeric.  Divides by this number if 'if_perc_divide' is TRUE}
 }

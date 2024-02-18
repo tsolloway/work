@@ -4,6 +4,7 @@
 #' @export
 lit_get_matter_team <- function(cases = NULL, limit = NULL){
 
+
   clean_role_type <- function(df, type){
 
     temp <- df %>% dplyr::select( names(df)[ df %>% names() %>% data.table::like(type) ] )
@@ -42,7 +43,7 @@ lit_get_matter_team <- function(cases = NULL, limit = NULL){
             tryCatch(x[["pre_lit_attorney"]], error = function(e)NA)
             )
 
-          y <- x[!is.na(x)] %>% paste0(collapse = "|")
+          y <- x[!is.na(x)] %>% unique() %>% paste0(collapse = "|")
 
         }else if( any(grepl("\\(fe\\)", y, ignore.case = TRUE)) ){
 
@@ -62,34 +63,71 @@ lit_get_matter_team <- function(cases = NULL, limit = NULL){
     temp[["target"]]
   }
 
+
   df <- work::lit_get_data(
     from_object = "litify_pm__Matter__c",
-    select_object = c("Id", "Needles_CaseID__c"),
+    select_object = c(
+      "Id", "Needles_CaseID__c", "Case_Manager__r.Name",
+      "Assigned_Attorney__r.Name", "Litigation_Attorney__r.Name",
+      "litify_pm__Principal_Attorney__r.Name"),
     from_object_child = "litify_pm__Matter_Teams__r",
     select_object_child = c("Team_Member__c", "Role_Name__c"),
     cases = cases,
-    limit = NULL,
-    predetermined_names = c("id_matter", "case", "role", "name"),
-    sort_predetermined_names = NULL,
+    limit = limit,
+    predetermined_names = c(
+      "id_matter", "case", "matter_pre_lit_attorney","matter_case_manager",
+      "role", "name", "matter_principal_attorney", "matter_litigation_attorney"),
+    sort_predetermined_names = c(
+      "id_matter", "case", "matter_case_manager", "matter_pre_lit_attorney",
+      "matter_litigation_attorney", "matter_principal_attorney", "role", "name"),
     filter_syntax = 'role == "Case Manager" | role == "Pre-Lit Attorney" | role == "Litigation Attorney" | role == "Principal Attorney" | role == "Negotiator"',
     apply_translate_limits = FALSE,
     add_links = NULL
   )
 
+
+  df_matter <- work::lit_get_data(
+    from_object = "litify_pm__Matter__c",
+    select_object = c(
+      "Id", "Needles_CaseID__c", "Case_Manager__r.Name",
+      "Assigned_Attorney__r.Name", "Litigation_Attorney__r.Name",
+      "litify_pm__Principal_Attorney__r.Name", "litify_pm__Case_Type__r.Name"),
+    cases = cases,
+    limit = limit,
+    predetermined_names = c(
+      "id_matter", "case", "matter_pre_lit_attorney","matter_case_manager",
+      "case_type", "matter_principal_attorney", "matter_litigation_attorney"),
+    sort_predetermined_names = c(
+      "id_matter", "case", "case_type", "matter_case_manager", "matter_pre_lit_attorney",
+      "matter_litigation_attorney", "matter_principal_attorney"),
+    apply_translate_limits = FALSE,
+    add_links = NULL
+  )
+
+
   if( nrow(df) == 0 ){
     df <- work::lit_get_data(
       from_object = "litify_pm__Matter__c",
-      select_object = "Id",
-      predetermined_names = "id_matter",
+      select_object = c(
+        "Id", "Needles_CaseID__c","Case_Manager__r.Name", "Assigned_Attorney__r.Name",
+        "Litigation_Attorney__r.Name", "litify_pm__Principal_Attorney__r.Name"),
+      predetermined_names = c(
+        "id_matter", "case", "matter_pre_lit_attorney","matter_case_manager",
+        "matter_principal_attorney", "matter_litigation_attorney"),
+      sort_predetermined_names = c(
+        "id_matter", "case", "matter_case_manager", "matter_pre_lit_attorney",
+        "matter_litigation_attorney", "matter_principal_attorney"),
       cases = cases,
       add_links = FALSE
     )
+  }else if( (ncol(df) == 2) && identical(names(df), c("id_matter", "case")) ){
+    #do nothing
   }else{
 
     df[["role"]] <- df[["role"]] %>% work::str_scrub()
 
 
-    df <- df %>% dplyr::group_split(id_matter) %>%
+    df <- df %>% dplyr::group_split(id_matter, case) %>%
       purrr::map(function(x){
         x[["role"]] <- x[["role"]] %>% paste0("_1") %>% make.unique(sep="_") %>%
           gsub("1_1", "2", .) %>% gsub("1_2", "3", .)  %>% gsub("1_3", "4", .) %>%
@@ -97,18 +135,65 @@ lit_get_matter_team <- function(cases = NULL, limit = NULL){
         x
       }) %>%
       dplyr::bind_rows() %>%
-      tidyr::pivot_wider(names_from = 'role', values_from = 'name', id_cols = 'id_matter')
+      tidyr::pivot_wider(
+        names_from = 'role',
+        values_from = 'name',
+        id_cols = c(
+          'id_matter', 'case', "matter_case_manager", "matter_pre_lit_attorney",
+          "matter_litigation_attorney", "matter_principal_attorney"
+        ))
 
 
-    df <- df %>% dplyr::select( names(df)[-1] %>% sort() %>% c(names(df)[1], .) )
+    df <- df %>% dplyr::select( names(df)[-(1:6)] %>% sort() %>% c(names(df)[1:6], .) )
 
   }
 
-  output <- df[, "id_matter"]
+  output <- df[, c("id_matter", "case")]
 
   for( i in c("case_manager", "pre_lit_attorney", "litigation_attorney", "principal_attorney", "negotiator") ){
-    output[[i]] <- df %>% clean_role_type(i)
+    output[[i]] <- df[, names(df)[!data.table::like(names(df), "matter")]] %>% clean_role_type(i)
   }
+
+
+  output <- dplyr::full_join(output, df[ ,1:6], by = c("id_matter", "case"))
+
+  output <- output %>% apply(1, function(x){
+    if( is.na(x[["case_manager"]]) ) x[["case_manager"]] <- x[["matter_case_manager"]]
+    if( is.na(x[["pre_lit_attorney"]]) ) x[["pre_lit_attorney"]] <- x[["matter_pre_lit_attorney"]]
+    if( is.na(x[["litigation_attorney"]]) ) x[["litigation_attorney"]] <- x[["matter_litigation_attorney"]]
+    if( is.na(x[["principal_attorney"]]) ) x[["principal_attorney"]] <- x[["matter_principal_attorney"]]
+    x
+  }, simplify = F) %>%
+    dplyr::bind_rows()
+
+  output[["matter_case_manager"]] <- NULL
+  output[["matter_pre_lit_attorney"]] <- NULL
+  output[["matter_litigation_attorney"]] <- NULL
+  output[["matter_principal_attorney"]] <- NULL
+
+
+
+  output[["case"]] <- output[["case"]] %>% as.numeric()
+
+  output <- dplyr::full_join(df_matter[, c("id_matter", "case", "case_type")], output, by = c("id_matter", "case"))
+
+  output <- dplyr::full_join(output, df_matter[, !names(df_matter) %in% "case_type"], by = c("id_matter", "case"))
+
+  output <- output %>% apply(1, function(x){
+    if( is.na(x[["case_manager"]]) ) x[["case_manager"]] <- x[["matter_case_manager"]]
+    if( is.na(x[["pre_lit_attorney"]]) ) x[["pre_lit_attorney"]] <- x[["matter_pre_lit_attorney"]]
+    if( is.na(x[["litigation_attorney"]]) ) x[["litigation_attorney"]] <- x[["matter_litigation_attorney"]]
+    if( is.na(x[["principal_attorney"]]) ) x[["principal_attorney"]] <- x[["matter_principal_attorney"]]
+    x
+  }, simplify = F) %>%
+    dplyr::bind_rows()
+
+  output[["matter_case_manager"]] <- NULL
+  output[["matter_pre_lit_attorney"]] <- NULL
+  output[["matter_litigation_attorney"]] <- NULL
+  output[["matter_principal_attorney"]] <- NULL
+
+
 
   output[["attorney"]] <- output %>% clean_role_type("attorney")
 
@@ -117,7 +202,8 @@ lit_get_matter_team <- function(cases = NULL, limit = NULL){
   }
 
 
-  output[["link_matter"]] <- paste0("https://wilshirelawfirm.lightning.force.com/lightning/r/", df[["id_matter"]], "/view")
+  output[["link_matter"]] <- paste0("https://wilshirelawfirm.lightning.force.com/lightning/r/", output[["id_matter"]], "/view")
+
 
   output
 }

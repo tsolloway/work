@@ -1,7 +1,7 @@
 #' if_numeric_make_numeric
 #' @description Returns numeric if input is numeric
 #' @param x input vector, assumes numeric or character
-#' @param if_perc_divide Logical.  Divides by 'divide_by_number' if it finds a character percentage using '%'
+#' @param if_perc_divide Logical.  Divides by 'divide_by_number' if it finds a character percentage using percentage symbol
 #' @param divide_by_number numeric.  Divides by this number if 'if_perc_divide' is TRUE
 #' @export
 if_numeric_make_numeric <- function(x, if_perc_divide = TRUE, divide_by_number = 100){
