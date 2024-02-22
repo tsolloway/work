@@ -27,10 +27,14 @@ lit_get_data <- function(
     apply_translate_limits = FALSE,
     add_links = FALSE,
     nested_structure = NULL,
-    col_name_clean = T
+    col_name_clean = T,
+    chunks = 1000,
+    additional_where_constant = NULL,
+    additional_where_child_constant = NULL
 ){
 
   require(glue)
+  require(dplyr)
   require(salesforcer)
 
   if( is.null(predetermined_names) && (!is.null(nested_structure) || isFALSE(predetermined_names)) ){
@@ -78,13 +82,30 @@ lit_get_data <- function(
 
 
 
+
   if(length(select_object_child) > 0 && length(select_object_child_parent) > 0){
 
-    second_line <- glue("(SELECT {select_object_child},{select_object_child_parent} FROM {from_object_child})")
+
+    second_line <- glue("SELECT {select_object_child},{select_object_child_parent} FROM {from_object_child}")
+
+    if( !is.null(additional_where_child_constant) ){
+      second_line <- glue("{second_line} WHERE {additional_where_child_constant}")
+    }
+
+    second_line <- glue("({second_line})")
+
 
   }else if(length(select_object_child) > 0 && length(select_object_child_parent) == 0){
 
-    second_line <- glue("(SELECT {select_object_child} FROM {from_object_child})")
+
+    second_line <- glue("SELECT {select_object_child} FROM {from_object_child}")
+
+    if( !is.null(additional_where_child_constant) ){
+      second_line <- glue("{second_line} WHERE {additional_where_child_constant}")
+    }
+
+    second_line <- glue("({second_line})")
+
 
   }else if(length(select_object_child) == 0 || is.na(select_object_child) || is.null(select_object_child) ){
 
@@ -94,6 +115,7 @@ lit_get_data <- function(
 
     stop("unsupported resolution & payor select combination")
   }
+
 
 
 
@@ -112,15 +134,21 @@ lit_get_data <- function(
   ##  add where & limit
   #######################
 
-  if (!is.null(cases) ){
+  if( !is.null(cases) ){
 
-    cases <- cases %>% unlist() %>% unique()
+    cases <- cases %>% unlist() %>% unique() %>% work::remove_na()
 
-    cases <- cases[!is.na(cases)]
-
-    cases_list <- split(cases, rep(seq(ceiling(length(cases)/400)), length.out = length(cases), each = 400))
+    cases_list <- split(cases, rep(seq(ceiling(length(cases)/chunks)), length.out = length(cases), each = chunks))
 
     cases_list <- cases_list %>% lapply(work::where_cases_equal, api_field = cases_field)
+
+
+    if( !is.null(additional_where_constant) ){
+
+      cases_list <- cases_list %>% purrr::map(~paste0(additional_where_constant, " AND ", .x))
+
+      }
+
 
     query <- cases_list %>% lapply(function(x)glue::glue(
       "{query}
@@ -176,7 +204,7 @@ lit_get_data <- function(
     df <- df %>% stats::setNames(predetermined_names)
 
     if( !is.null(sort_predetermined_names) ){
-      df <- df %>% dplyr::select(sort_predetermined_names)
+      df <- df %>% dplyr::select(dplyr::all_of(sort_predetermined_names))
     }
   }
 

@@ -22,7 +22,10 @@ lit_get_data(
   apply_translate_limits = FALSE,
   add_links = FALSE,
   nested_structure = NULL,
-  col_name_clean = T
+  col_name_clean = T,
+  chunks = 1000,
+  additional_where_constant = NULL,
+  additional_where_child_constant = NULL
 )
 }
 \arguments{

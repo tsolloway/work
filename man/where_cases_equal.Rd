@@ -4,13 +4,7 @@
 \alias{where_cases_equal}
 \title{where_cases_equal}
 \usage{
-where_cases_equal(
-  x,
-  api_field = "Needles_CaseID__c",
-  separator = " OR ",
-  logical = "=",
-  return_vector = FALSE
-)
+where_cases_equal(x, api_field = "Needles_CaseID__c")
 }
 \arguments{
 \item{x}{value vector}
