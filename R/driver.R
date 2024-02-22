@@ -99,21 +99,27 @@ engine_logistic <- function(
 
 
 
-#' drivers
-#' @description drivers
+#' driver
+#' @description driver
 #' @export
-drivers <- function(
-    df, dv, ivs, subgroups = NULL, engine = c("linear", "logistic"), shift_percentage = .05,
+driver <- function(
+    df, dv, ivs, subgroups = NULL, labels = NULL, engine = c("linear", "logistic"), shift_percentage = .05,
     dv_recode = c("none", "tb", "t2b", "t3b", "custom"),
     custom_car_recode_syntax = NULL
 ){
 
   engine <- match.arg(engine)
 
+  if( !is.null(labels) ){
+    labels <- c(labels, NA)
+  }else{
+    labels <- c(ivs, NA)
+  }
+
   if( engine == "linear" ){
 
     if( is.null(subgroups) ){
-      analysis <- engine_linear(df = df, dv = dv, ivs = ivs)
+      analysis <- work::engine_linear(df = df, dv = dv, ivs = ivs)
     }else{
       analysis <- subgroups %>% purrr::map(~work::engine_linear(
         df = df %>% dplyr::filter(df[[.x]] == 1),
@@ -125,10 +131,10 @@ drivers <- function(
   }else if( engine == "logistic" ){
 
     if( is.null(subgroups) ){
-      analysis <- engine_logistic(
+      analysis <- work::engine_logistic(
         df = df, dv = dv, ivs = ivs, shift_percentage = shift_percentage,
         dv_recode = dv_recode, custom_car_recode_syntax = custom_car_recode_syntax
-      )
+      ) %>% list("SINGLE" = .)
     }else{
 
       analysis <- subgroups %>% purrr::map(~work::engine_logistic(
@@ -150,18 +156,16 @@ drivers <- function(
     dplyr::bind_cols() %>%
     dplyr::bind_cols(
       Variables = .[[1]],
-      Labels = .[[1]],
+      Labels = labels,
       .
     )
 
   analysis_table[nrow(analysis_table), "Variables"] <- "Total Impact"
 
-
-
-
-
-
-
+  if( is.null(subgroups) ){
+    analysis <- analysis[["SINGLE"]]
+    names(analysis_table) <- names(analysis_table) %>% gsub("SINGLE_", "", ., fixed = TRUE)
+  }
 
   output <- list(
     analysis = analysis,
@@ -169,5 +173,59 @@ drivers <- function(
   )
 
   return(output)
+}
+
+
+#' driver
+#' @description driver
+#' @export
+drivers <- function(
+    df, dv, ivs, subgroups = NULL, labels = NULL, engine, shift_percentage = .05, label_width = "auto", write = TRUE
+){
+
+  analysis <- dv %>% purrr::imap(function(dvx, dvn){
+    ivs %>% purrr::map(function(ivx){
+      work::driver(df, dv=dvx, ivs=ivx, subgroups = subgroups, labels = labels, engine = engine[[dvn]], shift_percentage = shift_percentage)
+    })
+  })
+
+  output <- analysis %>% purrr::imap(function(dvx, dvn){
+
+    wb <- openxlsx::createWorkbook()
+
+    for( i in names(dvx) ){
+
+      if(engine[[dvn]] == "linear"){
+        footer <- "Divers are estimated with OLS regression"
+      }else if(engine[[dvn]] == "logistic"){
+        footer <- glue::glue("Divers are estimated with logistic regression and impacts are calculated with a {shift_percentage*100}% shift in predictors") %>% as.character()
+      }
+
+      wb <- work::append_drivers(
+        dvx[[i]][["analysis_table"]],
+        wb = wb,
+        sheet_name = i ,
+        title = paste("Drivers of", dvn, "predicted by", i),
+        footer = footer,
+        label_width = label_width)
+    }
+
+    return(wb)
+  })
+
+
+  if( write ){
+    output %>% purrr::iwalk(~{
+      openxlsx::saveWorkbook(.x, glue::glue("Drivers - {.y}.xlsx"), overwrite = TRUE)
+    })
+  }
+
+
+  return(
+    list(
+      analysis = analysis,
+      formatted_workbooks = output
+    )
+  )
 }
 
