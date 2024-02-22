@@ -7,9 +7,14 @@ Depends:
   R (>= 3.5.0),
   magrittr
 Imports:
+  car,
+  corrplot,
+  corrr,
   devtools,
   dplyr,
   glue,
+  highcharter,
+  Hmisc,
   lubridate,
   pak,
   purrr,
