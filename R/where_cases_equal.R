@@ -3,14 +3,10 @@
 #' @param x value vector
 #' @param api_field name of api field
 #' @export
-where_cases_equal <- function(x, api_field = "Needles_CaseID__c", separator = " OR ", logical = "=", return_vector = FALSE){
+where_cases_equal <- function(x, api_field = "Needles_CaseID__c"){
   x <- x %>% unlist() %>% unique()
 
-  x <- glue::glue("{api_field} {logical} '{x}'") %>% glue::glue_collapse(sep = separator)
-
-  if(return_vector){
-    x <- x %>% strsplit(separator) %>% unlist()
-  }
+  x <- paste0(api_field, " IN (", paste0("'", x, "'", collapse = ","), ")")
 
   return(x)
 }
