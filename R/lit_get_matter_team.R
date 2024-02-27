@@ -2,7 +2,7 @@
 #' @description queries litify for matter team data
 #' @param cases vector of case numbers
 #' @export
-lit_get_matter_team <- function(cases = NULL, limit = NULL){
+lit_get_matter_team <- function(cases = NULL, limit = NULL, add_link = FALSE){
 
 
   clean_role_type <- function(df, type){
@@ -202,7 +202,7 @@ lit_get_matter_team <- function(cases = NULL, limit = NULL){
   }
 
 
-  output[["link_matter"]] <- paste0("https://wilshirelawfirm.lightning.force.com/lightning/r/", output[["id_matter"]], "/view")
+  if( add_link ) output[["link_matter"]] <- output[["id_matter"]] %>% work::lit_add_id_link()
 
 
   output

@@ -9,39 +9,39 @@ install_pkg_local <- function(
     pkg = NULL, ask = FALSE, upgrade = FALSE,
     on_exit_restart = TRUE
 ){
-  
+
   if(on_exit_restart) on.exit(work::restart(keep = TRUE))
-  
-  
+
+
   work::install_pak()
-  
-  
+
+
   pkg_found <- pkg %>% normalizePath() %>% dir.exists() %>% suppressWarnings()
-  
-  
-  
+
+
+
   if( !pkg_found ){
     path_git <- work::get_path("git")
-    
+
     pkg <- glue::glue("{path_git}/{pkg}")
-    
+
     pkg_found <- pkg %>% normalizePath() %>% dir.exists() %>% suppressWarnings()
   }
-  
-  
-  
+
+
+
   if( pkg_found ){
-    
+
     pkg %>% devtools::document()
-    
+
     tryCatch(
       {
-        pkg %>% pak::pkg_install(ask = ask, upgrade = upgrade)
-      }, 
+        pak::local_install(pkg, ask = ask, upgrade = upgrade)
+      },
       error = function(e){
         pkg %>% devtools::install(upgrade = upgrade)
       }
     )
-    
+
   }
 }

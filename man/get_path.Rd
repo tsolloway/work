@@ -6,7 +6,7 @@
 \usage{
 get_path(
   type = c("home", "r_home", "environment", "profile", "makevars", "preference_rstudio",
-    "snippets_r", "git"),
+    "snippets_r", "git", "onedrive", "downloads", "desktop"),
   edit_file = FALSE,
   scope = c("user", "project")
 )

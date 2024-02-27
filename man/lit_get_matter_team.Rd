@@ -4,7 +4,7 @@
 \alias{lit_get_matter_team}
 \title{lit_get_matter_team}
 \usage{
-lit_get_matter_team(cases = NULL, limit = NULL)
+lit_get_matter_team(cases = NULL, limit = NULL, add_link = FALSE)
 }
 \arguments{
 \item{cases}{vector of case numbers}
