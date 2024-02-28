@@ -14,17 +14,17 @@ write <- function(
 
 
   if(
-    work::is_truthy(attr(df, "write_type")) &&
-    work::is_truthy(attr(df, "analysis"))
+    work::is_truthy(attr(x, "write_type")) &&
+    work::is_truthy(attr(x, "analysis"))
   ){
 
     if(
-      attr(df, "write_type") == "openxlsx_formatted" &&
+      attr(x, "write_type") == "openxlsx_formatted" &&
       attr(x, "analysis") == "dmd_check"
     ){
       type <- "xlsx"
       if( is.null(file) ){
-        file <- paste0("dmd-check-", Sys.time(), ".xlsx")
+        file <- paste0("dmd-check-", Sys.Date(), ".xlsx")
       }
     }
 
