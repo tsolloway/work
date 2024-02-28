@@ -8,7 +8,7 @@ write(
   x,
   where = c("here", "desktop", "downloads", "onedrive", "file"),
   file = NULL,
-  type = c("csv")
+  type = c("csv", "xlsx")
 )
 }
 \description{

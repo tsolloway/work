@@ -5,11 +5,31 @@ write <- function(
     x,
     where = c("here", "desktop", "downloads", "onedrive", "file"),
     file = NULL,
-    type = c("csv")
+    type = c("csv", "xlsx")
 ){
 
   type <- match.arg(type)
   where <- match.arg(where)
+
+
+
+  if(
+    work::is_truthy(attr(df, "write_type")) &&
+    work::is_truthy(attr(df, "analysis"))
+  ){
+
+    if(
+      attr(df, "write_type") == "openxlsx_formatted" &&
+      attr(x, "analysis") == "dmd_check"
+    ){
+      type <- "xlsx"
+      if( is.null(file) ){
+        file <- paste0("dmd-check-", Sys.time(), ".xlsx")
+      }
+    }
+
+  }
+
 
 
   if( is.null(file) ){
@@ -55,6 +75,10 @@ write <- function(
   if( type == "csv" ){
 
     write.csv(x = x, file = file, row.names = FALSE, na= "")
+
+  }else if( type == "xlsx" ){
+
+    openxlsx::saveWorkbook(wb = x, file = file, overwrite = TRUE)
 
   }
 
