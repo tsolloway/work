@@ -17,8 +17,7 @@ lit_date_filed <- function(
   )
 
 
-
-  work::lit_get_data(
+  df <- work::lit_get_data(
     from_object = "litify_pm__Matter__c",
     select_object = c(
       "Id", "Needles_CaseID__c", "litify_pm__Filed_Date__c", "Date_Complaint_Was_Filed__c",
@@ -27,28 +26,37 @@ lit_date_filed <- function(
     cases = cases,
     cases_field = cases_field,
     col_name_clean = FALSE
-  ) %>% rename(
+  ) %>% work::rename_col(
     id_matter = Id,
     case = Needles_CaseID__c,
-    date_filed = litify_pm__Filed_Date__c,
-    date_complaint_was_filed = Date_Complaint_Was_Filed__c,
-    date_x3p_filed = X3P_Lawsuit_Filed__c,
-    date_government_claim_filed = Government_Claim_Filed__c
+    lit_date_filed = litify_pm__Filed_Date__c,
+    lit_date_complaint_was_filed = Date_Complaint_Was_Filed__c,
+    lit_date_x3p_filed = X3P_Lawsuit_Filed__c,
+    lit_date_government_claim_filed = Government_Claim_Filed__c
+  ) %>% dplyr::select(
+    case, id_matter, lit_date_filed,
+    lit_date_complaint_was_filed,
+    lit_date_x3p_filed,
+    lit_date_government_claim_filed
   )
 
+
+
+  df <- df %>% rowwise() %>% mutate(
+
+    lit_date_filed = lit_date_filed %>% as.Date(),
+    lit_date_complaint_was_filed  = lit_date_complaint_was_filed  %>% as.Date(),
+
+    date_filed = min(
+      c(lit_date_filed, lit_date_complaint_was_filed,lit_date_x3p_filed, lit_date_government_claim_filed),
+      na.rm = T
+    ) %>% suppressWarnings(),
+
+    date_filed = ifelse(is.infinite(date_filed), NA, date_filed) %>% as.Date()
+  )
+
+
+  return(df)
 }
 
 
-
-
-
-
-
-
-
-
-date_filed <-  "
-SELECT Id,
- Date_Complaint_Was_Filed__c, litify_pm__Filed_Date__c, X3P_Lawsuit_Filed__c, Government_Claim_Filed__c
-FROM litify_pm__Matter__c
-limit 1000" %>% salesforcer::sf_query()

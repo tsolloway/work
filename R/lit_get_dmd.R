@@ -6,7 +6,7 @@ lit_get_dmd <- function(
     limit_clean = TRUE
 ){
 
-  dmd <- work::lit_get_data(
+  dmd <- lit_get_data(
     from_object = "litify_pm__Matter__c",
     select_object = c(
       "Id", "Needles_CaseID__c", "litify_pm__Client__r.Name", "litify_pm__Incident_date__c",
@@ -19,20 +19,32 @@ lit_get_dmd <- function(
     ),
     cases = cases,
     cases_field = "Needles_CaseID__c",
-    predetermined_names = c(
-      "id_matter", "severity", "government",
-      "date_incident", "case", "policy_limit",
-      "practice_area", "date_agreement_signed", "case_type",
-      "client_name", "commercial", "id_intake",
-      "source_from_intake", "source_from_matter"
-    ),
-    sort_predetermined_names = c(
-      "id_matter", "id_intake", "case", "client_name",
-      "practice_area", "case_type", "severity",
-      "commercial", "government", "policy_limit",
-      "source_from_intake", "source_from_matter",
-      "date_incident","date_agreement_signed"
-    )
+    col_name_clean = FALSE
+    # predetermined_names = c(
+    #
+    # )
+    # sort_predetermined_names = c(
+    # )
+  ) %>% work::rename_col(
+    id_matter = Id,
+    severity = Case_Severity__c,
+    government = Government_Case__c,
+    date_incident = litify_pm__Incident_date__c,
+    case = Needles_CaseID__c,
+    policy_limit = Policy_Limit__c,
+    practice_area = Practice_Area__c,
+    date_agreement_signed = Received_Signed_Agreement__c,
+    case_type = litify_pm__Case_Type__r.Name,
+    client_name = litify_pm__Client__r.Name,
+    commercial = litify_pm__Intake__c.Commercial__c,
+    id_intake = litify_pm__Intake__c.Id,
+    source_from_intake = litify_pm__Intake__c.Source_Name__c,
+    source_from_matter = litify_pm__Source__r.Name
+  ) %>% select(
+    id_matter, id_intake, case, client_name,
+    practice_area, case_type, severity,
+    commercial, government, policy_limit,
+    source_from_intake, source_from_matter, date_incident, date_agreement_signed
   )
 
 
