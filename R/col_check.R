@@ -7,8 +7,6 @@ col_check <- function(df, check_names){
 
   if(!all(check_names %in% col_names)){
 
-
-
     missing_names <- check_names[!check_names %in% col_names]
 
     stop(

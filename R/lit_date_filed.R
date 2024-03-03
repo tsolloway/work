@@ -34,7 +34,8 @@ lit_date_filed <- function(
     lit_date_x3p_filed = X3P_Lawsuit_Filed__c,
     lit_date_government_claim_filed = Government_Claim_Filed__c
   ) %>% dplyr::select(
-    case, id_matter, lit_date_filed,
+    case, id_matter,
+    lit_date_filed,
     lit_date_complaint_was_filed,
     lit_date_x3p_filed,
     lit_date_government_claim_filed
@@ -46,10 +47,12 @@ lit_date_filed <- function(
 
     lit_date_filed = lit_date_filed %>% as.Date(),
     lit_date_complaint_was_filed  = lit_date_complaint_was_filed  %>% as.Date(),
+    lit_date_x3p_filed = lit_date_x3p_filed %>% as.Date(),
+    lit_date_government_claim_filed = lit_date_government_claim_filed %>% as.Date(),
 
     date_filed = min(
-      c(lit_date_filed, lit_date_complaint_was_filed,lit_date_x3p_filed, lit_date_government_claim_filed),
-      na.rm = T
+      base::c(lit_date_filed, lit_date_complaint_was_filed, lit_date_x3p_filed, lit_date_government_claim_filed),
+      na.rm = TRUE
     ) %>% suppressWarnings(),
 
     date_filed = ifelse(is.infinite(date_filed), NA, date_filed) %>% as.Date()

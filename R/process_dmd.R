@@ -17,14 +17,16 @@ process_dmd <- function(path, sheet, scrub = TRUE){
     )
   )
 
-   df <- df %>% dplyr::rename(case = case_no, case_manager = cm)
+   df <- df %>%
+     dplyr::rename(case = case_no, case_manager = cm) %>%
+     dplyr::filter(is.na(lit_settlement))
 
 
   if( scrub ){
     df <- df %>% mutate(
-      dol = dol %>% as.Date(),
-      date_signed = date_signed %>% as.Date(),
-      date_settled = date_settled %>% as.Date(),
+      dol = dol %>% as.Date(origin = "1899-12-30"),
+      date_signed = date_signed %>% as.Date(origin = "1899-12-30"),
+      date_settled = date_settled %>% as.Date(origin = "1899-12-30"),
 
       settlement_any =  df %>% dplyr::select(pre_lit_settlement, med_pay)  %>% rowSums(na.rm = T),
 

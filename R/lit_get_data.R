@@ -275,14 +275,14 @@ lit_get_data <- function(
 
     assign(nested_structure[["data_name"]], df[[nested_structure[["data_name"]]]])
 
-    for(i in names(nested_structure[-c(1:2)])){
+    for(i in names(nested_structure[-base::c(1:2)])){
       df <- df %>% dplyr::bind_cols(
         !!i := eval(parse(text=nested_structure[[i]]))
       )
     }
 
     df <- df %>% dplyr::select(
-      names(nested_structure[-c(1:2)]), nested_structure[["data_name"]]
+      names(nested_structure[-base::c(1:2)]), nested_structure[["data_name"]]
     )
   }
 

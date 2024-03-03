@@ -3,6 +3,8 @@
 #' @export
 join_dmd_to_lit <- function(df){
 
+  work::start(TRUE)
+
   lit_dmd <- df %>% dplyr::select(case) %>% work::lit_get_dmd()
 
   dmd_cases_not_found <- unique(unlist(df$case))[ ! unique(unlist(df$case)) %in% unique(unlist(lit_dmd$case)) ]

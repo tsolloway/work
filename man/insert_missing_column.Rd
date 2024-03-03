@@ -10,10 +10,5 @@ insert_missing_column(.data, ...)
 insert_missing_column
 }
 \examples{
-iris \%>\% insert_missing_column(
-s_len = Sepal.Length,
-tom = mom,
-p_len = Petal.Length,
-foo = boo
-) \%>\% head()
+iris \%>\% insert_missing_column(Sepal.Length, mom, boo) \%>\% head()
 }
