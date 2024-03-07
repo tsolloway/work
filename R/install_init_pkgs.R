@@ -66,6 +66,7 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "dtplyr",
     "dygraphs",
     "e1071",
+    "easystats",
     "effects",
     "ellipsis",
     "emoji",
@@ -288,6 +289,11 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "zip",
     "zoo"
   ) %>% work::install_pkg(on_exit_restart = FALSE)
+
+
+  easystats:::.suggested_pkgs() %>%
+    unlist() %>% unique() %>% sort() %>%
+    work::install_pkg(on_exit_restart = FALSE)
 
 
   c(
