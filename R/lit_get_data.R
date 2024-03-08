@@ -33,9 +33,8 @@ lit_get_data <- function(
     additional_where_child_constant = NULL
 ){
 
-  require(glue)
-  require(dplyr)
-  require(salesforcer)
+  work::start(TRUE)
+
 
   if( is.null(predetermined_names) && (!is.null(nested_structure) || isFALSE(predetermined_names)) ){
     warning("can't have nested structure within function without predetermined names / structure")
@@ -192,8 +191,42 @@ lit_get_data <- function(
 
     df <- query %>% lapply(sf_query)
 
+
+    df_clases <- df %>% purrr::map_df(~{.x %>% purrr::map_df(class)})
+
+
+    df_clases_not_same <- df_clases %>% purrr::map_lgl(~{
+      .x %>% remove_na() %>% unique() %>% length() %>% equals(1) %>% not()
+    })
+
+
+    if( !all(df_clases_not_same) ){
+
+      df_clases_not_same <- df_clases %>% select( names(df_clases_not_same)[df_clases_not_same] )
+
+      for(i in names(df_clases_not_same)){
+        differnet_classes <- df_clases_not_same %>% select(!!i) %>% unique() %>% unlist()
+
+        if( ("character" %in% differnet_classes) && ("numeric" %in% differnet_classes) ){
+          warning(glue("column {i} has {glue_collapse(differnet_classes, sep = ', ')}. Changing to only character."))
+
+          df <- df %>% purrr::map(~{
+            .x <- .x %>% work::insert_missing_column(i)
+            .x[[i]] <- .x[[i]] %>% as.character()
+            .x
+          })
+
+        }else{
+          stop(glue("column {i} has {glue_collapse(differnet_classes, sep = ', ')}. This scenario is not coded."))
+        }
+      }
+    }
+
+
     df <- dplyr::bind_rows(df)
   }
+
+
 
   df <- set_attr(df, "api_names", names(df))
 

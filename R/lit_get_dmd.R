@@ -48,29 +48,7 @@ lit_get_dmd <- function(
     lit_date_x3p_filed = X3P_Lawsuit_Filed__c,
     lit_date_government_claim_filed = Government_Claim_Filed__c
   ) %>%
-    rowwise() %>%
-    mutate(
-
-      lit_date_filed = lit_date_filed %>% as.Date(),
-      lit_date_complaint_was_filed  = lit_date_complaint_was_filed  %>% as.Date(),
-      lit_date_x3p_filed = lit_date_x3p_filed %>% as.Date(),
-      lit_date_government_claim_filed = lit_date_government_claim_filed %>% as.Date(),
-
-      date_filed = ifelse(
-        all(
-          is.na(
-            base::c(lit_date_filed, lit_date_complaint_was_filed, lit_date_x3p_filed, lit_date_government_claim_filed)
-          )
-        ),
-        as.Date(NA),
-        min(
-          lit_date_filed, lit_date_complaint_was_filed, lit_date_x3p_filed, lit_date_government_claim_filed
-          , na.rm = TRUE)
-      ) %>% as.Date(),
-
-      date_filed = ifelse(is.infinite(date_filed), NA, date_filed) %>% as.Date()
-    ) %>%
-    ungroup() %>%
+    work:::lit_correct_date_filed_mutate() %>%
     select(
       id_matter, id_intake, case, client_name,
       practice_area, case_type, severity,
