@@ -6,17 +6,20 @@
 \usage{
 str_scrub(
   x,
-  repacement = "_",
-  make_lowercase = FALSE,
+  replacement = "_",
+  make_lowercase = TRUE,
   return_on_error = TRUE,
   fill_na = NULL,
-  fill_null = NULL
+  fill_null = NULL,
+  keep = NULL,
+  remove_all_spaces = TRUE,
+  remove_utf8 = TRUE
 )
 }
 \arguments{
 \item{x}{Character / string vector}
 
-\item{repacement}{Integer of how many n characters to return}
+\item{replacement}{Integer of how many n characters to return}
 }
 \description{
 Returns a scrubbed string
