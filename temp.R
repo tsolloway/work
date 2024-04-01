@@ -47,11 +47,21 @@ dedupe <- function(x){
 
           duplicate_date_fields_rows <- x[x[["date_created"]] == i & x[["field"]] == fld, ]
 
+          duplicate_date_fields_rows <- duplicate_date_fields_rows %>%
+            mutate(
+              value = ifelse(value == "Missing", NA, value),
+              value_cat = ifelse(value_cat == "Missing", NA, value_cat),
+            )
+
           duplicate_date_fields_rows[['value']] <- duplicate_date_fields_rows[['value']] %>% tail(1)
 
-          duplicate_date_fields_rows[['value_cat']] <- duplicate_date_fields_rows[['value_cat']] %>%
-            unique() %>%
-            paste0(collapse = ":")
+          temp_value_cat <- duplicate_date_fields_rows[['value_cat']] %>% unique()
+
+          if(length(temp_value_cat) == 1){
+            duplicate_date_fields_rows[['value_cat']] <- temp_value_cat
+          }else if(length(temp_value_cat) > 1){
+            duplicate_date_fields_rows[['value_cat']] <- temp_value_cat %>% paste0(collapse = "|")
+          }
 
           x[x[["date_created"]] == i & x[["field"]] == fld, ] <- duplicate_date_fields_rows
 
@@ -121,81 +131,6 @@ matter %<-% {
 
 
 
-matter_history %<-% {
-  df <- lit_get_matter_history() %>%
-    rename_col(
-      .distinct = TRUE,
-      .select = TRUE,
-      id_matter = ParentId,
-      date_created = CreatedDate,
-      field = Field,
-      value = NewValue
-    ) %>%
-    filter(
-      !is.na(date_created)
-    ) %>%
-    mutate(
-      date_created = date_created %>% as.POSIXct(format="%Y-%m-%dT%H:%M:%OS"),
-      value = value %>% case_match(
-        c(
-          'System Automation', 'Litify Services', 'Wilshire Law Firm',
-          'Jesse Test2', 'Natalie Yunus Automation User (FE)'
-        ) ~ NA,
-        .default = value
-      ),
-      value = ifelse(value == "Missing", NA, value),
-      value_cat = value
-    ) %>%
-    distinct() %>%
-    arrange(date_created) %>%
-    group_split(id_matter)
-
-
-  df <- future_lapply(df, dedupe, future.seed = NULL) %>%
-    bind_rows() %>%
-    tidyr::pivot_wider(
-      names_from = 'field',
-      values_from = c("value", "value_cat"),
-      id_cols = c("id_matter", 'date_created')
-    ) %>%
-    rename_col(
-      .select = TRUE,
-      .distinct = TRUE,
-
-      id_matter = id_matter,
-      date_created = date_created,
-
-      case_manager = value_Case_Manager__c,
-      pre_lit_attorney = value_Assigned_Attorney__c,
-      principle_attorney = value_litify_pm__Principal_Attorney__c,
-      team_member_ids = value_Matter_Team_Member_Ids__c,
-
-      source = value_litify_pm__Source__c,
-      case_type = value_litify_pm__Case_Type__c,
-      matter_stage = value_litify_pm__Matter_Stage_Activity__c,
-      status = value_litify_pm__Status__c,
-      closed_reason = value_litify_pm__Closed_Reason__c,
-
-      cat_case_manager = value_cat_Case_Manager__c,
-      cat_pre_lit_attorney = value_cat_Assigned_Attorney__c,
-      cat_principle_attorney = value_cat_litify_pm__Principal_Attorney__c,
-      cat_team_member_ids = value_cat_Matter_Team_Member_Ids__c,
-
-      cat_source = value_cat_litify_pm__Source__c,
-      cat_case_type = value_cat_litify_pm__Case_Type__c,
-      cat_matter_stage = value_cat_litify_pm__Matter_Stage_Activity__c,
-      cat_status = value_cat_litify_pm__Status__c,
-      cat_closed_reason = value_cat_litify_pm__Closed_Reason__c
-    ) %>%
-    arrange(date_created) %>%
-    group_split(id_matter)
-
-
-  return(df)
-}
-
-
-
 matter_team %<-% {
   df <- lit_get_data(
     from_object = "litify_pm__Matter_Team_Member__c",
@@ -244,13 +179,99 @@ matter_team %<-% {
     group_split(id_matter)
 
 
+
   df <- future_lapply(df, dedupe, future.seed = NULL) %>%
     bind_rows() %>%
     tidyr::pivot_wider(
       names_from = 'field',
       values_from = c("value", "value_cat"),
       id_cols = c("id_matter", 'date_created')
-    )
+    ) %>%
+    arrange(id_matter, date_created)
+
+
+  names(df) <- names(df) %>% str_scrub() %>% gsub("value_", "", .)
+
+
+  df <- df %>%
+    mutate(
+      litigation_attorney = ifelse(is.na(litigation_attorney), litigation, litigation_attorney),
+      cat_litigation_attorney = ifelse(is.na(cat_litigation_attorney), cat_litigation, cat_litigation_attorney)
+    ) %>%
+    select(-litigation, -cat_litigation)
+
+  return(df)
+}
+
+
+
+matter_history %<-% {
+  df <- lit_get_matter_history() %>%
+    rename_col(
+      .distinct = TRUE,
+      .select = TRUE,
+      id_matter = ParentId,
+      date_created = CreatedDate,
+      field = Field,
+      value = NewValue
+    ) %>%
+    filter(
+      !is.na(date_created)
+    ) %>%
+    mutate(
+      date_created = date_created %>% as.POSIXct(format="%Y-%m-%dT%H:%M:%OS"),
+      value = value %>% case_match(
+        c(
+          'System Automation', 'Litify Services', 'Wilshire Law Firm',
+          'Jesse Test2', 'Natalie Yunus Automation User (FE)'
+        ) ~ NA,
+        .default = value
+      ),
+      # value = ifelse(value == "Missing", NA, value),
+      value_cat = value
+    ) %>%
+    distinct() %>%
+    arrange(date_created) %>%
+    group_split(id_matter)
+
+
+  df <- future_lapply(df, dedupe, future.seed = NULL) %>%
+    bind_rows() %>%
+    tidyr::pivot_wider(
+      names_from = 'field',
+      values_from = c("value", "value_cat"),
+      id_cols = c("id_matter", 'date_created')
+    ) %>%
+    rename_col(
+      .select = TRUE,
+      .distinct = TRUE,
+
+      id_matter = id_matter,
+      date_created = date_created,
+
+      case_manager = value_Case_Manager__c,
+      pre_lit_attorney = value_Assigned_Attorney__c,
+      principal_attorney = value_litify_pm__Principal_Attorney__c,
+      team_member_ids = value_Matter_Team_Member_Ids__c,
+
+      source = value_litify_pm__Source__c,
+      case_type = value_litify_pm__Case_Type__c,
+      matter_stage = value_litify_pm__Matter_Stage_Activity__c,
+      status = value_litify_pm__Status__c,
+      closed_reason = value_litify_pm__Closed_Reason__c,
+
+      cat_case_manager = value_cat_Case_Manager__c,
+      cat_pre_lit_attorney = value_cat_Assigned_Attorney__c,
+      cat_principal_attorney = value_cat_litify_pm__Principal_Attorney__c,
+      cat_team_member_ids = value_cat_Matter_Team_Member_Ids__c,
+
+      cat_source = value_cat_litify_pm__Source__c,
+      cat_case_type = value_cat_litify_pm__Case_Type__c,
+      cat_matter_stage = value_cat_litify_pm__Matter_Stage_Activity__c,
+      cat_status = value_cat_litify_pm__Status__c,
+      cat_closed_reason = value_cat_litify_pm__Closed_Reason__c
+    ) %>%
+    arrange(id_matter, date_created)
 
 
   return(df)
@@ -259,7 +280,128 @@ matter_team %<-% {
 
 
 
+matter_historical %>% names
 
+
+matter_historical <- full_join(
+  matter_history,
+  matter_team,
+  by = join_by(
+    id_matter == id_matter,
+    date_created == date_created
+  )
+) %>%
+  mutate(
+    case_manager.x = ifelse(is.na(case_manager.x), case_manager.y, case_manager.x),
+    case_manager.x = ifelse(case_manager.x != case_manager.y, glue("{case_manager.x}|{case_manager.y}"), case_manager.x),
+
+    cat_case_manager.x = ifelse(is.na(cat_case_manager.x), cat_case_manager.y, cat_case_manager.x),
+    cat_case_manager.x = ifelse(cat_case_manager.x != cat_case_manager.y, glue("{cat_case_manager.x}|{cat_case_manager.y}"), cat_case_manager.x),
+
+    pre_lit_attorney.x = ifelse(is.na(pre_lit_attorney.x), pre_lit_attorney.y, pre_lit_attorney.x),
+    pre_lit_attorney.x = ifelse(pre_lit_attorney.x != pre_lit_attorney.y, glue("{pre_lit_attorney.x}|{pre_lit_attorney.y}"), pre_lit_attorney.x),
+
+    cat_pre_lit_attorney.x = ifelse(is.na(cat_pre_lit_attorney.x), cat_pre_lit_attorney.y, cat_pre_lit_attorney.x),
+    cat_pre_lit_attorney.x = ifelse(cat_pre_lit_attorney.x != cat_pre_lit_attorney.y, glue("{cat_pre_lit_attorney.x}|{cat_pre_lit_attorney.y}"), cat_pre_lit_attorney.x),
+  ) %>%
+  rename(
+    case_manager = case_manager.x,
+    cat_case_manager = cat_case_manager.x,
+    pre_lit_attorney = pre_lit_attorney.x,
+    cat_pre_lit_attorney = cat_pre_lit_attorney.x
+  ) %>%
+  select(
+    -case_manager.y,
+    -cat_case_manager.y,
+    -pre_lit_attorney.y,
+    -cat_pre_lit_attorney.y
+  ) %>%
+  mutate(
+    date_created = date_created %>% as.Date(),
+  ) %>%
+  group_by(id_matter, date_created) %>%
+  summarise_all(last) %>%
+  group_by(id_matter) %>%
+  tidyr::fill(names(.), .direction = "down") %>%
+  ungroup() %>%
+  mutate_if(is.character, function(x)ifelse(x == "Missing", NA, x))
+
+
+
+
+matter
+
+
+matter_team %>%
+  arrange(date_created) %>%
+  group_by(id_matter, date_created) %>%
+  summarise_all(last) %>%
+  ungroup() %>%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+matter %>% names
+
+
+
+
+
+names(temp)
+
+
+group_by(id_matter) %>%
+  tidyr::fill(names(.), .direction = "down") %>%
+  ungroup()
+
+
+  mutate(
+    date_created = date_created %>% as.Date(),
+  ) %>%
+  group_by(id_matter, date_created) %>%
+  summarise_all(last) %>%
+  ungroup()
+
+
+
+temp %>% names
+
+temp %>% filter(
+  cat_case_manager.x != cat_case_manager.y
+) %>% select(id_matter, date_created, case_manager.x, case_manager.y, cat_case_manager.x, cat_case_manager.y) %>% View
+
+
+temp %>% filter(
+  cat_pre_lit_attorney.x != cat_pre_lit_attorney.y
+) %>% select(id_matter, date_created, pre_lit_attorney.x, pre_lit_attorney.y, cat_pre_lit_attorney.x, cat_pre_lit_attorney.y) %>% View
+
+
+
+
+matter %>% names
+
+matter_history[[1]]$id_matter
+
+a0L5G00000Ccp4gUAB
+
+matter_history[[1]] %>% tidyr::fill(names(.), .direction = "down")
+
+matter_history %>% bind_rows() %>% group_by(id_matter) %>% tidyr::fill(names(.), .direction = "down")
+
+
+matter_team %>% names
 
 
 
