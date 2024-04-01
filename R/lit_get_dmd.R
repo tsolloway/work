@@ -56,6 +56,7 @@ lit_get_dmd <- function(
       date_filed
     ) %>%
     mutate(
+      case = case %>% as.numeric(),
       commercial = commercial %>% work::str_scrub() %>% recode("commercial" = TRUE, "non_commercial" = FALSE, .default = NA),
       government = government %>% work::str_scrub() %>% dplyr::recode("yes" = TRUE, "no" = FALSE, .default = NA),
 

@@ -40,7 +40,7 @@ lit_get_matter_team_DEPRECATE <- function(cases = NULL, limit = NULL, add_link =
 
         }else if(type == "attorney"){
 
-          x <- c(
+          x <- base::c(
             tryCatch(x[["principal_attorney"]], error = function(e)NA),
             tryCatch(x[["litigation_attorney"]], error = function(e)NA),
             tryCatch(x[["pre_lit_attorney"]], error = function(e)NA)

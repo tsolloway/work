@@ -65,7 +65,14 @@ lit_get_resolutions <- function(
     resolution_reason = litify_pm__Resolution__c.Resolution_Reason__c,
     link_resolution = link_resolution,
     link_matter = link_matter
-  )
+  ) %>%
+    mutate(
+      date_incident = date_incident %>% as.Date(),
+      date_signed_agreement  = date_signed_agreement %>% as.Date(),
+
+      case = case %>% as.numeric(),
+      resolution_amount = resolution_amount %>% as.numeric()
+    )
 
 
 

@@ -3,12 +3,12 @@
 #' @export
 process_dmd <- function(path, sheet, scrub = TRUE){
 
-  work::start(TRUE)
+  work::start()
 
-  df <- work::read_xl(path, sheet = sheet)
+  df <- read_xl(path, sheet = sheet)
 
 
-  df %>% work::col_check(
+  df %>% col_check(
     c(
       "dol", "date_signed", "date_settled",
       "pre_lit_settlement", "med_pay", "policy_limit",
@@ -16,6 +16,7 @@ process_dmd <- function(path, sheet, scrub = TRUE){
       "case_no"
     )
   )
+
 
    df <- df %>%
      dplyr::rename(case = case_no, case_manager = cm) %>%

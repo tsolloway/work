@@ -3,25 +3,27 @@
 #' @export
 join_dmd_to_lit <- function(df){
 
-  work::start(TRUE)
+  work::start(lib_sales_force = TRUE)
 
-  lit_dmd <- df %>% dplyr::select(case) %>% work::lit_get_dmd()
+  lit_dmd <- df %>% select(case) %>% lit_get_dmd()
 
   dmd_cases_not_found <- unique(unlist(df$case))[ ! unique(unlist(df$case)) %in% unique(unlist(lit_dmd$case)) ]
-
 
 
   df <- df %>% dplyr::full_join(lit_dmd, by = "case", suffix = c("", "_lit"))
 
 
-  resolutions <- df %>% select(case, resolution_data) %>% tidyr::unnest(resolution_data, names_sep = "_resolution") %>%
-    dplyr::rename(
+  resolutions <- df %>%
+    select(case, resolution_data) %>%
+    tidyr::unnest(resolution_data, names_sep = "_resolution") %>%
+    rename(
       resolution_amount = resolution_data_resolutionresolution_amount,
       date_resolution = resolution_data_resolutiondate_resolution,
       resolution_group = resolution_data_resolutionresolution_group,
       resolution_type = resolution_data_resolutionresolution_type,
       resolution_link = resolution_data_resolutionlink_resolution
-    ) %>% select(
+    ) %>%
+    select(
       case, resolution_amount, date_resolution,
       resolution_group, resolution_type, resolution_link
     ) %>%
