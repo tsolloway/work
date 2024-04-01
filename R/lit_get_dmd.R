@@ -86,12 +86,13 @@ lit_get_dmd <- function(
 
 
   matter_team <- cases %>%
-    lit_get_matter_team() %>%
+    lit_get_matter_team_DEPRECATE() %>%
     dplyr::select(-case, -case_type, -contains("_count"))
 
 
 
-  resolutions <- cases %>% work::lit_get_resolutions() %>%
+  resolutions <- cases %>%
+    lit_get_resolutions() %>%
     dplyr::select(-case)
 
 
