@@ -47,13 +47,22 @@ lit_get_intake_questionnaire <- function(
     cases = cases,
     cases_field = cases_field,
     limit = limit,
-    predetermined_names = c("id_intake", "id_matter", "case", "answer", "question"),
-    sort_predetermined_names = c("id_intake", "id_matter", "case", "question", "answer"),
     additional_where_child_constant = additional_where_child_constant,
     chunks = chunks
   ) %>%
+    rename_col(
+      .select = TRUE,
+      .distinct = TRUE,
+      id_intake = Id,
+      id_matter = litify_pm__Matter__r.Id,
+      case = litify_pm__Matter__r.Needles_CaseID__c,
+      question = litify_pm__Question_Answer__c.litify_pm__Question__r.litify_pm__Question_Label__c,
+      answer = litify_pm__Question_Answer__c.litify_pm__Answer__c
+    ) %>%
     dplyr::filter(!is.na(answer)) %>%
-    dplyr::distinct()
+    mutate(
+      question = ifelse(question == "Type of Accident.", "Type of Accident", question)
+    )
 
 
   dedupe <- questionnaire %>%

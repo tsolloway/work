@@ -32,9 +32,9 @@ process_dmd <- function(path, sheet, scrub = TRUE){
 
       policy_limit = policy_limit %>% work::translate_limits(),
 
-      case_manager = case_manager %>% work::translate_names(),
-      attorney = attorney %>% work::translate_names(),
-      negotiator = negotiator %>% work::translate_names()
+      case_manager = case_manager %>% work::translate_names("cm"),
+      attorney = attorney %>% work::translate_names("attorney"),
+      negotiator = negotiator %>% work::translate_names("negotiator")
     )
   }
 

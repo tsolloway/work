@@ -7,7 +7,7 @@ lit_get_dmd <- function(
 ){
 
 
-  work::start(TRUE)
+  work::start(lib_sales_force = TRUE)
 
 
   dmd <- lit_get_data(
@@ -26,7 +26,6 @@ lit_get_dmd <- function(
     ),
     cases = cases,
     cases_field = "Needles_CaseID__c",
-    col_name_clean = FALSE
 
   ) %>% work::rename_col(
     id_matter = Id,
@@ -69,13 +68,13 @@ lit_get_dmd <- function(
 
   if(limit_clean){
     dmd <- dmd %>% mutate(
-      policy_limit = policy_limit %>% work::translate_limits()
+      policy_limit = policy_limit %>% translate_limits()
     )
   }
 
 
 
-  questionnaire <- work::lit_get_intake_questionnaire(
+  questionnaire <- lit_get_intake_questionnaire(
     cases = dmd[["id_intake"]],
     cases_field = "id_intake",
     clean_cols = FALSE,
@@ -86,7 +85,8 @@ lit_get_dmd <- function(
 
 
 
-  matter_team <- cases %>% work::lit_get_matter_team() %>%
+  matter_team <- cases %>%
+    lit_get_matter_team() %>%
     dplyr::select(-case, -case_type, -contains("_count"))
 
 
