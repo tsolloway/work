@@ -68,7 +68,8 @@ lit_get_resolutions <- function(
   ) %>%
     mutate(
       date_incident = date_incident %>% as.Date(),
-      date_signed_agreement  = date_signed_agreement %>% as.Date(),
+      date_signed_agreement = date_signed_agreement %>% as.Date(),
+      date_resolution = date_resolution %>% as.Date(),
 
       case = case %>% as.numeric(),
       resolution_amount = resolution_amount %>% as.numeric()

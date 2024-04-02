@@ -5,9 +5,14 @@ join_dmd_to_lit <- function(df){
 
   work::start(lib_sales_force = TRUE)
 
+
   lit_dmd <- df %>% select(case) %>% lit_get_dmd()
 
-  dmd_cases_not_found <- unique(unlist(df$case))[ ! unique(unlist(df$case)) %in% unique(unlist(lit_dmd$case)) ]
+  dmd_cases_not_found <-
+    unique(unlist(df$case))[
+      ! unique(unlist(df$case)) %in% unique(unlist(lit_dmd$case))
+    ] %>%
+    remove_na()
 
 
   df <- df %>% dplyr::full_join(lit_dmd, by = "case", suffix = c("", "_lit"))
@@ -80,6 +85,7 @@ join_dmd_to_lit <- function(df){
 
   df <- df_split %>% bind_rows() %>%
     mutate(
+
       name_check = purrr::map2(client_name, client_name_lit, ~{
 
         ys <- .y %>% strsplit(" ") %>% unlist()
@@ -98,6 +104,7 @@ join_dmd_to_lit <- function(df){
       case_manager_check = (case_manager == case_manager_lit) %>%  work::if_na_return(),
       attorney_check = (attorney == pre_lit_attorney) %>%  work::if_na_return(),
       negotiator_check = (negotiator == negotiator_lit) %>%  work::if_na_return()
+
     )
 
 
