@@ -15,12 +15,20 @@ lit_get_lead_gen_source <- function(){
                         Marketing_Details__c, litify_pm__Primary_Intake__c,
 
                         Lead_Case__c,
-                        litify_pm__Companion__r.Lead_Case__c
+                        litify_pm__Companion__r.Lead_Case__c,
+
+                        Display_Name2__c, litify_pm__Status__c, litify_pm__Closed_Reason__c
       ),
       from_object_child = "litify_pm__Intakes__r",
       select_object_child = c(Id, litify_pm__Source__r.Name, litify_pm__Source__r.Id, Marketing_Note__c),
       chunks = 700,
       parallel_process = FALSE
+    ) %>%
+    filter(
+      Display_Name2__c %>% stringr::str_detect(stringr::coll("test", ignore_case = TRUE), negate = TRUE) |
+        litify_pm__Status__c %>% stringr::str_detect(stringr::coll("test", ignore_case = TRUE), negate = TRUE) |
+        litify_pm__Closed_Reason__c %>% stringr::str_detect(stringr::coll("test", ignore_case = TRUE), negate = TRUE) |
+        litify_pm__Closed_Reason__c %>% stringr::str_detect(stringr::coll("duplicate", ignore_case = TRUE), negate = TRUE)
     ) %>%
     rename_col(
       .select = T,

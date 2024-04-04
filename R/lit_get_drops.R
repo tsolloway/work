@@ -6,7 +6,6 @@ lit_get_drops <- function(
   parallel_process = T, add_lead_gen_source = F
 ){
 
-  work::start(T,T,T)
   work::start(lib_sales_force = TRUE)
 
 
@@ -37,11 +36,14 @@ lit_get_drops <- function(
         litify_pm__Companion__r.Lead_Case__c
       ),
       parallel_process = FALSE
-    ) %>%   filter(
-      (litify_pm__Status__c != "Test") %>% work::if_na_return(TRUE),
-      (litify_pm__Closed_Reason__c != "Test") %>% work::if_na_return(TRUE),
-      (litify_pm__Closed_Reason__c != "Duplicate") %>% work::if_na_return(TRUE)
     ) %>%
+      filter(
+        Display_Name2__c %>% stringr::str_detect(stringr::coll("test", ignore_case = TRUE), negate = TRUE) |
+          litify_pm__Status__c %>% stringr::str_detect(stringr::coll("test", ignore_case = TRUE), negate = TRUE) |
+          litify_pm__Closed_Reason__c %>% stringr::str_detect(stringr::coll("test", ignore_case = TRUE), negate = TRUE) |
+          litify_pm__Closed_Reason__c %>% stringr::str_detect(stringr::coll("duplicate", ignore_case = TRUE), negate = TRUE) |
+          !is.na(Received_Signed_Agreement__c)
+      ) %>%
       rename_col(
         .select = TRUE,
         .distinct = TRUE,
@@ -168,7 +170,7 @@ lit_get_drops <- function(
 
       ) %>%
       mutate(
-        date_drop = ifelse(status == "dropped" & is.na(date_drop), date_drop_or_pending_drop_c, date_drop) %>% as.Date(),
+        date_drop = ifelse(status == "dropped" & is.na(date_drop), date_dropped_at_c, date_drop) %>% as.Date(),
       ) %>%
       ungroup() %>%
       mutate(
@@ -244,7 +246,7 @@ lit_get_drops <- function(
         drops_signed_month = sum(!is.na(date_drop)),
         subout_signed_month = sum(!is.na(date_subout)),
         lit_cases_signed = litigation_same_month %>% sum(),
-        lit_cases_converted = litigation_same_month %>% not() %>% sum(),
+        lit_cases_converted = ((litigation_same_month %>% not()) & litigation) %>% sum(),
 
         drop_days_ave = drop_days %>% mean(na.rm=T),
 
