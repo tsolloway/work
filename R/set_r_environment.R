@@ -66,13 +66,13 @@ set_r_environment <- function(
 
     new_vars <- new_lines %>% strsplit("=") %>% purrr::map(head(1)) %>% unlist()
     previous_lines <- previous_lines[!previous_lines_vars %in% new_vars]
-    new_lines <- c(previous_lines, new_lines)
+    new_lines <- base::c(previous_lines, new_lines)
 
   }else if( !overwrite ){
 
     new_vars <- new_lines %>% strsplit("=") %>% purrr::map(head(1)) %>% unlist()
     new_lines <- new_lines[!new_vars %in% previous_lines_vars]
-    new_lines <- c(previous_lines, new_lines)
+    new_lines <- base::c(previous_lines, new_lines)
 
   }
 
