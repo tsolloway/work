@@ -50,7 +50,7 @@ lit_get_data <- function(
 
   if( use_bulk == "auto" ){
 
-    if( !is.null(from_object_child) || !is.null(from_object_child) ){
+    if( !is.null(from_object_child) || !is.null(from_object_parent) ){
       use_bulk <- FALSE
     }else if( is.null(cases) ){
       use_bulk <- TRUE
