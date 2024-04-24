@@ -22,6 +22,7 @@ lit_get_matter <- function(attach_accident_type = FALSE){
 
       Lead_Case__c, Lead_Matter__c,
       litify_pm__Companion__r.Lead_Case__c,
+      litify_pm__Companion__r.Id,
 
       litify_pm__Filed_Date__c, Date_Complaint_Was_Filed__c,
       X3P_Lawsuit_Filed__c, Government_Claim_Filed__c,
@@ -99,6 +100,7 @@ lit_get_matter <- function(attach_accident_type = FALSE){
       lead_case = Lead_Case__c,
       lead_matter = Lead_Matter__c,
       companion_lead_case = litify_pm__Companion__r.Lead_Case__c,
+      id_companion = litify_pm__Companion__r.Id,
 
       date_closed_at = Closed_At__c,
       date_closed_date = litify_pm__Closed_Date__c
