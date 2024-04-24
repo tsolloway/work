@@ -4,7 +4,11 @@
 \alias{lit_get_drops}
 \title{lit_get_drops}
 \usage{
-lit_get_drops(start_year = 2021, parallel_process = T, add_lead_gen_source = F)
+lit_get_drops(
+  start_date = as.Date("2021-01-01"),
+  parallel_process = TRUE,
+  add_lead_gen_source = FALSE
+)
 }
 \description{
 queries litify for drop and subout data

@@ -1,14 +1,10 @@
 #' lit_get_resolutions
 #' @description queries litify for resolution data
 #' @param cases vector of case numbers
-#' @param select_resolution fields from litify_pm__LitifyResolutions__c
-#' @param select_matter fields from litify_pm__Matter__c
-#' @param select_client fields from litify_pm__Client__c
-#' @param select_payor fields from litify_pm__Payor__c
-#' @param predetermined_names character vector of predetermined col_names.  Tricky to use unless with defaults
 #' @export
 lit_get_resolutions <- function(
-    cases = NULL, limit = NULL,
+    cases = NULL,
+    limit = NULL,
     apply_translate_limits = TRUE,
     add_links = list(
       link_resolution = "id_resolution",
@@ -23,6 +19,7 @@ lit_get_resolutions <- function(
     )
 ){
 
+  work::start(lib_sales_force = TRUE)
 
   df <- lit_get_data(
 
@@ -48,7 +45,8 @@ lit_get_resolutions <- function(
     limit = limit,
 
     apply_translate_limits = apply_translate_limits,
-    add_links = add_links
+    add_links = add_links,
+    chunks = 700
   ) %>% rename_col(
     id_matter = Id,
     date_incident = litify_pm__Incident_date__c,

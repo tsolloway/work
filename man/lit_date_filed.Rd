@@ -4,7 +4,7 @@
 \alias{lit_date_filed}
 \title{lit_date_filed}
 \usage{
-lit_date_filed(cases = NULL, cases_field = c("case", "id_matter", "cutom"))
+lit_date_filed(.x = NULL, cases_field = c("case", "id_matter", "cutom"))
 }
 \description{
 lit_date_filed
