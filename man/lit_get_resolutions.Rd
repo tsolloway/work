@@ -18,16 +18,6 @@ lit_get_resolutions(
 }
 \arguments{
 \item{cases}{vector of case numbers}
-
-\item{select_resolution}{fields from litify_pm__LitifyResolutions__c}
-
-\item{select_matter}{fields from litify_pm__Matter__c}
-
-\item{select_client}{fields from litify_pm__Client__c}
-
-\item{select_payor}{fields from litify_pm__Payor__c}
-
-\item{predetermined_names}{character vector of predetermined col_names.  Tricky to use unless with defaults}
 }
 \description{
 queries litify for resolution data

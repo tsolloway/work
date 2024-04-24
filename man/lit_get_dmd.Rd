@@ -4,7 +4,7 @@
 \alias{lit_get_dmd}
 \title{lit_get_dmd}
 \usage{
-lit_get_dmd(cases = NULL, limit_clean = TRUE)
+lit_get_dmd(cases = NULL, remove_med_pay = FALSE, limit_clean = TRUE)
 }
 \description{
 queries litify for dmd data

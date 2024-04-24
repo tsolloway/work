@@ -4,11 +4,7 @@
 \alias{lit_get_matter}
 \title{lit_get_matter}
 \usage{
-lit_get_matter(
-  cases = NULL,
-  limit = NULL,
-  cases_field = c("case", "id_intake", "id_matter", NULL)
-)
+lit_get_matter(attach_accident_type = FALSE)
 }
 \description{
 queries litify for matter data

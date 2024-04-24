@@ -4,6 +4,7 @@
 #' @export
 lit_get_matter_team <- function(
     cases = NULL,
+    cases_field = "Needles_CaseID__c",
     add_links = FALSE,
     parallel_process = TRUE
 ){
@@ -106,10 +107,7 @@ lit_get_matter_team <- function(
   select_object_child = c("CreatedDate", "Team_Member__c", "Role_Name__c"),
   cases = cases,
   cases_field = cases_field,
-  apply_translate_limits = FALSE,
   chunks = 700,
-  col_name_clean = FALSE,
-  add_links = FALSE,
   parallel_process = parallel_process
   ) %>%
     work::rename_col(

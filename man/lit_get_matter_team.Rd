@@ -4,7 +4,12 @@
 \alias{lit_get_matter_team}
 \title{lit_get_matter_team}
 \usage{
-lit_get_matter_team(cases = NULL, add_links = FALSE, parallel_process = TRUE)
+lit_get_matter_team(
+  cases = NULL,
+  cases_field = "Needles_CaseID__c",
+  add_links = FALSE,
+  parallel_process = TRUE
+)
 }
 \arguments{
 \item{cases}{vector of case numbers}

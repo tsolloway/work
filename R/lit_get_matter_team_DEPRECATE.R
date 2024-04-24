@@ -77,7 +77,8 @@ lit_get_matter_team_DEPRECATE <- function(cases = NULL, limit = NULL, add_link =
     from_object_child = "litify_pm__Matter_Teams__r",
     select_object_child = c("Team_Member__c", "Role_Name__c"),
     cases = cases,
-    limit = limit
+    limit = limit,
+    chunks = 700
   ) %>%
     work::rename_col(
       .select = TRUE,
