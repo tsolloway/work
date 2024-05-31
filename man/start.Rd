@@ -4,10 +4,14 @@
 \alias{start}
 \title{start}
 \usage{
-start(sales_force = FALSE)
+start(lib_sales_force = FALSE, lib_dev = FALSE, lib_future = FALSE)
 }
 \arguments{
-\item{sales_force}{logical on whether to include esalesforcer}
+\item{lib_sales_force}{logical on whether to include salesforcer}
+
+\item{lib_dev}{logical on whether to include dev packages}
+
+\item{lib_future}{logical on whether to include future packages}
 }
 \description{
 loads common libraries

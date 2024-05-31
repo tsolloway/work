@@ -5,8 +5,6 @@
 #' @param select_object_child fields from from_object_child
 #' @param select_object_parent fields from from_object_parent
 #' @param select_object_child_parent fields from from_object_child_parent
-#' @param predetermined_names character vector of predetermined col_names.  Tricky to use unless with defaults
-#' @param filter_syntax syntax to go into dplyr::filter
 #' @param nested_structure listed instructions for nested tibble list(by = , data_name = ...)
 #' @export
 lit_get_data <- function(
@@ -21,25 +19,79 @@ lit_get_data <- function(
     cases = NULL,
     cases_field = "Needles_CaseID__c",
     limit = NULL,
-    predetermined_names = NULL,
-    sort_predetermined_names = NULL,
-    filter_syntax = NULL,
     apply_translate_limits = FALSE,
     add_links = FALSE,
     nested_structure = NULL,
-    col_name_clean = TRUE,
     chunks = 1000,
     additional_where_constant = NULL,
-    additional_where_child_constant = NULL
+    additional_where_child_constant = NULL,
+    use_bulk = c("auto", TRUE, FALSE),
+    parallel_process = TRUE,
+    verbose = FALSE
 ){
 
-  require(glue)
-  require(dplyr)
-  require(salesforcer)
+  work::start(lib_sales_force = TRUE)
 
-  if( is.null(predetermined_names) && (!is.null(nested_structure) || isFALSE(predetermined_names)) ){
-    warning("can't have nested structure within function without predetermined names / structure")
-    nested_structure <- FALSE
+
+  sf_auth()
+
+
+  if( !is.logical(use_bulk) || is.na(use_bulk) ){
+    use_bulk <- match.arg(use_bulk)
+  }
+
+
+
+  if( !is.null(cases) ){
+    cases <- cases %>% unlist() %>% unique() %>% work::remove_na()
+  }
+
+
+
+  if( use_bulk == "auto" ){
+
+    if( !is.null(from_object_child) || !is.null(from_object_parent) ){
+      use_bulk <- FALSE
+    }else if( is.null(cases) ){
+      use_bulk <- TRUE
+    }else{
+      use_bulk <- FALSE
+    }
+
+    if(verbose) message( glue("'use_bulk' switched to {use_bulk}") )
+  }
+
+
+
+  if( use_bulk ){ parallel_process <- FALSE }
+
+
+
+
+  if( parallel_process ){
+    start(lib_future = TRUE)
+
+    old_plan <- plan(multisession)
+
+    on.exit(plan(old_plan), add = TRUE)
+  }
+
+
+
+
+  if( parallel_process && is.null(cases) ){
+
+
+    cases <- lit_get_data(
+      from_object = from_object,
+      select_object = "Id",
+      use_bulk = TRUE) %>%
+      select(Id) %>%
+      distinct() %>%
+      unlist()
+
+    cases_field <- "Id"
+    select_object <- base::c(cases_field, select_object) %>% unique()
   }
 
 
@@ -138,28 +190,44 @@ lit_get_data <- function(
 
     cases <- cases %>% unlist() %>% unique() %>% work::remove_na()
 
-    cases_list <- split(cases, rep(seq(ceiling(length(cases)/chunks)), length.out = length(cases), each = chunks))
 
-    cases_list <- cases_list %>% lapply(work::where_cases_equal, api_field = cases_field)
+    if( !use_bulk ){
 
 
-    if( !is.null(additional_where_constant) ){
+      cases_list <- split(cases, rep(seq(ceiling(length(cases)/chunks)), length.out = length(cases), each = chunks))
 
-      cases_list <- cases_list %>% purrr::map(~paste0(additional_where_constant, " AND ", .x))
+      cases_list <- cases_list %>% lapply(work::where_cases_equal, api_field = cases_field)
+
+
+      if( !is.null(additional_where_constant) ){
+
+        cases_list <- cases_list %>% purrr::map(~paste0(additional_where_constant, " AND ", .x))
 
       }
 
 
-    query <- cases_list %>% lapply(function(x)glue::glue(
-      "{query}
+      query <- cases_list %>% lapply(function(x)glue(
+        "{query}
       WHERE {x}"
       ))
 
-    if( is.list(query) && length(query) == 1 ){
-      query <- query %>% unlist()
+
+      if( is.list(query) && length(query) == 1 ){
+        query <- query %>% unlist()
+      }
     }
 
-  }
+  }else if(
+    ( is.null(cases) && !is.null(additional_where_constant) ) ||
+    ( use_bulk && !is.null(additional_where_constant) )
+  ){
+      query <- glue::glue(
+        "{query}
+      WHERE {additional_where_constant}"
+      )
+
+    }
+
 
 
 
@@ -186,35 +254,72 @@ lit_get_data <- function(
 
   if( is.character(query) && !is.list(query) ){
 
-    df <- query %>% sf_query()
 
-    }else if( is.list(query) && length(query) > 1 ){
+    if( use_bulk ){
+      df <- sf_query(query, api_type = "Bulk 2.0", guess_types = FALSE)
+    }else if(!use_bulk){
+      df <- sf_query(query, guess_types = FALSE)
+    }
 
-    df <- query %>% lapply(sf_query)
+
+
+    if( !is.null(cases) ){
+      df <- df %>% filter( df[[cases_field]] %in% cases )
+    }
+
+
+
+  }else if( is.list(query) ){
+
+
+    if( parallel_process ){
+
+      df <- future_lapply(query, sf_query, guess_types = FALSE, future.seed = NULL)
+
+    }else if( !parallel_process ){
+
+      df <- lapply(query, sf_query, guess_types = FALSE)
+    }
+
+
+    df_classes <- df %>% purrr::map_df(~{.x %>% purrr::map_df(class)})
+
+
+    df_classes_not_same <- df_classes %>% purrr::map_lgl(~{
+      .x %>% remove_na() %>% unique() %>% length() %>% equals(1) %>% not()
+    })
+
+
+    if( !all(df_classes_not_same) ){
+
+      df_classes_not_same <- df_classes %>% select( names(df_classes_not_same)[df_classes_not_same] )
+
+      for(i in names(df_classes_not_same)){
+        differnet_classes <- df_classes_not_same %>% select(!!i) %>% unique() %>% unlist()
+
+        if(
+          all(grepl("character|numeric", differnet_classes))
+        ){
+          warning(glue("column {i} has {glue_collapse(differnet_classes, sep = ', ')}. Changing to only character."))
+
+          df <- df %>% purrr::map(~{
+            .x <- .x %>% work::insert_missing_column(i)
+            .x[[i]] <- .x[[i]] %>% as.character()
+            .x
+          })
+
+        }else if( all(grepl("POSIXct|POSIXt", differnet_classes)) ){
+
+          # do nothing, it'll row bind.
+
+        }else{
+          stop(glue("column {i} has {glue_collapse(differnet_classes, sep = ', ')}. This scenario is not coded."))
+        }
+      }
+    }
+
 
     df <- dplyr::bind_rows(df)
-  }
-
-  df <- set_attr(df, "api_names", names(df))
-
-  if(col_name_clean) df <- df %>% work::names_clean()
-
-  if( !is.null(predetermined_names) ){
-
-    df <- df %>% stats::setNames(predetermined_names)
-
-    if( !is.null(sort_predetermined_names) ){
-      df <- df %>% dplyr::select(dplyr::all_of(sort_predetermined_names))
-    }
-  }
-
-
-  #######################
-  ##  apply filter
-  #######################
-
-  if( !is.null(filter_syntax) ){
-    df <- tryCatch(df %>% dplyr::filter( eval(parse(text = filter_syntax)) ), error = function(e)df)
   }
 
 

@@ -23,3 +23,43 @@
 #
 # work::install_pkg_local("work")
 #
+
+
+
+
+
+
+
+# df_translate_lead_gen <- work::read_xl("C:/Users/tsolloway/Downloads/sources.xlsx", "Sheet4") %>%
+#   work::rename_col(
+#     .select = T,
+#     lead_gen_source = lead_gen_source,
+#     sub_lead_gen = sub_lead_gen,
+#     source = source,
+#     details = details_any
+#   ) %>%
+#   mutate(
+#     match = 1,
+#     source_original = source,
+#     source = source %>% work::str_scrub(keep="-"),
+#     details_original = details,
+#     details = details %>% work::str_scrub(keep="-")
+#   ) %>%
+#   distinct() %>%
+#   select(
+#     c(
+#       "lead_gen_source", "sub_lead_gen",
+#       "source", "details",
+#       "source_original", "details_original",
+#       "match")
+#   )
+#
+
+
+
+
+
+
+
+
+

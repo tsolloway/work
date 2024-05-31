@@ -4,7 +4,6 @@
 #' c(!!(1:4))
 #' c(!!(1:4), hi ="5")
 #' c(!!(1:4), hi ="5", foo = boo, "hello" = "world")
-#' @export
 c <- function(...){
 
   x <- rlang::enquos(...)

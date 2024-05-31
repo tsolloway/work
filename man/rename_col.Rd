@@ -4,7 +4,7 @@
 \alias{rename_col}
 \title{rename_col}
 \usage{
-rename_col(.data, ...)
+rename_col(.data, ..., .select = FALSE, .distinct = FALSE)
 }
 \description{
 rename_col

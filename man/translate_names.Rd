@@ -4,7 +4,7 @@
 \alias{translate_names}
 \title{translate_names}
 \usage{
-translate_names(x, df_names, return_dict = FALSE)
+translate_names(x, type = c("cm", "attorney", "negotiator"))
 }
 \arguments{
 \item{x}{character vector to translate}

@@ -16,16 +16,15 @@ lit_get_data(
   cases = NULL,
   cases_field = "Needles_CaseID__c",
   limit = NULL,
-  predetermined_names = NULL,
-  sort_predetermined_names = NULL,
-  filter_syntax = NULL,
   apply_translate_limits = FALSE,
   add_links = FALSE,
   nested_structure = NULL,
-  col_name_clean = TRUE,
   chunks = 1000,
   additional_where_constant = NULL,
-  additional_where_child_constant = NULL
+  additional_where_child_constant = NULL,
+  use_bulk = c("auto", TRUE, FALSE),
+  parallel_process = TRUE,
+  verbose = FALSE
 )
 }
 \arguments{
@@ -38,10 +37,6 @@ lit_get_data(
 \item{select_object_child_parent}{fields from from_object_child_parent}
 
 \item{cases}{vector of case numbers}
-
-\item{predetermined_names}{character vector of predetermined col_names.  Tricky to use unless with defaults}
-
-\item{filter_syntax}{syntax to go into dplyr::filter}
 
 \item{nested_structure}{listed instructions for nested tibble list(by = , data_name = ...)}
 }

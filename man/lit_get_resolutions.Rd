@@ -7,21 +7,6 @@
 lit_get_resolutions(
   cases = NULL,
   limit = NULL,
-  select_resolution = c("Id", "litify_pm__Resolution_Type__c",
-    "litify_pm__Settlement_Verdict_Amount__c", "litify_pm__Resolution_Date__c",
-    "Resolution_Group__c", "Resolution_Reason__c"),
-  select_matter = c("Id", "Needles_CaseID__c", "Policy_Limit__c",
-    "litify_pm__Incident_date__c", "Received_Signed_Agreement__c"),
-  select_client = "Name",
-  select_payor = "Name",
-  predetermined_names = c("id_matter", "date_incident", "case", "policy_limit",
-    "date_signed_agreement", "client_name", "id_resolution", "id_payor",
-    "date_resolution", "resolution_type", "resolution_amount", "resolution_group",
-    "resolution_reason"),
-  sort_predetermined_names = c("case", "client_name", "date_incident",
-    "resolution_amount", "policy_limit", "date_signed_agreement", "date_resolution",
-    "resolution_type", "resolution_group", "resolution_group", "resolution_reason",
-    "id_payor", "id_matter", "id_resolution"),
   apply_translate_limits = TRUE,
   add_links = list(link_resolution = "id_resolution", link_matter = "id_matter"),
   nested_structure = list(by = "id_matter", data_name = "resolution_data", id_matter =
@@ -33,16 +18,6 @@ lit_get_resolutions(
 }
 \arguments{
 \item{cases}{vector of case numbers}
-
-\item{select_resolution}{fields from litify_pm__LitifyResolutions__c}
-
-\item{select_matter}{fields from litify_pm__Matter__c}
-
-\item{select_client}{fields from litify_pm__Client__c}
-
-\item{select_payor}{fields from litify_pm__Payor__c}
-
-\item{predetermined_names}{character vector of predetermined col_names.  Tricky to use unless with defaults}
 }
 \description{
 queries litify for resolution data

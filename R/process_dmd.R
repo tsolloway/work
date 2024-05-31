@@ -3,12 +3,12 @@
 #' @export
 process_dmd <- function(path, sheet, scrub = TRUE){
 
-  work::start(TRUE)
+  work::start()
 
-  df <- work::read_xl(path, sheet = sheet)
+  df <- read_xl(path, sheet = sheet)
 
 
-  df %>% work::col_check(
+  df %>% col_check(
     c(
       "dol", "date_signed", "date_settled",
       "pre_lit_settlement", "med_pay", "policy_limit",
@@ -16,6 +16,7 @@ process_dmd <- function(path, sheet, scrub = TRUE){
       "case_no"
     )
   )
+
 
    df <- df %>%
      dplyr::rename(case = case_no, case_manager = cm) %>%
@@ -32,9 +33,9 @@ process_dmd <- function(path, sheet, scrub = TRUE){
 
       policy_limit = policy_limit %>% work::translate_limits(),
 
-      case_manager = case_manager %>% work::translate_names(),
-      attorney = attorney %>% work::translate_names(),
-      negotiator = negotiator %>% work::translate_names()
+      case_manager = case_manager %>% work::translate_names("cm"),
+      attorney = attorney %>% work::translate_names("attorney"),
+      negotiator = negotiator %>% work::translate_names("negotiator")
     )
   }
 

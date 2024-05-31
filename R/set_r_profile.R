@@ -16,20 +16,20 @@ set_r_profile <- function(
 
   old_lines <- readLines(path) %>% work::remove_empty()
 
-  init_lines <- c(
+  init_lines <- base::c(
     ".First <- function(){",
     "library(magrittr)",
     "}"
   )
 
-  my_lines <- c(
+  my_lines <- base::c(
     ".First <- function(){",
     "library(magrittr)",
     "library(work)",
     "}"
   )
 
-  custom_lines <- c(
+  custom_lines <- base::c(
     ".First <- function(){",
     x,
     "}"
@@ -43,7 +43,7 @@ set_r_profile <- function(
   )
 
   if(!overwrite){
-    new_lines <- c(old_lines, "", new_lines)
+    new_lines <- base::c(old_lines, "", new_lines)
   }
 
   writeLines(new_lines, path)

@@ -28,7 +28,7 @@ set_rstudio_prefs <- function(path = NULL, on_exit_restart = TRUE){
 
   old_lines <- old_lines[!names(old_lines) %in% names(init_lines)]
 
-  new_lines <- c(old_lines, init_lines) %>% jsonlite::toJSON(auto_unbox = TRUE, pretty = TRUE)
+  new_lines <- base::c(old_lines, init_lines) %>% jsonlite::toJSON(auto_unbox = TRUE, pretty = TRUE)
 
   writeLines(new_lines, path)
 }

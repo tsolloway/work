@@ -10,9 +10,13 @@ Imports:
   car,
   corrplot,
   corrr,
+  DBI,
   devtools,
   dplyr,
+  future,
+  future.apply,
   glue,
+  gsubfn,
   highcharter,
   Hmisc,
   lubridate,
@@ -29,6 +33,7 @@ Imports:
   stringi,
   stringr,
   tibble,
+  tictoc,
   usethis
 RoxygenNote: 7.3.1
 LazyData: true
