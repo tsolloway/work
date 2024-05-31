@@ -20,14 +20,21 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     work::install_pkg(on_exit_restart = FALSE)
 
 
+
+
+
+
+
   c(
     "abind",
     "anytime",
     "askpass",
     "assertthat",
+    "auth0",
     "backports",
     "BiocManager",
     "brew",
+    "bs4Dash",
     "brio",
     "broom",
     "bslib",
@@ -84,6 +91,7 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "forecast",
     "formatR",
     "fs",
+    "fresh",
     "furrr",
     "future",
     "future.apply",
@@ -154,7 +162,6 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "magrittr",
     "manipulate",
     "maps",
-    "maptools",
     "markdown",
     "matrixcalc",
     "MatrixModels",
@@ -175,7 +182,6 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "odbc",
     "officer",
     "openssl",
-    "parallel",
     "parallelly",
     "parsnip",
     "patchwork",
@@ -220,7 +226,6 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "remotes",
     "reshape",
     "reshape2",
-    "rgdal",
     "rgl",
     "rjson",
     "RJSONIO",
@@ -250,6 +255,7 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "sys",
     "testthat",
     "tibble",
+    "tictoc",
     "tidyquant",
     "tidyr",
     "tidyselect",
@@ -271,6 +277,7 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "vctrs",
     "viridisLite",
     "vroom",
+    "waiter",
     "withr",
     "workflows",
     "workflowsets",
@@ -291,7 +298,8 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
   ) %>% work::install_pkg(on_exit_restart = FALSE)
 
 
-  easystats:::.suggested_pkgs() %>%
+  easystats::install_suggested()
+  easystats:::show_suggested() %>%
     unlist() %>% unique() %>% sort() %>%
     work::install_pkg(on_exit_restart = FALSE)
 
