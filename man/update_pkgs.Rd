@@ -4,14 +4,12 @@
 \alias{update_pkgs}
 \title{update_pkgs}
 \usage{
-update_pkgs(ask = FALSE, upgrade = FALSE, on_exit_restart = TRUE)
+update_pkgs(ask = FALSE, upgrade = TRUE)
 }
 \arguments{
 \item{ask}{Logical. Whether to ask for confirmation when installing a different version of a package that is already installed. Installations that only add new packages never require confirmation.}
 
 \item{upgrade}{Logical. When FALSE, the default, pak does the minimum amount of work to give you the latest version(s) of pkg. It will only upgrade dependent packages if pkg, or one of their dependencies explicitly require a higher version than what you currently have. It will also prefer a binary package over to source package, even it the binary package is older.}
-
-\item{on_exit_restart}{Logical. Restart R session of install.}
 }
 \description{
 Updates R libraries

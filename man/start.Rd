@@ -4,7 +4,15 @@
 \alias{start}
 \title{start}
 \usage{
-start(lib_sales_force = FALSE, lib_dev = FALSE, lib_future = FALSE)
+start(
+  lib_sales_force = FALSE,
+  lib_dev = FALSE,
+  lib_future = FALSE,
+  lib_azure = FALSE,
+  lib_viz = FALSE,
+  lib_shiny_reporter = FALSE,
+  .quietly = TRUE
+)
 }
 \arguments{
 \item{lib_sales_force}{logical on whether to include salesforcer}

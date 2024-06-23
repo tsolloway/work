@@ -3,12 +3,12 @@
 #' @export
 set_snippets <- function(path = NULL, on_exit_restart = TRUE){
 
-  if(on_exit_restart) on.exit(work::restart(keep = TRUE))
+  if(on_exit_restart) on.exit( restart(keep = TRUE) )
 
 
   if( is.null(path) ){
 
-    path <- work::get_path("snippets_r")
+    path <- get_path("snippets_r")
 
   }else if( !is.null(path) ){
 

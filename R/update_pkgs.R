@@ -2,8 +2,8 @@
 #' @description Updates R libraries
 #' @inherit install_pkg
 #' @export
-update_pkgs <- function(ask = FALSE, upgrade = FALSE, on_exit_restart = TRUE){
+update_pkgs <- function(ask = FALSE, upgrade = TRUE){
 
-  install_pkg(update_pkgs = TRUE, on_exit_restart = on_exit_restart)
+  old.packages() %>% as.data.frame() %>% .[["Package"]] %>% pak::pkg_install(ask = ask, upgrade = upgrade)
 
 }

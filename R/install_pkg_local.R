@@ -10,10 +10,10 @@ install_pkg_local <- function(
     on_exit_restart = TRUE
 ){
 
-  if(on_exit_restart) on.exit(work::restart(keep = TRUE))
+  if(on_exit_restart) on.exit(restart(keep = TRUE))
 
 
-  work::install_pak()
+  install_pak()
 
 
   pkg_found <- pkg %>% normalizePath() %>% dir.exists() %>% suppressWarnings()
@@ -21,7 +21,7 @@ install_pkg_local <- function(
 
 
   if( !pkg_found ){
-    path_git <- work::get_path("git")
+    path_git <- get_path("git")
 
     pkg <- glue::glue("{path_git}/{pkg}")
 

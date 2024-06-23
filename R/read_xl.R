@@ -10,15 +10,23 @@
 read_xl <- function(
     path, sheet = NULL,
     clean_col_names = TRUE,
-    range = NULL, col_names = TRUE, col_types = NULL){
+    range = NULL,
+    col_names = TRUE,
+    col_types = NULL){
 
   df <- readxl::read_excel(
-    path = path, sheet = sheet, range = range,
-    col_names = col_names, col_types = col_types) %>%
+    path = path,
+    sheet = sheet,
+    range = range,
+    col_names = col_names,
+    col_types = col_types
+  ) %>%
     tibble::as_tibble() %>%
     suppressWarnings()
 
-  if(clean_col_names) df <- df %>% work::names_clean()
+  if(clean_col_names){
+    df <- df %>% names_clean()
+  }
 
   df
 }

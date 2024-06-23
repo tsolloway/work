@@ -3,7 +3,7 @@
 #' @export
 set_rstudio_prefs <- function(path = NULL, on_exit_restart = TRUE){
 
-  if(on_exit_restart) on.exit(work::restart(keep = TRUE))
+  if(on_exit_restart) on.exit( restart(keep = TRUE) )
 
   if( is.null(path) ){
     path <- "rstudio-prefs.json" %>% usethis:::rstudio_config_path() %>% normalizePath(mustWork = TRUE)

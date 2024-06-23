@@ -26,10 +26,10 @@ object_name <- function(x){
 
 
 object_name2 <-  function(x){
-  y <- work::object_name(x)
+  y <- object_name(x)
 
   if(y == "x")y  <- deparse(substitute(x))
-  # if(z=="y")z = work::object_name(y)
+  # if(z=="y")z = object_name(y)
   y
 }
 

@@ -1,10 +1,10 @@
-#' c
-#' @description c
+#' cq
+#' @description cq
 #' @examples
 #' c(!!(1:4))
 #' c(!!(1:4), hi ="5")
 #' c(!!(1:4), hi ="5", foo = boo, "hello" = "world")
-c <- function(...){
+cq <- function(...){
 
   x <- rlang::enquos(...)
 

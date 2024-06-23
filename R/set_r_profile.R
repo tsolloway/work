@@ -6,15 +6,15 @@ set_r_profile <- function(
     overwrite = TRUE, on_exit_restart = TRUE
 ){
 
-  if(on_exit_restart) on.exit(work::restart(keep = TRUE))
+  if(on_exit_restart) on.exit(restart(keep = TRUE))
 
   type <- match.arg(type)
 
-  path <- work::get_path("profile")
+  path <- get_path("profile")
 
   if( is.null(path) ) stop("Couldn't find Rprofile path")
 
-  old_lines <- readLines(path) %>% work::remove_empty()
+  old_lines <- readLines(path) %>% remove_empty()
 
   init_lines <- base::c(
     ".First <- function(){",

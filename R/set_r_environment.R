@@ -9,9 +9,9 @@ set_r_environment <- function(
 
   type <- match.arg(type)
 
-  if( on_exit_restart ) on.exit( work::restart(keep = TRUE) )
+  if( on_exit_restart ) on.exit( restart(keep = TRUE) )
 
-  path <- work::get_path("environment")
+  path <- get_path("environment")
 
   if( is.null(path) ) stop("Couldn't find Renviron path")
 

@@ -4,7 +4,7 @@
 \alias{col_check}
 \title{col_check}
 \usage{
-col_check(df, check_names)
+col_check(df, check_names, hard_stop = TRUE)
 }
 \description{
 col_check

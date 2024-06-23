@@ -11,9 +11,9 @@ install_pkg <- function(
     update_pkgs = FALSE, on_exit_restart = TRUE
 ){
 
-  if(on_exit_restart) on.exit(work::restart(keep = TRUE))
+  if(on_exit_restart) on.exit(restart(keep = TRUE))
 
-  work::install_pak()
+  install_pak()
 
 
   # package organization
