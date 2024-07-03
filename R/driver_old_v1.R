@@ -1,23 +1,20 @@
 #' engine_linear
 #' @description engine_linear
 #' @export
-engine_linear <- function(
+engine_linear_old_v1 <- function(
     df, dv, ivs
 ){
-
-  require(broom)
-
-  tibble("ivs" = ivs) %>%
-    mutate(
-      fit = ivs %>% map(~lm(glue("{dv}~{.x}"), df)),
-      tidy = fit %>% map(broom::tidy),
-      glance = fit %>% map(broom::glance),
-      coeficient = fit %>% map(~coefficients(.x)[[2]]) %>% unlist(),
-      index = coeficient %>% map(~(.x/mean(abs(coeficient)))*100) %>% unlist(),
+  tibble::tibble("ivs" = ivs) %>%
+    dplyr::mutate(
+      fit = ivs %>% purrr::map(~lm(glue::glue("{dv}~{.x}"), df)),
+      tidy = fit %>% purrr::map(broom::tidy),
+      glance = fit %>% purrr::map(broom::glance),
+      coeficient = fit %>% purrr::map(~coefficients(.x)[[2]]) %>% unlist(),
+      index = coeficient %>% purrr::map(~(.x/mean(abs(coeficient)))*100) %>% unlist(),
       index_abs = index %>% abs,
-      r2 = glance %>% map(~.x["r.squared"]) %>% unlist(),
-      p = glance %>% map(~.x["p.value"]) %>% unlist(),
-      n = glance %>% map(~.x["nobs"]) %>% unlist(),
+      r2 = glance %>% purrr::map(~.x["r.squared"]) %>% unlist(),
+      p = glance %>% purrr::map(~.x["p.value"]) %>% unlist(),
+      n = glance %>% purrr::map(~.x["nobs"]) %>% unlist(),
     )
 }
 
@@ -26,18 +23,16 @@ engine_linear <- function(
 #' engine_logistic
 #' @description engine_logistic
 #' @export
-engine_logistic <- function(
+engine_logistic_old_v1 <- function(
     df, dv, ivs, shift_percentage = .05,
     dv_recode = c("none", "tb", "t2b", "t3b", "custom"),
     custom_car_recode_syntax = NULL
 ){
 
-  require(rms)
-
   dv_recode <- match.arg(dv_recode)
 
   if( dv_recode != "none"){
-    df[["dv"]] <- df[[dv]] %>% fields_recode(dv_recode, custom_car_recode_syntax = custom_car_recode_syntax)
+    df[["dv"]] <- df[[dv]] %>% work::fields_recode(dv_recode, custom_car_recode_syntax = custom_car_recode_syntax)
   }else{
     df[["dv"]] <- df[[dv]]
   }
@@ -49,54 +44,54 @@ engine_logistic <- function(
   }
 
 
-  temp <- tibble("ivs" = ivs) %>%
-    mutate(
-      fit = ivs %>% map(~rms::lrm(formula(glue("df[['dv']]~df[['{.x}']]")), df)) %>% suppressWarnings(),
-      se = fit %>% map(~.x[["var"]] %>% diag() %>% sqrt() %>% .[2]) %>% unlist(),
+  temp <- tibble::tibble("ivs" = ivs) %>%
+    dplyr::mutate(
+      fit = ivs %>% purrr::map(~rms::lrm(formula(glue::glue("df[['dv']]~df[['{.x}']]")), df)) %>% suppressWarnings(),
+      se = fit %>% purrr::map(~.x[["var"]] %>% diag() %>% sqrt() %>% .[2]) %>% unlist(),
 
-      beta0 = fit %>% map(~{
+      beta0 = fit %>% purrr::map(~{
         y = .x[["coefficients"]][1]
         ifelse(is.null(y), NA, y)
       }) %>% unlist(),
 
-      beta1 = fit %>% map(~{
+      beta1 = fit %>% purrr::map(~{
         y = .x[["coefficients"]][2]
         ifelse(is.null(y), NA, y)
       }) %>% unlist(),
 
 
-      wald_z = map2(beta1, se, ~.x/.y) %>% unlist(),
+      wald_z = purrr::map2(beta1, se, ~.x/.y) %>% unlist(),
 
-      p = fit %>% map(~{
+      p = fit %>% purrr::map(~{
         y = .x[["stats"]][["P"]]
         ifelse(is.null(y), NA, y)
       }) %>% unlist(),
 
-      r2 = fit %>% map(~{
+      r2 = fit %>% purrr::map(~{
         y = .x[["stats"]][["R2"]]
         ifelse(is.null(y), NA, y)
       }) %>% unlist(),
 
-      Dxy = fit %>% map(~{
+      Dxy = fit %>% purrr::map(~{
         y = .x[["stats"]][["Dxy"]]
         ifelse(is.null(y), NA, y)
       }) %>% unlist(),
 
-      n = fit %>% map(~{
+      n = fit %>% purrr::map(~{
         y = .x[["stats"]][["Obs"]]
         ifelse(is.null(y), NA, y)
       }) %>% unlist()
     )
 
   temp %>% mutate(
-    iv_mean = df[, ivs] %>% map(mean, na.rm = TRUE) %>% unlist(),
-    iv_range_low = df[, ivs] %>% map(function(x)range(x, na.rm = T) %>% head(1)) %>% unlist(),
-    iv_range_hi = df[, ivs] %>% map(function(x)range(x, na.rm = T) %>% tail(1)) %>% unlist(),
+    iv_mean = df[, ivs] %>% purrr::map(mean, na.rm = TRUE) %>% unlist(),
+    iv_range_low = df[, ivs] %>% purrr::map(function(x)range(x, na.rm = T) %>% head(1)) %>% unlist(),
+    iv_range_hi = df[, ivs] %>% purrr::map(function(x)range(x, na.rm = T) %>% tail(1)) %>% unlist(),
     iv_shift = shift_percentage * (iv_range_hi - iv_range_low),
-    prob_low = prob_success(iv_mean - 0.5 * iv_shift, beta0, beta1),
-    prob_high = prob_success(iv_mean + 0.5 * iv_shift, beta0, beta1),
+    prob_low = prob_success(iv_mean - 0.5*iv_shift, beta0, beta1),
+    prob_high = prob_success(iv_mean + 0.5*iv_shift, beta0, beta1),
     prob_shift = prob_high - prob_low,
-    index = prob_shift %>% map(~(.x / mean(abs(prob_shift), na.rm=T)) * 100) %>% unlist(),
+    index = prob_shift %>% purrr::map(~(.x/mean(abs(prob_shift), na.rm=T))*100) %>% unlist(),
     index_abs = index %>% abs
   )
 
@@ -107,7 +102,7 @@ engine_logistic <- function(
 #' driver
 #' @description driver
 #' @export
-driver <- function(
+driver_old_v1 <- function(
     df, dv, ivs, subgroups = NULL, labels = NULL, engine = c("linear", "logistic"), shift_percentage = .05,
     dv_recode = c("none", "tb", "t2b", "t3b", "custom"),
     custom_car_recode_syntax = NULL
@@ -124,10 +119,10 @@ driver <- function(
   if( engine == "linear" ){
 
     if( is.null(subgroups) ){
-      analysis <- engine_linear(df = df, dv = dv, ivs = ivs)
+      analysis <- work::engine_linear(df = df, dv = dv, ivs = ivs)
     }else{
-      analysis <- subgroups %>% map(~engine_linear(
-        df = df %>% filter(df[[.x]] == 1),
+      analysis <- subgroups %>% purrr::map(~work::engine_linear(
+        df = df %>% dplyr::filter(df[[.x]] == 1),
         dv = dv, ivs = ivs
       )) %>% set_names(subgroups)
     }
@@ -136,30 +131,30 @@ driver <- function(
   }else if( engine == "logistic" ){
 
     if( is.null(subgroups) ){
-      analysis <- engine_logistic(
+      analysis <- work::engine_logistic(
         df = df, dv = dv, ivs = ivs, shift_percentage = shift_percentage,
         dv_recode = dv_recode, custom_car_recode_syntax = custom_car_recode_syntax
       ) %>% list("SINGLE" = .)
     }else{
 
-      analysis <- subgroups %>% map(~engine_logistic(
-        df = df %>% filter(df[[.x]] == 1),
+      analysis <- subgroups %>% purrr::map(~work::engine_logistic(
+        df = df %>% dplyr::filter(df[[.x]] == 1),
         dv = dv, ivs = ivs, shift_percentage = shift_percentage,
         dv_recode = dv_recode, custom_car_recode_syntax = custom_car_recode_syntax
       )) %>% set_names(subgroups)
     }
   }
 
-  analysis_table <- analysis %>% imap(~{
+  analysis_table <- analysis %>% purrr::imap(~{
     .x[["fit"]] <- NULL
     names(.x) <- paste0(.y, "_", names(.x))
     .x[[gsub("_", " ", .y)]] <- .x[[paste0(.y, "_index_abs")]]
-    .x <- .x %>% add_NA_rows(1)
+    .x <- .x %>% work::add_NA_rows(1)
     .x[nrow(.x), ncol(.x)] <- mean(.x[[paste0(.y, "_prob_shift")]], na.rm = TRUE)
     .x
   }) %>%
-    bind_cols() %>%
-    bind_cols(
+    dplyr::bind_cols() %>%
+    dplyr::bind_cols(
       Variables = .[[1]],
       Labels = labels,
       .
@@ -181,35 +176,32 @@ driver <- function(
 }
 
 
-
 #' driver
 #' @description driver
 #' @export
-drivers <- function(
+drivers_old_v1 <- function(
     df, dv, ivs, subgroups = NULL, labels = NULL, engine, shift_percentage = .05, label_width = "auto", write = TRUE
 ){
 
-  require(openxlsx)
-
-  analysis <- dv %>% imap(function(dvx, dvn){
-    ivs %>% imap(function(ivx, ivn){
-      driver(df, dv=dvx, ivs=ivx, subgroups = subgroups, labels = labels[[ivn]], engine = engine[[dvn]], shift_percentage = shift_percentage)
+  analysis <- dv %>% purrr::imap(function(dvx, dvn){
+    ivs %>% purrr::map(function(ivx){
+      work::driver_old_v1(df, dv=dvx, ivs=ivx, subgroups = subgroups, labels = labels, engine = engine[[dvn]], shift_percentage = shift_percentage)
     })
   })
 
-  output <- analysis %>% imap(function(dvx, dvn){
+  output <- analysis %>% purrr::imap(function(dvx, dvn){
 
-    wb <- createWorkbook()
+    wb <- openxlsx::createWorkbook()
 
     for( i in names(dvx) ){
 
       if(engine[[dvn]] == "linear"){
         footer <- "Divers are estimated with OLS regression"
       }else if(engine[[dvn]] == "logistic"){
-        footer <- glue("Divers are estimated with logistic regression and impacts are calculated with a {shift_percentage*100}% shift in predictors") %>% as.character()
+        footer <- glue::glue("Divers are estimated with logistic regression and impacts are calculated with a {shift_percentage*100}% shift in predictors") %>% as.character()
       }
 
-      wb <- append_drivers(
+      wb <- work::append_drivers(
         dvx[[i]][["analysis_table"]],
         wb = wb,
         sheet_name = i ,
@@ -223,8 +215,8 @@ drivers <- function(
 
 
   if( write ){
-    output %>% iwalk(~{
-      saveWorkbook(.x, glue("Drivers - {.y}.xlsx"), overwrite = TRUE)
+    output %>% purrr::iwalk(~{
+      openxlsx::saveWorkbook(.x, glue::glue("Drivers - {.y}.xlsx"), overwrite = TRUE)
     })
   }
 

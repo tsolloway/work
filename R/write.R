@@ -68,5 +68,5 @@ write <- function(
   }else if( type == "xlsx" ){
     openxlsx::saveWorkbook(wb = x, file = file, overwrite = TRUE)
   }
-  s
+
 }

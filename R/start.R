@@ -14,7 +14,7 @@ start <- function(
     .quietly = TRUE
 ){
 
-  require(wlf, quietly = .quietly, warn.conflicts = !.quietly)
+  require(work, quietly = .quietly, warn.conflicts = !.quietly)
   require(dplyr, quietly = .quietly, warn.conflicts = !.quietly)
   require(purrr, quietly = .quietly, warn.conflicts = !.quietly)
   require(magrittr, quietly = .quietly, warn.conflicts = !.quietly)
