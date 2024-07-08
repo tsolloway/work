@@ -210,9 +210,9 @@ drivers <- function(
       }
 
       wb <- append_drivers(
-        dvx[[i]][["analysis_table"]],
+        analysis_table = dvx[[i]][["analysis_table"]],
         wb = wb,
-        sheet_name = i ,
+        sheet_name = i,
         title = paste("Drivers of", dvn, "predicted by", i),
         footer = footer,
         label_width = label_width)
