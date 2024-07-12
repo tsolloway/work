@@ -6,11 +6,13 @@
 \usage{
 append_drivers(
   analysis_table,
+  subgroups = NULL,
   wb = NULL,
   sheet_name = NULL,
   title = NULL,
   footer = NULL,
-  label_width = "auto"
+  label_width = "auto",
+  engine = c("linear", "logistic")
 )
 }
 \description{

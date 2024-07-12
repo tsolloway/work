@@ -1,7 +1,11 @@
 #' append_drivers
 #' @description append_drivers
 #' @export
-append_drivers <- function(analysis_table, wb = NULL, sheet_name = NULL , title = NULL, footer = NULL, label_width = "auto"){
+append_drivers <- function(
+    analysis_table, subgroups = NULL, wb = NULL,
+    sheet_name = NULL , title = NULL, footer = NULL, label_width = "auto",
+    engine = c("linear", "logistic")
+){
 
   require(openxlsx)
 
@@ -38,8 +42,14 @@ append_drivers <- function(analysis_table, wb = NULL, sheet_name = NULL , title 
   setColWidths(wb, sheet_name, cols = col_data_start + 1, widths = label_width)
 
   for(i in driver_cols){
-    neg_formula <- paste0(num2let(i-2), driver_rows[1], " < 0")
-    p_formula <- paste0(num2let(i-13), driver_rows[1], " > .1")
+    if(engine == "logistic"){
+      neg_formula <- paste0(num2let(i-2), driver_rows[1], " < 0")
+      p_formula <- paste0(num2let(i-13), driver_rows[1], " > .1")
+    }else if(engine == "linear"){
+      neg_formula <- paste0(num2let(i-5), driver_rows[1], " < 0")
+      p_formula <- paste0(num2let(i-2), driver_rows[1], " > .1")
+    }
+
     conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows, style = c("#f66a6e","#feea8a","#66bd7d"), type = "colourScale")
     conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows, style = createStyle(textDecoration = c("bold","italic")), rule = neg_formula)
     conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows, style = createStyle(bgFill = "black"), rule = p_formula)

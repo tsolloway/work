@@ -7,18 +7,24 @@ engine_linear <- function(
 
   require(broom)
 
-  tibble("ivs" = ivs) %>%
+  temp <- tibble("ivs" = ivs) %>%
     mutate(
-      fit = ivs %>% map(~lm(glue("{dv}~{.x}"), df)),
+      fit = ivs %>% map(possibly(~lm(glue("{dv}~{.x}"), df), otherwise = NA)),
+    )
+
+  temp %>%
+    filter(!is.na(fit)) %>%
+    mutate(
       tidy = fit %>% map(broom::tidy),
       glance = fit %>% map(broom::glance),
-      coeficient = fit %>% map(~coefficients(.x)[[2]]) %>% unlist(),
-      index = coeficient %>% map(~(.x/mean(abs(coeficient)))*100) %>% unlist(),
+      coeficient = fit %>% map(~coefficients(.x) %>% tail(1)) %>% as.numeric(),
+      index = coeficient %>% map(~(.x/mean(abs(coeficient)))*100) %>% as.numeric(),
       index_abs = index %>% abs,
       r2 = glance %>% map(~.x["r.squared"]) %>% unlist(),
       p = glance %>% map(~.x["p.value"]) %>% unlist(),
       n = glance %>% map(~.x["nobs"]) %>% unlist(),
-    )
+    ) %>%
+    left_join(temp, ., by = join_by(ivs, fit))
 }
 
 
@@ -51,42 +57,44 @@ engine_logistic <- function(
 
   temp <- tibble("ivs" = ivs) %>%
     mutate(
-      fit = ivs %>% map(~rms::lrm(formula(glue("df[['dv']]~df[['{.x}']]")), df)) %>% suppressWarnings(),
-      se = fit %>% map(~.x[["var"]] %>% diag() %>% sqrt() %>% .[2]) %>% unlist(),
+      fit = ivs %>% purrr::map(possibly(~rms::lrm(formula(glue("df[['dv']]~df[['{.x}']]")), df), otherwise = NA)),
+
+      se = fit %>% map(possibly(~.x %>% pluck("var") %>% diag() %>% sqrt()%>% tail(1) )) %>% as.numeric(),
 
       beta0 = fit %>% map(~{
-        y = .x[["coefficients"]][1]
+        y = .x %>% pluck("coefficients") %>% head(1)
         ifelse(is.null(y), NA, y)
-      }) %>% unlist(),
+      }) %>% as.numeric(),
 
       beta1 = fit %>% map(~{
-        y = .x[["coefficients"]][2]
+        y = .x %>% pluck("coefficients") %>% tail(1)
         ifelse(is.null(y), NA, y)
-      }) %>% unlist(),
+      }) %>% as.numeric(),
 
-
-      wald_z = map2(beta1, se, ~.x/.y) %>% unlist(),
+      wald_z = map2(beta1, se, ~.x/.y) %>% as.numeric(),
 
       p = fit %>% map(~{
-        y = .x[["stats"]][["P"]]
+        y = .x %>% pluck("stats") %>% pluck("P")
         ifelse(is.null(y), NA, y)
-      }) %>% unlist(),
+      }) %>% as.numeric(),
 
       r2 = fit %>% map(~{
-        y = .x[["stats"]][["R2"]]
+        y = .x %>% pluck("stats") %>% pluck("R2")
         ifelse(is.null(y), NA, y)
-      }) %>% unlist(),
+      }) %>% as.numeric(),
 
       Dxy = fit %>% map(~{
-        y = .x[["stats"]][["Dxy"]]
+        y = .x %>% pluck("stats") %>% pluck("Dxy")
         ifelse(is.null(y), NA, y)
-      }) %>% unlist(),
+      }) %>% as.numeric(),
 
       n = fit %>% map(~{
-        y = .x[["stats"]][["Obs"]]
+        y = .x %>% pluck("stats") %>% pluck("Obs")
         ifelse(is.null(y), NA, y)
-      }) %>% unlist()
-    )
+      }) %>% as.numeric()
+
+    ) %>% suppressWarnings()
+
 
   temp %>% mutate(
     iv_mean = df[, ivs] %>% map(mean, na.rm = TRUE) %>% unlist(),
@@ -98,7 +106,7 @@ engine_logistic <- function(
     prob_shift = prob_high - prob_low,
     index = prob_shift %>% map(~(.x / mean(abs(prob_shift), na.rm=T)) * 100) %>% unlist(),
     index_abs = index %>% abs
-  )
+  ) %>% suppressWarnings()
 
 }
 
@@ -155,7 +163,13 @@ driver <- function(
     names(.x) <- paste0(.y, "_", names(.x))
     .x[[gsub("_", " ", .y)]] <- .x[[paste0(.y, "_index_abs")]]
     .x <- .x %>% add_NA_rows(1)
-    .x[nrow(.x), ncol(.x)] <- mean(.x[[paste0(.y, "_prob_shift")]], na.rm = TRUE)
+
+    if(engine == "logistic"){
+      .x[nrow(.x), ncol(.x)] <- mean(abs(.x[[paste0(.y, "_prob_shift")]]), na.rm = TRUE)
+    }else if(engine == "linear"){
+      .x[nrow(.x), ncol(.x)] <- mean(abs(.x[[paste0(.y, "_r2")]]), na.rm = TRUE)
+    }
+
     .x
   }) %>%
     bind_cols() %>%
@@ -211,11 +225,14 @@ drivers <- function(
 
       wb <- append_drivers(
         analysis_table = dvx[[i]][["analysis_table"]],
+        subgroups = subgroups,
         wb = wb,
         sheet_name = i,
         title = paste("Drivers of", dvn, "predicted by", i),
         footer = footer,
-        label_width = label_width)
+        label_width = label_width,
+        engine = engine[[dvn]]
+      )
     }
 
     return(wb)
