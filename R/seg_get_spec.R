@@ -35,14 +35,27 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
 
     sheet <- sheet %>%
       filter(is.na(block)) %>%
-      select(var, label, source_var, syntax) %>%
+      select(any_of(c("var", "label", "source_var", "syntax", "source_label"))) %>%
       mutate(
         syntax = syntax %>%
           str_squish() %>%
           str_replace("&gt;", ">") %>%
           str_replace("&lt;", "<") %>%
-          str_replace(fixed(",)"), ")")
+          str_replace(fixed(",)"), ")"),
+        label = label %>%
+          str_squish() %>%
+          str_replace("&amp;", "&")
       )
+
+
+    if("source_label" %in% names(sheet)){
+      sheet <- sheet %>%
+        mutate(
+          source_label = source_label %>%
+          str_squish() %>%
+          str_replace("&amp;", "&")
+        )
+    }
 
 
     blocks <- blocks %>%

@@ -1,7 +1,7 @@
 #' seg_write_shell
 #' @description seg_write_shell
 #' @export
-seg_write_shell <- function(seg, solution_var, where = c("solutions", "here")){
+seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), verbose = FALSE){
 
   where <- match.arg(where)
 
@@ -238,38 +238,6 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here")){
 
 
   require(openxlsx)
-
-  oxl_outer_box <- function(
-    wb, sheet_name, row_start, row_end, col_start, col_end, borderStyle = "thick"
-  ){
-    bt <- createStyle(border = "top", borderStyle = borderStyle)
-    bb <- createStyle(border = "bottom", borderStyle = borderStyle)
-    bl <- createStyle(border = "left", borderStyle = borderStyle)
-    br <- createStyle(border = "right", borderStyle = borderStyle)
-
-
-    addStyle(wb, sheet_name, style = bt,
-             rows = row_start,
-             cols = seq(col_start, col_end),
-             gridExpand = F, stack = TRUE)
-
-    addStyle(wb, sheet_name, style = bb,
-             rows = row_end,
-             cols = seq(col_start, col_end),
-             gridExpand = F, stack = TRUE)
-
-    addStyle(wb, sheet_name, style = bl,
-             rows = seq(row_start, row_end),
-             cols = col_start,
-             gridExpand = F, stack = TRUE)
-
-    addStyle(wb, sheet_name, style = br,
-             rows = seq(row_start, row_end),
-             cols = col_end,
-             gridExpand = F, stack = TRUE)
-  }
-
-
 
   add_spec_table <- function(
     wb, sheet_name, row_data_start, row_start, col_start, data_table, header,
@@ -1037,13 +1005,15 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here")){
 
   wb <- createWorkbook()
 
-  append_sheet(wb, shell_tables)
+  append_sheet(wb, shell_tables) %>% suppressWarnings()
 
   purrr::walk(
     shell_tables[["segment_tables"]] %>% length() %>% seq(),
-    ~append_sheet(wb, shell_tables, seg_n = .x)
+    ~append_sheet(wb, shell_tables, seg_n = .x) %>% suppressWarnings()
   )
 
   saveWorkbook(wb, glue("{where}/Solution - {solution_var}.xlsx"), overwrite = TRUE)
+
+  if(verbose) message(glue("Written: {solution_var}"))
 
 }

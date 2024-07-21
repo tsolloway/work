@@ -86,7 +86,8 @@ seg_do_spec <- function(seg, debug = FALSE){
         source_var = source_var,
         profile_var = var,
         factor_var = factor_var,
-        label = label
+        label = label,
+        source_label = source_label
       )
 
 
