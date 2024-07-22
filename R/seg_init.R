@@ -36,9 +36,8 @@ seg_init <- function(
     "files" = list(
       "data" = NA,
       "spec" = NA,
-      "shell" = NA,
       "input" = NA,
-      "FA" = NA
+      "fa" = NA
     )
   )
 

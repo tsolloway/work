@@ -4,7 +4,13 @@
 \alias{fa_write}
 \title{fa_write}
 \usage{
-fa_write(fa_analysis_object, file_name = "Factor Analysis", where = NULL)
+fa_write(
+  fa_analysis_object,
+  clean_max = 0.25,
+  file_name = "Factor Analysis",
+  where = NULL,
+  return_location = TRUE
+)
 }
 \description{
 fa_write

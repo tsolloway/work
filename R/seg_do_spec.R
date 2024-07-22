@@ -79,13 +79,13 @@ seg_do_spec <- function(seg, debug = FALSE){
     inputs <- spec_polars %>%
       tidyr::unnest(col = vars) %>%
       mutate(
-        factor_var = glue("rs_factor_{source_var}")
+        rs_var = glue("rs_{source_var}")
       ) %>%
       rename_col(
         .select = T,
         source_var = source_var,
         profile_var = var,
-        factor_var = factor_var,
+        rs_var = rs_var,
         label = label,
         source_label = source_label
       )
@@ -95,7 +95,7 @@ seg_do_spec <- function(seg, debug = FALSE){
       across(
         .cols = inputs[["source_var"]],
         .fns = ~ .x %>% case_match(1 ~ -4, 2 ~ -2, 3 ~ 2, 4 ~ 4),
-        .names = "rs_factor_{.col}"
+        .names = "rs_{.col}"
       )
     )
 

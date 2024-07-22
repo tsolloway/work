@@ -4,7 +4,17 @@
 \alias{seg_fa}
 \title{seg_fa}
 \usage{
-seg_fa(seg, where = NULL)
+seg_fa(
+  seg,
+  clean_max = 0.25,
+  where = NULL,
+  file_name = "Factor Analysis",
+  method = "pa",
+  rotation = c("equamax", "varimax", "quartimax", "bentlerT", "varimin", "geominT",
+    "bifactor", "Promax", "promax", "oblimin", "simplimax", "bentlerQ", "geominQ",
+    "biquartimin", "none"),
+  return_object = FALSE
+)
 }
 \description{
 seg_fa

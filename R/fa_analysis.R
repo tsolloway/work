@@ -82,7 +82,7 @@ fa_analysis <- function(
       select(
         name, variable, label, factor, max, starts_with("F")
       ) %>%
-      arrange(factor, -max) %>%
+      arrange(factor, -abs(max)) %>%
       suppressWarnings()
   )
 
