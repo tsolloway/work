@@ -7,7 +7,7 @@ seg_organize_input_sheet <- function(seg, range_predictors, solution_items = 14)
   df <- seg[["df"]]
 
 
-  input_table <- seg[["input_table"]] %>%
+  input_table <- seg[["input_sheet"]][["input_fa_table"]] %>%
     mutate(
       .,
       order = seq(nrow(.))
@@ -173,9 +173,9 @@ seg_organize_input_sheet <- function(seg, range_predictors, solution_items = 14)
   )
 
 
-  seg[["input_table"]] <- input_table
-  seg[["solution_rational"]] <- solution_rational
-
+  seg[["input_sheet"]][["input_table"]] <- input_table
+  seg[["input_sheet"]][["prototype_table"]] <- prototype_table
+  seg[["input_sheet"]][["solution_rational"]] <- solution_rational
 
   return(seg)
 }

@@ -57,7 +57,7 @@ seg_get_fa_winner <- function(seg, winner, row_header = 4, file_location = NULL)
     )
 
 
-  seg[["input_table"]] <- df
+  seg[["input_sheet"]][["input_fa_table"]] <- df
 
 
   return(seg)
