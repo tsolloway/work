@@ -230,7 +230,19 @@ seg_input_sheet <- function(seg, fa_winner, range_predictors, where = NULL, file
       style = createStyle(textDecoration = "bold", bgFill = "#FCD5B4")
     )
 
+#
+    walk(
+      # col_start + c(4:5, 7, 9:10),
+      col_start + c(4:5, 7:10),
+      ~conditionalFormatting(
+        wb, sheet_name,
+        rows = rows_all, cols = .x,
+        type = "colourScale",
+        style = color_scale_colors
+      )
+    )
 
+#
     setColWidths(wb, sheet_name, cols = c(col_start - 1, cols_all[length(cols_all)] + 1), widths = 1)
     setColWidths(wb, sheet_name, cols = cols_all[14], widths = .1)
     setColWidths(wb, sheet_name, cols = cols_all[c(1:3, 5:6, 8:11)], widths = 6)
