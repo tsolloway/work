@@ -44,7 +44,7 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
           str_replace(fixed(",)"), ")"),
         label = label %>%
           str_squish() %>%
-          str_replace("&amp;", "&")
+          str_replace_all("&amp;", "&")
       )
 
 

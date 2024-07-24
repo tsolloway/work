@@ -6,7 +6,7 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), v
   where <- match.arg(where)
 
   if(where == "solutions"){
-    where = seg$paths$folders$solution
+    where = seg[["paths"]][["folders"]][["solution"]]
   }else if(where == "here"){
     where = getwd()
   }
@@ -16,156 +16,127 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), v
   # analytic helpers
   #########################
 
+  do_summary_means <- function(
+    df, solution_var, shell_all, add_desc = c("range", "diff"),
+    remove_total = FALSE, seg_names = NULL, sort_table = FALSE
+  ){
 
-  do_total_means <- function(df, vars){
-    df %>%
-      ungroup() %>%
-      select(all_of(vars)) %>%
-      tidyr::pivot_longer(all_of(vars)) %>%
-      group_by(name) %>%
-      summarise(
-        count = value %>% is.na() %>% not() %>% sum(),
-        mean = value %>% mean(na.rm=T)
-      ) %>%
-      set_names(c("var", "count", "mean"))
-  }
-
-
-  do_summary_means <- function(df, solution_var, shell_all){
+    add_desc <- match.arg(add_desc)
 
     vars <- shell_all[["var"]]
 
-    temp <- df %>%
-      select(all_of(c(solution_var, vars))) %>%
-      tidyr::pivot_longer(vars) %>%
-      group_by(across(c(-value))) %>%
-      summarise(
-        mean = value %>% mean(na.rm=T)
-      ) %>%
-      tidyr::pivot_wider(
-        names_from = name,
-        values_from = mean
-      ) %>%
-      t() %>%
-      bind_cols(
-        var = rownames(.),
-        .
-      ) %>%
-      set_names(
-        c(names(.)[1], glue("seg_{seq(1, ncol(.)-1)}"))
-      ) %>%
-      slice(-1) %>%
-      suppressMessages()
+
+    if(!remove_total){
+      total <- df %>%
+        select(all_of(vars)) %>%
+        psych::describe() %>%
+        select(n, mean) %>%
+        as.data.frame() %>%
+        round(10) %>%
+        setNames(c("count", "mean")) %>%
+        tibble::rownames_to_column("var")
+    }
 
 
-    temp[["range"]] <- temp %>%
-      select(-1) %>%
-      apply(1, function(x){max(x)-min(x)})
+    table_summary <- df %>%
+      select(all_of(solution_var)) %>%
+      unlist() %>%
+      unique() %>%
+      sort() %>%
+      map(
+        ~ df %>%
+          filter(.data[[solution_var]] == .x) %>%
+          select(all_of(vars)) %>%
+          psych::describe() %>%
+          select(mean) %>%
+          round(10) %>%
+          as_tibble()
+      ) %>%
+      bind_cols() %>%
+      suppressMessages() %>%
+      setNames(., glue("seg_{seq(length(.))}"))
 
 
-    temp[["p_value"]] <- temp[["var"]] %>%
-      sapply(function(x){
+    if(!is.null(seg_names)){
+      names(table_summary) <- seg_names
+    }
+
+
+    if(add_desc == "range"){
+      table_summary[, "range"] <- table_summary %>% apply(1, function(x){max(x, na.rm=T)-min(x, na.rm=T)})
+    }else if(add_desc == "diff"){
+      table_summary <- table_summary %>%
+        mutate(
+          Diff = target - others
+        ) %>%
+        suppressMessages()
+    }
+
+
+    table_summary[, "p_value"] <- sapply(
+      vars,
+      function(x){
         possibly(
           ~ chisq.test(table(df[[x]], df[[solution_var]]))
           , otherwise = NA)() %>%
-          pluck("p.value") %>% suppressWarnings()
+          pluck("p.value") %>%
+          suppressWarnings() %>%
+          round(10)
+      }) %>% sapply(function(x){
+        ifelse(is.null(x) || is.nan(x), NA, x)
       }) %>%
       sapply(function(x){
-        ifelse(is.null(x) || is.nan(x), NA, x)
+        ifelse(x == 0, 0.0000000001, x)
       })
 
 
-    total_means <- do_total_means(df, vars = vars)
+    if(!remove_total){
+      table_summary <- bind_cols(total, table_summary)
+    }else if(remove_total){
+      table_summary <- bind_cols(var = vars, table_summary)
+    }
 
 
-    left_join(
-      total_means,
-      temp,
+    table_summary <- left_join(
+      shell_all,
+      table_summary,
       by = join_by(var)
     ) %>%
-      left_join(
-        shell_all,
-        .,
-        by = join_by(var)
-      ) %>%
-      select(-var) %>%
-      tidyr::nest(by=-c(block_header, type))
-
-  }
-
-
-  do_segment_means <- function(seg_n, solution_var, df, shell_all, sort_table = TRUE){
-
-    vars = shell_all[["var"]]
-
-    temp <- df %>%
-      mutate(
-        temp_solution = .data[[solution_var]] %>% case_match(seg_n ~ 1, NA ~ NA, .default = 0)
-      )
-
-    result <- temp %>%
-      select(all_of(c("temp_solution", vars))) %>%
-      tidyr::pivot_longer(vars) %>%
-      group_by(across(c(-value))) %>%
-      summarise(
-        mean = value %>% mean(na.rm=T)
-      ) %>%
-      tidyr::pivot_wider(
-        names_from = name,
-        values_from = mean
-      ) %>%
-      t() %>%
-      bind_cols(
-        var = rownames(.),
-        .
-      ) %>%
-      set_names(
-        c("var", "others", "target")
-      ) %>%
-      select(var, target, others) %>%
-      slice(-1) %>%
-      mutate(
-        Diff = target - others
-      ) %>%
-      suppressMessages()
-
-
-    result[["p_value"]] <- result[["var"]] %>%
-      sapply(function(x){
-        possibly(
-          ~ chisq.test(table(temp[[x]], temp[["temp_solution"]]))
-          , otherwise = NA)() %>%
-          pluck("p.value") %>% suppressWarnings()
-      }) %>%
-      sapply(function(x){
-        ifelse(is.null(x) || is.nan(x), NA, x)
-      })
-
-
-    result <- result %>%
-      left_join(
-        shell_all,
-        .,
-        by = join_by(var)
-      ) %>%
       select(-var) %>%
       tidyr::nest(by=-c(block_header, type))
 
 
     if(sort_table){
-      result[["by"]] <- result[["by"]] %>% map(~{.x %>% arrange(-Diff)})
+      if(add_desc == "range"){
+        table_summary[["by"]] <- table_summary[["by"]] %>% map(~{.x %>% arrange(-range)})
+      }else if(add_desc == "diff"){
+        table_summary[["by"]] <- table_summary[["by"]] %>% map(~{.x %>% arrange(-Diff)})
+      }
     }
 
-    return(result)
+
+    return(table_summary)
   }
 
 
   do_all_segment_means <- function(solution_var, df, shell_all){
 
-    seg_length <- df %>% select(all_of(solution_var)) %>% unique() %>% nrow()
+    seg_max <- df %>% select(all_of(solution_var)) %>% unlist() %>% max()
 
-    seq(1, seg_length) %>%
-      map(~do_segment_means(seg_n = .x, solution_var = solution_var, df = df, shell_all = shell_all))
+    seq(seg_max) %>%
+      map(~{
+
+        temp <- df %>%
+          mutate(
+            temp_solution = .data[[solution_var]] %>% case_match(.x ~ 1, NA ~ NA, .default = 2)
+          )
+
+        do_summary_means(
+          df = temp, solution_var = "temp_solution", shell_all = shell_all,
+          add_desc = "diff", remove_total = TRUE,
+          seg_names = c("target", "others"), sort_table = TRUE
+        )
+      })
   }
 
 
@@ -191,7 +162,7 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), v
     summary_table <- df %>% do_summary_means(solution_var = solution_var, shell_all = shell_all)
 
 
-    segment_tables <- do_all_segment_means(solution_var = "HHI", df = df, shell_all = shell_all)
+    segment_tables <- do_all_segment_means(solution_var = solution_var, df = df, shell_all = shell_all)
 
 
     solution_frequency <- df %>%
@@ -1013,6 +984,7 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), v
   )
 
   saveWorkbook(wb, glue("{where}/Solution - {solution_var}.xlsx"), overwrite = TRUE)
+
 
   if(verbose) message(glue("Written: {solution_var}"))
 
