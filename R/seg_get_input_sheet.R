@@ -1,7 +1,7 @@
 #' seg_get_input_sheet
 #' @description seg_get_input_sheet
 #' @export
-seg_get_input_sheet <- function(seg, file_location = NULL, row_start = 5){
+seg_get_input_sheet <- function(seg, file_location = NULL, row_start = 6){
 
   require(openxlsx)
 

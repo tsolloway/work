@@ -8,6 +8,8 @@ Depends:
   magrittr
 Imports:
   car,
+  caret,
+  cluster,
   corrplot,
   corrr,
   DBI,
@@ -20,6 +22,7 @@ Imports:
   highcharter,
   Hmisc,
   lubridate,
+  mclust,
   openxlsx,
   pak,
   psych,
@@ -35,6 +38,7 @@ Imports:
   stringr,
   tibble,
   tictoc,
-  usethis
+  usethis,
+  uuid
 RoxygenNote: 7.3.2
 LazyData: true

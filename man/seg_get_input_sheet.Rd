@@ -4,7 +4,7 @@
 \alias{seg_get_input_sheet}
 \title{seg_get_input_sheet}
 \usage{
-seg_get_input_sheet(seg, file_location = NULL, row_start = 5)
+seg_get_input_sheet(seg, file_location = NULL, row_start = 6)
 }
 \description{
 seg_get_input_sheet
