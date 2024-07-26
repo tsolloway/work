@@ -26,6 +26,7 @@ cluster_medoid <- function(
 
   tibble::tibble("n" = n_min : n_max) %>%
     dplyr::mutate(
+      "solution_name" = solution_name,
       "cluster_name" = glue("medoid_cluster_{solution_name}{n}"),
       "cluster_fit" = map(n, possibly(~cluster::pam(df_temp, .x), otherwise = NA)),
       "cluster_seed" = map2(cluster_fit, cluster_name, possibly(~pluck(.x, "clustering") %>% bind_cols(id_temp, .) %>% set_names(c("id", .y)) %>% suppressMessages(), otherwise = NA)),

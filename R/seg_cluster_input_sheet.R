@@ -9,7 +9,7 @@ seg_cluster_input_sheet <- function(
     do_kmeans = TRUE, do_medoid = TRUE, do_gaus_mix = TRUE, do_hierarchical = TRUE
 ){
 
-  imap(
+  solutions <- imap(
     seg[["solutions"]][["inputs"]],
     ~cluster_solution_family(
       seg = seg,
@@ -27,4 +27,33 @@ seg_cluster_input_sheet <- function(
   )
 
 
+  solution_table <- solutions %>%
+    map(keep, tibble::is_tibble) %>%
+    flatten() %>%
+    map(~select(.x, solution_name, n, cluster_name, lda_name, confusion, accuracy, df_append)) %>%
+    bind_rows()
+
+
+  df_segment_append <- solution_table %>%
+    select(df_append) %>%
+    unlist(recursive = FALSE) %>%
+    reduce(full_join, by = "id")
+
+
+  solution_table <- solution_table %>% select(-df_append)
+
+
+  df <- left_join(
+    seg[["data"]][["with_shell"]],
+    df_segment_append,
+    by = join_by(seg_uuid == id)
+  )
+
+
+  seg[["solutions"]][["solutions"]] <- solutions
+  seg[["solutions"]][["summary_table"]] <- solution_table
+  seg[["solutions"]][["df_segment_append"]] <- df_segment_append
+  seg[["data"]][["with_solutions"]] <- df
+
+  return(seg)
 }

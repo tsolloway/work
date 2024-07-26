@@ -2,7 +2,9 @@
 #' @description seg_init
 #' @export
 seg_init <- function(
-    folder_path = getwd()
+    folder_path = getwd(),
+    project_name = NULL,
+    project_number = NULL
 ){
 
   result <- list()
@@ -43,7 +45,16 @@ seg_init <- function(
 
   result[["meta"]] <- list(
     "analytic" = "segmentation",
-    "folder_name" = folder_name
+    "folder_name" = folder_name,
+    "project_name" = project_name %>% stringr::str_squish(),
+    "project_number" = project_number %>% stringr::str_squish()
+  )
+
+
+  result[["data"]] <- list(
+    "original" = NA,
+    "with_shell" = NA,
+    "with_solutions" = NA
   )
 
   return(result)

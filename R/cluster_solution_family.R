@@ -9,14 +9,11 @@ cluster_solution_family <- function(
     do_kmeans = TRUE, do_medoid = TRUE, do_gaus_mix = TRUE, do_hierarchical = TRUE
 ){
 
-
   result <- list()
 
+  df <- seg[["data"]][["with_shell"]]
+
   polars_rs <- seg[["input_sheet"]][["input_table"]][["rs_var"]] %>% as.character()
-
-
-  # create unqiue id
-  df <- seg[["df"]] %>% add_uuid(id_name)
 
 
   # filter data if availabe

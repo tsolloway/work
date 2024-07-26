@@ -4,7 +4,7 @@
 seg_organize_input_sheet <- function(seg, range_predictors, solution_items = 14){
 
 
-  df <- seg[["df"]]
+  df <- seg[["data"]][["with_shell"]]
 
 
   input_table <- seg[["input_sheet"]][["input_fa_table"]] %>%
@@ -36,7 +36,10 @@ seg_organize_input_sheet <- function(seg, range_predictors, solution_items = 14)
     select(var, label)
 
 
-  vars_shell <- prototype_table %>% select(var) %>% unlist() %>% setNames(NULL)
+  vars_shell <- prototype_table %>%
+    select(var) %>%
+    unlist() %>%
+    setNames(NULL)
 
 
   prototype_table <- df %>%

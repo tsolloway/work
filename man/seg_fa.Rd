@@ -13,7 +13,8 @@ seg_fa(
   rotation = c("equamax", "varimax", "quartimax", "bentlerT", "varimin", "geominT",
     "bifactor", "Promax", "promax", "oblimin", "simplimax", "bentlerQ", "geominQ",
     "biquartimin", "none"),
-  return_object = FALSE
+  return_object = FALSE,
+  add_proj_name_to_file = TRUE
 )
 }
 \description{

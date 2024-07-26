@@ -21,6 +21,7 @@ Imports:
   gsubfn,
   highcharter,
   Hmisc,
+  janitor,
   lubridate,
   mclust,
   openxlsx,

@@ -12,7 +12,8 @@ seg_fa <- function(
       "Promax", "promax", "oblimin", "simplimax", "bentlerQ", "geominQ", "biquartimin",
       "none"
     ),
-    return_object = FALSE
+    return_object = FALSE,
+    add_proj_name_to_file = TRUE
 ){
 
   if(is.null(where)){
@@ -27,15 +28,24 @@ seg_fa <- function(
 
 
   fa_analysis_object <- fa_analysis(
-    df = seg[["df"]],
-    vars = seg[["input_table"]][["rs_var"]] %>% unlist(),
-    labels = seg[["input_table"]] %>% select(rs_var, source_label) %>% set_names(c("variable", "label")),
+    df = seg[["data"]][["with_shell"]],
+    vars = seg[["spec"]][["polars_table"]][["rs_var"]] %>% unlist(),
+    labels = seg[["spec"]][["polars_table"]] %>% select(rs_var, source_label) %>% set_names(c("variable", "label")),
     method = method,
     rotation = rotation
   )
 
 
-  file_location <-  fa_analysis_object %>% fa_write(where = where, clean_max = clean_max, file_name = file_name, return_location = TRUE)
+
+  if(add_proj_name_to_file){
+    file_name <- seg_glue_proj_name_to_file(seg, file_name)
+  }
+
+
+
+  file_location <-  fa_analysis_object %>%
+    fa_write(where = where, clean_max = clean_max, file_name = file_name, return_location = TRUE)
+
 
 
   seg[["paths"]][["files"]][["fa"]] <- file_location

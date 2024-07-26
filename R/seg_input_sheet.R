@@ -1,7 +1,10 @@
 #' seg_input_sheet
 #' @description seg_input_sheet
 #' @export
-seg_input_sheet <- function(seg, fa_winner, range_predictors, where = NULL, file_name = "Input Sheet"){
+seg_input_sheet <- function(
+    seg, fa_winner, range_predictors, where = NULL,
+    file_name = "Input Sheet", add_proj_name_to_file = TRUE
+){
 
   require(openxlsx)
 
@@ -230,7 +233,7 @@ seg_input_sheet <- function(seg, fa_winner, range_predictors, where = NULL, file
       style = createStyle(textDecoration = "bold", bgFill = "#FCD5B4")
     )
 
-#
+    #
     walk(
       # col_start + c(4:5, 7, 9:10),
       col_start + c(4:5, 7:10),
@@ -242,7 +245,7 @@ seg_input_sheet <- function(seg, fa_winner, range_predictors, where = NULL, file
       )
     )
 
-#
+    #
     setColWidths(wb, sheet_name, cols = c(col_start - 1, cols_all[length(cols_all)] + 1), widths = 1)
     setColWidths(wb, sheet_name, cols = cols_all[14], widths = .1)
     setColWidths(wb, sheet_name, cols = cols_all[c(1:3, 5:6, 8:11)], widths = 6)
@@ -524,15 +527,23 @@ seg_input_sheet <- function(seg, fa_winner, range_predictors, where = NULL, file
 
   wb <- createWorkbook()
 
+
   append_input_sheet(wb, seg_input_table = seg[["input_sheet"]][["input_table"]], sheet_name = "Inputs", row_start = 6, col_start = 2)
 
   append_rational_sheet(wb, rational_table = seg[["input_sheet"]][["solution_rational"]], sheet_name = "Rational", row_start = 2, col_start = 2)
 
   append_prototype_sheet(wb, prototype_table = seg[["input_sheet"]][["prototype_table"]], sheet_name = "Prototype", row_start = 2,  col_start = 2, segs_max = 10)
 
-  seg[["paths"]][["files"]][["input"]] <- file_location
+
+  if(add_proj_name_to_file){
+    file_name <- seg_glue_proj_name_to_file(seg, file_name)
+  }
+
 
   saveWorkbook(wb, file_location, overwrite = TRUE)
+
+  seg[["paths"]][["files"]][["input"]] <- file_location
+
 
   return(seg)
 }

@@ -4,7 +4,7 @@
 \alias{seg_get_data}
 \title{seg_get_data}
 \usage{
-seg_get_data(seg, data_path, weight = NULL)
+seg_get_data(seg, data_path, weight = NULL, id_name = "seg_uuid")
 }
 \description{
 seg_get_data

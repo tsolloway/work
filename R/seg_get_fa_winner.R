@@ -6,6 +6,9 @@ seg_get_fa_winner <- function(seg, winner, row_header = 4, file_location = NULL)
   require(openxlsx)
 
 
+  polars_table <- seg[["spec"]][["polars_table"]]
+
+
   if(is.null(file_location)){
     file_location <- seg[["paths"]][["files"]][["fa"]]
   }
@@ -51,7 +54,7 @@ seg_get_fa_winner <- function(seg, winner, row_header = 4, file_location = NULL)
       solution_a = solution_a
     ) %>%
     left_join(
-      seg[["input_table"]],
+      polars_table,
       .,
       by = join_by(rs_var == fa_var)
     )

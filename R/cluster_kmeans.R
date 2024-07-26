@@ -26,6 +26,7 @@ cluster_kmeans <- function(
 
   tibble::tibble("n" = n_min : n_max) %>%
     dplyr::mutate(
+      "solution_name" = solution_name,
       "cluster_name" = glue("kmeans_cluster_{solution_name}{n}"),
       "cluster_fit" = map(n, possibly(~stats::kmeans(df_temp, .x, iter.max = iter_max, nstart = nstart), otherwise = NA)),
       "cluster_seed" = map2(cluster_fit, cluster_name, possibly(~pluck(.x, "cluster") %>% bind_cols(id_temp, .) %>% set_names(c("id", .y)) %>% suppressMessages(), otherwise = NA)),

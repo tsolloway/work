@@ -1,15 +1,29 @@
 #' seg_get_data
 #' @description seg_get_data
 #' @export
-seg_get_data <- function(seg, data_path, weight = NULL){
+seg_get_data <- function(seg, data_path, weight = NULL, id_name = "seg_uuid"){
 
-  seg[["paths"]][["files"]][["data"]] <- data_path %>% normalizePath(mustWork = TRUE)
 
-  seg[["df"]] <- read_xl(data_path, clean_col_names = FALSE)
+  data_path <- data_path %>% normalizePath(mustWork = TRUE)
+
+
+  seg[["data"]][["original"]] <- data_path %>%
+    read_xl(clean_col_names = FALSE) %>%
+    add_uuid(id_name)
+
+
+  seg[["paths"]][["files"]][["data"]] <- data_path
+
 
   if(!is.null(weight)){
     seg[["meta"]][["weight_variable"]] <- weight
   }
 
-  seg
+
+  if(!is.null(weight)){
+    seg[["meta"]][["id_variable"]] <- id_name
+  }
+
+
+  return(seg)
 }

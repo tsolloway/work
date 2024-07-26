@@ -3,20 +3,31 @@
 #' @export
 seg_do_spec <- function(seg, debug = FALSE){
 
-  if(is.null(seg[["df"]])){
+  if(is.null(seg[["data"]][["original"]])){
     stop("No data. Run get_data first.")
-  }else if(!is.null(seg[["df"]])){
-    df <- seg[["df"]]
+
+  }else if(!is.null(seg[["data"]][["original"]])){
+
+    df <- seg[["data"]][["original"]]
   }
 
+
   if(is.null(seg[["spec"]][["polars"]]) || is.null(seg[["spec"]][["profiles"]])){
+
     stop("No specs Run get_spec first.")
+
   }else if(!is.null(seg[["spec"]][["polars"]]) && !is.null(seg[["spec"]][["profiles"]])){
+
     spec_polars <- seg[["spec"]][["polars"]]
+
     spec_profiles <- seg[["spec"]][["profiles"]]
   }
 
-  if(!is.null(seg[["meta"]][["weight_variable"]])) stop("Weighting not programmed.  Fix this before doing this seg please.")
+
+  if(!is.null(seg[["meta"]][["weight_variable"]])){
+    stop("Weighting not programmed.  Fix this before doing this seg please.")
+  }
+
 
 
   #########################
@@ -99,10 +110,10 @@ seg_do_spec <- function(seg, debug = FALSE){
       )
     )
 
-    seg[["df"]] <- df
+    seg[["data"]][["with_shell"]] <- df
     seg[["shell"]][["polars"]] <- df %>% spec_shell(spec_polars)
     seg[["shell"]][["profiles"]] <- df %>% spec_shell(spec_profiles)
-    seg[["input_table"]] <- inputs
+    seg[["spec"]][["polars_table"]] <- inputs
 
   }
 

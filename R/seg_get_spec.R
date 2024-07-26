@@ -83,11 +83,16 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
 
 
   if(exeute){
-    if(is.null(seg[["df"]])){
+
+    if(is.null(seg[["data"]][["original"]])){
+
       warning("No data. Run get_data first. Will not execute")
-    }else if(!is.null(seg[["df"]])){
+
+    }else if(!is.null(seg[["data"]][["original"]])){
+
       seg <- seg %>% seg_do_spec(debug = execute_debug)
     }
+
   }
 
 

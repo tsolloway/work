@@ -142,7 +142,7 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), v
 
   do_shell_tables <- function(seg, solution_var){
 
-    df <- seg[["df"]]
+    df <- seg[["data"]][["with_shell"]]
 
     shell_polars <- seg[["shell"]][["polars"]] %>%
       tidyr::unnest(cols = vars)

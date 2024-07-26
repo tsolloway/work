@@ -4,7 +4,7 @@
 \alias{seg_init}
 \title{seg_init}
 \usage{
-seg_init(folder_path = getwd())
+seg_init(folder_path = getwd(), project_name = NULL, project_number = NULL)
 }
 \description{
 seg_init

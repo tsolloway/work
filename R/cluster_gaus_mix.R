@@ -27,6 +27,7 @@ cluster_gaus_mix <- function(
 
   result <- tibble::tibble("n" = n_min : n_max) %>%
     dplyr::mutate(
+      "solution_name" = solution_name,
       "cluster_name" = glue("gaus_mix_cluster_{solution_name}{n}"),
       "cluster_fit" = purrr::map(n, possibly(~mclust::Mclust(df_temp, .x, verbose = FALSE), otherwise = NA)),
       "cluster_seed" = map2(cluster_fit, cluster_name, possibly(~pluck(.x, "classification") %>% bind_cols(id_temp, .) %>% set_names(c("id", .y)) %>% suppressMessages(), otherwise = NA)),

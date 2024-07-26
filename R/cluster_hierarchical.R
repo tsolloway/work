@@ -28,6 +28,7 @@ cluster_hierarchical <- function(
 
   result <- tibble::tibble("n" = n_min : n_max) %>%
     dplyr::mutate(
+      "solution_name" = solution_name,
       "cluster_name" = glue("hierarchical_cluster_{solution_name}{n}"),
       "cluster_seed" = map2(
         n, cluster_name,

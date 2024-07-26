@@ -9,7 +9,8 @@ seg_input_sheet(
   fa_winner,
   range_predictors,
   where = NULL,
-  file_name = "Input Sheet"
+  file_name = "Input Sheet",
+  add_proj_name_to_file = TRUE
 )
 }
 \description{
