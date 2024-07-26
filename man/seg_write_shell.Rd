@@ -4,7 +4,7 @@
 \alias{seg_write_shell}
 \title{seg_write_shell}
 \usage{
-seg_write_shell(seg, solution_var, where = NULL, verbose = FALSE)
+seg_write_shell(seg, solution_var, key = NULL, where = NULL, verbose = FALSE)
 }
 \description{
 seg_write_shell
