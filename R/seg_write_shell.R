@@ -1,7 +1,7 @@
 #' seg_write_shell
 #' @description seg_write_shell
 #' @export
-seg_write_shell <- function(seg, solution_var, where = NULL, verbose = FALSE){
+seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose = FALSE){
 
 
   if(is.null(where)){
@@ -168,10 +168,42 @@ seg_write_shell <- function(seg, solution_var, where = NULL, verbose = FALSE){
       select(block_header, type, var, label)
 
 
+
     summary_table <- df %>% do_summary_means(solution_var = solution_var, shell_all = shell_all)
 
 
+
     segment_tables <- do_all_segment_means(solution_var = solution_var, df = df, shell_all = shell_all)
+
+
+
+    if(is.null(key)){
+
+      if(solution_var %in% seg[["solutions"]][["summary_table"]][["lda_name"]]){
+
+        key <- seg[["solutions"]][["summary_table"]] %>%
+          filter(lda_name == solution_var) %>%
+          select(profiles) %>%
+          unlist() %>%
+          setNames(NULL)
+      }
+    }
+
+
+    if(!is.null(key)){
+
+      summary_key <- df %>%
+        do_summary_means(
+          solution_var = solution_var,
+          shell_all = shell_all %>% filter(var %in% key)
+        ) %>% tidyr::unnest(by) %>%
+        mutate(
+          block_header = ifelse(type == "polar", "Key Polars", "Key Profiles")
+        ) %>%
+        tidyr::nest(by = -c(block_header, type))
+
+    }
+
 
 
     solution_frequency <- df %>%
@@ -186,20 +218,20 @@ seg_write_shell <- function(seg, solution_var, where = NULL, verbose = FALSE){
       data.frame()
 
 
+
     names(solution_frequency) <- glue("Seg {seq(ncol(solution_frequency))}")
 
     names(segment_tables) <- names(solution_frequency)
 
-    segment_tables
-    return(
-      list(
-        "summary_table" = summary_table,
-        "segment_tables" = segment_tables,
-        "solution_frequency" = solution_frequency
-      )
+
+    result <- list(
+      "summary_table" = summary_table,
+      "segment_tables" = segment_tables,
+      "solution_frequency" = solution_frequency
     )
 
 
+    return(result)
   }
 
 
