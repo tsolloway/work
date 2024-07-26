@@ -15,6 +15,7 @@ Imports:
   DBI,
   devtools,
   dplyr,
+  furrr,
   future,
   future.apply,
   glue,

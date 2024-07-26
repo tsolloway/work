@@ -1,15 +1,26 @@
 #' seg_write_shell
 #' @description seg_write_shell
 #' @export
-seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), verbose = FALSE){
+seg_write_shell <- function(seg, solution_var, where = NULL, verbose = FALSE){
 
-  where <- match.arg(where)
 
-  if(where == "solutions"){
-    where = seg[["paths"]][["folders"]][["solution"]]
-  }else if(where == "here"){
-    where = getwd()
+  if(is.null(where)){
+    where <- seg[["paths"]][["folders"]][["solution"]]
   }
+
+  if(is.null(where) || is.na(where)){
+    where <- getwd()
+  }
+
+
+  df_solutions <- seg[["data"]][["with_solutions"]]
+
+  if(all(is.na(df_solutions)) || is.null(df_solutions)){
+    df <- seg[["data"]][["with_shell"]]
+  }else{
+    df <- df_solutions
+  }
+
 
 
   #########################
@@ -140,9 +151,7 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), v
   }
 
 
-  do_shell_tables <- function(seg, solution_var){
-
-    df <- seg[["data"]][["with_shell"]]
+  do_shell_tables <- function(seg, solution_var, df){
 
     shell_polars <- seg[["shell"]][["polars"]] %>%
       tidyr::unnest(cols = vars)
@@ -199,7 +208,7 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), v
   #########################
 
 
-  shell_tables <- seg %>% do_shell_tables(solution_var = solution_var)
+  shell_tables <- do_shell_tables(seg = seg, solution_var = solution_var, df = df)
 
 
 
@@ -978,7 +987,7 @@ seg_write_shell <- function(seg, solution_var, where = c("solutions", "here"), v
 
   append_sheet(wb, shell_tables) %>% suppressWarnings()
 
-  purrr::walk(
+  walk(
     shell_tables[["segment_tables"]] %>% length() %>% seq(),
     ~append_sheet(wb, shell_tables, seg_n = .x) %>% suppressWarnings()
   )

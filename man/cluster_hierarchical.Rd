@@ -7,6 +7,7 @@
 cluster_hierarchical(
   df,
   vars,
+  vars_profiles,
   solution_name,
   id_name,
   filter_name = NULL,

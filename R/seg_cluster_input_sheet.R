@@ -30,7 +30,7 @@ seg_cluster_input_sheet <- function(
   solution_table <- solutions %>%
     map(keep, tibble::is_tibble) %>%
     flatten() %>%
-    map(~select(.x, solution_name, n, cluster_name, lda_name, confusion, accuracy, df_append)) %>%
+    map(~select(.x, solution_name, n, cluster_name, lda_name, inputs, profiles, confusion, accuracy, df_append)) %>%
     bind_rows()
 
 
@@ -54,6 +54,7 @@ seg_cluster_input_sheet <- function(
   seg[["solutions"]][["summary_table"]] <- solution_table
   seg[["solutions"]][["df_segment_append"]] <- df_segment_append
   seg[["data"]][["with_solutions"]] <- df
+
 
   return(seg)
 }

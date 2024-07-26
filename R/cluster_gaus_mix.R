@@ -2,7 +2,7 @@
 #' @description cluster_gaus_mix
 #' @export
 cluster_gaus_mix <- function(
-    df, vars, solution_name, id_name, filter_name = NULL,
+    df, vars, vars_profiles, solution_name, id_name, filter_name = NULL,
     n_min = 4, n_max = 7,
     priors = c("equal", "size"), iter_max = 100000, nstart = 10
 ){
@@ -29,6 +29,8 @@ cluster_gaus_mix <- function(
     dplyr::mutate(
       "solution_name" = solution_name,
       "cluster_name" = glue("gaus_mix_cluster_{solution_name}{n}"),
+      "inputs" = list(vars),
+      "profiles" = list(vars_profiles),
       "cluster_fit" = purrr::map(n, possibly(~mclust::Mclust(df_temp, .x, verbose = FALSE), otherwise = NA)),
       "cluster_seed" = map2(cluster_fit, cluster_name, possibly(~pluck(.x, "classification") %>% bind_cols(id_temp, .) %>% set_names(c("id", .y)) %>% suppressMessages(), otherwise = NA)),
       "priors_equal" = purrr::map(n, ~rep(1/.x, .x)),

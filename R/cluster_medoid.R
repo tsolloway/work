@@ -2,7 +2,7 @@
 #' @description cluster_medoid
 #' @export
 cluster_medoid <- function(
-    df, vars, solution_name, id_name, filter_name = NULL,
+    df, vars, vars_profiles, solution_name, id_name, filter_name = NULL,
     n_min = 4, n_max = 7,
     priors = c("equal", "size"), iter_max = 100000, nstart = 10
 ){
@@ -28,6 +28,8 @@ cluster_medoid <- function(
     dplyr::mutate(
       "solution_name" = solution_name,
       "cluster_name" = glue("medoid_cluster_{solution_name}{n}"),
+      "inputs" = list(vars),
+      "profiles" = list(vars_profiles),
       "cluster_fit" = map(n, possibly(~cluster::pam(df_temp, .x), otherwise = NA)),
       "cluster_seed" = map2(cluster_fit, cluster_name, possibly(~pluck(.x, "clustering") %>% bind_cols(id_temp, .) %>% set_names(c("id", .y)) %>% suppressMessages(), otherwise = NA)),
       "cluster_tidy" = map(cluster_fit, possibly(broom::tidy, otherwise = NA)),

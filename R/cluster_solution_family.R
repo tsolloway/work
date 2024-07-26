@@ -41,7 +41,7 @@ cluster_solution_family <- function(
 
   if(do_kmeans){
     result[["kmeans"]] <- cluster_kmeans(
-      df = df, vars = inputs[["RS"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
+      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max,
       priors = priors, iter_max = iter_max, nstart = nstart
     )
@@ -51,7 +51,7 @@ cluster_solution_family <- function(
 
   if(do_medoid){
     result[["medoid"]] <- cluster_medoid(
-      df = df, vars = inputs[["RS"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
+      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max,
       priors = priors, iter_max = iter_max, nstart = nstart
     )
@@ -61,7 +61,7 @@ cluster_solution_family <- function(
 
   if(do_gaus_mix){
     result[["gaus_mix"]] <- cluster_gaus_mix(
-      df = df, vars = inputs[["RS"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
+      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max,
       priors = priors, iter_max = iter_max, nstart = nstart
     )
@@ -71,7 +71,7 @@ cluster_solution_family <- function(
 
   if(do_hierarchical){
     temp <- cluster_hierarchical(
-      df = df, vars = inputs[["RS"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
+      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max,
       priors = priors, iter_max = iter_max, nstart = nstart
     )

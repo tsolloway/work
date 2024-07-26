@@ -2,7 +2,7 @@
 #' @description cluster_hierarchical
 #' @export
 cluster_hierarchical <- function(
-    df, vars, solution_name, id_name, filter_name = NULL,
+    df, vars, vars_profiles, solution_name, id_name, filter_name = NULL,
     n_min = 4, n_max = 7,
     priors = c("equal", "size"), iter_max = 100000, nstart = 10
 ){
@@ -30,6 +30,8 @@ cluster_hierarchical <- function(
     dplyr::mutate(
       "solution_name" = solution_name,
       "cluster_name" = glue("hierarchical_cluster_{solution_name}{n}"),
+      "inputs" = list(vars),
+      "profiles" = list(vars_profiles),
       "cluster_seed" = map2(
         n, cluster_name,
         function(x,y)possibly(
