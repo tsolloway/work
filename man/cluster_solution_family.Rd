@@ -12,6 +12,7 @@ cluster_solution_family(
   filter_logical_vector = NULL,
   n_min = 4,
   n_max = 7,
+  reduced_inputs_max = NULL,
   vary_percent = 0.1,
   side_bias_percent = 0.1,
   priors = c("equal", "size"),

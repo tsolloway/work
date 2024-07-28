@@ -13,6 +13,7 @@ cluster_gaus_mix(
   filter_name = NULL,
   n_min = 4,
   n_max = 7,
+  reduced_inputs_max = NULL,
   priors = c("equal", "size"),
   iter_max = 1e+05,
   nstart = 10

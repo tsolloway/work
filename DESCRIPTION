@@ -23,6 +23,7 @@ Imports:
   highcharter,
   Hmisc,
   janitor,
+  klaR,
   lubridate,
   mclust,
   openxlsx,

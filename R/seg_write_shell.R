@@ -1,7 +1,9 @@
 #' seg_write_shell
 #' @description seg_write_shell
 #' @export
-seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose = FALSE){
+seg_write_shell <- function(
+    seg, solution_var, key = NULL, add_key = FALSE, where = NULL, verbose = FALSE
+){
 
 
   if(is.null(where)){
@@ -153,6 +155,8 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
 
   do_shell_tables <- function(seg, solution_var, df, key = NULL){
 
+    result <- list()
+
     shell_polars <- seg[["shell"]][["polars"]] %>%
       tidyr::unnest(cols = vars)
 
@@ -183,7 +187,7 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
 
         key <- seg[["solutions"]][["summary_table"]] %>%
           filter(lda_name == solution_var) %>%
-          select(profiles) %>%
+          select(lda_profiles) %>%
           unlist() %>%
           setNames(NULL)
       }
@@ -202,6 +206,7 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
         ) %>%
         tidyr::nest(by = -c(block_header, type))
 
+      result[["summary_key"]] <- summary_key
     }
 
 
@@ -224,11 +229,9 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
     names(segment_tables) <- names(solution_frequency)
 
 
-    result <- list(
-      "summary_table" = summary_table,
-      "segment_tables" = segment_tables,
-      "solution_frequency" = solution_frequency
-    )
+    result[["summary_table"]] <- summary_table
+    result[["segment_tables"]] <- segment_tables
+    result[["solution_frequency"]] <- solution_frequency
 
 
     return(result)
@@ -241,7 +244,6 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
 
 
   shell_tables <- do_shell_tables(seg = seg, solution_var = solution_var, df = df, key = key)
-
 
 
   #########################
@@ -258,13 +260,7 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
 
     require(openxlsx)
 
-
-    if(!segment_specific){
-      sheet_name <- "summary"
-    }else if(segment_specific){
-      sheet_name_summary <- "summary"
-    }
-
+    sheet_name_summary <- "summary"
 
     style_percent <- createStyle(halign = "center", numFmt = "0%")
     style_number <- createStyle(halign = "center", numFmt = "0")
@@ -657,10 +653,12 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
 
 
   append_sheet <- function(
-    wb, shell_tables, seg_n = NULL, row_data_start = 15, col_start = 2, row_block_gap = 2
+    wb, shell_tables, add_key = FALSE, seg_n = NULL, row_data_start = 15, col_start = 2, row_block_gap = 2
   ){
 
     summary_sheet_name <-  "summary"
+    key_sheet_name <- "key"
+
 
     row_start <- row_data_start
 
@@ -690,7 +688,6 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
       xtable <- shell_tables[["segment_tables"]][[sheet_name]]
 
     }else if(!segment_specific){
-      sheet_name <- summary_sheet_name
 
       col_seg_first <- num2let(col_start + 4)
       col_seg_last <- num2let(col_start + 4 + seg_count - 1)
@@ -698,7 +695,14 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
       col_width_1 <- c(1, 5, 6 + seg_count, 9 + seg_count, 11 + seg_count, 13 + seg_count)
       col_width_7 <- c(seq(3,4), seq(6, 5 + seg_count), seq(7 + seg_count, 8 + seg_count), 10 + seg_count, 12 + seg_count)
 
-      xtable <- shell_tables[["summary_table"]]
+
+      if(add_key){
+        sheet_name <- key_sheet_name
+        xtable <- shell_tables[["summary_key"]]
+      }else if(!add_key){
+        sheet_name <- summary_sheet_name
+        xtable <- shell_tables[["summary_table"]]
+      }
     }
 
 
@@ -1017,7 +1021,15 @@ seg_write_shell <- function(seg, solution_var, key = NULL, where = NULL, verbose
 
   wb <- createWorkbook()
 
-  append_sheet(wb, shell_tables) %>% suppressWarnings()
+  append_sheet(wb, shell_tables)
+
+
+  if(add_key){
+    append_sheet(wb, shell_tables, add_key = TRUE)
+
+    worksheetOrder(wb) <- 2:1
+  }
+
 
   walk(
     shell_tables[["segment_tables"]] %>% length() %>% seq(),

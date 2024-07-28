@@ -43,9 +43,11 @@ seg_write_solutions <- function(seg, solution = NULL, where = NULL){
   )
 
 
+
   require(furrr)
 
   plan(multisession, workers = 8)
+
 
   opts <- furrr_options(
     globals = TRUE,
@@ -53,10 +55,21 @@ seg_write_solutions <- function(seg, solution = NULL, where = NULL){
     seed = TRUE
   )
 
+
   future_walk2(
     solution_vars,
     solution_locations,
-    ~seg_write_shell(seg = seg, solution_var = .x, where = .y),
+    function(x,y){
+      tryCatch(
+        seg_write_shell(
+          seg = seg,
+          solution_var = x,
+          where = y,
+          add_key = TRUE
+        ),
+        error = function(e) NA
+      )
+    },
     .options = opts
   )
 

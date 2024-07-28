@@ -7,10 +7,12 @@
 cluster_add_lda(
   cluster_table,
   df,
-  vars,
+  lda_vars = NULL,
+  lda_vars_profiles = NULL,
   id_name,
   filter_name = NULL,
-  priors = c("equal", "size")
+  priors = c("equal", "size"),
+  use_reduced = FALSE
 )
 }
 \description{
