@@ -23,8 +23,14 @@ seg_split_segments <- function(
   }
 
 
-  mean_inf_zero <- function(x){
+
+  max_inf_zero <- function(x){
     ifelse(is.infinite(max(x, na.rm = TRUE)), 0, max(x, na.rm = TRUE)) %>% suppressWarnings()
+  }
+
+
+  min_inf_zero <- function(x){
+    ifelse(is.infinite(min(x, na.rm = TRUE)), 0, min(x, na.rm = TRUE)) %>% suppressWarnings()
   }
 
 
@@ -83,11 +89,29 @@ seg_split_segments <- function(
     y <- glue("seed_{new_solution_name}")
     x <- glue("new_cut_{i}")
 
+
+    if(i == seg_splits[1]){
+
+      ymin <- min_inf_zero(df_append[[y]])
+
+      if(ymin > 1){
+
+        df_append <- df_append %>%
+          mutate(
+            "{y}" := !!sym(y) - ymin + 1
+          )
+      }
+      rm(ymin)
+    }
+
+
     df_append <- df_append %>%
       mutate(
-        "{y}" := ifelse(is.na(!!sym(y)), !!sym(x) + mean_inf_zero(!!sym(y)), !!sym(y))
+        "{y}" := ifelse(is.na(!!sym(y)), !!sym(x) + max_inf_zero(!!sym(y)), !!sym(y))
       ) %>%
       select(-all_of(x))
+
+
   };rm(y,x,i)
 
 

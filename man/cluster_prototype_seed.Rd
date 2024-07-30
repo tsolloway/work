@@ -11,6 +11,7 @@ cluster_prototype_seed(
   seed,
   vars = NULL,
   vars_profiles = NULL,
+  filter_name = NULL,
   reduced_inputs_max = 14,
   priors = c("size", "equal"),
   id_name = "seg_uuid"

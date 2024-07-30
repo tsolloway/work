@@ -2,7 +2,7 @@
 #' @description cluster_prototype_seed
 #' @export
 cluster_prototype_seed <- function(
-    seg, solution_family_name, seed_name, seed, vars = NULL, vars_profiles = NULL,
+    seg, solution_family_name, seed_name, seed, vars = NULL, vars_profiles = NULL, filter_name = NULL,
     reduced_inputs_max = 14, priors = c("size", "equal"), id_name = "seg_uuid"
 ){
 
@@ -13,7 +13,15 @@ cluster_prototype_seed <- function(
     vars_profiles <- seg[["input_sheet"]][["input_table"]][["profile_var"]] %>% as.character()
   }
 
-  df <- seg[["data"]][["with_shell"]]
+
+  df <- seg[["data"]][["with_solutions"]]
+
+
+  if(!is.null(filter_name)){
+    df_temp <- df %>% filter(.data[[filter_name]])
+  }else if(is.null(filter_name)){
+    df_temp <- df
+  }
 
 
   results <- tibble::tibble(
@@ -27,7 +35,7 @@ cluster_prototype_seed <- function(
     cluster_glance = NA,
     priors_equal = purrr::map(n, ~rep(1/.x, .x)),
     priors_size = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
-    reduced_inputs = purrr::map2(cluster_seed, cluster_name, ~cluster_reduce_vars(df, vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)),
+    reduced_inputs = purrr::map2(cluster_seed, cluster_name, ~cluster_reduce_vars(df_temp, vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)),
     reduced_profiles = purrr::map(reduced_inputs, ~vars_profiles[match(vars, .x) %>% remove_na()])
   )
 
@@ -44,7 +52,7 @@ cluster_prototype_seed <- function(
   result_all <- results %>%
     cluster_add_lda(
       df = df, id_name = id_name,
-      filter_name = NULL, priors = priors,
+      filter_name = filter_name, priors = priors,
       use_reduced = FALSE
     )
 
@@ -52,7 +60,7 @@ cluster_prototype_seed <- function(
   result_reduced <- results %>%
     cluster_add_lda(
       df = df, id_name = id_name,
-      filter_name = NULL, priors = priors,
+      filter_name = filter_name, priors = priors,
       use_reduced = TRUE
     )
 

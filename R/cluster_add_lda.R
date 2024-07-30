@@ -12,9 +12,9 @@ cluster_add_lda <- function(
 
 
   if(!is.null(filter_name)){
-    df_temp <- df %>% filter(.data[[filter_name]]) #%>% dplyr::select(all_of(vars))
+    df_temp <- df %>% filter(.data[[filter_name]])
   }else if(is.null(filter_name)){
-    df_temp <- df #%>% dplyr::select(all_of(vars))
+    df_temp <- df
   }
 
 
