@@ -2,7 +2,9 @@
 #' @description seg_write_shell
 #' @export
 seg_write_shell <- function(
-    seg, solution_var, key = NULL, add_key = FALSE, where = NULL, verbose = FALSE
+    seg, solution_var, key = NULL, add_key = FALSE,
+    truncate = FALSE, truncate_polar_threshold = .15, truncate_profile_threshold = .1,
+    where = NULL, verbose = FALSE
 ){
 
 
@@ -653,7 +655,8 @@ seg_write_shell <- function(
 
 
   append_sheet <- function(
-    wb, shell_tables, add_key = FALSE, seg_n = NULL, row_data_start = 15, col_start = 2, row_block_gap = 2
+    wb, shell_tables, add_key = FALSE, seg_n = NULL, row_data_start = 15, col_start = 2, row_block_gap = 2,
+    truncate = FALSE, truncate_polar_threshold = .15, truncate_profile_threshold = .1
   ){
 
     summary_sheet_name <-  "summary"
@@ -703,10 +706,16 @@ seg_write_shell <- function(
         sheet_name <- summary_sheet_name
         xtable <- shell_tables[["summary_table"]]
       }
+
     }
 
 
     addWorksheet(wb, sheet_name)
+
+
+    if(truncate){
+      rows_to_truncate <- c()
+    }
 
 
     for(i in seq(nrow(xtable))){
@@ -738,8 +747,39 @@ seg_write_shell <- function(
         data_table = temp, header = temp_header, seg_count = seg_count, segment_specific = segment_specific
       )
 
+
+
+      if(truncate){
+
+        type <- temp %>% select(any_of("type")) %>% unlist() %>% unique()
+
+        diff <- temp %>% select(any_of(c("Diff", "range"))) %>% unlist() %>% abs()
+
+
+        truncate_threshold <- ifelse(type == "polar", truncate_polar_threshold, truncate_profile_threshold)
+
+
+        temp_rows_to_truncate <- seq(row_start, row_start + nrow(temp) - 1)[diff < truncate_threshold]
+
+
+        if(length(temp_rows_to_truncate) == nrow(temp)){
+          temp_rows_to_truncate <- c(seq(row_start - 3, row_start - 1), temp_rows_to_truncate)
+        }
+
+        rows_to_truncate <- c(rows_to_truncate, temp_rows_to_truncate) %>% unique()
+      }
+
+
+
       row_start <- row_start + nrow(temp) + row_block_gap + 1
     }
+
+
+
+    if(truncate && length(rows_to_truncate) >= 1){
+      setRowHeights(wb, sheet = sheet_name, rows = rows_to_truncate, heights = 0)
+    }
+
 
 
     # sheet formatting
@@ -1033,7 +1073,13 @@ seg_write_shell <- function(
 
   walk(
     shell_tables[["segment_tables"]] %>% length() %>% seq(),
-    ~append_sheet(wb, shell_tables, seg_n = .x) %>% suppressWarnings()
+    ~append_sheet(
+      wb, shell_tables, seg_n = .x,
+      truncate = truncate,
+      truncate_polar_threshold = truncate_polar_threshold,
+      truncate_profile_threshold = truncate_profile_threshold
+    ) %>%
+      suppressWarnings()
   )
 
   saveWorkbook(wb, glue("{where}/Solution - {solution_var}.xlsx"), overwrite = TRUE)

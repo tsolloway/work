@@ -36,16 +36,27 @@ cluster_prototype_seed <- function(
     priors_equal = purrr::map(n, ~rep(1/.x, .x)),
     priors_size = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
     reduced_inputs = purrr::map2(cluster_seed, cluster_name, ~cluster_reduce_vars(df_temp, vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)),
-    reduced_profiles = purrr::map(reduced_inputs, ~vars_profiles[match(vars, .x) %>% remove_na()])
+    reduced_profiles = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
   )
 
 
   if(!is.null(reduced_inputs_max)){
-    results <- results %>%
-      mutate(
-        "reduced_inputs" = purrr::map(reduced_inputs, head, reduced_inputs_max),
-        "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(vars, .x) %>% remove_na()])
-      )
+
+    if(is.numeric(reduced_inputs_max)){
+      results <- results %>%
+        mutate(
+          "reduced_inputs" = purrr::map(reduced_inputs, head, reduced_inputs_max),
+          "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+        )
+
+    }else if(is.character(reduced_inputs_max)){
+      results <- results %>%
+        mutate(
+          "reduced_inputs" = list(reduced_inputs_max),
+          "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+        )
+    }
+
   }
 
 
@@ -65,8 +76,8 @@ cluster_prototype_seed <- function(
     )
 
 
-  if(is_truthy(seg[["solutions"]][["solutions"]][[solution_family_name]])){
-    solution_family_results <- seg[["solutions"]][["solutions"]][[solution_family_name]]
+  if(is_truthy(seg[["solutions"]][["analysis"]][[solution_family_name]])){
+    solution_family_results <- seg[["solutions"]][["analysis"]][[solution_family_name]]
   }else{
     solution_family_results <- list()
   }
@@ -93,15 +104,15 @@ cluster_prototype_seed <- function(
     setNames(., names(.) %>% gsub(".x", "", .))
 
 
-  seg[["solutions"]][["solutions"]][[solution_family_name]] <- solution_family_results
+  seg[["solutions"]][["analysis"]][[solution_family_name]] <- solution_family_results
 
 
-  solution_table <- seg[["solutions"]][["solutions"]] %>%
+  solution_table <- seg[["solutions"]][["analysis"]] %>%
     map(pluck, "solution_table") %>%
     bind_rows()
 
 
-  df_segment_append <- seg[["solutions"]][["solutions"]] %>%
+  df_segment_append <- seg[["solutions"]][["analysis"]] %>%
     map(pluck, "df_segment_append") %>%
     reduce(full_join, by = "id")
 

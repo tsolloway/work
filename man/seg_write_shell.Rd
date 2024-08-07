@@ -9,6 +9,9 @@ seg_write_shell(
   solution_var,
   key = NULL,
   add_key = FALSE,
+  truncate = FALSE,
+  truncate_polar_threshold = 0.15,
+  truncate_profile_threshold = 0.1,
   where = NULL,
   verbose = FALSE
 )

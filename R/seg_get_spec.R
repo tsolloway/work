@@ -35,7 +35,7 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
 
     sheet <- sheet %>%
       filter(is.na(block)) %>%
-      select(any_of(c("var", "label", "source_var", "syntax", "source_label"))) %>%
+      select(any_of(c("var", "label", "source_var", "syntax", "source_label", "left_label", "right_label"))) %>%
       mutate(
         syntax = syntax %>%
           str_squish() %>%

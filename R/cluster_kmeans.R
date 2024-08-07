@@ -36,7 +36,7 @@ cluster_kmeans <- function(
       "priors_equal" = purrr::map(n, ~rep(1/.x, .x)),
       "priors_size" = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
       "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, ~cluster_reduce_vars(df_temp, vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)),
-      "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(vars, .x) %>% remove_na()])
+      "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
     )
 
 
@@ -44,7 +44,7 @@ cluster_kmeans <- function(
     result <- result %>%
       mutate(
         "reduced_inputs" = purrr::map(reduced_inputs, head, reduced_inputs_max),
-        "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(vars, .x) %>% remove_na()])
+        "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
       )
   }
 

@@ -98,7 +98,9 @@ seg_do_spec <- function(seg, debug = FALSE){
         profile_var = var,
         rs_var = rs_var,
         label = label,
-        source_label = source_label
+        source_label = source_label,
+        right_label = right_label,
+        left_label = left_label
       )
 
 

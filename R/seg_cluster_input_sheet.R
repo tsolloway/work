@@ -29,7 +29,7 @@ seg_cluster_input_sheet <- function(
     )
   }else if(!is.null(solution_family)){
 
-    solutions <- seg[["solutions"]][["solutions"]]
+    solutions <- seg[["solutions"]][["analysis"]]
 
     solutions[[solution_family]] <- cluster_solution_family(
       seg = seg,
@@ -65,7 +65,7 @@ seg_cluster_input_sheet <- function(
   )
 
 
-  seg[["solutions"]][["solutions"]] <- solutions
+  seg[["solutions"]][["analysis"]] <- solutions
   seg[["solutions"]][["summary_table"]] <- solution_table
   seg[["solutions"]][["df_segment_append"]] <- df_segment_append
   seg[["data"]][["with_solutions"]] <- df

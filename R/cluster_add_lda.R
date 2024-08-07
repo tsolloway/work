@@ -6,6 +6,8 @@ cluster_add_lda <- function(
     filter_name = NULL, priors = c("equal", "size"), use_reduced = FALSE
 ){
 
+  set.seed(1)
+
   priors <- match.arg(priors)
 
   id <- df[[id_name]]
@@ -32,35 +34,6 @@ cluster_add_lda <- function(
 
     return(x)
   }
-
-
-  lda_typing_tool_objects <- function(fit){
-
-    result <- list()
-
-    gpm <- fit %>% pluck("means")
-    gpm_center <- gpm %>% colMeans() #equals colSums(prior * gpm)
-
-    prior <- fit %>% pluck("prior")
-    svd <- fit %>% pluck("svd")
-
-    scaling <- fit %>% pluck("scaling")
-
-    dm <- scale(gpm, center = gpm_center, scale = FALSE) %*% scaling
-
-    dist_const <- 0.5 * rowSums(dm^2) - log(prior)
-
-    dm <- dm %>% t() %>% data.frame() %>% setNames(glue("seg_{seq(nrow(dm))}"))
-
-    result[["gpm_center"]] <- gpm_center
-    result[["scaling"]] <- scaling
-    result[["dm"]] <- dm
-    result[["dist_const"]] <- dist_const
-    result[["svd"]] <- svd
-
-    return(result)
-  }
-
 
 
   if(use_reduced){
@@ -120,7 +93,12 @@ cluster_add_lda <- function(
     result <- result %>%
       mutate(
         "lda_fit" = purrr::pmap(
-          list(cluster_seed, priors_size, cluster_name, lda_inputs),
+          list(
+            cluster_seed,
+            priors_size,
+            cluster_name,
+            lda_inputs
+          ),
           possibly(
             function(x,y,z,w)MASS::lda(df_temp %>% dplyr::select(all_of(unlist(w))), x[[z]], prior = y),
             otherwise = NA))
@@ -128,13 +106,17 @@ cluster_add_lda <- function(
   }
 
 
-
   result <- result %>%
     mutate(
 
-      "lda_typing_tool_objects" = purrr::map(
-        lda_fit, possibly(
-          ~lda_typing_tool_objects(.x),
+      "lda_coefficient_function" = purrr::pmap(
+        list(
+          lda_fit,
+          lda_inputs,
+          cluster_seed,
+          cluster_name
+        ), possibly(
+          function(x,y,z,w)coefficient_lda(x, df_temp %>% dplyr::select(all_of(unlist(y))), z[[w]]),
           otherwise = NA)
       ),
 
