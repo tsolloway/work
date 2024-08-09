@@ -1082,7 +1082,13 @@ seg_write_shell <- function(
       suppressWarnings()
   )
 
-  saveWorkbook(wb, glue("{where}/Solution - {solution_var}.xlsx"), overwrite = TRUE)
+  if(truncate){
+    file_name <- glue("{where}/Solution - {solution_var}.xlsx")
+  }else{
+    file_name <- glue("{where}/Solution - {solution_var} (Truncate).xlsx")
+  }
+
+  saveWorkbook(wb, file_name, overwrite = TRUE)
 
 
   if(verbose) message(glue("Written: {solution_var}"))
