@@ -28,6 +28,7 @@ Imports:
   mclust,
   openxlsx,
   pak,
+  parallelly,
   psych,
   purrr,
   dialr,

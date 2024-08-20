@@ -4,7 +4,31 @@
 \alias{seg_write_solutions}
 \title{seg_write_solutions}
 \usage{
-seg_write_solutions(seg, solution = NULL, where = NULL)
+seg_write_solutions(
+  seg,
+  solution = NULL,
+  where = NULL,
+  strategy = c("multisession", "multicore", "sequential", "cluster"),
+  workers = availableCores(omit = 1),
+  add_key = TRUE,
+  label_width = 75,
+  hide_pvalue = FALSE,
+  truncate = c("no", "yes", "both"),
+  truncate_polar_threshold = 0.15,
+  truncate_profile_threshold = 0.1,
+  version = c("traditional", "both"),
+  do_seg_bw = TRUE,
+  do_italic = TRUE,
+  switched_polars = FALSE,
+  setting_polar_threshold = 0.2,
+  setting_profile_threshold = 0.15,
+  setting_tolerance = 0.05,
+  setting_pvalue = 0.1,
+  setting_diff = 0.1,
+  setting_type = c("diff", "pvalue"),
+  setting_color = c("bw", "color"),
+  verbose = FALSE
+)
 }
 \description{
 seg_write_solutions

@@ -35,7 +35,7 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
 
     sheet <- sheet %>%
       filter(is.na(block)) %>%
-      select(any_of(c("var", "label", "source_var", "syntax", "source_label", "left_label", "right_label"))) %>%
+      select(any_of(c("var", "label", "source_var", "syntax", "source_label", "opposite_label", "left_label", "right_label"))) %>%
       mutate(
         syntax = syntax %>%
           str_squish() %>%
@@ -58,6 +58,16 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
     }
 
 
+    if("opposite_label" %in% names(sheet)){
+      sheet <- sheet %>%
+        mutate(
+          opposite_label = opposite_label %>%
+            str_squish() %>%
+            str_replace("&amp;", "&")
+        )
+    }
+
+
     blocks <- blocks %>%
       mutate(
         vars = prefix %>% map(~{
@@ -70,10 +80,6 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
         })
       )
   }
-
-
-  spec_polars <- spec_path %>% clean_sheets("Polars")
-  spec_profiles <- spec_path %>% clean_sheets("Profiles")
 
 
   seg[["spec"]] <- list(

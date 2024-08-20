@@ -99,6 +99,7 @@ seg_do_spec <- function(seg, debug = FALSE){
         rs_var = rs_var,
         label = label,
         source_label = source_label,
+        opposite_label = opposite_label,
         right_label = right_label,
         left_label = left_label
       )
