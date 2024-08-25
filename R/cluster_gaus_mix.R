@@ -7,7 +7,7 @@ cluster_gaus_mix <- function(
     priors = c("equal", "size"), iter_max = 100000, nstart = 10
 ){
 
-  require(mclust)
+  require(mclust) %>% suppressMessages()
 
   set.seed(1)
 
@@ -31,11 +31,23 @@ cluster_gaus_mix <- function(
       "cluster_name" = glue("gaus_mix_cluster_{solution_name}{n}"),
       "inputs" = list(vars),
       "profiles" = list(vars_profiles),
-      "cluster_fit" = purrr::map(n, possibly(~mclust::Mclust(df_temp, .x, verbose = FALSE), otherwise = NA)),
-      "cluster_seed" = purrr::map2(cluster_fit, cluster_name, possibly(~pluck(.x, "classification") %>% bind_cols(id_temp, .) %>% set_names(c("id", .y)) %>% suppressMessages(), otherwise = NA)),
+      "cluster_fit" = purrr::map(n, possibly(~{
+        set.seed(1)
+        mclust::Mclust(df_temp, .x, verbose = FALSE)
+      }, otherwise = NA)),
+      "cluster_seed" = purrr::map2(cluster_fit, cluster_name, possibly(~{
+        pluck(.x, "classification") %>%
+          bind_cols(id_temp, .) %>%
+          set_names(c("id", .y)) %>%
+          suppressMessages()
+      }, otherwise = NA)),
       "priors_equal" = purrr::map(n, ~rep(1/.x, .x)),
       "priors_size" = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
-      "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, ~cluster_reduce_vars(df_temp, vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)),
+      "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, possibly(~{
+        set.seed(1)
+        cluster_reduce_vars(df_temp, vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE) %>%
+          suppressWarnings()
+      }, otherwise = NA)),
       "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
     )
 
@@ -53,6 +65,7 @@ cluster_gaus_mix <- function(
   possibly(~detach("package:mclust", unload=TRUE))()
 
 
+  set.seed(1)
   result_all <- result %>%
     cluster_add_lda(
       df = df, id_name = id_name,
@@ -60,6 +73,7 @@ cluster_gaus_mix <- function(
       use_reduced = FALSE
     )
 
+  set.seed(1)
   result_reduced <- result %>%
     cluster_add_lda(
       df = df, id_name = id_name,

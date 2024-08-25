@@ -5,6 +5,8 @@ cluster_reduce_vars <- function(df, vars, grp, type = c("greedy_step", "greedy",
 
   type <- match.arg(type)
 
+  set.seed(1)
+
 
   if(is.character(grp)){
     grp <- df %>% dplyr::select(all_of(grp))
@@ -15,6 +17,8 @@ cluster_reduce_vars <- function(df, vars, grp, type = c("greedy_step", "greedy",
 
 
   if(type == "greedy_step" || type == "greedy"){
+
+    set.seed(1)
 
     greedy <- klaR::greedy.wilks(
       df[!is.na(grp), ], grp[!is.na(grp)]
@@ -37,6 +41,8 @@ cluster_reduce_vars <- function(df, vars, grp, type = c("greedy_step", "greedy",
 
 
   if(type == "greedy_step"  || type == "step"){
+
+    set.seed(1)
 
     step <- klaR::stepclass(
       df[!is.na(grp), ],  grp[!is.na(grp)],

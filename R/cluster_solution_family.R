@@ -41,6 +41,7 @@ cluster_solution_family <- function(
 
 
   if(do_kmeans){
+    set.seed(1)
     result[["kmeans"]] <- cluster_kmeans(
       df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
@@ -51,6 +52,7 @@ cluster_solution_family <- function(
 
 
   if(do_medoid){
+    set.seed(1)
     result[["medoid"]] <- cluster_medoid(
       df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
@@ -61,6 +63,7 @@ cluster_solution_family <- function(
 
 
   if(do_gaus_mix){
+    set.seed(1)
     result[["gaus_mix"]] <- cluster_gaus_mix(
       df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
@@ -72,6 +75,7 @@ cluster_solution_family <- function(
 
 
   if(do_hierarchical){
+    set.seed(1)
     temp <- cluster_hierarchical(
       df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
@@ -97,7 +101,8 @@ cluster_solution_family <- function(
       lda_coefficient_function, lda_predict,
       confusion, accuracy, df_append
     )) %>%
-    bind_rows()
+    bind_rows() %>%
+    filter(!is.na(df_append))
 
 
 

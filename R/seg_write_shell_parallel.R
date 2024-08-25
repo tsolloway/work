@@ -55,7 +55,6 @@ seg_write_shell_parallel <- function(
   }
 
 
-
   if(is.null(workers)){
 
     workers <- availableCores(omit = 1)

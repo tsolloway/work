@@ -84,7 +84,10 @@ cluster_add_lda <- function(
         "lda_fit" = purrr::pmap(
           list(cluster_seed, priors_equal, cluster_name, lda_inputs),
           possibly(
-            function(x,y,z,w) MASS::lda(df_temp %>% dplyr::select(all_of(unlist(w))), x[[z]], prior = y),
+            function(x,y,z,w){
+              set.seed(1)
+              MASS::lda(df_temp %>% dplyr::select(all_of(unlist(w))), x[[z]], prior = y)
+            },
             otherwise = NA))
       )
 
@@ -100,7 +103,10 @@ cluster_add_lda <- function(
             lda_inputs
           ),
           possibly(
-            function(x,y,z,w)MASS::lda(df_temp %>% dplyr::select(all_of(unlist(w))), x[[z]], prior = y),
+            function(x,y,z,w){
+              set.seed(1)
+              MASS::lda(df_temp %>% dplyr::select(all_of(unlist(w))), x[[z]], prior = y)
+            },
             otherwise = NA))
       )
   }
@@ -108,7 +114,6 @@ cluster_add_lda <- function(
 
   result <- result %>%
     mutate(
-
       "lda_coefficient_function" = purrr::pmap(
         list(
           lda_fit,
@@ -146,7 +151,9 @@ cluster_add_lda <- function(
             function(x,y,z,w)caret::confusionMatrix(
               as.factor(y %>% pluck(w)),
               as.factor(x %>% pluck(z))
-            ), otherwise = NA))
+            ) %>%
+              suppressWarnings(),
+            otherwise = NA))
       )
 
   }else if(!is.null(filter_name)){
@@ -159,7 +166,9 @@ cluster_add_lda <- function(
             function(x,y,z,w)caret::confusionMatrix(
               as.factor(y %>% pluck(w) %>% .[df[[filter_name]]]),
               as.factor(x %>% pluck(z))
-            ), otherwise = NA))
+            ) %>%
+              suppressWarnings(),
+            otherwise = NA))
       )
   }
 

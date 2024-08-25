@@ -6,15 +6,15 @@
 \usage{
 seg_cluster_input_sheet(
   seg,
-  id_name = "seg_uuid",
   solution_family = NULL,
-  filter_logical_vector = NULL,
   n_min = 4,
   n_max = 7,
-  reduced_inputs_max = NULL,
+  reduced_inputs_max = 14,
+  filter_logical_vector = NULL,
   vary_percent = 0.1,
   side_bias_percent = 0.1,
   priors = c("equal", "size"),
+  id_name = "seg_uuid",
   iter_max = 1e+05,
   nstart = 10,
   do_kmeans = TRUE,
