@@ -7,12 +7,32 @@ seg_cluster_input_sheet <- function(
     filter_logical_vector = NULL,
     vary_percent = .1, side_bias_percent = .1,
     priors = c("equal", "size"), id_name = "seg_uuid", iter_max = 100000, nstart = 10,
-    do_kmeans = TRUE, do_medoid = TRUE, do_gaus_mix = TRUE, do_hierarchical = TRUE
+    do_kmeans = TRUE, do_medoid = TRUE, do_gaus_mix = TRUE, do_hierarchical = TRUE,
+    strategy = c("multisession", "multicore", "sequential", 'cluster'),
+    workers = NULL
 ){
 
   if(is.null(solution_family)){
+
+    require(mclust) %>% suppressMessages()
+
+    ntasks <- seg[["solutions"]][["inputs"]] %>% names() %>% length()
+
+    future_plan(
+      strategy = strategy, workers = workers, ntasks = ntasks
+    )
+
+    opts <- furrr_options(
+      globals = TRUE,
+      packages = c(
+        "dplyr", "tibble", "tidyr", "purrr", "glue",
+        "stats", "klaR", "MASS", "caret", "cluster", "mclust"
+      ),
+      seed = TRUE
+    )
+
     set.seed(1)
-    solutions <- imap(
+    solutions <- furrr::future_imap(
       seg[["solutions"]][["inputs"]],
       ~cluster_solution_family(
         seg = seg,
@@ -26,8 +46,18 @@ seg_cluster_input_sheet <- function(
         priors = priors, iter_max = iter_max, nstart = nstart,
         do_kmeans = do_kmeans, do_medoid = do_medoid,
         do_gaus_mix = do_gaus_mix, do_hierarchical = do_hierarchical
-      )
+      ),
+      .options = opts
     )
+
+    future_stop()
+
+    possibly(~detach("package:klaR", unload=TRUE))()
+    possibly(~detach("package:mclust", unload=TRUE))()
+    possibly(~detach("package:caret", unload=TRUE))()
+    possibly(~detach("package:cluster", unload=TRUE))()
+    possibly(~detach("package:MASS", unload=TRUE))()
+
   }else if(!is.null(solution_family)){
 
     solutions <- seg[["solutions"]][["analysis"]]

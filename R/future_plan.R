@@ -17,6 +17,13 @@ future_plan <- function(
   }
 
 
+  if(strategy == "sequential"){
+    no_workers <- TRUE
+  }else{
+    no_workers <- FALSE
+  }
+
+
   strategy <- switch(
     strategy,
     sequential = future::sequential,
@@ -43,8 +50,19 @@ future_plan <- function(
   }
 
 
-  return(
-    plan(strategy = strategy, workers = workers)
-  )
+
+  if(no_workers){
+
+    return(
+      plan(strategy = strategy)
+    )
+
+  }else if(!no_workers){
+
+    return(
+      plan(strategy = strategy, workers = workers)
+    )
+
+  }
 
 }
