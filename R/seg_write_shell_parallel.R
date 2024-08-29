@@ -27,10 +27,7 @@ seg_write_shell_parallel <- function(
     verbose = FALSE
 ){
 
-  require(furrr)
-
   strategy <- match.arg(strategy)
-
   truncate <- match.arg(truncate)
   version <- match.arg(version)
   setting_type <- match.arg(setting_type)
@@ -48,51 +45,6 @@ seg_write_shell_parallel <- function(
     truncate_both <- TRUE
   }
 
-
-
-  if(strategy == "multicore" && !supportsMulticore()){
-    strategy <- "multisession"
-  }
-
-
-  if(is.null(workers)){
-
-    workers <- availableCores(omit = 1)
-
-    ntasks <- solution_vars %>% length()
-
-    if(truncate_both){
-      ntasks <- ntasks * 2
-    }
-
-    if(workers > ntasks){
-      workers <- ntasks
-    }
-  }
-
-
-  if(workers > availableCores(omit = 1)){
-    workers <- availableCores(omit = 1)
-  }
-
-
-  strategy <- switch(
-    strategy,
-    sequential = future::sequential,
-    multisession = future::multisession,
-    multicore = future::multicore,
-    cluster = future::cluster
-  )
-
-
-  plan(strategy = strategy, workers = workers)
-
-
-  opts <- furrr_options(
-    globals = TRUE,
-    packages = c("dplyr", "openxlsx", "psych", "tibble", "tidyr", "purrr", "glue"),
-    seed = TRUE
-  )
 
 
   if(!truncate_both){
@@ -114,6 +66,26 @@ seg_write_shell_parallel <- function(
       )
     )
   }
+
+
+
+  ntasks <- solution_vars %>% length()
+
+  if(truncate_both){
+    ntasks <- ntasks * 2
+  }
+
+
+  future_plan(
+    strategy = strategy, workers = workers, ntasks = ntasks
+  )
+
+
+  opts <- furrr_options(
+    globals = TRUE,
+    packages = c("dplyr", "openxlsx", "psych", "tibble", "tidyr", "purrr", "glue"),
+    seed = TRUE
+  )
 
 
   future_pwalk(
@@ -151,7 +123,7 @@ seg_write_shell_parallel <- function(
   )
 
 
-  future:::ClusterRegistry("stop")
+  future_stop()
 
 }
 
