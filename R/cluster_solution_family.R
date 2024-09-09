@@ -2,7 +2,9 @@
 #' @description cluster_solution_family
 #' @export
 cluster_solution_family <- function(
-    seg, inputs, solution_name, id_name = "seg_uuid", filter_logical_vector = NULL,
+    seg, inputs, solution_name,
+    id_name = "seg_uuid",
+    filter_logical_vector = NULL,
     n_min = 4, n_max = 7, reduced_inputs_max = NULL,
     vary_percent = .1, side_bias_percent = .1,
     priors = c("equal", "size"), iter_max = 100000, nstart = 10,

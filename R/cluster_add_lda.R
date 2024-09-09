@@ -2,7 +2,7 @@
 #' @description cluster_add_lda
 #' @export
 cluster_add_lda <- function(
-    cluster_table, df, lda_vars = NULL, lda_vars_profiles = NULL, id_name,
+    cluster_table, df, lda_vars = NULL, lda_vars_profiles = NULL, id_name = "seg_uuid",
     filter_name = NULL, priors = c("equal", "size"), use_reduced = FALSE
 ){
 
@@ -12,12 +12,15 @@ cluster_add_lda <- function(
 
   id <- df[[id_name]]
 
+  if(is.null(id)) stop("id is NULL in 'cluster_add_lda'")
+
 
   if(!is.null(filter_name)){
     df_temp <- df %>% filter(.data[[filter_name]])
   }else if(is.null(filter_name)){
     df_temp <- df
   }
+
 
 
   lda_score <- function(x, df){
@@ -34,6 +37,7 @@ cluster_add_lda <- function(
 
     return(x)
   }
+
 
 
   if(use_reduced){
@@ -82,11 +86,22 @@ cluster_add_lda <- function(
     result <- result %>%
       mutate(
         "lda_fit" = purrr::pmap(
-          list(cluster_seed, priors_equal, cluster_name, lda_inputs),
+          list(
+            cluster_seed,
+            priors_equal,
+            cluster_name,
+            lda_inputs
+          ),
           possibly(
             function(x,y,z,w){
               set.seed(1)
-              MASS::lda(df_temp %>% dplyr::select(all_of(unlist(w))), x[[z]], prior = y)
+              MASS::lda(
+                x = df_temp %>%
+                  dplyr::filter(.data[[id_name]] %in% x[["id"]]) %>%
+                  dplyr::select(all_of(unlist(w))),
+                grouping = x[[z]],
+                prior = y
+              )
             },
             otherwise = NA))
       )
@@ -105,7 +120,13 @@ cluster_add_lda <- function(
           possibly(
             function(x,y,z,w){
               set.seed(1)
-              MASS::lda(df_temp %>% dplyr::select(all_of(unlist(w))), x[[z]], prior = y)
+              MASS::lda(
+                x = df_temp %>%
+                  dplyr::filter(.data[[id_name]] %in% x[["id"]]) %>%
+                  dplyr::select(all_of(unlist(w))),
+                grouping = x[[z]],
+                prior = y
+              )
             },
             otherwise = NA))
       )
@@ -121,22 +142,38 @@ cluster_add_lda <- function(
           cluster_seed,
           cluster_name
         ), possibly(
-          function(x,y,z,w)coefficient_lda(x, df_temp %>% dplyr::select(all_of(unlist(y))), z[[w]]),
+          function(x,y,z,w){
+            coefficient_lda(
+              fit = x,
+              input = df_temp %>%
+                dplyr::filter(.data[[id_name]] %in% z[["id"]]) %>%
+                dplyr::select(all_of(unlist(y))),
+              grp = z[[w]]
+            )
+            },
           otherwise = NA)
       ),
 
       "lda_predict" = purrr::map2(
         lda_fit, lda_inputs, possibly(
-          ~lda_score(.x, df %>% dplyr::select(all_of(unlist(.y)))),
-          otherwise = NA)),
+          ~lda_score(
+            .x,
+            df %>%
+              dplyr::select(all_of(unlist(.y)))),
+          otherwise = NA)
+      ),
 
       "lda_seg" = purrr::map2(
         lda_predict, lda_name,
         possibly(
-          ~pluck(.x, "seg") %>% as.character() %>% as.numeric() %>%
-            bind_cols(id, .) %>% set_names(c("id", .y)) %>%
+          ~pluck(.x, "seg") %>%
+            as.character() %>%
+            as.numeric() %>%
+            bind_cols(id, .) %>%
+            set_names(c("id", .y)) %>%
             suppressMessages(),
-          otherwise = NA))
+          otherwise = NA)
+      )
     )
 
 

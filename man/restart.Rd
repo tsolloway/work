@@ -4,12 +4,19 @@
 \alias{restart}
 \title{restart}
 \usage{
-restart(keep = FALSE, clean = TRUE, restart_session = TRUE)
+restart(
+  keep = FALSE,
+  run_gc = TRUE,
+  clean = FALSE,
+  restart_session = TRUE,
+  start_after = TRUE,
+  restart_after_command = NULL
+)
 }
 \arguments{
 \item{keep}{Logical or character vector. TRUE is keep all objects on restart. FALSE is drop all objects on restart. Character vector specifies which objects to keep.}
 
-\item{clean}{Logical. If TRUE, gc() is executed after restart. Note that the gc() is executed before the session is restarted.}
+\item{run_gc}{Logical. If TRUE, gc() is executed after restart. Note that the gc() is executed before the session is restarted.}
 
 \item{restart_session}{Logical. IF true, the R session will be restarted}
 }

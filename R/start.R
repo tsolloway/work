@@ -7,6 +7,7 @@
 start <- function(
     lib_sales_force = FALSE,
     lib_dev = FALSE,
+    lib_oxl = FALSE,
     lib_future = FALSE,
     lib_azure = FALSE,
     lib_viz = FALSE,
@@ -31,6 +32,9 @@ start <- function(
     require(tictoc, quietly = .quietly, warn.conflicts = !.quietly)
   }
 
+  if(lib_oxl){
+    require(openxlsx, quietly = .quietly, warn.conflicts = !.quietly)
+  }
 
   if(lib_future){
     require(future, quietly = .quietly, warn.conflicts = !.quietly)

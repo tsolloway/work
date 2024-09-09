@@ -43,6 +43,7 @@ Imports:
   tibble,
   tictoc,
   usethis,
-  uuid
+  uuid,
+  xfun
 RoxygenNote: 7.3.2
 LazyData: true

@@ -2,7 +2,7 @@
 #' @description cluster_kmeans
 #' @export
 cluster_kmeans <- function(
-    df, vars, vars_profiles, solution_name, id_name, filter_name = NULL,
+    df, vars, vars_profiles, solution_name, id_name = "seg_uuid", filter_name = NULL,
     n_min = 4, n_max = 7, reduced_inputs_max = NULL,
     priors = c("equal", "size"), iter_max = 100000, nstart = 10
 ){
