@@ -4,7 +4,7 @@
 \alias{last_month}
 \title{last_month}
 \usage{
-last_month(part = c("start", "end"))
+last_month(part = c("number", "start", "end"))
 }
 \description{
 last_month
