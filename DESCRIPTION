@@ -20,6 +20,7 @@ Imports:
   future.apply,
   glue,
   gsubfn,
+  haven,
   highcharter,
   Hmisc,
   janitor,
@@ -34,6 +35,7 @@ Imports:
   dialr,
   readxl,
   rJava,
+  readxl,
   rms,
   rvest,
   salesforcer,
@@ -42,6 +44,7 @@ Imports:
   stringr,
   tibble,
   tictoc,
+  tools,
   usethis,
   uuid,
   xfun

@@ -5,8 +5,8 @@
 \title{azure_store_endpoint}
 \usage{
 azure_store_endpoint(
-  endpoint = "https://xxxxxxxxxxxxxx.blob.core.windows.net",
-  key = get_environment_key("WLF_BLOB_KEY")
+  endpoint = "https://xxxxxxx.blob.core.windows.net",
+  key = get_environment_key("BLOB_KEY")
 )
 }
 \description{

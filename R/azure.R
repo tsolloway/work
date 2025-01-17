@@ -3,11 +3,11 @@
 #' @description azure_store_endpoint
 #' @export
 azure_store_endpoint <- function(
-    endpoint = "https://xxxxxxxxxxxxxx.blob.core.windows.net",
-    key = get_environment_key("WLF_BLOB_KEY")
+    endpoint = "https://xxxxxxx.blob.core.windows.net",
+    key = get_environment_key("BLOB_KEY")
 ){
 
-  start(lib_azure = TRUE)
+  wlf::start(lib_azure = TRUE)
 
   storage_endpoint(
     endpoint = endpoint,
@@ -184,22 +184,35 @@ azure_file_save_rds <- function(
     container_path = NULL,
     end_point = azure_store_endpoint()
 ){
-  start(lib_azure = TRUE)
+  wlf::start(lib_azure = TRUE)
 
 
   if( is.null(container_path) ){
 
-    container_path <- glue("{object_name(obj)}.rds")
+    container_path <- glue("{envnames::get_obj_name(obj, n = 2)}.rds")
 
   }else if(right(container_path, 1) == "/" ){
 
-    container_path <- glue("{container_path}{object_name(obj)}.rds")
+    container_path <- glue("{container_path}/{envnames::get_obj_name(obj, n = 2)}.rds")
 
   }
 
+
+  if(tools::file_ext(container_path) != "rds" ){
+
+    container_path <- glue("{container_path}.rds")
+
+  }
+
+
   container <- azure_container_get(container, end_point)
 
+
   storage_save_rds(obj, container, container_path)
+
+
+  return(container_path)
+
 }
 
 
@@ -215,6 +228,10 @@ azure_file_load_rds <- function(
   start(lib_azure = TRUE)
 
   container <- azure_container_get(container, end_point)
+
+  if(tools::file_ext(container_path) != "rds" ){
+    container_path <- glue("{container_path}.rds")
+  }
 
   storage_load_rds(container, container_path)
 }

@@ -8,7 +8,10 @@ seg_get_data <- function(seg, data_path, weight = NULL, id_name = "seg_uuid"){
 
 
   seg[["data"]][["original"]] <- data_path %>%
-    read_xl(clean_col_names = FALSE) %>%
+    read(
+      clean_col_names = FALSE,
+      hard_stop = TRUE
+    ) %>%
     add_uuid(id_name)
 
 
