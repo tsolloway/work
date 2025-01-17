@@ -3,6 +3,7 @@
 #' @export
 seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = FALSE){
 
+  work::start()
   require(openxlsx)
   require(stringr)
 
@@ -71,12 +72,11 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
     blocks <- blocks %>%
       mutate(
         vars = prefix %>% map(~{
-          grep(.x, sheet$var) %>%
+          grep(glue("^{.x}0|^{.x}1|^{.x}2|^{.x}3|^{.x}4|^{.x}5"), sheet$var) %>%
             slice(sheet, .) %>%
             mutate(
               var = var %>% case_match(.x~NA, .default = var)
             )
-
         })
       )
   }

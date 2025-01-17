@@ -13,6 +13,29 @@ seg_write_shell <- function(
     where = NULL, verbose = FALSE
 ){
 
+
+  # key = NULL
+  # add_key = FALSE
+  # label_width = 75
+  # hide_pvalue = FALSE
+  # truncate = FALSE
+  # truncate_polar_threshold = .15
+  # truncate_profile_threshold = .1
+  # version = "traditional"
+  # do_seg_bw = TRUE
+  # do_italic = TRUE
+  # switched_polars = FALSE
+  # setting_polar_threshold = .2
+  # setting_profile_threshold = .15
+  # setting_tolerance = .05
+  # setting_pvalue = .1
+  # setting_diff = .1
+  # setting_type = "diff"
+  # setting_color = "bw"
+  # where = NULL
+  # verbose = FALSE
+
+
   work::start()
 
   version <- match.arg(version)
