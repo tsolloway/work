@@ -2,15 +2,28 @@
 #' @description seg_write_shell
 #' @export
 seg_write_shell <- function(
-    seg, solution_var, key = NULL, add_key = FALSE,
-    label_width = 75, hide_pvalue = FALSE,
-    truncate = FALSE, truncate_polar_threshold = .15, truncate_profile_threshold = .1,
+    seg,
+    solution_var,
+    key = NULL,
+    add_key = FALSE,
+    label_width = 75,
+    hide_pvalue = FALSE,
+    truncate = FALSE,
+    truncate_polar_threshold = .15,
+    truncate_profile_threshold = .1,
     version = c("traditional", "both"),
-    do_seg_bw = TRUE, do_italic = TRUE, switched_polars = FALSE,
-    setting_polar_threshold = .2, setting_profile_threshold = .15, setting_tolerance = .05,
-    setting_pvalue = .1, setting_diff = .1,
-    setting_type = c("diff", "pvalue"), setting_color = c("bw", "color"),
-    where = NULL, verbose = FALSE
+    do_seg_bw = TRUE,
+    do_italic = TRUE,
+    switched_polars = FALSE,
+    setting_polar_threshold = .2,
+    setting_profile_threshold = .15,
+    setting_tolerance = .05,
+    setting_pvalue = .1,
+    setting_diff = .1,
+    setting_type = c("diff", "pvalue"),
+    setting_color = c("bw", "color"),
+    where = NULL,
+    verbose = FALSE
 ){
 
 
@@ -1514,7 +1527,7 @@ seg_write_shell <- function(
 
 
 
-  wb <- createWorkbook()
+  wb <- oxl_create_workbook()
 
 
   append_sheet(

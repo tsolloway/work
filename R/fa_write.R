@@ -7,6 +7,7 @@ fa_write <- function(
 
   require(openxlsx)
 
+
   if(is.null(where)){
     where <- getwd()
   }
@@ -236,13 +237,17 @@ fa_write <- function(
   }
 
 
-  wb <- createWorkbook()
+  wb <- oxl_create_workbook()
+
 
   rotation <- fa_analysis_object[["parameters"]][["rotation"]]
 
+
   variance_explained <- fa_analysis_object[["variance_explained"]]
 
+
   append_variance_explained(wb, variance_explained = variance_explained)
+
 
   iwalk(
     fa_analysis_object[["fa_tables"]],
@@ -254,9 +259,12 @@ fa_write <- function(
     )
   )
 
+
   file_location <- glue("{where}/{file_name}.xlsx")
 
+
   saveWorkbook(wb, file_location, overwrite = TRUE)
+
 
   if(return_location){
     return(file_location)

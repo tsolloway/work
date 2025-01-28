@@ -2,8 +2,12 @@
 #' @description seg_input_sheet
 #' @export
 seg_input_sheet <- function(
-    seg, fa_winner, range_predictors, where = NULL,
-    file_name = "Input Sheet", add_proj_name_to_file = TRUE
+    seg,
+    fa_winner,
+    range_predictors,
+    where = NULL,
+    file_name = "Input Sheet",
+    add_proj_name_to_file = TRUE
 ){
 
   require(openxlsx)
@@ -19,10 +23,10 @@ seg_input_sheet <- function(
   }
 
 
-  file_location <- glue("{where}/{file_name}.xlsx")
-
-
   color_scale_colors <- c("#f8696a", "#feea84", "#63be7b")
+
+
+  color_scale_colors_rev <- color_scale_colors %>% rev()
 
 
   append_input_sheet <- function(
@@ -233,10 +237,10 @@ seg_input_sheet <- function(
       style = createStyle(textDecoration = "bold", bgFill = "#FCD5B4")
     )
 
-    #
+
+
     walk(
-      # col_start + c(4:5, 7, 9:10),
-      col_start + c(4:5, 7:10),
+      col_start + c(4:5, 7:9),
       ~conditionalFormatting(
         wb, sheet_name,
         rows = rows_all, cols = .x,
@@ -245,7 +249,15 @@ seg_input_sheet <- function(
       )
     )
 
-    #
+
+    conditionalFormatting(
+      wb, sheet_name,
+      rows = rows_all, cols = col_start + 10,,
+      type = "colourScale",
+      style = color_scale_colors_rev
+    )
+
+
     setColWidths(wb, sheet_name, cols = c(col_start - 1, cols_all[length(cols_all)] + 1), widths = 1)
     setColWidths(wb, sheet_name, cols = cols_all[14], widths = .1)
     setColWidths(wb, sheet_name, cols = cols_all[c(1:3, 5:6, 8:11)], widths = 6)
@@ -522,17 +534,21 @@ seg_input_sheet <- function(
 
   seg <- seg %>% seg_get_fa_winner(winner = fa_winner)
 
+
   seg <- seg %>% seg_organize_input_sheet(range_predictors = range_predictors)
 
 
-  wb <- createWorkbook()
+  wb <- oxl_create_workbook()
 
 
   append_input_sheet(wb, seg_input_table = seg[["input_sheet"]][["input_table"]], sheet_name = "Inputs", row_start = 6, col_start = 2)
 
+
   append_rational_sheet(wb, rational_table = seg[["input_sheet"]][["solution_rational"]], sheet_name = "Rational", row_start = 2, col_start = 2)
 
+
   append_prototype_sheet(wb, prototype_table = seg[["input_sheet"]][["prototype_table"]], sheet_name = "Prototype", row_start = 2,  col_start = 2, segs_max = 10)
+
 
 
   if(add_proj_name_to_file){
@@ -540,7 +556,11 @@ seg_input_sheet <- function(
   }
 
 
+  file_location <- glue("{where}/{file_name}.xlsx")
+
+
   saveWorkbook(wb, file_location, overwrite = TRUE)
+
 
   seg[["paths"]][["files"]][["input"]] <- file_location
 
