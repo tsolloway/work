@@ -339,9 +339,19 @@ seg_write_shell <- function(
 
 
   add_spec_table <- function(
-    wb, sheet_name, row_data_start, row_start, col_start, data_table, header,
-    seg_count = NULL, segment_specific = TRUE,
-    version = "traditional", do_italic = TRUE, do_seg_bw = TRUE, hide_pvalue = FALSE
+    wb,
+    sheet_name,
+    row_data_start,
+    row_start,
+    col_start,
+    data_table,
+    header,
+    seg_count = NULL,
+    segment_specific = TRUE,
+    version = "traditional",
+    do_italic = TRUE,
+    do_seg_bw = TRUE,
+    hide_pvalue = FALSE
   ){
 
     require(openxlsx)
@@ -942,11 +952,23 @@ seg_write_shell <- function(
 
 
   append_sheet <- function(
-    wb, shell_tables, add_key = FALSE, seg_n = NULL, row_data_start = 15, col_start = 2, row_block_gap = 2,
-    label_width = 75, hide_pvalue = FALSE,
-    truncate = FALSE, truncate_polar_threshold = .15, truncate_profile_threshold = .1,
-    version = "traditional", do_italic = TRUE, do_seg_bw = TRUE,
-    setting_polar_threshold = .2, setting_profile_threshold = .15, setting_tolerance = .05,
+    wb,
+    shell_tables,
+    add_key = FALSE,
+    seg_n = NULL,
+    row_data_start = 15,
+    col_start = 2,
+    row_block_gap = 2,
+    label_width = 75,
+    hide_pvalue = FALSE,
+    truncate = FALSE,
+    truncate_polar_threshold = .15,
+    truncate_profile_threshold = .1,
+    version = "traditional",
+    do_italic = TRUE,
+    do_seg_bw = TRUE,
+    setting_polar_threshold = .2,
+    setting_profile_threshold = .15, setting_tolerance = .05,
     setting_pvalue = .1, setting_diff = .1,
     setting_type = c("diff", "pvalue"), setting_color = c("bw", "color")
   ){
@@ -1066,7 +1088,7 @@ seg_write_shell <- function(
 
 
       temp_version <- version
-      if(temp_type != "polar") temp_version <- "both_profile"
+      if(temp_type != "polar" && version == "both") temp_version <- "both_profile"
 
 
       add_spec_table(
@@ -1397,6 +1419,7 @@ seg_write_shell <- function(
       borders = "surrounding",
       borderStyle = "thick"
     )
+
 
     if(segment_specific || add_key){
 
