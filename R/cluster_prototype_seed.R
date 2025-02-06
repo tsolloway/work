@@ -2,11 +2,37 @@
 #' @description cluster_prototype_seed
 #' @export
 cluster_prototype_seed <- function(
-    seg, solution_family_name, seed_name, seed, vars = NULL, vars_profiles = NULL, filter_name = NULL,
-    reduced_inputs_max = 14, priors = c("size", "equal"), id_name = "seg_uuid"
+    seg,
+    solution_family_name,
+    seed_name,
+    seed = NULL,
+    vars = NULL,
+    vars_profiles = NULL,
+    filter_name = NULL,
+    reduced_inputs_max = 14,
+    priors = c("size", "equal"),
+    resp_id_name = NULL
 ){
 
+
+  # solution_family_name = "D7to5"
+  # seed_name = "proto_D7to5"
+  # seed = NULL
+  # vars = NULL
+  # vars_profiles = NULL
+  # filter_name = NULL
+  # reduced_inputs_max = 14
+  # priors = "size"
+  # resp_id_name = NULL
+
+
   priors <- match.arg(priors)
+
+
+  if(is.null(resp_id_name)){
+    resp_id_name <- seg %>% get_resp_id_name()
+  }
+
 
   if(is.null(vars)){
     vars <- seg[["input_sheet"]][["input_table"]][["rs_var"]] %>% as.character()
@@ -15,6 +41,11 @@ cluster_prototype_seed <- function(
 
 
   df <- seg[["data"]][["with_solutions"]]
+
+
+  if(is.null(seed)){
+    seed <- df %>% select(all_of(c(resp_id_name, seed_name)))
+  }
 
 
   if(!is.null(filter_name)){
@@ -62,16 +93,20 @@ cluster_prototype_seed <- function(
 
   result_all <- results %>%
     cluster_add_lda(
-      df = df, id_name = id_name,
-      filter_name = filter_name, priors = priors,
+      df = df,
+      resp_id_name = resp_id_name,
+      filter_name = filter_name,
+      priors = priors,
       use_reduced = FALSE
     )
 
 
   result_reduced <- results %>%
     cluster_add_lda(
-      df = df, id_name = id_name,
-      filter_name = filter_name, priors = priors,
+      df = df,
+      resp_id_name = resp_id_name,
+      filter_name = filter_name,
+      priors = priors,
       use_reduced = TRUE
     )
 

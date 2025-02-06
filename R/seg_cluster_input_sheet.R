@@ -2,15 +2,31 @@
 #' @description seg_cluster_input_sheet
 #' @export
 seg_cluster_input_sheet <- function(
-    seg, solution_family = NULL,
-    n_min = 4, n_max = 7, reduced_inputs_max = 14,
+    seg,
+    solution_family = NULL,
+    n_min = 4,
+    n_max = 7,
+    reduced_inputs_max = 14,
     filter_logical_vector = NULL,
-    vary_percent = .1, side_bias_percent = .1,
-    priors = c("equal", "size"), id_name = "seg_uuid", iter_max = 100000, nstart = 10,
-    do_kmeans = TRUE, do_medoid = TRUE, do_gaus_mix = TRUE, do_hierarchical = TRUE,
+    vary_percent = .1,
+    side_bias_percent = .1,
+    priors = c("equal", "size"),
+    resp_id_name = NULL,
+    iter_max = 100000,
+    nstart = 10,
+    do_kmeans = TRUE,
+    do_medoid = TRUE,
+    do_gaus_mix = TRUE,
+    do_hierarchical = TRUE,
     strategy = c("multisession", "multicore", "sequential", 'cluster'),
     workers = NULL
 ){
+
+
+  if(is.null(resp_id_name)){
+    resp_id_name <- seg %>% get_resp_id_name()
+  }
+
 
   if(is.null(solution_family)){
 
@@ -38,7 +54,7 @@ seg_cluster_input_sheet <- function(
         seg = seg,
         inputs = .x,
         solution_name = .y,
-        id_name = id_name,
+        id_name = resp_id_name,
         filter_logical_vector = filter_logical_vector,
         n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
         vary_percent = vary_percent,
@@ -67,7 +83,7 @@ seg_cluster_input_sheet <- function(
       seg = seg,
       inputs = seg[["solutions"]][["inputs"]][[solution_family]],
       solution_name = solution_family,
-      id_name = id_name,
+      id_name = resp_id_name,
       filter_logical_vector = filter_logical_vector,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       vary_percent = vary_percent,

@@ -14,7 +14,7 @@ seg_cluster_input_sheet(
   vary_percent = 0.1,
   side_bias_percent = 0.1,
   priors = c("equal", "size"),
-  id_name = "seg_uuid",
+  resp_id_name = NULL,
   iter_max = 1e+05,
   nstart = 10,
   do_kmeans = TRUE,

@@ -2,15 +2,38 @@
 #' @description cluster_add_lda
 #' @export
 cluster_add_lda <- function(
-    cluster_table, df, lda_vars = NULL, lda_vars_profiles = NULL, id_name = "seg_uuid",
-    filter_name = NULL, priors = c("equal", "size"), use_reduced = FALSE
+    cluster_table,
+    df,
+    lda_vars = NULL,
+    lda_vars_profiles = NULL,
+    resp_id_name = NULL,
+    filter_name = NULL,
+    priors = c("equal", "size"),
+    use_reduced = FALSE
 ){
+
+  # cluster_table = results
+  # df = df
+  # lda_vars = NULL
+  # lda_vars_profiles = NULL
+  # resp_id_name = resp_id_name
+  # filter_name = filter_name
+  # priors = priors
+  # use_reduced = FALSE
+
 
   set.seed(1)
 
   priors <- match.arg(priors)
 
-  id <- df[[id_name]]
+
+  if(is.null(resp_id_name)){
+    resp_id_name <- seg %>% get_resp_id_name()
+  }
+
+
+  id <- df[[resp_id_name]]
+
 
   if(is.null(id)) stop("id is NULL in 'cluster_add_lda'")
 
@@ -97,7 +120,7 @@ cluster_add_lda <- function(
               set.seed(1)
               MASS::lda(
                 x = df_temp %>%
-                  dplyr::filter(.data[[id_name]] %in% x[["id"]]) %>%
+                  dplyr::filter(.data[[resp_id_name]] %in% x[["id"]]) %>%
                   dplyr::select(all_of(unlist(w))),
                 grouping = x[[z]],
                 prior = y
@@ -122,7 +145,7 @@ cluster_add_lda <- function(
               set.seed(1)
               MASS::lda(
                 x = df_temp %>%
-                  dplyr::filter(.data[[id_name]] %in% x[["id"]]) %>%
+                  dplyr::filter(.data[[resp_id_name]] %in% x[["id"]]) %>%
                   dplyr::select(all_of(unlist(w))),
                 grouping = x[[z]],
                 prior = y
@@ -146,7 +169,7 @@ cluster_add_lda <- function(
             coefficient_lda(
               fit = x,
               input = df_temp %>%
-                dplyr::filter(.data[[id_name]] %in% z[["id"]]) %>%
+                dplyr::filter(.data[[resp_id_name]] %in% z[["id"]]) %>%
                 dplyr::select(all_of(unlist(y))),
               grp = z[[w]]
             )

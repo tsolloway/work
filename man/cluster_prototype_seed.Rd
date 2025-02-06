@@ -8,13 +8,13 @@ cluster_prototype_seed(
   seg,
   solution_family_name,
   seed_name,
-  seed,
+  seed = NULL,
   vars = NULL,
   vars_profiles = NULL,
   filter_name = NULL,
   reduced_inputs_max = 14,
   priors = c("size", "equal"),
-  id_name = "seg_uuid"
+  resp_id_name = "seg_uuid"
 )
 }
 \description{

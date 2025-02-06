@@ -9,7 +9,7 @@ cluster_add_lda(
   df,
   lda_vars = NULL,
   lda_vars_profiles = NULL,
-  id_name = "seg_uuid",
+  resp_id_name = NULL,
   filter_name = NULL,
   priors = c("equal", "size"),
   use_reduced = FALSE
