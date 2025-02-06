@@ -44,15 +44,19 @@ cluster_prototype_seed <- function(
 
 
   if(is.null(seed)){
-    seed <- df %>% select(all_of(c(resp_id_name, seed_name)))
+    seed <- df %>% dplyr::select(dplyr::all_of(c(resp_id_name, seed_name)))
   }
+  seed <- seed %>% dplyr::filter(!is.na(.data[[seed_name]]))
 
 
   if(!is.null(filter_name)){
-    df_temp <- df %>% filter(.data[[filter_name]])
+    df_temp <- df %>% dplyr::filter(.data[[filter_name]])
   }else if(is.null(filter_name)){
     df_temp <- df
   }
+
+
+  df_temp <- df_temp %>% dplyr::filter(df_temp[[resp_id_name]] %in% seed[[resp_id_name]])
 
 
   results <- tibble::tibble(

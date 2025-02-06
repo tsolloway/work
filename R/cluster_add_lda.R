@@ -106,55 +106,62 @@ cluster_add_lda <- function(
 
   if(priors == "equal"){
 
-    result <- result %>%
-      mutate(
-        "lda_fit" = purrr::pmap(
-          list(
-            cluster_seed,
-            priors_equal,
-            cluster_name,
-            lda_inputs
-          ),
-          possibly(
-            function(x,y,z,w){
-              set.seed(1)
-              MASS::lda(
-                x = df_temp %>%
-                  dplyr::filter(.data[[resp_id_name]] %in% x[["id"]]) %>%
-                  dplyr::select(all_of(unlist(w))),
-                grouping = x[[z]],
-                prior = y
-              )
-            },
-            otherwise = NA))
-      )
+    temp_list <- rlang::quo(
+      list(
+        cluster_seed,
+        priors_equal,
+        cluster_name,
+        lda_inputs)
+    )
 
   }else if(priors == "size"){
 
-    result <- result %>%
-      mutate(
-        "lda_fit" = purrr::pmap(
-          list(
-            cluster_seed,
-            priors_size,
-            cluster_name,
-            lda_inputs
-          ),
-          possibly(
-            function(x,y,z,w){
-              set.seed(1)
-              MASS::lda(
-                x = df_temp %>%
-                  dplyr::filter(.data[[resp_id_name]] %in% x[["id"]]) %>%
-                  dplyr::select(all_of(unlist(w))),
-                grouping = x[[z]],
-                prior = y
-              )
-            },
-            otherwise = NA))
+
+    temp_list <- rlang::quo(
+      list(
+        cluster_seed,
+        priors_size,
+        cluster_name,
+        lda_inputs
       )
+    )
+
   }
 
+
+  result <- result %>%
+    mutate(
+      "lda_fit" = purrr::pmap(
+        {{temp_list}},
+        possibly(
+          function(x, y, z, w){
+            set.seed(1)
+
+            dx <- dplyr::left_join(
+              x,
+              df_temp %>% dplyr::select(all_of(c(!!resp_id_name, unlist(w)))),
+              by = dplyr::join_by("id" == !!resp_id_name)
+            )
+
+            dx <- dx %>% dplyr::filter( !is.na(dx[[{z}]]) )
+
+            dg <- dx %>% dplyr::select(dplyr::all_of(z)) %>% unlist()
+
+            dx <- dx %>% dplyr::select(!dplyr::any_of(c("id", resp_id_name, z)))
+
+            dp <- y / sum(y)
+
+            MASS::lda(
+              x = dx,
+              grouping = dg,
+              prior = dp
+            )
+          },
+          otherwise = NA))
+    )
+
+
+  result$cluster_seed
 
   result <- result %>%
     mutate(
@@ -173,7 +180,7 @@ cluster_add_lda <- function(
                 dplyr::select(all_of(unlist(y))),
               grp = z[[w]]
             )
-            },
+          },
           otherwise = NA)
       ),
 
@@ -208,12 +215,17 @@ cluster_add_lda <- function(
         "confusion" = purrr::pmap(
           list(cluster_seed, lda_seg, cluster_name, lda_name),
           possibly(
-            function(x,y,z,w)caret::confusionMatrix(
-              as.factor(y %>% pluck(w)),
-              as.factor(x %>% pluck(z))
-            ) %>%
-              suppressWarnings(),
-            otherwise = NA))
+            function(x,y,z,w){
+
+              y <- y %>% filter(y[["id"]] %in% x[["id"]])
+
+              caret::confusionMatrix(
+                as.factor(y %>% pluck(w)),
+                as.factor(x %>% pluck(z))
+              ) %>%
+                suppressWarnings()
+
+            },otherwise = NA))
       )
 
   }else if(!is.null(filter_name)){
@@ -223,11 +235,16 @@ cluster_add_lda <- function(
         "confusion" = purrr::pmap(
           list(cluster_seed, lda_seg, cluster_name, lda_name),
           possibly(
-            function(x,y,z,w)caret::confusionMatrix(
-              as.factor(y %>% pluck(w) %>% .[df[[filter_name]]]),
-              as.factor(x %>% pluck(z))
-            ) %>%
-              suppressWarnings(),
+            function(x,y,z,w){
+
+              y <- y %>% filter(y[["id"]] %in% x[["id"]])
+
+              caret::confusionMatrix(
+                as.factor(y %>% pluck(w) %>% .[df[[filter_name]]]),
+                as.factor(x %>% pluck(z))
+              ) %>%
+                suppressWarnings()
+            },
             otherwise = NA))
       )
   }

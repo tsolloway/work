@@ -14,7 +14,7 @@ cluster_prototype_seed(
   filter_name = NULL,
   reduced_inputs_max = 14,
   priors = c("size", "equal"),
-  resp_id_name = "seg_uuid"
+  resp_id_name = NULL
 )
 }
 \description{
