@@ -8,7 +8,7 @@ cluster_solution_family(
   seg,
   inputs,
   solution_name,
-  id_name = "seg_uuid",
+  resp_id_name = "seg_uuid",
   filter_logical_vector = NULL,
   n_min = 4,
   n_max = 7,
@@ -20,8 +20,8 @@ cluster_solution_family(
   nstart = 10,
   do_kmeans = TRUE,
   do_medoid = TRUE,
-  do_gaus_mix = TRUE,
-  do_hierarchical = TRUE
+  do_hierarchical = TRUE,
+  do_gaus_mix = FALSE
 )
 }
 \description{

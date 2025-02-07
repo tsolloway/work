@@ -2,8 +2,12 @@
 #' @description seg_split_segments
 #' @export
 seg_split_segments <- function(
-    seg, solution_name, seg_splits, new_solution_name,
-    split_into = 2, id_name = "seg_uuid",
+    seg,
+    solution_name,
+    seg_splits,
+    new_solution_name,
+    split_into = 2,
+    resp_id_name = NULL,
     method = c("kmeans", "medoid"),
     return_append_only = FALSE
 ){
@@ -11,6 +15,10 @@ seg_split_segments <- function(
   method <- match.arg(method)
 
   df <- seg[["data"]][["with_solutions"]]
+
+  if(is.null(resp_id_name)){
+    resp_id_name <- seg %>% get_resp_id_name()
+  }
 
 
   if(is.null(df) || all(is.na(df))){
@@ -43,7 +51,7 @@ seg_split_segments <- function(
         df = df %>% filter(.data[[solution_name]] == .x),
         vars = seg[["input_sheet"]][["input_table"]][["rs_var"]],
         vars_profiles = seg[["input_sheet"]][["input_table"]][["profile_var"]],
-        solution_name = "dummy", n_min = split_into, n_max = split_into, id_name = "seg_uuid"
+        solution_name = "dummy", n_min = split_into, n_max = split_into, resp_id_name = resp_id_name
       ) %>%
         keep_at("all_inputs") %>%
         flatten() %>%
@@ -58,7 +66,7 @@ seg_split_segments <- function(
         df = df %>% filter(.data[[solution_name]] == .x),
         vars = seg[["input_sheet"]][["input_table"]][["rs_var"]],
         vars_profiles = seg[["input_sheet"]][["input_table"]][["profile_var"]],
-        solution_name = "dummy", n_min = split_into, n_max = split_into, id_name = "seg_uuid"
+        solution_name = "dummy", n_min = split_into, n_max = split_into, resp_id_name = resp_id_name
       ) %>%
         keep_at("all_inputs") %>%
         flatten() %>%

@@ -35,8 +35,8 @@ cluster_prototype_seed <- function(
 
 
   if(is.null(vars)){
-    vars <- seg[["input_sheet"]][["input_table"]][["rs_var"]] %>% as.character()
-    vars_profiles <- seg[["input_sheet"]][["input_table"]][["profile_var"]] %>% as.character()
+    vars <- seg %>% seg_get_vars_polars(.return = "rs")
+    vars_profiles <- seg %>% seg_get_vars_polars(.return = "profiles")
   }
 
 

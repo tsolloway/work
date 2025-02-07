@@ -15,7 +15,7 @@ seg_prototype_split_segments(
   reduced_inputs_max = 14,
   priors = c("size", "equal"),
   method = c("kmeans", "medoid"),
-  id_name = "seg_uuid"
+  resp_id_name = NULL
 )
 }
 \description{

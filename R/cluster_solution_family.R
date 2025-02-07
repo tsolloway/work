@@ -2,13 +2,23 @@
 #' @description cluster_solution_family
 #' @export
 cluster_solution_family <- function(
-    seg, inputs, solution_name,
-    id_name = "seg_uuid",
+    seg,
+    inputs,
+    solution_name,
+    resp_id_name = "seg_uuid",
     filter_logical_vector = NULL,
-    n_min = 4, n_max = 7, reduced_inputs_max = NULL,
-    vary_percent = .1, side_bias_percent = .1,
-    priors = c("equal", "size"), iter_max = 100000, nstart = 10,
-    do_kmeans = TRUE, do_medoid = TRUE, do_gaus_mix = TRUE, do_hierarchical = TRUE
+    n_min = 4,
+    n_max = 7,
+    reduced_inputs_max = NULL,
+    vary_percent = .1,
+    side_bias_percent = .1,
+    priors = c("equal", "size"),
+    iter_max = 100000,
+    nstart = 10,
+    do_kmeans = TRUE,
+    do_medoid = TRUE,
+    do_hierarchical = TRUE,
+    do_gaus_mix = FALSE
 ){
 
   result <- list()
@@ -16,22 +26,33 @@ cluster_solution_family <- function(
   df <- seg[["data"]][["with_shell"]]
 
   all_polars_rs <- seg[["input_sheet"]][["input_table"]][["rs_var"]] %>% as.character()
-  all_inputs <- seg[["input_sheet"]][["input_table"]][["profile_var"]] %>% as.character()
+  # all_inputs <- seg[["input_sheet"]][["input_table"]][["profile_var"]] %>% as.character()  # I don't think we need.  Commenting out incase we do.
 
 
   # filter data if available
   if(!is.null(filter_logical_vector)){
+
     if(is.vector(filter_logical_vector)){
+
       df <- df %>% filter(filter_logical_vector)
+
     }else  if(is.character(filter_logical_vector)){
+
       df <- df %>% filter(.data[[filter_logical_vector]])
     }
   }
 
-  df <- df %>% seg_cluster_variability(vars = all_polars_rs, vary_percent = vary_percent, side_bias_percent = side_bias_percent)
+
+  df <- df %>% seg_cluster_variability(
+    vars = all_polars_rs,
+    vary_percent = vary_percent,
+    side_bias_percent = side_bias_percent
+  )
+
 
   ok_filter_exists <- df[["ok_filter_exists"]]
   df <- df[["df"]]
+
 
 
   if(ok_filter_exists){
@@ -45,7 +66,8 @@ cluster_solution_family <- function(
   if(do_kmeans){
     set.seed(1)
     result[["kmeans"]] <- cluster_kmeans(
-      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
+      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]],
+      solution_name = solution_name, resp_id_name = resp_id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       priors = priors, iter_max = iter_max, nstart = nstart
     )
@@ -56,7 +78,8 @@ cluster_solution_family <- function(
   if(do_medoid){
     set.seed(1)
     result[["medoid"]] <- cluster_medoid(
-      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
+      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]],
+      solution_name = solution_name, resp_id_name = resp_id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       priors = priors, iter_max = iter_max, nstart = nstart
     )
@@ -67,7 +90,8 @@ cluster_solution_family <- function(
   if(do_gaus_mix){
     set.seed(1)
     result[["gaus_mix"]] <- cluster_gaus_mix(
-      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
+      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]],
+      solution_name = solution_name, resp_id_name = resp_id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       priors = priors, iter_max = iter_max, nstart = nstart
     )
@@ -79,7 +103,8 @@ cluster_solution_family <- function(
   if(do_hierarchical){
     set.seed(1)
     temp <- cluster_hierarchical(
-      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]], solution_name = solution_name, id_name = id_name, filter_name = filter_name,
+      df = df, vars = inputs[["RS"]], vars_profiles = inputs[["Profile"]],
+      solution_name = solution_name, resp_id_name = resp_id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       priors = priors, iter_max = iter_max, nstart = nstart
     )
@@ -102,7 +127,8 @@ cluster_solution_family <- function(
       lda_name, lda_inputs, lda_profiles,
       lda_coefficient_function, lda_predict,
       confusion, accuracy, df_append
-    )) %>%
+    )
+    ) %>%
     bind_rows() %>%
     filter(!is.na(df_append))
 
@@ -113,7 +139,10 @@ cluster_solution_family <- function(
     unlist(recursive = FALSE) %>%
     reduce(full_join, by = "id") %>%
     dplyr::select(-ends_with(".y")) %>%
-    setNames(., names(.) %>% gsub(".x", "", .))
+    setNames(
+      .,
+      names(.) %>% gsub(".x", "", .)
+    )
 
 
 

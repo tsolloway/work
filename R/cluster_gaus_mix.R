@@ -3,9 +3,14 @@
 #' @export
 cluster_gaus_mix <- function(
     df, vars, vars_profiles, solution_name,
-    id_name = "seg_uuid", filter_name = NULL,
-    n_min = 4, n_max = 7, reduced_inputs_max = NULL,
-    priors = c("equal", "size"), iter_max = 100000, nstart = 10
+    resp_id_name = NULL,
+    filter_name = NULL,
+    n_min = 4,
+    n_max = 7,
+    reduced_inputs_max = NULL,
+    priors = c("equal", "size"),
+    iter_max = 100000,
+    nstart = 10
 ){
 
   require(mclust) %>% suppressMessages()
@@ -14,7 +19,11 @@ cluster_gaus_mix <- function(
 
   priors <- match.arg(priors)
 
-  id <- df[[id_name]]
+  if(is.null(resp_id_name)){
+    resp_id_name <- seg %>% get_resp_id_name()
+  }
+
+  id <- df[[resp_id_name]]
 
 
   if(!is.null(filter_name)){
@@ -69,7 +78,7 @@ cluster_gaus_mix <- function(
   set.seed(1)
   result_all <- result %>%
     cluster_add_lda(
-      df = df, id_name = id_name,
+      df = df, resp_id_name = resp_id_name,
       filter_name = filter_name, priors = priors,
       use_reduced = FALSE
     )
@@ -77,7 +86,7 @@ cluster_gaus_mix <- function(
   set.seed(1)
   result_reduced <- result %>%
     cluster_add_lda(
-      df = df, id_name = id_name,
+      df = df, resp_id_name = resp_id_name,
       filter_name = filter_name, priors = priors,
       use_reduced = TRUE
     )

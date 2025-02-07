@@ -9,7 +9,7 @@ cluster_kmeans(
   vars,
   vars_profiles,
   solution_name,
-  id_name = "seg_uuid",
+  resp_id_name = NULL,
   filter_name = NULL,
   n_min = 4,
   n_max = 7,

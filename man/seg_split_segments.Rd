@@ -10,7 +10,7 @@ seg_split_segments(
   seg_splits,
   new_solution_name,
   split_into = 2,
-  id_name = "seg_uuid",
+  resp_id_name = NULL,
   method = c("kmeans", "medoid"),
   return_append_only = FALSE
 )

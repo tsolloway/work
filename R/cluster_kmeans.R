@@ -2,16 +2,52 @@
 #' @description cluster_kmeans
 #' @export
 cluster_kmeans <- function(
-    df, vars, vars_profiles, solution_name, id_name = "seg_uuid", filter_name = NULL,
-    n_min = 4, n_max = 7, reduced_inputs_max = NULL,
-    priors = c("equal", "size"), iter_max = 100000, nstart = 10
+    df,
+    vars,
+    vars_profiles,
+    solution_name,
+    resp_id_name = NULL,
+    filter_name = NULL,
+    n_min = 4,
+    n_max = 7,
+    reduced_inputs_max = NULL,
+    priors = c("equal", "size"),
+    iter_max = 100000,
+    nstart = 10
 ){
+
+  # df = seg[["data"]][["with_solutions"]]
+  # vars = c(
+  #   seg_get_vars(seg, type = "polars", .return = "rs"),
+  #   seg_get_vars(seg, block = "CVP", type = "profiles")
+  # )
+  # vars_profiles = c(
+  #   seg_get_vars(seg, type = "polars", .return = "profiles"),
+  #   seg_get_vars(seg, block = "CVP", type = "profiles")
+  # )
+  # solution_name = "foo"
+  # resp_id_name = NULL
+  # filter_name = NULL
+  # n_min = 4
+  # n_max = 7
+  # reduced_inputs_max = NULL
+  # priors = "equal"
+  # iter_max = 100000
+  # nstart = 10
+
 
   set.seed(1)
 
   priors <- match.arg(priors)
 
-  id <- df[[id_name]]
+  if(is.null(resp_id_name)){
+    resp_id_name <- seg %>% get_resp_id_name()
+  }
+
+  id <- df %>%
+    dplyr::select(!!resp_id_name) %>%
+    unlist() %>%
+    setNames(NULL)
 
 
   if(!is.null(filter_name)){
@@ -22,6 +58,9 @@ cluster_kmeans <- function(
     id_temp <- id
   }
 
+
+  reduced_vars <- vars[!vars %in% seg_get_vars_profiles(seg)]
+  reduced_vars_profiles <- vars_profiles[!vars_profiles %in% seg_get_vars_profiles(seg)]
 
 
   result <- tibble::tibble("n" = n_min : n_max) %>%
@@ -42,10 +81,11 @@ cluster_kmeans <- function(
       "priors_size" = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
       "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, possibly(~{
         set.seed(1)
-        cluster_reduce_vars(df_temp, vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)
+        cluster_reduce_vars(df_temp, reduced_vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)
       }, otherwise = NA)),
-      "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+      "reduced_profiles" = purrr::map(reduced_inputs, ~reduced_vars_profiles[match(.x, reduced_vars)])
     )
+
 
 
   if(!is.null(reduced_inputs_max)){
@@ -56,19 +96,25 @@ cluster_kmeans <- function(
       )
   }
 
+
+
   set.seed(1)
   result_all <- result %>%
     cluster_add_lda(
-      df = df, id_name = id_name,
-      filter_name = filter_name, priors = priors,
+      df = df,
+      resp_id_name = resp_id_name,
+      filter_name = filter_name,
+      priors = priors,
       use_reduced = FALSE
     )
 
   set.seed(1)
   result_reduced <- result %>%
     cluster_add_lda(
-      df = df, id_name = id_name,
-      filter_name = filter_name, priors = priors,
+      df = df,
+      resp_id_name = resp_id_name,
+      filter_name = filter_name,
+      priors = priors,
       use_reduced = TRUE
     )
 
