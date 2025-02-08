@@ -9,14 +9,16 @@ cluster_kmeans(
   vars,
   vars_profiles,
   solution_name,
-  resp_id_name = NULL,
+  resp_id_name = "seg_uuid",
   filter_name = NULL,
   n_min = 4,
   n_max = 7,
   reduced_inputs_max = NULL,
   priors = c("equal", "size"),
   iter_max = 1e+05,
-  nstart = 10
+  nstart = 10,
+  lda_vars = NULL,
+  lda_vars_profiles = NULL
 )
 }
 \description{

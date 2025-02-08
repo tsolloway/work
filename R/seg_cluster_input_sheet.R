@@ -14,6 +14,7 @@ seg_cluster_input_sheet <- function(
     resp_id_name = NULL,
     iter_max = 100000,
     nstart = 10,
+    ok_filter = TRUE,
     do_kmeans = TRUE,
     do_medoid = TRUE,
     do_gaus_mix = TRUE,
@@ -25,6 +26,28 @@ seg_cluster_input_sheet <- function(
 
   if(is.null(resp_id_name)){
     resp_id_name <- seg %>% get_resp_id_name()
+  }
+
+
+  df <- seg[["data"]][["with_shell"]]
+
+
+  if(ok_filter){
+    filter_name <- "okay_filter"
+
+    if(!filter_name %in% names(df)){
+
+      df <- df %>%
+        seg_cluster_variability(
+          vars = seg_get_vars_polars(seg, .return="rs"),
+          vary_percent = .1,
+          side_bias_percent = .1
+        )
+
+      df <- df[["df"]]
+
+      seg[["data"]][["with_shell"]] <- df
+    }
   }
 
 
@@ -106,17 +129,26 @@ seg_cluster_input_sheet <- function(
     reduce(full_join, by = "id")
 
 
-  df <- left_join(
+  df_return <- left_join(
     seg[["data"]][["with_shell"]],
     df_segment_append,
     by = join_by(seg_uuid == id)
   )
 
 
+  if("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)){
+    df_return <- df_return %>%
+      left_join(
+        df %>% select(c(!!resp_id_name, "okay_filter")),
+        by = join_by(!!resp_id_name)
+      )
+  }
+
+
   seg[["solutions"]][["analysis"]] <- solutions
   seg[["solutions"]][["summary_table"]] <- solution_table
   seg[["solutions"]][["df_segment_append"]] <- df_segment_append
-  seg[["data"]][["with_solutions"]] <- df
+  seg[["data"]][["with_solutions"]] <- df_return
 
 
   return(seg)

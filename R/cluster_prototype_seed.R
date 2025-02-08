@@ -156,16 +156,25 @@ cluster_prototype_seed <- function(
     reduce(full_join, by = "id")
 
 
-  df <- left_join(
+  df_return <- left_join(
     seg[["data"]][["with_shell"]],
     df_segment_append,
     by = join_by(seg_uuid == id)
   )
 
 
+  if("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)){
+    df_return <- df_return %>%
+      left_join(
+        df %>% select(c(!!resp_id_name, "okay_filter")),
+        by = join_by(!!resp_id_name)
+      )
+  }
+
+
   seg[["solutions"]][["summary_table"]] <- solution_table
   seg[["solutions"]][["df_segment_append"]] <- df_segment_append
-  seg[["data"]][["with_solutions"]] <- df
+  seg[["data"]][["with_solutions"]] <- df_return
 
 
   return(seg)

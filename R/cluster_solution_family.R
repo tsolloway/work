@@ -5,7 +5,7 @@ cluster_solution_family <- function(
     seg,
     inputs,
     solution_name,
-    resp_id_name = "seg_uuid",
+    resp_id_name = NULL,
     filter_logical_vector = NULL,
     n_min = 4,
     n_max = 7,
@@ -15,6 +15,7 @@ cluster_solution_family <- function(
     priors = c("equal", "size"),
     iter_max = 100000,
     nstart = 10,
+    ok_filter = TRUE,
     do_kmeans = TRUE,
     do_medoid = TRUE,
     do_hierarchical = TRUE,
@@ -23,9 +24,13 @@ cluster_solution_family <- function(
 
   result <- list()
 
+  if(is.null(resp_id_name)){
+    resp_id_name <- seg %>% get_resp_id_name()
+  }
+
   df <- seg[["data"]][["with_shell"]]
 
-  all_polars_rs <- seg[["input_sheet"]][["input_table"]][["rs_var"]] %>% as.character()
+  all_polars_rs <- seg %>% seg_get_vars_polars(.return = "rs")
   # all_inputs <- seg[["input_sheet"]][["input_table"]][["profile_var"]] %>% as.character()  # I don't think we need.  Commenting out incase we do.
 
 
@@ -43,23 +48,32 @@ cluster_solution_family <- function(
   }
 
 
-  df <- df %>% seg_cluster_variability(
-    vars = all_polars_rs,
-    vary_percent = vary_percent,
-    side_bias_percent = side_bias_percent
-  )
 
-
-  ok_filter_exists <- df[["ok_filter_exists"]]
-  df <- df[["df"]]
-
-
-
-  if(ok_filter_exists){
+  if(ok_filter){
     filter_name <- "okay_filter"
-  }else if(!ok_filter_exists){
+
+    if(!filter_name %in% names(df)){
+
+      df <- df %>%
+        seg_cluster_variability(
+          vars = seg_get_vars_polars(seg, .return="rs"),
+          vary_percent = .1,
+          side_bias_percent = .1
+        )
+
+      df <- df[["df"]]
+    }
+
+  }else{
     filter_name <- NULL
   }
+
+
+  # if(ok_filter_exists){
+  #   filter_name <- "okay_filter"
+  # }else if(!ok_filter_exists){
+  #   filter_name <- NULL
+  # }
 
 
 

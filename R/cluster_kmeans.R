@@ -6,52 +6,48 @@ cluster_kmeans <- function(
     vars,
     vars_profiles,
     solution_name,
-    resp_id_name = NULL,
+    resp_id_name = "seg_uuid",
     filter_name = NULL,
     n_min = 4,
     n_max = 7,
     reduced_inputs_max = NULL,
     priors = c("equal", "size"),
     iter_max = 100000,
-    nstart = 10
+    nstart = 10,
+    lda_vars = NULL,
+    lda_vars_profiles = NULL
 ){
 
-  # df = seg[["data"]][["with_solutions"]]
-  # vars = c(
-  #   seg_get_vars(seg, type = "polars", .return = "rs"),
-  #   seg_get_vars(seg, block = "CVP", type = "profiles")
-  # )
-  # vars_profiles = c(
-  #   seg_get_vars(seg, type = "polars", .return = "profiles"),
-  #   seg_get_vars(seg, block = "CVP", type = "profiles")
-  # )
-  # solution_name = "foo"
-  # resp_id_name = NULL
-  # filter_name = NULL
-  # n_min = 4
-  # n_max = 7
-  # reduced_inputs_max = NULL
-  # priors = "equal"
-  # iter_max = 100000
-  # nstart = 10
+    # df = seg[["data"]][["with_solutions"]]
+    # vars = c(
+    #   seg_get_vars(seg, type = "polars", .return = "rs")#,
+    #   # seg_get_vars(seg, block = "CVP", type = "profiles")
+    # )
+    # vars_profiles = c(
+    #   seg_get_vars(seg, type = "polars", .return = "profiles")#,
+    #   # seg_get_vars(seg, block = "CVP", type = "profiles")
+    # )
+    # solution_name = "foo"
+    # resp_id_name = "seg_uuid"
+    # filter_name = NULL
+    # n_min = 4
+    # n_max = 7
+    # reduced_inputs_max = NULL
+    # priors = "equal"
+    # iter_max = 100000
+    # nstart = 10
+    # lda_vars = NULL
 
 
   set.seed(1)
 
   priors <- match.arg(priors)
 
-  if(is.null(resp_id_name)){
-    resp_id_name <- seg %>% get_resp_id_name()
-  }
-
-  id <- df %>%
-    dplyr::select(!!resp_id_name) %>%
-    unlist() %>%
-    setNames(NULL)
+  id <- df[[resp_id_name]]
 
 
   if(!is.null(filter_name)){
-    df_temp <- df %>% filter(.data[[filter_name]]) %>% dplyr::select(all_of(vars))
+    df_temp <- df %>% dplyr::filter(.data[[filter_name]]) %>% dplyr::select(all_of(vars))
     id_temp <- id[df[[filter_name]]]
   }else if(is.null(filter_name)){
     df_temp <- df %>% dplyr::select(all_of(vars))
@@ -59,8 +55,15 @@ cluster_kmeans <- function(
   }
 
 
-  reduced_vars <- vars[!vars %in% seg_get_vars_profiles(seg)]
-  reduced_vars_profiles <- vars_profiles[!vars_profiles %in% seg_get_vars_profiles(seg)]
+
+  if(!is.null(lda_vars)){
+    reduced_vars <- vars[!vars %in% lda_vars]
+    reduced_vars_profiles <- vars_profiles[!vars_profiles %in% lda_vars_profiles]
+  }else{
+    reduced_vars <- vars
+    reduced_vars_profiles <- vars_profiles
+  }
+
 
 
   result <- tibble::tibble("n" = n_min : n_max) %>%
@@ -105,7 +108,9 @@ cluster_kmeans <- function(
       resp_id_name = resp_id_name,
       filter_name = filter_name,
       priors = priors,
-      use_reduced = FALSE
+      use_reduced = FALSE,
+      lda_vars = reduced_vars,
+      lda_vars_profiles = reduced_vars_profiles
     )
 
   set.seed(1)
@@ -115,7 +120,7 @@ cluster_kmeans <- function(
       resp_id_name = resp_id_name,
       filter_name = filter_name,
       priors = priors,
-      use_reduced = TRUE
+      use_reduced = TRUE,
     )
 
 

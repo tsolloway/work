@@ -55,7 +55,7 @@ seg_get_vars_polars <- function(
   .return <- match.arg(.return)
 
   all_blocks <- seg[["shell"]][["polars"]] %>%
-    select(prefix) %>%
+    dplyr::select(prefix) %>%
     unlist() %>%
     setNames(NULL)
 
@@ -84,8 +84,8 @@ seg_get_vars_polars <- function(
 
 
   polar_table <- seg[["input_sheet"]][["input_table"]] %>%
-    select(source_var, profile_var, rs_var) %>%
-    filter(profile_var %in% polar_profiles)
+    dplyr::select(source_var, profile_var, rs_var) %>%
+    dplyr::filter(profile_var %in% polar_profiles)
 
 
   if(.return == "all"){
@@ -119,7 +119,7 @@ seg_get_vars_profiles <- function(
   .return <- match.arg(.return)
 
   all_blocks <- seg[["shell"]][["profiles"]] %>%
-    select(prefix) %>%
+    dplyr::select(prefix) %>%
     unlist() %>%
     setNames(NULL)
 
@@ -137,12 +137,12 @@ seg_get_vars_profiles <- function(
 
 
   seg[["shell"]][["profiles"]] %>%
-    filter(
+    dplyr::filter(
       prefix %in% blocks
     ) %>%
-    select(vars) %>%
+    dplyr::select(vars) %>%
     tidyr::unnest(vars) %>%
-    select(var) %>%
+    dplyr::select(var) %>%
     unlist() %>%
     setNames(NULL)
 

@@ -17,6 +17,7 @@ seg_cluster_input_sheet(
   resp_id_name = NULL,
   iter_max = 1e+05,
   nstart = 10,
+  ok_filter = TRUE,
   do_kmeans = TRUE,
   do_medoid = TRUE,
   do_gaus_mix = TRUE,

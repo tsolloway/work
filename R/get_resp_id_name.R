@@ -4,16 +4,18 @@
 get_resp_id_name <- function(obj, .default = "seg_uuid"){
 
   if(
-    is.null(obj[["meta"]][["respondent_id_name"]])
+    !is.null(obj[["meta"]][["respondent_id_name"]])
   ){
 
-    return(.default)
+    result <- obj[["meta"]][["respondent_id_name"]]
 
   }else{
 
-    return(obj[["meta"]][["respondent_id_name"]])
+    result <- .default
 
   }
+
+  return(result)
 }
 
 
