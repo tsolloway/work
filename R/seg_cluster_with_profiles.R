@@ -21,10 +21,10 @@ seg_cluster_with_profiles <- function(
     nstart = 10
 ){
 
-  # solution_previous = "G"
-  # solution_name = "foo"
+  # solution_previous = NULL
+  # solution_name = "H"
   # inputs_polars = NULL
-  # inputs_profiles = seg_get_vars(seg, block = "CVP", type = "profiles")
+  # inputs_profiles = c("BT14", "BT15", "BT16", seg_get_vars_profiles(seg, c("TER", "USE")))
   # resp_id_name = NULL
   # filter_logical_vector = NULL
   # ok_filter = TRUE
@@ -38,6 +38,8 @@ seg_cluster_with_profiles <- function(
   # iter_max = 100000
   # nstart = 10
 
+
+  priors <- match.arg(priors)
 
   if(is.null(resp_id_name)){
     resp_id_name <- seg %>% get_resp_id_name()
@@ -90,9 +92,7 @@ seg_cluster_with_profiles <- function(
 
 
   if(use_greedy && is.null(solution_previous) && is.null(inputs_polars)){
-
     inputs_polars <- seg %>% get_greedy_vars(df=df, filter_name = filter_name)
-
   }
 
 
@@ -106,6 +106,7 @@ seg_cluster_with_profiles <- function(
     dplyr::select(profile_var) %>%
     unlist() %>%
     setNames(NULL)
+
 
 
   results <- cluster_kmeans(
@@ -124,7 +125,8 @@ seg_cluster_with_profiles <- function(
     priors = priors,
     iter_max = iter_max,
     nstart = nstart
-  )
+  ) %>%
+    suppressWarnings()
 
 
   if(is_truthy(seg[["solutions"]][["analysis"]][[solution_name]])){
@@ -140,7 +142,8 @@ seg_cluster_with_profiles <- function(
     discard_at("hierarchical_fit") %>%
     flatten() %>%
     purrr::map(~dplyr::select(.x, solution_name, n, cluster_name, lda_name, lda_inputs, lda_profiles, confusion, accuracy, df_append)) %>%
-    bind_rows()
+    bind_rows() %>%
+    filter(!is.na(accuracy))
 
 
   solution_family_results[["df_segment_append"]] <- solution_family_results[["solution_table"]] %>%

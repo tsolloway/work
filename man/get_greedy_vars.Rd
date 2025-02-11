@@ -10,6 +10,7 @@ get_greedy_vars(
   n = seq(4, 8),
   df = NULL,
   vars = NULL,
+  grp = NULL,
   filter_name = NULL,
   iter_max = 10000,
   nstart = 10

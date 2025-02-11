@@ -6,9 +6,14 @@ seg_split_segments <- function(
     solution_name,
     seg_splits,
     new_solution_name,
+    vars = NULL,
+    vars_profiles = NULL,
     split_into = 2,
     resp_id_name = NULL,
+    use_greedy = TRUE,
+    use_top_n_polars = 20,
     method = c("kmeans", "medoid"),
+    priors = c("equal", "size"),
     return_append_only = FALSE
 ){
 
@@ -42,6 +47,27 @@ seg_split_segments <- function(
   }
 
 
+  if(use_greedy && is.null(vars)){
+    vars <- seg %>% get_greedy_vars(
+      df = df %>% filter(.data[[solution_name]] %in% seg_splits),
+      top = use_top_n_polars)
+  }
+
+
+  if(is.null(vars)){
+    vars <- seg %>% seg_get_vars_polars(.return = "rs")
+    vars_profiles <- seg %>% seg_get_vars_polars(.return = "profiles")
+  }
+
+
+  if(is.null(vars_profiles)){
+    vars_profiles <- seg_get_vars_polars(seg, .return = "all") %>%
+      dplyr::filter(rs_var %in% vars) %>%
+      dplyr::select(profile_var) %>%
+      unlist() %>%
+      setNames(NULL)
+  }
+
 
   if(method == "kmeans"){
 
@@ -49,8 +75,9 @@ seg_split_segments <- function(
       seg_splits,
       ~cluster_kmeans(
         df = df %>% filter(.data[[solution_name]] == .x),
-        vars = seg[["input_sheet"]][["input_table"]][["rs_var"]],
-        vars_profiles = seg[["input_sheet"]][["input_table"]][["profile_var"]],
+        vars = vars,
+        vars_profiles = vars_profiles,
+        priors = priors,
         solution_name = "dummy", n_min = split_into, n_max = split_into, resp_id_name = resp_id_name
       ) %>%
         keep_at("all_inputs") %>%
@@ -64,8 +91,9 @@ seg_split_segments <- function(
       seg_splits,
       ~cluster_medoid(
         df = df %>% filter(.data[[solution_name]] == .x),
-        vars = seg[["input_sheet"]][["input_table"]][["rs_var"]],
-        vars_profiles = seg[["input_sheet"]][["input_table"]][["profile_var"]],
+        vars = vars,
+        vars_profiles = vars_profiles,
+        priors = priors,
         solution_name = "dummy", n_min = split_into, n_max = split_into, resp_id_name = resp_id_name
       ) %>%
         keep_at("all_inputs") %>%

@@ -12,6 +12,8 @@ cluster_prototype_seed(
   vars = NULL,
   vars_profiles = NULL,
   filter_name = NULL,
+  use_greedy = TRUE,
+  use_top_n_polars = 20,
   reduced_inputs_max = 14,
   priors = c("size", "equal"),
   resp_id_name = NULL

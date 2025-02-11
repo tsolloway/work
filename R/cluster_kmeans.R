@@ -57,8 +57,8 @@ cluster_kmeans <- function(
 
 
   if(!is.null(lda_vars)){
-    reduced_vars <- vars[!vars %in% lda_vars]
-    reduced_vars_profiles <- vars_profiles[!vars_profiles %in% lda_vars_profiles]
+    reduced_vars <- vars[vars %in% lda_vars]
+    reduced_vars_profiles <- vars_profiles[vars_profiles %in% lda_vars_profiles]
   }else{
     reduced_vars <- vars
     reduced_vars_profiles <- vars_profiles

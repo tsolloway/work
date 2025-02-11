@@ -9,6 +9,8 @@ cluster_prototype_seed <- function(
     vars = NULL,
     vars_profiles = NULL,
     filter_name = NULL,
+    use_greedy = TRUE,
+    use_top_n_polars = 20,
     reduced_inputs_max = 14,
     priors = c("size", "equal"),
     resp_id_name = NULL
@@ -34,12 +36,6 @@ cluster_prototype_seed <- function(
   }
 
 
-  if(is.null(vars)){
-    vars <- seg %>% seg_get_vars_polars(.return = "rs")
-    vars_profiles <- seg %>% seg_get_vars_polars(.return = "profiles")
-  }
-
-
   df <- seg[["data"]][["with_solutions"]]
 
 
@@ -49,6 +45,7 @@ cluster_prototype_seed <- function(
   seed <- seed %>% dplyr::filter(!is.na(.data[[seed_name]]))
 
 
+
   if(!is.null(filter_name)){
     df_temp <- df %>% dplyr::filter(.data[[filter_name]])
   }else if(is.null(filter_name)){
@@ -56,7 +53,33 @@ cluster_prototype_seed <- function(
   }
 
 
-  df_temp <- df_temp %>% dplyr::filter(df_temp[[resp_id_name]] %in% seed[[resp_id_name]])
+  if( !all(df_temp[[resp_id_name]] %in% seed[[resp_id_name]]) ){
+    df_temp <- df_temp %>%
+      dplyr::filter(
+        df_temp[[resp_id_name]] %in% seed[[resp_id_name]]
+      )
+  }
+
+
+  if(use_greedy && is.null(vars)){
+    vars <- seg %>% get_greedy_vars(df = df_temp, top = use_top_n_polars, grp = unlist(seed[[seed_name]]))
+  }
+
+
+  if(is.null(vars)){
+    vars <- seg %>% seg_get_vars_polars(.return = "rs")
+    vars_profiles <- seg %>% seg_get_vars_polars(.return = "profiles")
+  }
+
+
+  if(is.null(vars_profiles)){
+    vars_profiles <- seg_get_vars_polars(seg, .return = "all") %>%
+      dplyr::filter(rs_var %in% vars) %>%
+      dplyr::select(profile_var) %>%
+      unlist() %>%
+      setNames(NULL)
+  }
+
 
 
   results <- tibble::tibble(

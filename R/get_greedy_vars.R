@@ -7,12 +7,15 @@ get_greedy_vars <- function(
     n = seq(4,8),
     df = NULL,
     vars = NULL,
+    grp = NULL,
     filter_name = NULL,
     iter_max = 10000,
     nstart = 10
 ){
 
   set.seed(1)
+
+  group_exists <- FALSE
 
   if(is.null(df)){
     df <- seg[["data"]][["with_shell"]]
@@ -34,18 +37,31 @@ get_greedy_vars <- function(
     )
 
 
+  if(!is.null(grp)){
+    n <- grp %>%
+      unlist() %>%
+      unique() %>%
+      max()
+  }
+
+
+
   result <- tibble::tibble(
     n = n,
 
-    grp = map(
-      n,
-      ~stats::kmeans(df_temp, .x, iter.max = iter_max, nstart = nstart) %>%
-        pluck("cluster")
+    grp = ifelse(
+      group_exists,
+      unlist(grp),
+      map(
+        n,
+        ~stats::kmeans(df, .x, iter.max = iter_max, nstart = nstart) %>%
+          pluck("cluster")
+      )
     ),
 
     greedy = map(
       grp,
-      ~cluster_reduce_vars(df_temp, reduced_vars, .x, type = "greedy", return_only_var = FALSE)
+      ~cluster_reduce_vars(df, vars, .x, type = "greedy", return_only_var = FALSE)
     )
   )
 

@@ -9,9 +9,14 @@ seg_split_segments(
   solution_name,
   seg_splits,
   new_solution_name,
+  vars = NULL,
+  vars_profiles = NULL,
   split_into = 2,
   resp_id_name = NULL,
+  use_greedy = TRUE,
+  use_top_n_polars = 20,
   method = c("kmeans", "medoid"),
+  priors = c("equal", "size"),
   return_append_only = FALSE
 )
 }

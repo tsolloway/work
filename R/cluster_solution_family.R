@@ -84,7 +84,8 @@ cluster_solution_family <- function(
       solution_name = solution_name, resp_id_name = resp_id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       priors = priors, iter_max = iter_max, nstart = nstart
-    )
+    ) %>%
+      suppressWarnings()
   }
 
 
@@ -96,7 +97,8 @@ cluster_solution_family <- function(
       solution_name = solution_name, resp_id_name = resp_id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       priors = priors, iter_max = iter_max, nstart = nstart
-    )
+    ) %>%
+      suppressWarnings()
   }
 
 
@@ -108,7 +110,8 @@ cluster_solution_family <- function(
       solution_name = solution_name, resp_id_name = resp_id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       priors = priors, iter_max = iter_max, nstart = nstart
-    )
+    ) %>%
+      suppressWarnings()
     possibly(~detach("package:mclust", unload=TRUE))()
   }
 
@@ -121,7 +124,8 @@ cluster_solution_family <- function(
       solution_name = solution_name, resp_id_name = resp_id_name, filter_name = filter_name,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       priors = priors, iter_max = iter_max, nstart = nstart
-    )
+    ) %>%
+      suppressWarnings()
 
     result[["hierarchical"]] <- list(
       all_inputs = temp[["all_inputs"]],
