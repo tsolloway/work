@@ -11,7 +11,7 @@ cluster_add_lda(
   lda_vars_profiles = NULL,
   resp_id_name = NULL,
   filter_name = NULL,
-  priors = c("equal", "size"),
+  priors = c("size", "equal"),
   use_reduced = FALSE
 )
 }

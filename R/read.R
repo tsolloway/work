@@ -54,7 +54,8 @@ read <- function(
       sheet = sheet,
       range = range,
       col_names = col_names,
-      col_types = col_types
+      col_types = col_types,
+      clean_col_names = clean_col_names
     ),
 
     xlsx = read_xl(
@@ -62,7 +63,8 @@ read <- function(
       sheet = sheet,
       range = range,
       col_names = col_names,
-      col_types = col_types
+      col_types = col_types,
+      clean_col_names = clean_col_names
     ),
 
     sav = haven::read_sav(

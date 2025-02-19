@@ -93,7 +93,12 @@ cluster_prototype_seed <- function(
     cluster_glance = NA,
     priors_equal = purrr::map(n, ~rep(1/.x, .x)),
     priors_size = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
-    reduced_inputs = purrr::map2(cluster_seed, cluster_name, ~cluster_reduce_vars(df_temp, vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)),
+    reduced_inputs = purrr::map2(
+      cluster_seed, cluster_name,
+      function(x,y)purrr::possibly(
+        function(x,y)cluster_reduce_vars(df_temp, vars, x[[y]], type = "greedy_step", return_only_var = TRUE),
+        otherwise = cluster_reduce_vars(df_temp, vars, x[[y]], type = "step", return_only_var = TRUE)
+      )()) %>% suppressWarnings(),
     reduced_profiles = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
   )
 
@@ -154,8 +159,10 @@ cluster_prototype_seed <- function(
   solution_family_results[["solution_table"]] <- solution_family_results[["result"]] %>%
     discard_at("hierarchical_fit") %>%
     flatten() %>%
-    purrr::map(~dplyr::select(.x, solution_name, n, cluster_name, lda_name, lda_inputs, lda_profiles, confusion, accuracy, df_append)) %>%
-    bind_rows()
+    purrr::map(~dplyr::select(.x, solution_name, n, cluster_name, lda_name, lda_inputs, lda_profiles, lda_coefficient_function, lda_predict, confusion, accuracy, df_append)) %>%
+    bind_rows() %>%
+    filter(!is.na(df_append))
+
 
 
   solution_family_results[["df_segment_append"]] <- solution_family_results[["solution_table"]] %>%
@@ -166,7 +173,13 @@ cluster_prototype_seed <- function(
     setNames(., names(.) %>% gsub(".x", "", .))
 
 
+
+  solution_family_results[["solution_table"]] <- solution_family_results[["solution_table"]] %>% dplyr::select(-df_append)
+
+
+
   seg[["solutions"]][["analysis"]][[solution_family_name]] <- solution_family_results
+
 
 
   solution_table <- seg[["solutions"]][["analysis"]] %>%
@@ -174,16 +187,31 @@ cluster_prototype_seed <- function(
     bind_rows()
 
 
+
   df_segment_append <- seg[["solutions"]][["analysis"]] %>%
     map(pluck, "df_segment_append") %>%
     reduce(full_join, by = "id")
 
 
+
+  df_temp <- seg[["data"]][["with_solutions"]]
+  if(is.null(df_temp) || all(is.na(df_temp))){
+    df_temp <- seg[["data"]][["with_shell"]]
+  }
+
+
   df_return <- left_join(
-    seg[["data"]][["with_shell"]],
+    df_temp %>%
+      select(
+        !any_of(
+          names(df_segment_append) %>%
+            tail(-1)
+        )
+      ),
     df_segment_append,
     by = join_by(seg_uuid == id)
   )
+
 
 
   if("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)){

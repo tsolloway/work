@@ -167,6 +167,7 @@ cluster_solution_family <- function(
   solution_table <- solution_table %>% dplyr::select(-df_append)
 
 
+
   output <- list(
     result = result,
     solution_table = solution_table,

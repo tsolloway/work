@@ -2,15 +2,32 @@
 #' @description seg_reorder_solution
 #' @export
 seg_reorder_solution <- function(
-    seg, solution_old, solution_new, new_order
-  ){
+    seg,
+    solution_old,
+    solution_new,
+    new_order
+){
 
+  # solution_old = "LDA_opt_kmeans_cluster_N6"
+  # solution_new = "Solution_A"
+  # new_order = c(6,2,3,4,5,1)
 
   summary_table <- seg[["solutions"]][["summary_table"]]
 
+  summary_append <- seg[["solutions"]][["df_segment_append"]]
+
+
+  summary_append_new <- summary_append %>%
+    select(all_of(c("id", !!solution_old)))
+
 
   summary_table_new <- summary_table %>%
-    filter(lda_name == !!solution_old)
+    filter(
+      lda_name == !!solution_old
+    ) %>%
+    mutate(
+      df_append = list(summary_append_new)
+    )
 
 
 
@@ -52,7 +69,7 @@ seg_reorder_solution <- function(
 
     df_append = df_append %>%
       flatten_df() %>%
-      select(all_of(c("id", solution_old))) %>%
+      select(all_of(c("id", !!solution_old))) %>%
       mutate(
         !!solution_new := .data[[solution_old]] %>%
           case_match(
@@ -64,11 +81,9 @@ seg_reorder_solution <- function(
   )
 
 
-
-
   seg[["solutions"]][["analysis"]][["reorder"]][["solution_table"]] <- bind_rows(
     seg[["solutions"]][["analysis"]][["reorder"]][["solution_table"]],
-    summary_table_new
+    summary_table_new %>% select(!df_append)
   )
 
 
@@ -99,8 +114,21 @@ seg_reorder_solution <- function(
 
 
 
-  df <- left_join(
-    seg[["data"]][["with_shell"]],
+
+  df_temp <- seg[["data"]][["with_solutions"]]
+  if(is.null(df_temp) || all(is.na(df_temp))){
+    df_temp <- seg[["data"]][["with_shell"]]
+  }
+
+
+  df_return <- left_join(
+    df_temp %>%
+      select(
+        !any_of(
+          names(df_segment_append) %>%
+            tail(-1)
+        )
+      ),
     df_segment_append,
     by = join_by(seg_uuid == id)
   )
@@ -108,7 +136,7 @@ seg_reorder_solution <- function(
 
   seg[["solutions"]][["summary_table"]] <- summary_table
   seg[["solutions"]][["df_segment_append"]] <- df_segment_append
-  seg[["data"]][["with_solutions"]] <- df
+  seg[["data"]][["with_solutions"]] <- df_return
 
 
   return(seg)

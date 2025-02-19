@@ -14,11 +14,27 @@ seg_prototype_split_segments <- function(
     use_greedy = TRUE,
     use_top_n_polars = 20,
     reduced_inputs_max = 14,
-
     priors = c("size", "equal"),
     method = c("kmeans", "medoid"),
     resp_id_name = NULL
 ){
+
+
+  # solution_to_split = "kmeans_cluster_A4"
+  # seg_splits = 4
+  # new_solution_family_name = "Foo"
+  # split_into = 2
+  # split_vars = NULL
+  # split_vars_profiles = NULL
+  # lda_vars = NULL
+  # lda_vars_profiles = NULL
+  # use_greedy = TRUE
+  # use_top_n_polars = 20
+  # reduced_inputs_max = 14
+  # priors = "size"
+  # method = "kmeans"
+  # resp_id_name = NULL
+
 
   priors <- match.arg(priors)
   method <- match.arg(method)

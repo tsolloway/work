@@ -41,7 +41,7 @@ get_greedy_vars <- function(
     n <- grp %>%
       unlist() %>%
       unique() %>%
-      max()
+      max(na.rm = TRUE)
   }
 
 

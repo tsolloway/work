@@ -24,6 +24,26 @@ seg_cluster_input_sheet <- function(
 ){
 
 
+  # solution_family = NULL
+  # n_min = 4
+  # n_max = 5
+  # reduced_inputs_max = 14
+  # filter_logical_vector = NULL
+  # vary_percent = .1
+  # side_bias_percent = .1
+  # priors = "equal"
+  # resp_id_name = NULL
+  # iter_max = 100000
+  # nstart = 10
+  # ok_filter = TRUE
+  # do_kmeans = TRUE
+  # do_medoid = TRUE
+  # do_gaus_mix = TRUE
+  # do_hierarchical = TRUE
+  # strategy = "multisession"
+  # workers = NULL
+
+
   if(is.null(resp_id_name)){
     resp_id_name <- seg %>% get_resp_id_name()
   }
@@ -77,7 +97,7 @@ seg_cluster_input_sheet <- function(
         seg = seg,
         inputs = .x,
         solution_name = .y,
-        id_name = resp_id_name,
+        resp_id_name = resp_id_name,
         filter_logical_vector = filter_logical_vector,
         n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
         vary_percent = vary_percent,
@@ -106,7 +126,7 @@ seg_cluster_input_sheet <- function(
       seg = seg,
       inputs = seg[["solutions"]][["inputs"]][[solution_family]],
       solution_name = solution_family,
-      id_name = resp_id_name,
+      resp_id_name = resp_id_name,
       filter_logical_vector = filter_logical_vector,
       n_min = n_min, n_max = n_max, reduced_inputs_max = reduced_inputs_max,
       vary_percent = vary_percent,
@@ -116,7 +136,6 @@ seg_cluster_input_sheet <- function(
       do_gaus_mix = do_gaus_mix, do_hierarchical = do_hierarchical
     )
   }
-
 
 
   solution_table <- solutions %>%
@@ -129,8 +148,20 @@ seg_cluster_input_sheet <- function(
     reduce(full_join, by = "id")
 
 
+  df_temp <- seg[["data"]][["with_solutions"]]
+  if(is.null(df_temp) || all(is.na(df_temp))){
+    df_temp <- seg[["data"]][["with_shell"]]
+  }
+
+
   df_return <- left_join(
-    seg[["data"]][["with_shell"]],
+    df_temp %>%
+      select(
+        !any_of(
+          names(df_segment_append) %>%
+            tail(-1)
+        )
+      ),
     df_segment_append,
     by = join_by(seg_uuid == id)
   )

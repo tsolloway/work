@@ -8,7 +8,7 @@ cluster_add_lda <- function(
     lda_vars_profiles = NULL,
     resp_id_name = NULL,
     filter_name = NULL,
-    priors = c("equal", "size"),
+    priors = c("size", "equal"),
     use_reduced = FALSE
 ){
 
@@ -137,6 +137,11 @@ cluster_add_lda <- function(
           function(x, y, z, w){
             set.seed(1)
 
+            # x=result[["cluster_seed"]][[1]]
+            # y=result[["priors_size"]][[1]]
+            # z=result[["cluster_name"]][[1]]
+            # w=result[["lda_inputs"]][[1]]
+
             dx <- dplyr::left_join(
               x,
               df_temp %>% dplyr::select(all_of(c(!!resp_id_name, unlist(w)))),
@@ -145,7 +150,7 @@ cluster_add_lda <- function(
 
             dx <- dx %>% dplyr::filter( !is.na(dx[[{z}]]) )
 
-            dg <- dx %>% dplyr::select(dplyr::all_of(z)) %>% unlist()
+            dg <- dx %>% dplyr::select(dplyr::all_of(z)) %>% unlist() %>% setNames(NULL)
 
             dx <- dx %>% dplyr::select(!dplyr::any_of(c("id", resp_id_name, z)))
 
@@ -157,11 +162,10 @@ cluster_add_lda <- function(
               prior = dp
             )
           },
-          otherwise = NA))
+          otherwise = NA)
+        )
     )
 
-
-  result$cluster_seed
 
   result <- result %>%
     mutate(
