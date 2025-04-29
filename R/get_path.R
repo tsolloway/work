@@ -13,6 +13,9 @@ get_path <- function(
     scope = c("user", "project")
 ){
 
+  # type = "downloads"
+  # scope = "user"
+
   type <- match.arg(type)
 
   scope <- match.arg(scope)
@@ -48,6 +51,8 @@ get_path <- function(
         temp[grepl("Directory of", temp, ignore.case = TRUE)] %>%
           gsub("Directory of", "", ., ignore.case = TRUE) %>%
           trimws()
+      }else if( get_os() == "macos" ){
+        "~/Downloads/"
       }
     },
 
@@ -59,6 +64,8 @@ get_path <- function(
         temp[grepl("Directory of", temp, ignore.case = TRUE)] %>%
           gsub("Directory of", "", ., ignore.case = TRUE) %>%
           trimws()
+      }else if( get_os() == "macos" ){
+        "~/Desktop/"
       }
     }
   )

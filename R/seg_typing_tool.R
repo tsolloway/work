@@ -17,6 +17,18 @@ seg_typing_tool <- function(
     doc_label_cell_merge = 6
 ){
 
+  # survey_respondent_id = "uuid"
+  # qualification_instructions = rep("qualification goes here", 8)
+  # overwrite_left_label = NULL
+  # overwrite_right_label = NULL
+  # segment_names = NULL
+  # file_name = "Typing Tool"
+  # where = NULL
+  # start_row = 2
+  # start_col = 2
+  # polar_label_width = 65
+  # doc_label_cell_merge = 6
+
   work::start(lib_oxl = TRUE)
 
   row_title <- start_row
@@ -72,11 +84,22 @@ seg_typing_tool <- function(
 
   polars_table <- seg[["spec"]][["polars_table"]]
 
+  profile_table <- seg[["spec"]][["profiles"]] %>%
+    tidyr::unnest(vars)
+
 
   if(all(inputs %in% polars_table[["rs_var"]])){
     inputs_are_rs <- TRUE
   }else if(all(inputs %in% polars_table[["source_var"]])){
     inputs_are_rs <- FALSE
+  }else if(all(inputs %in% profile_table[["source_var"]])){
+    inputs_are_rs <- FALSE
+    inputs_are_profile <- TRUE
+    inputs_are_profile_dichot <- FALSE
+  }else if(all(inputs %in% profile_table[["var"]])){
+    inputs_are_rs <- FALSE
+    inputs_are_profile <- TRUE
+    inputs_are_profile_dichot <- TRUE
   }else{
     stop("Script can't find the inputs in the polars, or we mixed raw and rs polar vars.")
   }
@@ -90,17 +113,35 @@ seg_typing_tool <- function(
     inputs <- inputs_table %>% select(rs_var) %>% unlist() %>% setNames(NULL)
     inputs_raw <- inputs_table %>% select(source_var) %>% unlist() %>% setNames(NULL)
 
-  }else if(!inputs_are_rs){
+  }else if(!inputs_are_rs && !inputs_are_profile){
 
     inputs_table <- polars_table %>% filter(source_var %in% inputs)
 
     inputs <- inputs_table %>% select(source_var) %>% unlist() %>% setNames(NULL)
     inputs_raw <- inputs
+
+  }else if(inputs_are_profile && !inputs_are_profile_dichot){
+
+    inputs_table <- profile_table %>% filter(source_var %in% inputs)
+
+    inputs <- inputs_table %>% select(source_var) %>% unlist() %>% setNames(NULL)
+    inputs_raw <- inputs
+  }else if(inputs_are_profile && inputs_are_profile_dichot){
+
+    inputs_table <- profile_table %>% filter(var %in% inputs)
+
+    inputs <- inputs_table %>% select(var) %>% unlist() %>% setNames(NULL)
+    inputs_raw <- inputs_table %>% select(source_var) %>% unlist() %>% setNames(NULL)
   }
 
 
-  if(!is.null(overwrite_left_label)) inputs_table[["left_label"]] <- overwrite_left_label
-  if(!is.null(overwrite_right_label)) inputs_table[["right_label"]] <- overwrite_right_label
+  if(!inputs_are_profile){
+    if(!is.null(overwrite_left_label)) inputs_table[["left_label"]] <- overwrite_left_label
+    if(!is.null(overwrite_right_label)) inputs_table[["right_label"]] <- overwrite_right_label
+  }else if(inputs_are_profile){
+    if(!is.null(overwrite_left_label)) inputs_table[["label"]] <- overwrite_left_label
+  }
+
 
 
   coef_func <- seg[["solutions"]][["summary_table"]] %>%
@@ -136,6 +177,11 @@ seg_typing_tool <- function(
 
 
   polar_points <- data_inputs %>% select(-!!survey_respondent_id) %>% unlist() %>% unique() %>% length() %>% seq()
+
+
+  if(inputs_are_profile && inputs_are_profile_dichot){
+    polar_points <- seq(0,1)
+  }
 
 
   ind_response <- data_inputs %>%

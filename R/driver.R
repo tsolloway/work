@@ -57,7 +57,7 @@ engine_logistic <- function(
 
   temp <- tibble("ivs" = ivs) %>%
     mutate(
-      fit = ivs %>% purrr::map(possibly(~rms::lrm(formula(glue("df[['dv']]~df[['{.x}']]")), df), otherwise = NA)),
+      fit = ivs %>% purrr::map(possibly(~rms::lrm(formula(glue("df[['dv']]~df[['{.x}']]")), df) %>% suppressWarnings() %>% suppressMessages(), otherwise = NA)),
 
       se = fit %>% map(possibly(~.x %>% pluck("var") %>% diag() %>% sqrt()%>% tail(1) )) %>% as.numeric(),
 
@@ -205,11 +205,22 @@ drivers <- function(
 
   require(openxlsx)
 
+
   analysis <- dv %>% imap(function(dvx, dvn){
+
     ivs %>% imap(function(ivx, ivn){
-      driver(df, dv=dvx, ivs=ivx, subgroups = subgroups, labels = labels[[ivn]], engine = engine[[dvn]], shift_percentage = shift_percentage)
+
+      if(is.list(labels)){
+        xlabels <- labels[[ivn]]
+      }else{
+        xlabels <- labels
+      }
+
+      driver(df, dv=dvx, ivs=ivx, subgroups = subgroups, labels = xlabels, engine = engine[[dvn]], shift_percentage = shift_percentage)
     })
-  })
+  }) %>%
+    suppressWarnings()
+
 
   output <- analysis %>% imap(function(dvx, dvn){
 
