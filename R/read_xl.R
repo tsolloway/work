@@ -14,7 +14,6 @@ read_xl <- function(
     col_names = TRUE,
     col_types = NULL){
 
-
   df <- readxl::read_excel(
     path = path,
     sheet = sheet,
@@ -25,14 +24,9 @@ read_xl <- function(
     tibble::as_tibble() %>%
     suppressWarnings()
 
-
-
   if(clean_col_names){
-
     df <- df %>% names_clean()
-
   }
-
 
   df
 }

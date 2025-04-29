@@ -15,6 +15,7 @@ read <- function(
     col_names = TRUE,
     col_types = NULL,
     hard_stop = FALSE,
+    always_list = FALSE,
     warning = TRUE
 ){
 
@@ -69,8 +70,7 @@ read <- function(
 
     sav = haven::read_sav(
       file = path
-    ) %>%
-      haven::zap_labels(),
+    ),
 
     NULL
 
@@ -80,11 +80,36 @@ read <- function(
 
 
 
+  if(ext == "sav"){
+    dictionary <- df %>% labelled::look_for()
+    df <- df %>% haven::zap_labels()
+  }
+
+
   if(clean_col_names){
     df <- df %>% names_clean()
   }
 
 
-  return(df)
+
+  if(ext == "sav"){
+    output <- list(
+      df = df,
+      dictionary = dictionary
+    )
+  }else{
+    if(always_list){
+      output <- list(
+        df = df,
+        dictionary = NULL
+      )
+    }else{
+      output <- df
+    }
+  }
+
+
+
+  return(output)
 
 }
