@@ -10,7 +10,7 @@
 read <- function(
     path,
     sheet = NULL,
-    clean_col_names = FALSE,
+    clean_col_names = TRUE,
     range = NULL,
     col_names = TRUE,
     col_types = NULL,
@@ -95,8 +95,16 @@ read <- function(
   }
 
 
+
   if(clean_col_names){
     df <- df %>% names_clean()
+
+    if(ext == "sav"){
+      dictionary <- dictionary %>%
+        mutate(
+          variable = variable %>% names_clean()
+        )
+    }
   }
 
 
