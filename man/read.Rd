@@ -7,11 +7,12 @@
 read(
   path,
   sheet = NULL,
-  clean_col_names = TRUE,
+  clean_col_names = FALSE,
   range = NULL,
   col_names = TRUE,
   col_types = NULL,
   hard_stop = FALSE,
+  always_list = FALSE,
   warning = TRUE
 )
 }

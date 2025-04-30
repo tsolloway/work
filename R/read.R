@@ -10,7 +10,7 @@
 read <- function(
     path,
     sheet = NULL,
-    clean_col_names = TRUE,
+    clean_col_names = FALSE,
     range = NULL,
     col_names = TRUE,
     col_types = NULL,
@@ -81,7 +81,16 @@ read <- function(
 
 
   if(ext == "sav"){
-    dictionary <- df %>% labelled::look_for()
+    dictionary <- df %>%
+      labelled::look_for() %>%
+      as_tibble %>%
+      mutate(
+        value_labels = value_labels %>%
+          map(~paste( .x, names(.x), sep = " = ", collapse = ", ")) %>%
+          unlist()
+      ) %>%
+      select(-levels)
+
     df <- df %>% haven::zap_labels()
   }
 

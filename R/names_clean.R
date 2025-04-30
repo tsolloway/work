@@ -1,5 +1,5 @@
 #' names_clean
-#' @description Returns dictionaries from litify objects
+#' @description names_clean
 #' @param x named df or character vector
 #' @export
 names_clean <- function(x, make_lowercase = TRUE){
