@@ -14,7 +14,7 @@ histogram_single <- function(
     )
 ){
 
-  require(highcharter)
+  require(highcharter, quietly = TRUE)
 
   x <- x[!is.na(x)]
 
@@ -75,10 +75,10 @@ histogram_single <- function(
 
 
 
-#' histogram
-#' @description histogram
-#' @export
-histogram <- function(
+#' hc_histogram
+#' @description hc_histogram
+#' @export hc_histogram
+hc_histogram <- function(
     x, variables = NULL, title = NULL, title_x_axis = NULL, title_y_axis = "Frequency", likert = NULL,
     arbitrary_likert_cutoff = 13, default_file_name = "filename",
     width = NULL, height = NULL, grid_n_col = 3,
@@ -122,3 +122,6 @@ histogram <- function(
   }
 
 }
+
+
+

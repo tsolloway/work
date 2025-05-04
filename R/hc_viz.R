@@ -21,7 +21,7 @@ hc_viz <- function(
     tooltip_round_digit = 2
 ){
 
-  require(highcharter)
+  require(highcharter, quietly = TRUE)
 
   regresssion_type <- match.arg(regresssion_type)
   type <- match.arg(type)
@@ -45,8 +45,7 @@ hc_viz <- function(
   if(is.null(yaxis_title)) yaxis_title <- yvar %>% gsub("_", " ", .)
 
 
-  hc <-
-    hchart(
+  hc <- hchart(
       df,
       type,
       eval(parse(text = instructions)),

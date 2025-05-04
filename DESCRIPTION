@@ -7,6 +7,7 @@ Depends:
   R (>= 3.5.0),
   magrittr
 Imports:
+  bnlearn, 
   car,
   caret,
   cluster,
@@ -15,6 +16,7 @@ Imports:
   DBI,
   devtools,
   dplyr,
+  entropy,
   furrr,
   future,
   future.apply,
