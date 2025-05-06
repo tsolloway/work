@@ -7,7 +7,7 @@ describe <- function(
 ){
 
   if(!is.null(vars)){
-    vars <- unlist(vars) %>% as.character()
+    vars <- vars %>% unlist() %>% as.character()
     df <- df %>% select(all_of(vars))
   }
 
@@ -15,7 +15,7 @@ describe <- function(
     psych::describe() %>%
     as_tibble() %>%
     mutate(
-      vars = vars,
+      vars = !!vars,
 
       missing = df %>%
         summarise(

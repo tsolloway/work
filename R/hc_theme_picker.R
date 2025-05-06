@@ -11,7 +11,7 @@ hc_theme_picker <- function(
     )
 ){
 
-  require(highcharter)
+  require(highcharter, quietly = TRUE)
 
   if( !is_nothing(theme) && !isFALSE(theme) )  theme <- match.arg(theme)
 

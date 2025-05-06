@@ -2,30 +2,96 @@
 #' @description stack_data
 #' @export
 stack_data <- function(
-    instructions,
     df,
-    uuid,
-    stack_id,
-    subgroups = NULL
+    instructions,
+    labels,
+    brand_table,
+    dv = NULL,
+    ivs = NULL,
+    subgroups = NULL,
+    uuid_flat,
+    uuid_stack = "uuid_stack",
+    only_completes = TRUE,
+    store_flat = TRUE,
+    return_only_data = FALSE
 ){
-  dfx <- instructions %>%
+
+  var_types <- list(
+    ids = c(uuid_stack, uuid_flat, "brand_number", "brand_name"),
+    subgroups = subgroups %>% unlist() %>% as.character(),
+    dvs = dv %>% unlist() %>% as.character(),
+    ivs = ivs %>% map(~unlist(.) %>% as.character())
+  )
+
+
+  dictionary <- tibble(
+    var = var_types %>% unlist(),
+    id = var %in% var_types[["ids"]],
+    subgroup = var %in% var_types[["subgroups"]],
+    dvs = var %in% var_types[["dvs"]],
+    ivs = var %in% unlist(var_types[["ivs"]])
+  ) %>% left_join(
+    labels %>%
+      tibble(
+        var = names(.),
+        label = .
+      ),
+    by = join_by(var)
+  ) %>%
+    left_join(
+      var_types[["ivs"]] %>%
+        imap(
+          ~tibble(
+            iv_battery = .y,
+            var = .x
+          )
+        ) %>%
+        bind_rows(),
+      by = join_by(var)
+    ) %>%
+    left_join(
+      instructions %>%
+        imap(
+          ~tibble(
+            var = .y,
+            stack_instructions = list(.x %>% unlist() %>% as.character)
+          )
+        ) %>%
+        bind_rows(),
+      by = join_by(var)
+    ) %>%
+    mutate(
+      label = case_when(
+        var == uuid_flat ~ uuid_flat,
+        var == uuid_stack ~ uuid_stack,
+        is.na(label)  ~ var %>% gsub("_", " ", .) %>% stringr::str_to_title(),
+        .default = label
+      )
+    ) %>%
+    relocate(
+      label, .after = var
+    )
+
+
+
+  df_stack <- instructions %>%
     imap(~{
-      df %>% select(all_of(c(uuid, !!.x))) %>%
+      df %>% select(all_of(c(uuid_flat, !!.x))) %>%
         tidyr::pivot_longer(
-          -all_of(uuid),
+          -all_of(uuid_flat),
           cols_vary = "fastest",
           values_to = .y
         ) %>%
         select(-name) %>%
         mutate(
-          stack_num = rep(
-            stack_id %>%
+          brand_number = rep(
+            brand_table %>%
               select("id") %>%
               unlist(),
             nrow(df)
           ),
-          stack_name = rep(
-            stack_id %>%
+          brand_name = rep(
+            brand_table %>%
               select("name") %>%
               unlist() %>%
               setNames(NULL),
@@ -33,33 +99,64 @@ stack_data <- function(
           )
         ) %>%
         relocate(
-          c("stack_num", "stack_name"),
-          .after = all_of(uuid)
+          c("brand_number", "brand_name"),
+          .after = all_of(uuid_flat)
         )
     }) %>%
-    plyr::join_all(by = c(uuid, "stack_num", "stack_name")) %>%
-    as_tibble() %>%
-    filter(
-      rowSums(across(names(instructions), ~ !is.na(.))) > 0
-    )
+    plyr::join_all(by = c(uuid_flat, "brand_number", "brand_name")) %>%
+    as_tibble()
+
+
+
+  if(only_completes){
+    df_stack <- df_stack %>%
+      filter(
+        rowSums(across(names(instructions), ~ !is.na(.))) > 0
+      )
+  }
 
 
 
   if(!is.null(subgroups)){
-    dfx <- dfx %>%
+    df_stack <- df_stack %>%
       right_join(
         df_flat %>%
-          select(all_of(c(uuid, subgroups))),
+          select(all_of(c(uuid_flat, subgroups))),
         .,
-        by = join_by(!!uuid)
-      ) %>%
-      relocate(
-        c("stack_num", "stack_name"),
-        .after = all_of(uuid)
+        by = join_by(!!uuid_flat)
       )
   }
 
-  return(dfx)
+
+  df_stack <- df_stack %>%
+    mutate(
+      {{uuid_stack}} := nrow(.) %>% uuid::UUIDgenerate(n = .)
+    ) %>%
+    select(
+      dictionary[["var"]] %>% setNames(NULL)
+    )
+
+
+  result <- list(
+    df_stack = df_stack,
+    dictionary_stack = dictionary,
+    var_types = var_types,
+    df_mean_summary = NULL,
+    subgroup_count = NULL
+  )
+
+
+  if(store_flat){
+    result[["df_flat"]] <- df_flat
+  }
+
+
+  if(return_only_data){
+    result <- df_stack
+  }
+
+
+  return(result)
 }
 
 

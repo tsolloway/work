@@ -4,7 +4,20 @@
 \alias{stack_data}
 \title{stack_data}
 \usage{
-stack_data(instructions, df, uuid, stack_id, subgroups = NULL)
+stack_data(
+  df,
+  instructions,
+  labels,
+  brand_table,
+  dv = NULL,
+  ivs = NULL,
+  subgroups = NULL,
+  uuid_flat,
+  uuid_stack = "uuid_stack",
+  only_completes = TRUE,
+  store_flat = TRUE,
+  return_only_data = FALSE
+)
 }
 \description{
 stack_data
