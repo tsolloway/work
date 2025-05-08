@@ -91,6 +91,8 @@ hc_histogram <- function(
     )
 ){
 
+  require(highcharter, quietly = TRUE)
+
   if( !is.null(variables) && is.data.frame(x) ){
 
     x <- x %>% dplyr::select(dplyr::all_of(variables))

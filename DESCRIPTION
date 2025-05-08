@@ -44,6 +44,7 @@ Imports:
   rvest,
   salesforcer,
   shiny,
+  skimr,
   stringi,
   stringr,
   tibble,
