@@ -35,7 +35,7 @@ bn_learn_networks <- function(
   results[["no_cross_battery"]] <- dv %>%
     map(
       ~bn_tan(
-        df = df_impute,
+        df = df,
         dv = .,
         ivs = ivs,
         white_list = white_list,

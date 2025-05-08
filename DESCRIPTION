@@ -15,6 +15,7 @@ Imports:
   corrr,
   DBI,
   devtools,
+  dialr,
   dplyr,
   entropy,
   furrr,
@@ -25,6 +26,7 @@ Imports:
   haven,
   highcharter,
   Hmisc,
+  igraph,
   janitor,
   klaR,
   lubridate,
@@ -34,7 +36,7 @@ Imports:
   parallelly,
   psych,
   purrr,
-  dialr,
+  RColorBrewer,
   readxl,
   rJava,
   readxl,
@@ -49,6 +51,7 @@ Imports:
   tools,
   usethis,
   uuid,
+  visNetwork,
   xfun
 RoxygenNote: 7.3.2
 LazyData: true

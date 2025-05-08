@@ -41,12 +41,14 @@ create_means_check <- function(
 
         TB_Mean = ~ case_when(
           is.na(.) ~ NA,
+          0 ~ 0,
           . == max(., na.rm = TRUE) ~ 1,
           .default = 0
         ) %>% mean(na.rm = TRUE),
 
         T2B_Mean = ~ case_when(
           is.na(.) ~ NA,
+          0 ~ 0,
           . %in% top2(.) ~ 1,
           .default = 0
         ) %>% mean(na.rm = TRUE),
