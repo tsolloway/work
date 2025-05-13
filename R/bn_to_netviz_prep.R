@@ -51,13 +51,7 @@ bn_to_netviz_prep <- function(
   viz_prep <- visNetwork::toVisNetworkData(ig_graph)
 
 
-  pal <- colorRampPalette(RColorBrewer::brewer.pal(8, 'Set2'))( max(ivs_group_assignment[["group"]]) )
-
-
-  pal <- tibble(
-    group = max(ivs_group_assignment[["group"]]) %>% seq() %>% as.numeric(),
-    color = pal
-  )
+  pal <- ivs_group_assignment[["group"]] %>% max() %>% bn_community_color()
 
 
   viz_prep[["nodes"]] <- viz_prep[["nodes"]] %>%

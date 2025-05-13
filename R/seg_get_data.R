@@ -7,12 +7,27 @@ seg_get_data <- function(seg, data_path, weight = NULL, id_name = "seg_uuid"){
   data_path <- data_path %>% normalizePath(mustWork = TRUE)
 
 
-  seg[["data"]][["original"]] <- data_path %>%
+  seg[["data"]][["original"]] <- list()
+
+
+  dfx <- data_path %>%
     read(
       clean_col_names = FALSE,
       hard_stop = TRUE
-    ) %>%
-    add_uuid(id_name)
+    )
+
+
+  seg[["data"]][["original"]][["dictionary"]] <- dfx[["dictionary"]] %>%
+    bind_rows(
+      tibble(
+        pos = 0, "variable" = !!id_name, "label" = !!id_name,
+        "col_type" = "chr", "missing" = 0
+      ),
+      .
+    )
+
+
+  seg[["data"]][["original"]][["df"]] <- dfx[["df"]] %>% add_uuid(id_name)
 
 
   seg[["paths"]][["files"]][["data"]] <- data_path

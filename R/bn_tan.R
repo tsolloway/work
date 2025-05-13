@@ -48,7 +48,7 @@ bn_tan <- function(
 
   if(cross_battery_first){
 
-    cb_black_list <- vars_iv %>%
+    cb_black_list <- ivs %>%
       map_dfr(make_arcs) %>%
       bind_rows(black_list) %>%
       distinct()

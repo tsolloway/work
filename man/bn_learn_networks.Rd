@@ -4,7 +4,14 @@
 \alias{bn_learn_networks}
 \title{bn_learn_networks}
 \usage{
-bn_learn_networks(df, dv, ivs, white_list = NULL, black_list = NULL)
+bn_learn_networks(
+  df,
+  dv,
+  ivs,
+  white_list = NULL,
+  black_list = NULL,
+  type = c("both", "cross_battery", "no_cross_battery")
+)
 }
 \description{
 bn_learn_networks
