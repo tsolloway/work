@@ -8,6 +8,7 @@ bn_finalize <- function(
     subgroups,
     dictionary = NULL,
     traditional_driver_engine = c("linear", "logistic"),
+    community_score_by = c("sum", "mean"),
     standardize_traditional_drivers = FALSE,
     vs_layout = "layout_with_fr"
 ){
@@ -192,12 +193,27 @@ bn_finalize <- function(
     select(-Total)
 
 
-  community_nodes <- tibble(
-    id = impact_community_by_sum[["community_name"]],
-    value = impact_community_by_sum[["Total"]],
-    label = id
-  ) %>%
-    left_join(
+
+  if(community_score_by == "sum"){
+
+    community_nodes <- tibble(
+      id = impact_community_by_sum[["community_name"]],
+      value = impact_community_by_sum[["Total"]],
+      label = id
+    )
+
+  }else if(community_score_by == "mean"){
+
+    community_nodes <- tibble(
+      id = impact_community_by_mean[["community_name"]],
+      value = impact_community_by_mean[["Total"]],
+      label = id
+    )
+
+  }
+
+
+  community_nodes <- community_nodes %>% left_join(
       viz_prep_final[["nodes"]] %>%
         select(community_name, group, color) %>%
         distinct(),

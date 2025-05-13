@@ -10,6 +10,9 @@ bn_finalize(
   dv,
   subgroups,
   dictionary = NULL,
+  traditional_driver_engine = c("linear", "logistic"),
+  community_score_by = c("sum", "mean"),
+  standardize_traditional_drivers = FALSE,
   vs_layout = "layout_with_fr"
 )
 }
