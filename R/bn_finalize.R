@@ -175,7 +175,7 @@ bn_finalize <- function(
     dv = dv,
     ivs = viz_prep_final[["nodes"]][["id"]],
     subgroups = subgroups,
-    labels = viz_prep_final[["nodes"]][["label"]],
+    labels = viz_prep_final[["nodes"]][["label"]] %>% unlist() %>% as.character(),
     engine = traditional_driver_engine
   )
 
