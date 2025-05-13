@@ -14,6 +14,7 @@ bn_finalize <- function(
 ){
 
   traditional_driver_engine <- match.arg(traditional_driver_engine)
+  community_score_by <- match.arg(community_score_by)
 
   black_list = viz_prep_to_finalize[["nodes"]] %>%
     select(id) %>%
