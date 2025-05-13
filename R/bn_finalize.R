@@ -49,6 +49,7 @@ bn_finalize <- function(
     ) %>%
     rename(group = group.y) %>%
     select(-c(group.x, color)) %>%
+    mutate(group = group %>% as.numeric()) %>%
     left_join(
       viz_prep_to_finalize[["nodes"]][["group"]] %>% max() %>% bn_community_color(),
       by = join_by("group")
@@ -159,13 +160,13 @@ bn_finalize <- function(
 
 
   if(standardize_traditional_drivers){
-    df_traditional <- df_stack[["df_stack"]] %>%
+    df_traditional <- df %>%
       mutate_at(
         c(dv, viz_prep_final[["nodes"]][["id"]]),
-        scale
+        ~as.numeric(.) %>% scale(.)
       )
   }else{
-    df_traditional <- df_stack[["df_stack"]]
+    df_traditional <- df
   }
 
 
