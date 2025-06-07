@@ -17,7 +17,7 @@ seg_get_data <- function(seg, data_path, weight = NULL, id_name = "seg_uuid"){
     )
 
 
-  seg[["data"]][["original"]][["dictionary"]] <- dfx[["dictionary"]] %>%
+  seg[["data"]][["original_dictionary"]] <- dfx[["dictionary"]] %>%
     bind_rows(
       tibble(
         pos = 0, "variable" = !!id_name, "label" = !!id_name,
@@ -27,7 +27,7 @@ seg_get_data <- function(seg, data_path, weight = NULL, id_name = "seg_uuid"){
     )
 
 
-  seg[["data"]][["original"]][["df"]] <- dfx[["df"]] %>% add_uuid(id_name)
+  seg[["data"]][["original"]] <- dfx[["df"]] %>% add_uuid(id_name)
 
 
   seg[["paths"]][["files"]][["data"]] <- data_path
@@ -38,7 +38,7 @@ seg_get_data <- function(seg, data_path, weight = NULL, id_name = "seg_uuid"){
   }
 
 
-  if(!is.null(weight)){
+  if(!is.null(id_name)){
     seg[["meta"]][["id_variable"]] <- id_name
   }
 

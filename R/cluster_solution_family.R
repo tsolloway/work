@@ -137,15 +137,17 @@ cluster_solution_family <- function(
 
 
 
+
   solution_table <- result %>%
     discard_at("hierarchical_fit") %>%
     flatten() %>%
-    purrr::map(~dplyr::select(
-      .x, solution_name, n, cluster_name,
-      lda_name, lda_inputs, lda_profiles,
-      lda_coefficient_function, lda_predict,
-      confusion, accuracy, df_append
-    )
+    purrr::map(
+      ~dplyr::select(
+        .x, solution_name, n, cluster_name,
+        lda_name, lda_inputs, lda_profiles,
+        lda_coefficient_function, lda_predict,
+        confusion, accuracy, df_append
+      )
     ) %>%
     bind_rows() %>%
     filter(!is.na(df_append))

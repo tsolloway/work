@@ -16,7 +16,9 @@ cluster_gaus_mix(
   reduced_inputs_max = NULL,
   priors = c("equal", "size"),
   iter_max = 1e+05,
-  nstart = 10
+  nstart = 10,
+  lda_vars = NULL,
+  lda_vars_profiles = NULL
 )
 }
 \description{

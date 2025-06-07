@@ -3,7 +3,7 @@
 #' @export
 future_stop <- function(){
 
-    return(
+  return(
     future:::ClusterRegistry("stop")
   )
 

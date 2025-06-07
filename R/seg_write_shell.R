@@ -11,6 +11,8 @@ seg_write_shell <- function(
     truncate = FALSE,
     truncate_polar_threshold = .15,
     truncate_profile_threshold = .1,
+    var_weight = NULL,
+    use_weight = TRUE,
     version = c("traditional", "both"),
     do_seg_bw = TRUE,
     do_italic = TRUE,
@@ -66,10 +68,16 @@ seg_write_shell <- function(
 
   df_solutions <- seg[["data"]][["with_solutions"]]
 
+
   if(all(is.na(df_solutions)) || is.null(df_solutions)){
     df <- seg[["data"]][["with_shell"]]
   }else{
     df <- df_solutions
+  }
+
+
+  if( !is.null(seg[["meta"]][["weight_variable"]]) && use_weight && is.null(var_weight)){
+    var_weight <- seg[["meta"]][["weight_variable"]]
   }
 
 
@@ -80,43 +88,83 @@ seg_write_shell <- function(
 
   do_summary_means <- function(
     df, solution_var, shell_all, add_desc = c("range", "diff"),
-    remove_total = FALSE, seg_names = NULL, sort_table = FALSE
+    remove_total = FALSE, seg_names = NULL, sort_table = FALSE,
+    var_weight = NULL
   ){
 
     add_desc <- match.arg(add_desc)
 
     vars <- shell_all[["var"]]
 
+    if(is.null(var_weight)){
+      var_weight <- "temp_weight"
 
-    if(!remove_total){
-      total <- df %>%
-        select(all_of(vars)) %>%
-        psych::describe() %>%
-        select(n, mean) %>%
-        as.data.frame() %>%
-        round(10) %>%
-        setNames(c("count", "mean")) %>%
-        tibble::rownames_to_column("var")
+      df <- df %>%
+        mutate(
+          {{var_weight}} := 1
+        )
     }
 
 
-    table_summary <- df %>%
-      select(all_of(solution_var)) %>%
-      unlist() %>%
-      unique() %>%
-      sort() %>%
-      map(
-        ~ df %>%
-          filter(.data[[solution_var]] == .x) %>%
-          select(all_of(vars)) %>%
-          psych::describe() %>%
-          select(mean) %>%
-          round(10) %>%
-          as_tibble()
+    if(!remove_total){
+      # total <- df %>%
+      #   select(all_of(vars)) %>%
+      #   psych::describe() %>%
+      #   select(n, mean) %>%
+      #   as.data.frame() %>%
+      #   round(10) %>%
+      #   setNames(c("count", "mean")) %>%
+      #   tibble::rownames_to_column("var")
+
+      total <- bind_rows(
+        reframe(df, across(vars, ~sum(!is.na(.)))),
+        reframe(df, across(vars, ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)))
       ) %>%
-      bind_cols() %>%
-      suppressMessages() %>%
-      setNames(., glue("seg_{seq(length(.))}"))
+        t() %>%
+        as.data.frame() %>%
+        round(5) %>%
+        setNames(c("count", "mean")) %>%
+        tibble::rownames_to_column("var") %>%
+        replace(is.na(.), 0)
+    }
+
+
+    # table_summary <- df %>%
+    #   select(all_of(solution_var)) %>%
+    #   unlist() %>%
+    #   unique() %>%
+    #   sort() %>%
+    #   map(
+    #     ~ df %>%
+    #       filter(.data[[solution_var]] == .x) %>%
+    #       select(all_of(vars)) %>%
+    #       psych::describe() %>%
+    #       select(mean) %>%
+    #       round(10) %>%
+    #       as_tibble()
+    #   ) %>%
+    #   bind_cols() %>%
+    #   suppressMessages() %>%
+    #   setNames(., glue("seg_{seq(length(.))}"))
+
+
+    table_summary <- reframe(
+      df,
+      across(vars, ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)),
+      .by = !!solution_var
+    ) %>%
+      ungroup() %>%
+      arrange(.data[[solution_var]]) %>%
+      t() %>%
+      as.data.frame() %>%
+      round(5) %>%
+      setNames(
+        glue("seg_{.[1,]}")
+      ) %>%
+      tibble::rownames_to_column("var") %>%
+      filter(var != solution_var) %>%
+      select(-var) %>%
+      replace(is.na(.), 0)
 
 
     if(!is.null(seg_names)){
@@ -125,7 +173,9 @@ seg_write_shell <- function(
 
 
     if(add_desc == "range"){
+
       table_summary[, "range"] <- table_summary %>% apply(1, function(x){max(x, na.rm=T)-min(x, na.rm=T)})
+
     }else if(add_desc == "diff"){
       table_summary <- table_summary %>%
         mutate(
@@ -133,6 +183,7 @@ seg_write_shell <- function(
         ) %>%
         suppressMessages()
     }
+
 
 
     table_summary[, "p_value"] <- sapply(
@@ -143,13 +194,17 @@ seg_write_shell <- function(
           , otherwise = NA)() %>%
           pluck("p.value") %>%
           suppressWarnings() %>%
-          round(10)
+          round(5)
       }) %>% sapply(function(x){
         ifelse(is.null(x) || is.nan(x), NA, x)
       }) %>%
       sapply(function(x){
-        ifelse(x == 0, 0.0000000001, x)
+        ifelse(x == 0, .00001, x)
+      }) %>%
+      sapply(function(x){
+        ifelse(is.na(x), .00001, x)
       })
+
 
 
     if(!remove_total){
@@ -180,7 +235,7 @@ seg_write_shell <- function(
   }
 
 
-  do_all_segment_means <- function(solution_var, df, shell_all){
+  do_all_segment_means <- function(solution_var, df, shell_all, var_weight = NULL){
 
     seg_max <- df %>% select(all_of(solution_var)) %>% unlist() %>% max()
 
@@ -195,13 +250,14 @@ seg_write_shell <- function(
         do_summary_means(
           df = temp, solution_var = "temp_solution", shell_all = shell_all,
           add_desc = "diff", remove_total = TRUE,
-          seg_names = c("target", "others"), sort_table = TRUE
+          seg_names = c("target", "others"), sort_table = TRUE,
+          var_weight = var_weight
         )
       })
   }
 
 
-  do_shell_tables <- function(seg, solution_var, df, key = NULL){
+  do_shell_tables <- function(seg, solution_var, df, key = NULL, var_weight = NULL){
 
     result <- list()
 
@@ -221,11 +277,15 @@ seg_write_shell <- function(
 
 
 
-    summary_table <- df %>% do_summary_means(solution_var = solution_var, shell_all = shell_all)
+    summary_table <- df %>% do_summary_means(
+      solution_var = solution_var, shell_all = shell_all, var_weight = var_weight
+    )
 
 
 
-    segment_tables <- do_all_segment_means(solution_var = solution_var, df = df, shell_all = shell_all)
+    segment_tables <- do_all_segment_means(
+      solution_var = solution_var, df = df, shell_all = shell_all, var_weight = var_weight
+    )
 
 
 
@@ -291,7 +351,10 @@ seg_write_shell <- function(
   #########################
 
 
-  shell_tables <- do_shell_tables(seg = seg, solution_var = solution_var, df = df, key = key)
+  shell_tables <- do_shell_tables(
+    seg = seg, solution_var = solution_var,
+    df = df, key = key, var_weight = var_weight
+  )
 
 
   if(switched_polars){
@@ -327,6 +390,11 @@ seg_write_shell <- function(
         })
 
   }
+
+
+
+
+  # shell_tables$summary_table %>% tidyr::unnest(by)
 
 
 

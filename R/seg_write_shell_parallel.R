@@ -123,7 +123,7 @@ seg_write_shell_parallel <- function(
   )
 
 
-  future_stop()
+  future::plan(future::sequential)
 
 }
 

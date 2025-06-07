@@ -14,6 +14,8 @@ seg_write_shell(
   truncate = FALSE,
   truncate_polar_threshold = 0.15,
   truncate_profile_threshold = 0.1,
+  var_weight = NULL,
+  use_weight = TRUE,
   version = c("traditional", "both"),
   do_seg_bw = TRUE,
   do_italic = TRUE,

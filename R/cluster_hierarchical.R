@@ -10,26 +10,43 @@ cluster_hierarchical <- function(
     reduced_inputs_max = NULL,
     priors = c("equal", "size"),
     iter_max = 100000,
-    nstart = 10
+    nstart = 10,
+    lda_vars = NULL,
+    lda_vars_profiles = NULL
 ){
+
 
   set.seed(1)
 
   priors <- match.arg(priors)
 
-  if(is.null(resp_id_name)){
-    resp_id_name <- seg %>% get_resp_id_name()
-  }
-
-  id <- df[[resp_id_name]]
-
 
   if(!is.null(filter_name)){
-    df_temp <- df %>% filter(.data[[filter_name]]) %>% dplyr::select(all_of(vars))
-    id_temp <- id[df[[filter_name]]]
-  }else if(is.null(filter_name)){
-    df_temp <- df %>% dplyr::select(all_of(vars))
-    id_temp <- id
+    df_temp <- df %>%
+      dplyr::filter(.data[[filter_name]])
+  }else{
+    df_temp <- df
+  }
+
+
+  df_temp <- df_temp %>%
+    dplyr::select(all_of(c(resp_id_name, vars))) %>%
+    na.exclude()
+
+
+  id <- df[[resp_id_name]]
+  id_temp <- df_temp[[resp_id_name]]
+
+
+  df_temp <- df_temp %>% dplyr::select(-all_of(resp_id_name))
+
+
+  if(!is.null(lda_vars)){
+    reduced_vars <- vars[vars %in% lda_vars]
+    reduced_vars_profiles <- vars_profiles[vars_profiles %in% lda_vars_profiles]
+  }else{
+    reduced_vars <- vars
+    reduced_vars_profiles <- vars_profiles
   }
 
 
@@ -55,9 +72,9 @@ cluster_hierarchical <- function(
       "priors_size" = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
       "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, possibly(~{
         set.seed(1)
-        cluster_reduce_vars(df_temp, vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)
+        cluster_reduce_vars(df_temp, reduced_vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)
         }, otherwise = NA)),
-      "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+      "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, reduced_vars)])
     )
 
 
@@ -73,16 +90,22 @@ cluster_hierarchical <- function(
   set.seed(1)
   result_all <- result %>%
     cluster_add_lda(
-      df = df, resp_id_name = resp_id_name,
-      filter_name = filter_name, priors = priors,
-      use_reduced = FALSE
+      df = df,
+      resp_id_name = resp_id_name,
+      filter_name = filter_name,
+      priors = priors,
+      use_reduced = FALSE,
+      lda_vars = reduced_vars,
+      lda_vars_profiles = reduced_vars_profiles
     )
 
   set.seed(1)
   result_reduced <- result %>%
     cluster_add_lda(
-      df = df, resp_id_name = resp_id_name,
-      filter_name = filter_name, priors = priors,
+      df = df,
+      resp_id_name = resp_id_name,
+      filter_name = filter_name,
+      priors = priors,
       use_reduced = TRUE
     )
 

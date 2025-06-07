@@ -24,9 +24,9 @@ seg_do_spec <- function(seg, debug = FALSE){
   }
 
 
-  if(!is.null(seg[["meta"]][["weight_variable"]])){
-    stop("Weighting not programmed.  Fix this before doing this seg please.")
-  }
+  # if(!is.null(seg[["meta"]][["weight_variable"]])){
+  #   stop("Weighting not programmed.  Fix this before doing this seg please.")
+  # }
 
 
 

@@ -43,17 +43,25 @@ cluster_kmeans <- function(
 
   priors <- match.arg(priors)
 
-  id <- df[[resp_id_name]]
-
 
   if(!is.null(filter_name)){
-    df_temp <- df %>% dplyr::filter(.data[[filter_name]]) %>% dplyr::select(all_of(vars))
-    id_temp <- id[df[[filter_name]]]
-  }else if(is.null(filter_name)){
-    df_temp <- df %>% dplyr::select(all_of(vars))
-    id_temp <- id
+    df_temp <- df %>%
+      dplyr::filter(.data[[filter_name]])
+  }else{
+    df_temp <- df
   }
 
+
+  df_temp <- df_temp %>%
+    dplyr::select(all_of(c(resp_id_name, vars))) %>%
+    na.exclude()
+
+
+  id <- df[[resp_id_name]]
+  id_temp <- df_temp[[resp_id_name]]
+
+
+  df_temp <- df_temp %>% dplyr::select(-all_of(resp_id_name))
 
 
   if(!is.null(lda_vars)){
@@ -63,7 +71,6 @@ cluster_kmeans <- function(
     reduced_vars <- vars
     reduced_vars_profiles <- vars_profiles
   }
-
 
 
   result <- tibble::tibble("n" = n_min : n_max) %>%
@@ -120,7 +127,7 @@ cluster_kmeans <- function(
       resp_id_name = resp_id_name,
       filter_name = filter_name,
       priors = priors,
-      use_reduced = TRUE,
+      use_reduced = TRUE
     )
 
 

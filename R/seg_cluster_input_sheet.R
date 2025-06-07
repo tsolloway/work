@@ -60,8 +60,8 @@ seg_cluster_input_sheet <- function(
       df <- df %>%
         seg_cluster_variability(
           vars = seg_get_vars_polars(seg, .return="rs"),
-          vary_percent = .1,
-          side_bias_percent = .1
+          vary_percent = vary_percent,
+          side_bias_percent = side_bias_percent
         )
 
       df <- df[["df"]]
@@ -109,7 +109,7 @@ seg_cluster_input_sheet <- function(
       .options = opts
     )
 
-    future_stop()
+    future::plan(future::sequential)
 
     possibly(~detach("package:klaR", unload=TRUE))()
     possibly(~detach("package:mclust", unload=TRUE))()
