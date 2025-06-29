@@ -36,6 +36,8 @@ seg_write_shell <- function(
   # truncate = FALSE
   # truncate_polar_threshold = .15
   # truncate_profile_threshold = .1
+  # var_weight = NULL
+  # use_weight = TRUE
   # version = "traditional"
   # do_seg_bw = TRUE
   # do_italic = TRUE
@@ -117,8 +119,8 @@ seg_write_shell <- function(
       #   tibble::rownames_to_column("var")
 
       total <- bind_rows(
-        reframe(df, across(vars, ~sum(!is.na(.)))),
-        reframe(df, across(vars, ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)))
+        reframe(df, across(all_of(vars), ~sum(!is.na(.)))),
+        reframe(df, across(all_of(vars), ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)))
       ) %>%
         t() %>%
         as.data.frame() %>%
@@ -150,7 +152,7 @@ seg_write_shell <- function(
 
     table_summary <- reframe(
       df,
-      across(vars, ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)),
+      across(all_of(vars), ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)),
       .by = !!solution_var
     ) %>%
       ungroup() %>%
