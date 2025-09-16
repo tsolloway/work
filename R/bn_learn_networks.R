@@ -45,7 +45,8 @@ bn_learn_networks <- function(
           white_list = white_list,
           black_list = black_list,
           cross_battery_first = TRUE,
-          suppress_bn_warning = TRUE)
+          suppress_bn_warning = TRUE
+        )
       ) %>%
       setNames(dv)
 
@@ -69,7 +70,8 @@ bn_learn_networks <- function(
           white_list = white_list,
           black_list = black_list,
           cross_battery_first = FALSE,
-          suppress_bn_warning = TRUE)
+          suppress_bn_warning = TRUE
+        )
       ) %>%
       setNames(glue("{dv} no cb"))
 
@@ -101,6 +103,9 @@ bn_learn_networks <- function(
     results[["summary"]] <- summary_ncb %>% arrange(dv)
 
   }
+
+
+  results[["meta"]] <- list(analysis = "bn_model_multiple")
 
 
   return(results)

@@ -9,12 +9,23 @@ bn_tan <- function(
     black_list = NULL,
     cross_battery_first = TRUE,
     compare_to_niave = TRUE,
-    suppress_bn_warning = FALSE
+    dictionary = NULL,
+    manual_groups = NULL,
+    node_label_type = c("both", "variable", "label"),
+    n_groups = NULL,
+    node_size = 1,
+    suppress_bn_warning = FALSE,
+    on_exit_detach_igraph = TRUE
 ){
 
   set.seed(1)
 
-  require(bnlearn)
+  require(bnlearn, quietly = TRUE) %>% suppressMessages()
+
+  node_label_type <- match.arg(node_label_type)
+
+  dictionary <- dictionary %>% dictionary_from_named_object()
+
   results <- list()
 
   ##############################
@@ -25,10 +36,12 @@ bn_tan <- function(
     unlist() %>%
     setNames(NULL)
 
+
   if(!is.null(white_list)){
     white_list <- white_list %>%
       as.data.frame()
   }
+
 
   if(!is.null(black_list)){
     black_list <- black_list %>%
@@ -41,7 +54,6 @@ bn_tan <- function(
     as.data.frame()
 
 
-
   ##############################
   # find cross battery whitelist
   ##############################
@@ -50,7 +62,7 @@ bn_tan <- function(
 
     cb_black_list <- ivs %>%
       map_dfr(make_arcs) %>%
-      bind_rows(black_list) %>%
+      dplyr::bind_rows(black_list) %>%
       distinct()
 
 
@@ -115,6 +127,21 @@ bn_tan <- function(
     compare_to_niave = compare_to_niave,
     suppress_bn_warning = suppress_bn_warning
   )
+
+
+  results[["viz_prep"]] <- bn_to_netviz_prep(
+      bn = results,
+      dictionary = dictionary,
+      node_label_type = node_label_type,
+      manual_groups = manual_groups,
+      n_groups = n_groups,
+      node_size = node_size,
+      on_exit_detach_igraph = on_exit_detach_igraph
+    )
+
+
+  results[["meta"]] <- list(analysis = "bn_model_single")
+
 
   return(results)
 }

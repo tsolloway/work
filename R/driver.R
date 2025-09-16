@@ -59,7 +59,7 @@ engine_logistic <- function(
     mutate(
       fit = ivs %>% purrr::map(possibly(~rms::lrm(formula(glue("df[['dv']]~df[['{.x}']]")), df) %>% suppressWarnings() %>% suppressMessages(), otherwise = NA)),
 
-      se = fit %>% map(possibly(~.x %>% pluck("var") %>% diag() %>% sqrt()%>% tail(1) )) %>% as.numeric(),
+      se = fit %>% map(possibly(~.x %>% vcov() %>% diag() %>% sqrt() %>% tail(1) )) %>% as.numeric(),
 
       beta0 = fit %>% map(~{
         y = .x %>% pluck("coefficients") %>% head(1)
@@ -123,11 +123,14 @@ driver <- function(
 
   engine <- match.arg(engine)
 
+
   if( !is.null(labels) ){
-    labels <- c(labels, NA)
+    labels <- labels %>% dictionary_from_named_object()
   }else{
-    labels <- c(ivs, NA)
+    labels <- ivs %>% dictionary_from_named_object()
   }
+
+
 
   if( engine == "linear" ){
 
@@ -150,36 +153,50 @@ driver <- function(
       ) %>% list("SINGLE" = .)
     }else{
 
-      analysis <- subgroups %>% map(~engine_logistic(
-        df = df %>% filter(df[[.x]] == 1),
-        dv = dv, ivs = ivs, shift_percentage = shift_percentage,
-        dv_recode = dv_recode, custom_car_recode_syntax = custom_car_recode_syntax
-      )) %>% set_names(subgroups)
+      analysis <- subgroups %>% map(
+        ~engine_logistic(
+          df = df %>% filter(df[[.x]] == 1),
+          dv = dv,
+          ivs = ivs,
+          shift_percentage = shift_percentage,
+          dv_recode = dv_recode,
+          custom_car_recode_syntax = custom_car_recode_syntax
+        )
+      ) %>%
+        set_names(subgroups)
     }
   }
 
-  analysis_table <- analysis %>% imap(~{
-    .x[["fit"]] <- NULL
-    names(.x) <- paste0(.y, "_", names(.x))
-    .x[[gsub("_", " ", .y)]] <- .x[[paste0(.y, "_index_abs")]]
-    .x <- .x %>% add_NA_rows(1)
 
-    if(engine == "logistic"){
-      .x[nrow(.x), ncol(.x)] <- mean(abs(.x[[paste0(.y, "_prob_shift")]]), na.rm = TRUE)
-    }else if(engine == "linear"){
-      .x[nrow(.x), ncol(.x)] <- mean(abs(.x[[paste0(.y, "_r2")]]), na.rm = TRUE)
+
+  analysis_table <- analysis %>% imap(
+    ~{
+      .x[["fit"]] <- NULL
+      names(.x) <- paste0(.y, "_", names(.x))
+      .x[[gsub("_", " ", .y)]] <- .x[[paste0(.y, "_index_abs")]]
+      .x <- .x %>% add_NA_rows(1)
+
+      if(engine == "logistic"){
+        .x[nrow(.x), ncol(.x)] <- mean(abs(.x[[paste0(.y, "_prob_shift")]]), na.rm = TRUE)
+      }else if(engine == "linear"){
+        .x[nrow(.x), ncol(.x)] <- mean(abs(.x[[paste0(.y, "_r2")]]), na.rm = TRUE)
+      }
+
+      .x
     }
-
-    .x
-  }) %>%
+  ) %>%
     bind_cols() %>%
-    bind_cols(
-      Variables = .[[1]],
-      Labels = labels,
-      .
-    )
+    rename(Variable = Total_ivs) %>%
+    select(-ends_with("ivs")) %>%
+    left_join(
+      labels,
+      by = join_by(Variable == var)
+    ) %>%
+    relocate(Label = label, .after = Variable)
 
-  analysis_table[nrow(analysis_table), "Variables"] <- "Total Impact"
+
+  analysis_table[nrow(analysis_table), "Variable"] <- "Total Impact"
+
 
   if( is.null(subgroups) ){
     analysis <- analysis[["SINGLE"]]
@@ -206,20 +223,42 @@ drivers <- function(
   require(openxlsx)
 
 
+  if(is.null(names(dv))){
+    names(dv) <- dv
+  }
+
+  if(!is.list(ivs) && is.character(ivs)){
+    ivs <- list(
+      "ivs" = ivs
+    )
+  }
+
+
   analysis <- dv %>% imap(function(dvx, dvn){
 
     ivs %>% imap(function(ivx, ivn){
 
-      if(is.list(labels)){
-        xlabels <- labels[[ivn]]
+
+      if(is.list(labels) && !tibble::is_tibble(labels)){
+        xlabels <- labels[[ivn]] %>% dictionary_from_named_object()
       }else{
-        xlabels <- labels
+        xlabels <- labels %>% dictionary_from_named_object()
       }
 
-      driver(df, dv=dvx, ivs=ivx, subgroups = subgroups, labels = xlabels, engine = engine[[dvn]], shift_percentage = shift_percentage)
+
+      if(is.list(engine)){
+        xengine <- engine[[dvn]]
+      }else{
+        xengine <- engine
+      }
+
+
+      driver(df, dv = dvx, ivs = ivx, subgroups = subgroups, labels = xlabels, engine = xengine, shift_percentage = shift_percentage)
+
     })
   }) %>%
     suppressWarnings()
+
 
 
   output <- analysis %>% imap(function(dvx, dvn){
@@ -228,11 +267,19 @@ drivers <- function(
 
     for( i in names(dvx) ){
 
-      if(engine[[dvn]] == "linear"){
+      if(is.list(engine)){
+        xengine <- engine[[dvn]]
+      }else{
+        xengine <- engine
+      }
+
+
+      if(xengine == "linear"){
         footer <- "Divers are estimated with OLS regression"
-      }else if(engine[[dvn]] == "logistic"){
+      }else if(xengine == "logistic"){
         footer <- glue("Divers are estimated with logistic regression and impacts are calculated with a {shift_percentage*100}% shift in predictors") %>% as.character()
       }
+
 
       wb <- append_drivers(
         analysis_table = dvx[[i]][["analysis_table"]],
@@ -242,7 +289,7 @@ drivers <- function(
         title = paste("Drivers of", dvn, "predicted by", i),
         footer = footer,
         label_width = label_width,
-        engine = engine[[dvn]]
+        engine = xengine
       )
     }
 

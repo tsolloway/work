@@ -12,7 +12,13 @@ bn_tan(
   black_list = NULL,
   cross_battery_first = TRUE,
   compare_to_niave = TRUE,
-  suppress_bn_warning = FALSE
+  dictionary = NULL,
+  manual_groups = NULL,
+  node_label_type = c("both", "variable", "label"),
+  n_groups = NULL,
+  node_size = 1,
+  suppress_bn_warning = FALSE,
+  on_exit_detach_igraph = TRUE
 )
 }
 \description{

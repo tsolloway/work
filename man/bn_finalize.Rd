@@ -5,15 +5,24 @@
 \title{bn_finalize}
 \usage{
 bn_finalize(
-  viz_prep_to_finalize,
+  obj,
   df,
   dv,
   subgroups,
   dictionary = NULL,
   traditional_driver_engine = c("linear", "logistic"),
   community_score_by = c("sum", "mean"),
+  node_label_type = c("both", "variable", "label"),
+  manual_groups = NULL,
+  node_size = NULL,
   standardize_traditional_drivers = FALSE,
-  vs_layout = "layout_with_fr"
+  attribute_viz_label_var_only = TRUE,
+  vs_layout = "layout_with_fr",
+  vs_height = "100vh",
+  vs_width = "100\%",
+  random_seed = 1,
+  interactive_map_deliverable = TRUE,
+  save_visuals = TRUE
 )
 }
 \description{

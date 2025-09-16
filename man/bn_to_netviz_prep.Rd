@@ -8,8 +8,10 @@ bn_to_netviz_prep(
   bn,
   dictionary = NULL,
   node_label_type = c("both", "variable", "label"),
+  manual_groups = NULL,
   n_groups = NULL,
-  node_size = 1
+  node_size = 1,
+  on_exit_detach_igraph = TRUE
 )
 }
 \description{

@@ -10,6 +10,7 @@ impute_data <- function(
 ){
 
   require(bnlearn)
+  work::start()
 
   vars <- vars %>%
     unlist() %>%
