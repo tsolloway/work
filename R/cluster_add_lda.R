@@ -104,7 +104,7 @@ cluster_add_lda <- function(
 
 
 
-  if(priors == "equal"){
+  if(all(priors == "equal")){
 
     temp_list <- rlang::quo(
       list(
@@ -114,8 +114,18 @@ cluster_add_lda <- function(
         lda_inputs)
     )
 
-  }else if(priors == "size"){
+  }else if(all(priors == "size")){
 
+    temp_list <- rlang::quo(
+      list(
+        cluster_seed,
+        priors_size,
+        cluster_name,
+        lda_inputs
+      )
+    )
+
+  }else{
 
     temp_list <- rlang::quo(
       list(
@@ -221,11 +231,15 @@ cluster_add_lda <- function(
           possibly(
             function(x,y,z,w){
 
-              y <- y %>% filter(y[["id"]] %in% x[["id"]])
+              temp <- left_join(
+                x,
+                y,
+                by = join_by(id)
+              )
 
               caret::confusionMatrix(
-                as.factor(y %>% pluck(w)),
-                as.factor(x %>% pluck(z))
+                as.factor(temp[[w]]),
+                as.factor(temp[[z]])
               ) %>%
                 suppressWarnings()
 
@@ -241,11 +255,23 @@ cluster_add_lda <- function(
           possibly(
             function(x,y,z,w){
 
-              y <- y %>% filter(y[["id"]] %in% x[["id"]])
+              # y <- y %>% filter(y[["id"]] %in% x[["id"]])
+              #
+              # caret::confusionMatrix(
+              #   as.factor(y %>% pluck(w) %>% .[df[[filter_name]]]),
+              #   as.factor(x %>% pluck(z))
+              # ) %>%
+              #   suppressWarnings()
+
+              temp <- left_join(
+                x,
+                y[df[[filter_name]], ],
+                by = join_by(id)
+              )
 
               caret::confusionMatrix(
-                as.factor(y %>% pluck(w) %>% .[df[[filter_name]]]),
-                as.factor(x %>% pluck(z))
+                as.factor(temp[[w]]),
+                as.factor(temp[[z]])
               ) %>%
                 suppressWarnings()
             },

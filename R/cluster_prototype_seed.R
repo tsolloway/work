@@ -92,7 +92,11 @@ cluster_prototype_seed <- function(
     cluster_seed = list(seed %>% setNames(c("id", seed_name))),
     cluster_glance = NA,
     priors_equal = purrr::map(n, ~rep(1/.x, .x)),
-    priors_size = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
+    priors_size = ifelse(
+      all(priors == "size"),
+      purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
+      purrr::map(n, ~priors)
+    ),
     reduced_inputs = purrr::map2(
       cluster_seed, cluster_name,
       function(x,y)purrr::possibly(
