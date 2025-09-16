@@ -7,6 +7,8 @@ seg_cluster_with_profiles <- function(
     solution_name = NULL,
     inputs_polars = NULL,
     inputs_profiles = NULL,
+    include_polars_lda = TRUE,
+    include_profiles_lda = TRUE,
     resp_id_name = NULL,
     filter_logical_vector = NULL,
     ok_filter = TRUE,
@@ -24,7 +26,7 @@ seg_cluster_with_profiles <- function(
   # solution_previous = NULL
   # solution_name = "H"
   # inputs_polars = NULL
-  # inputs_profiles = c("BT14", "BT15", "BT16", seg_get_vars_profiles(seg, c("TER", "USE")))
+  # # inputs_profiles = c("BT14", "BT15", "BT16", seg_get_vars_profiles(seg, c("TER", "USE")))
   # resp_id_name = NULL
   # filter_logical_vector = NULL
   # ok_filter = TRUE
@@ -37,6 +39,8 @@ seg_cluster_with_profiles <- function(
   # priors = "size"
   # iter_max = 100000
   # nstart = 10
+  # include_polars_lda = T
+  # include_profiles_lda = T
 
 
   priors <- match.arg(priors)
@@ -96,27 +100,65 @@ seg_cluster_with_profiles <- function(
   }
 
 
-  if(is.null(inputs_polars)){
-    inputs_polars <- seg %>% seg_get_vars_polars(.return = "rs")
+  if(is.null(inputs_polars) || isFALSE(inputs_polars) || isTRUE(inputs_polars)){
+    all_inputs_polars <- seg %>% seg_get_vars_polars(.return = "rs")
+  }else{
+    all_inputs_polars <- inputs_polars
   }
 
 
-  inputs_polars_profiles <- seg_get_vars_polars(seg, .return = "all") %>%
-    dplyr::filter(rs_var %in% inputs_polars) %>%
+
+
+  all_inputs_polars_profiles <- seg_get_vars_polars(seg, .return = "all") %>%
+    dplyr::filter(
+      rs_var %in% all_inputs_polars | source_var %in% all_inputs_polars
+    ) %>%
     dplyr::select(profile_var) %>%
     unlist() %>%
     setNames(NULL)
 
 
 
+
+  if(isFALSE(inputs_polars)){
+    cluster_vars <- inputs_profiles
+    cluster_profiles <- inputs_profiles
+  }else{
+    cluster_vars <- c(all_inputs_polars, inputs_profiles)
+    cluster_profiles <- c(all_inputs_polars_profiles, inputs_profiles)
+  }
+
+
+
+  if(include_polars_lda && include_profiles_lda){
+
+    lda_vars <- c(all_inputs_polars, inputs_profiles)
+    lda_profiles <- c(all_inputs_polars_profiles, inputs_profiles)
+
+  }else if(!include_polars_lda && include_profiles_lda){
+
+    lda_vars <- inputs_profiles
+    lda_profiles <- inputs_profiles
+
+  }else if(include_polars_lda && !include_profiles_lda){
+
+    lda_vars <- all_inputs_polars
+    lda_profiles <- all_inputs_polars_profiles
+
+  }else if(!include_polars_lda && !include_profiles_lda){
+
+    stop("Both include_polars_lda and include_profiles_lda cannot be false")
+
+  }
+
+
   results <- cluster_kmeans(
     df = df,
-    vars = c(inputs_polars, inputs_profiles),
-    vars_profiles = c(inputs_polars_profiles, inputs_profiles),
+    vars = cluster_vars,
+    vars_profiles = cluster_profiles,
     solution_name = solution_name,
-    lda_vars = inputs_polars,
-    lda_vars_profiles = inputs_polars_profiles,
-
+    lda_vars = lda_vars,
+    lda_vars_profiles = lda_profiles,
     reduced_inputs_max = reduced_inputs_max,
     resp_id_name = resp_id_name,
     filter_name = filter_name,

@@ -17,17 +17,24 @@ seg_get_data <- function(seg, data_path, weight = NULL, id_name = "seg_uuid"){
     )
 
 
-  seg[["data"]][["original_dictionary"]] <- dfx[["dictionary"]] %>%
-    bind_rows(
-      tibble(
-        pos = 0, "variable" = !!id_name, "label" = !!id_name,
-        "col_type" = "chr", "missing" = 0
-      ),
-      .
-    )
+  if(!is.null(dfx[["dictionary"]])){
+    seg[["data"]][["original_dictionary"]] <- dfx[["dictionary"]] %>%
+      bind_rows(
+        tibble(
+          pos = 0, "variable" = !!id_name, "label" = !!id_name,
+          "col_type" = "chr", "missing" = 0
+        ),
+        .
+      )
+  }
 
 
-  seg[["data"]][["original"]] <- dfx[["df"]] %>% add_uuid(id_name)
+  if(!is.null(dfx[["df"]])){
+    seg[["data"]][["original"]] <- dfx[["df"]] %>% add_uuid(id_name)
+  }else{
+    seg[["data"]][["original"]] <- dfx %>% add_uuid(id_name)
+  }
+
 
 
   seg[["paths"]][["files"]][["data"]] <- data_path

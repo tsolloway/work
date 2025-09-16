@@ -88,10 +88,12 @@ seg_typing_tool <- function(
     tidyr::unnest(vars)
 
 
-  if(all(inputs %in% polars_table[["rs_var"]])){
+  if(all(inputs %in% polars_table[["rs_var"]]) && all(!inputs %in% profile_table[["var"]])){
     inputs_are_rs <- TRUE
-  }else if(all(inputs %in% polars_table[["source_var"]])){
+    inputs_are_profile <- FALSE
+  }else if(all(inputs %in% polars_table[["source_var"]]) && all(!inputs %in% profile_table[["var"]])){
     inputs_are_rs <- FALSE
+    inputs_are_profile <- FALSE
   }else if(all(inputs %in% profile_table[["source_var"]])){
     inputs_are_rs <- FALSE
     inputs_are_profile <- TRUE

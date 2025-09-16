@@ -24,7 +24,7 @@ seg_cluster_input_sheet <- function(
 ){
 
 
-  # solution_family = NULL
+  # solution_family = "A"
   # n_min = 4
   # n_max = 5
   # reduced_inputs_max = 14

@@ -10,6 +10,8 @@ seg_cluster_with_profiles(
   solution_name = NULL,
   inputs_polars = NULL,
   inputs_profiles = NULL,
+  include_polars_lda = TRUE,
+  include_profiles_lda = TRUE,
   resp_id_name = NULL,
   filter_logical_vector = NULL,
   ok_filter = TRUE,

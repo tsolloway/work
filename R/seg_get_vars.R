@@ -151,3 +151,45 @@ seg_get_vars_profiles <- function(
 
 
 
+#' seg_get_vars_polars_from_profiles
+#' @description seg_get_vars_polars_from_profiles
+#' @export
+seg_get_vars_polars_from_profiles <- function(
+    seg,
+    var_profile,
+    type = c("rs", "source", "table")
+){
+
+  type = match.arg(type)
+
+
+  type <- switch(
+    type,
+    "rs" = "rs_var",
+    "source" = "source_var",
+    "table" = "table"
+  )
+
+
+  output <- seg %>%
+    seg_get_vars_polars() %>%
+    mutate_all(as.character) %>%
+    filter(
+      profile_var %in% var_profile
+    )
+
+
+  if(type != "table"){
+    output <- output %>%
+      select(all_of(type)) %>%
+      unlist() %>%
+      as.character() %>%
+      setNames(NULL)
+  }
+
+
+  return(output)
+}
+
+
+

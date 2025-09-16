@@ -19,6 +19,7 @@ seg_prototype_split_segments <- function(
     resp_id_name = NULL
 ){
 
+  work::start()
 
   # solution_to_split = "kmeans_cluster_A4"
   # seg_splits = 4
@@ -60,7 +61,8 @@ seg_prototype_split_segments <- function(
 
   seg <- cluster_prototype_seed(
     seg = seg, solution_family_name = new_solution_family_name,
-    seed_name = glue("seed_{new_solution_family_name}"), seed = created_seed,
+    seed_name = glue("seed_{new_solution_family_name}"),
+    seed = created_seed %>% select(-2),
     vars = lda_vars, vars_profiles = lda_vars_profiles,
     use_greedy = use_greedy,
     use_top_n_polars = use_top_n_polars,
