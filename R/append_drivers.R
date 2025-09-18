@@ -9,7 +9,7 @@ append_drivers <- function(
 
   require(openxlsx)
 
-  if( is.null(wb) ) wb <- createWorkbook()
+  if( is.null(wb) ) wb <- oxl_create_workbook()
   if( is.null(sheet_name) ) sheet_name <- "drivers"
 
   row_data_start <- 4

@@ -57,7 +57,7 @@ bn_finalize <- function(
 
       xnodes <- obj[["nodes"]]
       xedges <- obj[["edges"]]
-      xivs <- obj[["nodes"]][["id"]] %>% unlist() %>% setNames(NULL)
+      xivs <- obj[["nodes"]][["id"]] %>% unlist() %>% as.character() %>% setNames(NULL)
 
 
       black_list <- xivs %>%

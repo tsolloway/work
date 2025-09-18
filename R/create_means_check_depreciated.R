@@ -1,7 +1,7 @@
-#' create_means_check
-#' @description create_means_check
+#' create_means_check_depreciated
+#' @description create_means_check_depreciated
 #' @export
-create_means_check <- function(
+create_means_check_depreciated <- function(
     obj = NULL,
     df_stack = NULL,
     dictionary_stack = NULL,

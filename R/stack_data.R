@@ -11,10 +11,20 @@ stack_data <- function(
     subgroups = NULL,
     uuid_flat,
     uuid_stack = "uuid_stack",
-    only_completes = TRUE,
+    remove_no_data = TRUE,
     store_flat = TRUE,
     return_only_data = FALSE
 ){
+
+
+  # dv = NULL
+  # ivs = NULL
+  # subgroups = NULL
+  # uuid_stack = "uuid_stack"
+  # remove_no_data = TRUE
+  # store_flat = TRUE
+  # return_only_data = FALSE
+
 
   var_types <- list(
     ids = c(uuid_stack, uuid_flat, "brand_number", "brand_name"),
@@ -108,7 +118,7 @@ stack_data <- function(
 
 
 
-  if(only_completes){
+  if(remove_no_data){
     df_stack <- df_stack %>%
       filter(
         rowSums(across(names(instructions), ~ !is.na(.))) > 0

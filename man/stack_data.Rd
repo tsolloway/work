@@ -14,7 +14,7 @@ stack_data(
   subgroups = NULL,
   uuid_flat,
   uuid_stack = "uuid_stack",
-  only_completes = TRUE,
+  remove_no_data = TRUE,
   store_flat = TRUE,
   return_only_data = FALSE
 )
