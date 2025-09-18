@@ -175,6 +175,12 @@ bn_to_netviz_prep <- function(
 
 
 
+  viz_prep[["nodes"]] <- viz_prep[["nodes"]] %>%
+    mutate(
+      group = group %>% as.numeric()
+    )
+
+
   if(on_exit_detach_igraph){
     detach_igraph()
   }
