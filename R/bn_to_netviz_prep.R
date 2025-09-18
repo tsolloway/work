@@ -181,6 +181,7 @@ bn_to_netviz_prep <- function(
     )
 
 
+
   if(on_exit_detach_igraph){
     detach_igraph()
   }
