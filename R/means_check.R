@@ -4,13 +4,13 @@
 means_check <- function(
     df_stack,
     stack_labels,
-    create_formatted_excel = TRUE,
     wb = NULL,
     sheet_name = NULL,
     title = "ProjectName (Number)",
     sub_title = "Means Check",
     variable_width = "auto",
     label_width = "auto",
+    create_formatted_excel = TRUE,
     write_file = TRUE
 ){
 

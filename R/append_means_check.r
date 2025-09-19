@@ -58,20 +58,20 @@ append_means_check <- function(
   # format data
   #############################
 
-  addStyle(wb, sheet_name, style = createStyle(numFmt = "0.00", halign = "center"), rows = row_data_all, cols = col_mean, gridExpand = TRUE)
-  addStyle(wb, sheet_name, style = createStyle(numFmt = "0", halign = "center"), rows = row_data_all, cols = col_count, gridExpand = TRUE)
-  addStyle(wb, sheet_name, style = createStyle(halign = "center"), rows = row_data_all, cols = col_var, gridExpand = TRUE)
-  addStyle(wb, sheet_name, style = createStyle(halign = "left"), rows = row_data_all, cols = col_label, gridExpand = TRUE)
+  addStyle(wb, sheet_name, style = createStyle(numFmt = "0.00", halign = "center"), rows = row_data_all, cols = col_mean, gridExpand = TRUE, stack = TRUE)
+  addStyle(wb, sheet_name, style = createStyle(numFmt = "0", halign = "center"), rows = row_data_all, cols = col_count, gridExpand = TRUE, stack = TRUE)
+  addStyle(wb, sheet_name, style = createStyle(halign = "center"), rows = row_data_all, cols = col_var, gridExpand = TRUE, stack = TRUE)
+  addStyle(wb, sheet_name, style = createStyle(halign = "left"), rows = row_data_all, cols = col_label, gridExpand = TRUE, stack = TRUE)
 
   setColWidths(wb, sheet_name, cols = col_label, widths = label_width)
   setColWidths(wb, sheet_name, cols = col_var, widths = variable_width)
 
-  addStyle(wb, sheet_name, style = createStyle(fontSize = 16, textDecoration = "bold"), rows = row_title, cols = col_var, gridExpand = TRUE)
-  addStyle(wb, sheet_name, style = createStyle(fontSize = 14, textDecoration = c("bold", "italic")), rows = row_subtitle, cols = col_var, gridExpand = TRUE)
+  addStyle(wb, sheet_name, style = createStyle(fontSize = 16, textDecoration = "bold"), rows = row_title, cols = col_var, gridExpand = TRUE, stack = TRUE)
+  addStyle(wb, sheet_name, style = createStyle(fontSize = 14, textDecoration = c("bold", "italic")), rows = row_subtitle, cols = col_var, gridExpand = TRUE, stack = TRUE)
 
 
   for(i in col_mean){
-    conditionalFormatting(wb, sheet_name, cols = i, rows = row_data_all, style = c("#f66a6e","#feea8a","#66bd7d"), type = "colourScale")
+    conditionalFormatting(wb, sheet_name, cols = i, rows = row_data_all, style = c("#f66a6e","#feea8a","#66bd7d"), type = "colourScale", stack = TRUE)
   }
 
 
