@@ -125,6 +125,7 @@ bn_finalize <- function(
       white_list = xedges %>% select(from, to),
       black_list = black_list,
       dictionary = dictionary,
+      manual_groups = manual_groups,
       cross_battery_first = FALSE,
       compare_to_niave = TRUE,
       suppress_bn_warning = TRUE,
@@ -486,17 +487,6 @@ bn_finalize <- function(
   #####################################
   # Send analytics to results output
   #####################################
-
-  final_excel_clean <- function(x){
-    x %>%
-      mutate_if(is.numeric, round, 4) %>%
-      setNames(
-        .,
-        names(.) %>%
-          gsub("_", " ", .) %>%
-          stringr::str_to_title()
-      )
-  }
 
 
   results <- list(

@@ -2,7 +2,7 @@
 #' @description bn_freq_prob_shift
 #' @param freq named count table
 #' @export
-bn_freq_prob_shift<- function(
+bn_freq_prob_shift <- function(
     freq = NULL,
     type = c("exponential", "linear", "quadratic"),
     lift = 0.1,
