@@ -2,10 +2,13 @@
 % Please edit documentation in R/oxl_style.R
 \name{oxl_opt_valign}
 \alias{oxl_opt_valign}
-\title{oxl_opt_valign}
+\title{Vertical alignment options}
 \usage{
 oxl_opt_valign()
 }
+\value{
+Character vector of vertical alignment options.
+}
 \description{
-oxl_opt_valign
+Returns available vertical alignment options for Excel cells.
 }

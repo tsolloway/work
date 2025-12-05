@@ -19,16 +19,42 @@ read(
 \arguments{
 \item{path}{Path to the file.}
 
-\item{sheet}{Sheet to read. Either a string (the name of a sheet), or an integer (the position of the sheet). Ignored if the sheet is specified via range. If neither argument specifies the sheet, defaults to the first sheet.}
+\item{sheet}{Sheet to read (for Excel). Either a string (sheet name) or integer (sheet index). Ignored if \code{range} is provided.}
 
-\item{clean_col_names}{logical on whether to clean the column names.}
+\item{clean_col_names}{Logical. If \code{TRUE}, column names are cleaned using \code{names_clean()}.}
 
-\item{range}{A cell range to read from, as described in cell-specification. Includes typical Excel ranges like "B3:D87", possibly including the sheet name like "Budget!B2:G14", and more. Interpreted strictly, even if the range forces the inclusion of leading or trailing empty rows or columns. Takes precedence over skip, n_max and sheet.}
+\item{range}{Cell range to read from Excel, e.g., \code{"B3:D87"} or \code{"Budget!B2:G14"}. Takes precedence over \code{sheet}.}
 
-\item{col_names}{TRUE to use the first row as column names, FALSE to get default names, or a character vector giving a name for each column. If user provides col_types as a vector, col_names can have one entry per column, i.e. have the same length as col_types, or one entry per unskipped column.}
+\item{col_names}{Logical or character vector. Use first row as column names (\code{TRUE}), default names (\code{FALSE}), or custom names.}
 
-\item{col_types}{Either NULL to guess all from the spreadsheet or a character vector containing one entry per column from these options: "skip", "guess", "logical", "numeric", "date", "text" or "list". If exactly one col_type is specified, it will be recycled. The content of a cell in a skipped column is never read and that column will not appear in the data frame output. A list cell loads a column as a list of length 1 vectors, which are typed using the type guessing logic from col_types = NULL, but on a cell-by-cell basis.}
+\item{col_types}{NULL or character vector specifying column types for Excel (\code{"skip"}, \code{"guess"}, \code{"logical"}, \code{"numeric"}, \code{"date"}, \code{"text"}, \code{"list"}).}
+
+\item{hard_stop}{Logical. If \code{TRUE}, stops immediately on unsupported file types.}
+
+\item{always_list}{Logical. If \code{TRUE}, output is always a list with elements \code{df} and \code{dictionary} (Excel/CSV will have \code{dictionary = NULL}).}
+
+\item{warning}{Logical. If \code{TRUE}, displays a warning for unsupported file types.}
+}
+\value{
+For CSV/Excel: tibble or list (if \code{always_list = TRUE}).
+For SAV: list with elements \code{df} (data frame) and \code{dictionary} (value labels).
 }
 \description{
-reads in files
+Reads a file into R. Supports \code{.csv}, \code{.xls}, \code{.xlsx}, and \code{.sav} files.
+For \code{.sav} files, returns both the data frame and a dictionary of value labels.
+}
+\examples{
+\dontrun{
+# Read Excel
+df <- read("data.xlsx", sheet = 1)
+
+# Read CSV
+df <- read("data.csv")
+
+# Read SPSS file and get dictionary
+output <- read("survey.sav")
+df <- output$df
+dictionary <- output$dictionary
+}
+
 }

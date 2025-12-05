@@ -7,8 +7,11 @@
 install_pak(update = TRUE)
 }
 \arguments{
-\item{update}{Logical value. If pak is installed, should it be updated if update is available?}
+\item{update}{Logical. If TRUE, updates pak if installed.}
+}
+\value{
+Logical: TRUE if pak is installed successfully, FALSE otherwise.
 }
 \description{
-Checks for if pak is installed. If not, it installs it.
+Checks if pak is installed. If not, installs it. Optionally updates pak if already installed.
 }

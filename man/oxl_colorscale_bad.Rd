@@ -4,8 +4,18 @@
 \alias{oxl_colorscale_bad}
 \title{oxl_colorscale_bad}
 \usage{
-oxl_colorscale_bad(x = as.character(c(1, 2)))
+oxl_colorscale_bad(x = c("1", "2"))
+}
+\arguments{
+\item{x}{Character or numeric, one of 1,2.}
+}
+\value{
+Hex color code as character.
 }
 \description{
-oxl_colorscale_bad
+Returns “bad” colors (red scale) for ordinal scales (1-2).
+}
+\examples{
+oxl_colorscale_bad(1)
+oxl_colorscale_bad("2")
 }

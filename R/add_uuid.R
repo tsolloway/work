@@ -1,17 +1,17 @@
 #' add_uuid
-#' @description add_uuid
+#'
+#' @description Adds a UUID column to a data frame.
+#' @param df A data frame or tibble.
+#' @param uuid_name Name of the UUID column to add (default: "uuid").
 #' @export
-add_uuid <- function(df, uuid_name = "uuid"){
-  df <- df %>%
-    rowwise() %>%
-    mutate(
-      !!uuid_name := uuid::UUIDgenerate(use.time = FALSE)
-    ) %>%
-    ungroup()
+add_uuid <- function(df, uuid_name = "uuid") {
+  n <- nrow(df)
+  uuids <- uuid::UUIDgenerate(n = n, use.time = FALSE)
 
-  if(length(unique(df[[uuid_name]])) != nrow(df)){
-    stop("'uuid::UUIDgenerate' not creating trully unique ids")
+  if (length(unique(uuids)) != n) {
+    stop("UUIDs are not unique. Consider retrying.")
   }
 
-  return(df)
+  df[[uuid_name]] <- uuids
+  df
 }

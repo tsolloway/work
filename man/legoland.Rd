@@ -7,8 +7,25 @@
 legoland(x = c("all", "sean", "alina", "tyler", "guestservices", "services"))
 }
 \arguments{
-\item{x}{character}
+\item{x}{Character string specifying whose code to return.
+Options: \code{"all"}, \code{"sean"}, \code{"alina"}, \code{"tyler"}, \code{"guestservices"}, \code{"services"}.
+Defaults to \code{"all"}.}
+}
+\value{
+A named character vector of passholder codes when \code{x = "all"},
+or a single character/number corresponding to the requested entry.
 }
 \description{
-Returns legoland passholder codes
+Returns Legoland passholder codes for specified individuals or services.
+}
+\examples{
+# Return all codes
+legoland("all")
+
+# Return a single passholder code
+legoland("alina")
+
+# Return the Guest Services number
+legoland("guestservices")
+
 }

@@ -6,6 +6,20 @@
 \usage{
 oxl_create_workbook(window_width = 33125, window_height = 16105)
 }
+\arguments{
+\item{window_width}{Numeric. Width of the Excel window (default = 33125).}
+
+\item{window_height}{Numeric. Height of the Excel window (default = 16105).}
+}
+\value{
+An \code{openxlsx} workbook object.
+}
 \description{
-oxl_create_workbook
+Creates a new Excel workbook with customized window dimensions.
+Uses \code{openxlsx::createWorkbook()} and sets workbook view size via XML.
+}
+\examples{
+wb <- oxl_create_workbook()
+openxlsx::addWorksheet(wb, "Sheet1")
+openxlsx::writeData(wb, "Sheet1", head(iris))
 }

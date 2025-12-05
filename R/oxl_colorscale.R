@@ -1,11 +1,15 @@
 #' oxl_colorscale_grey
-#' @description oxl_colorscale_grey
+#'
+#' @description Returns shades of grey for ordinal scales (1-4).
+#' @param x Character or numeric, one of 1,2,3,4.
+#' @return Hex color code as character.
+#' @examples
+#' oxl_colorscale_grey(1)
+#' oxl_colorscale_grey("3")
 #' @export
-oxl_colorscale_grey <- function(
-    x = as.character(c(1,2,3,4))
-){
-  x <- x %>% as.character()
-  x <- match.arg(x)
+oxl_colorscale_grey <- function(x = c("1","2","3","4")) {
+  x <- as.character(x)
+  x <- match.arg(x, choices = c("1","2","3","4"))
 
   switch(
     x,
@@ -16,16 +20,18 @@ oxl_colorscale_grey <- function(
   )
 }
 
-
-
 #' oxl_colorscale_good
-#' @description oxl_colorscale_good
+#'
+#' @description Returns “good” colors (green scale) for ordinal scales (1-2).
+#' @param x Character or numeric, one of 1,2.
+#' @return Hex color code as character.
+#' @examples
+#' oxl_colorscale_good(1)
+#' oxl_colorscale_good("2")
 #' @export
-oxl_colorscale_good <- function(
-    x = as.character(c(1,2))
-){
-  x <- x %>% as.character()
-  x <- match.arg(x)
+oxl_colorscale_good <- function(x = c("1","2")) {
+  x <- as.character(x)
+  x <- match.arg(x, choices = c("1","2"))
 
   switch(
     x,
@@ -34,15 +40,18 @@ oxl_colorscale_good <- function(
   )
 }
 
-
 #' oxl_colorscale_bad
-#' @description oxl_colorscale_bad
+#'
+#' @description Returns “bad” colors (red scale) for ordinal scales (1-2).
+#' @param x Character or numeric, one of 1,2.
+#' @return Hex color code as character.
+#' @examples
+#' oxl_colorscale_bad(1)
+#' oxl_colorscale_bad("2")
 #' @export
-oxl_colorscale_bad <- function(
-    x = as.character(c(1,2))
-){
-  x <- x %>% as.character()
-  x <- match.arg(x)
+oxl_colorscale_bad <- function(x = c("1","2")) {
+  x <- as.character(x)
+  x <- match.arg(x, choices = c("1","2"))
 
   switch(
     x,
@@ -51,15 +60,18 @@ oxl_colorscale_bad <- function(
   )
 }
 
-
-#' oxl_colorscale_neurtal
-#' @description oxl_colorscale_neurtal
+#' oxl_colorscale_neutral
+#'
+#' @description Returns neutral colors (yellow/orange) for ordinal scales (1-2).
+#' @param x Character or numeric, one of 1,2.
+#' @return Hex color code as character.
+#' @examples
+#' oxl_colorscale_neutral(1)
+#' oxl_colorscale_neutral("2")
 #' @export
-oxl_colorscale_neurtal <- function(
-    x = as.character(c(1,2))
-){
-  x <- x %>% as.character()
-  x <- match.arg(x)
+oxl_colorscale_neutral <- function(x = c("1","2")) {
+  x <- as.character(x)
+  x <- match.arg(x, choices = c("1","2"))
 
   switch(
     x,
@@ -67,5 +79,3 @@ oxl_colorscale_neurtal <- function(
     "2" = "#9c5800"
   )
 }
-
-

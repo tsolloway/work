@@ -14,18 +14,38 @@ read_xl(
 )
 }
 \arguments{
-\item{path}{Path to the xls/xlsx file.}
+\item{path}{Path to the Excel file.}
 
-\item{sheet}{Sheet to read. Either a string (the name of a sheet), or an integer (the position of the sheet). Ignored if the sheet is specified via range. If neither argument specifies the sheet, defaults to the first sheet.}
+\item{sheet}{Sheet to read. Either a string (sheet name) or integer (sheet index). Ignored if \code{range} is specified. Defaults to the first sheet if not provided.}
 
-\item{clean_col_names}{logical on whether to clean the column names.}
+\item{clean_col_names}{Logical. If \code{TRUE}, column names are cleaned using \code{names_clean()}.}
 
-\item{range}{A cell range to read from, as described in cell-specification. Includes typical Excel ranges like "B3:D87", possibly including the sheet name like "Budget!B2:G14", and more. Interpreted strictly, even if the range forces the inclusion of leading or trailing empty rows or columns. Takes precedence over skip, n_max and sheet.}
+\item{range}{Cell range to read, e.g. \code{"B3:D87"} or \code{"Budget!B2:G14"}. Takes precedence over \code{sheet}.}
 
-\item{col_names}{TRUE to use the first row as column names, FALSE to get default names, or a character vector giving a name for each column. If user provides col_types as a vector, col_names can have one entry per column, i.e. have the same length as col_types, or one entry per unskipped column.}
+\item{col_names}{Logical or character vector. Use first row as column names (\code{TRUE}), default names (\code{FALSE}), or custom names.}
 
-\item{col_types}{Either NULL to guess all from the spreadsheet or a character vector containing one entry per column from these options: "skip", "guess", "logical", "numeric", "date", "text" or "list". If exactly one col_type is specified, it will be recycled. The content of a cell in a skipped column is never read and that column will not appear in the data frame output. A list cell loads a column as a list of length 1 vectors, which are typed using the type guessing logic from col_types = NULL, but on a cell-by-cell basis.}
+\item{col_types}{NULL (guess types) or a character vector specifying column types (\code{"skip"}, \code{"guess"}, \code{"logical"}, \code{"numeric"}, \code{"date"}, \code{"text"}, \code{"list"}). Single values are recycled.}
+}
+\value{
+A tibble containing the Excel data.
 }
 \description{
-reads in excel files
+Reads an Excel file (\code{.xls} or \code{.xlsx}) into a tibble.
+Optionally cleans column names after reading.
+}
+\examples{
+\dontrun{
+# Read first sheet and clean column names
+df <- read_xl("data.xlsx")
+
+# Read specific sheet by name
+df <- read_xl("data.xlsx", sheet = "Budget")
+
+# Read a specific range
+df <- read_xl("data.xlsx", range = "B3:D20")
+
+# Do not clean column names
+df <- read_xl("data.xlsx", clean_col_names = FALSE)
+}
+
 }

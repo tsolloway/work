@@ -4,23 +4,24 @@
 #' @export
 install_init_pkgs <- function(on_exit_restart = TRUE){
 
-  if(on_exit_restart) on.exit(restart(keep = TRUE))
+  if(on_exit_restart) on.exit(if (interactive()) rstudioapi::restartSession(TRUE))
 
+  # Ensure pak is installed
   install_pak()
 
-  pak::pkg_install("magrittr")
-
+  # Core utilities
+  pak::pkg_install(c("magrittr", "devtools", "stringi"))
   library("magrittr")
 
 
-  c("devtools", "stringi") %>% pak::pkg_install()
-
-
-  c("rmarkdown", "shiny", "tidymodels", "tidyverse") %>% pak::pkg_install()
-
-
-
+  # Tidyverse / Modeling / Shiny
   c(
+    "rmarkdown", "shiny", "tidymodels", "tidyverse"
+  ) %>%
+    pak::pkg_install()
+
+
+  pkgs <- c(
     "abind", "anytime", "askpass", "assertthat",
     "backports", "BiocManager", "brew", "brio",
     "broom", "bslib", "cachem", "callr",
@@ -31,10 +32,7 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "curl", "data.table", "datapasta", "DBI",
     "dbplyr", "desc", "dials", "DiceDesign",
     "dichromat", "diffobj", "digest", "doParallel",
-    "dplyr", "drat", "dtplyr", "dygraphs"
-  )  %>% pak::pkg_install()
-
-  c(
+    "dplyr", "drat", "dtplyr", "dygraphs",
     "e1071", "easystats", "effects", "ellipsis",
     "emoji", "encryptr", "evaluate", "extraDistr",
     "fansi", "farver", "fastmap", "fBasics",
@@ -56,10 +54,7 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "later", "latticeExtra", "lava", "lavaan",
     "lazyeval", "leaflet", "leaps", "lhs",
     "lifecycle", "listenv", "lme4", "lmtest",
-    "loo","lubridate"
-  ) %>% pak::pkg_install()
-
-  c(
+    "loo","lubridate",
     "magrittr", "manipulate", "maps",
     "markdown", "matrixcalc", "MatrixModels", "matrixStats",
     "memoise", "mime", "minqa", "mnormt",
@@ -80,10 +75,7 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "rgl", "rjson", "RJSONIO",
     "rlang", "RODBC", "roxygen2", "rpart",
     "rsample", "RSQLite", "rstan", "rstantools",
-    "rversions", "rvest"
-  ) %>% pak::pkg_install()
-
-  c(
+    "rversions", "rvest",
     "sandwich", "sass", "scales", "scatterD3",
     "scatterplot3d", "sem", "shape", "sourcetools",
     "sp", "spatial", "stringi", "stringr",
@@ -98,15 +90,21 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "xlsxjars", "XML","xml2", "xopen",
     "xtable", "xts", "yaml", "yardstick",
     "zip", "zoo"
-  ) %>% pak::pkg_install()
+  )
+
+  pak_install_by_chunk(pkgs)
 
 
-  easystats:::.suggested_pkgs() %>%
-    unlist() %>% unique() %>% sort() %>%
-    pak::pkg_install()
+
+  pkgs <- easystats:::.suggested_pkgs() %>%
+    unlist() %>%
+    unique() %>%
+    sort()
+
+  pak_install_by_chunk(pkgs)
 
 
-  c(
+  pkgs <- c(
     "argonR", "bs4Dash",
     "bsplus", "cicerone",
     "colourpicker", "drawer",
@@ -131,7 +129,8 @@ install_init_pkgs <- function(on_exit_restart = TRUE){
     "sortable", "spsComps",
     "tablerDash", "timevis",
     "tippy"
-  ) %>% pak::pkg_install()
+  )
+  pak_install_by_chunk(pkgs)
 
 
   c("google/CausalImpact") %>% pak::pkg_install()

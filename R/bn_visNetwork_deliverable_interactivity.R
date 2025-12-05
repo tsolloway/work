@@ -1,5 +1,43 @@
-#' bn_visNetwork_deliverable_interactivity
-#' @description bn_visNetwork_deliverable_interactivity
+#' Add Interactivity and Export Controls to a visNetwork Bayesian Network
+#'
+#' @description
+#' Enhances a `visNetwork` Bayesian network visualization with advanced
+#' interactivity features for exploration and export. Adds UI controls for
+#' zooming, node dragging, multiple selection, node editing, and custom buttons
+#' for font resizing and exporting the network as PNG or SVG.
+#'
+#' @param obj A `visNetwork` object produced by functions such as
+#'   `bn_to_netviz_prep()` or `visNetwork::visNetwork()`.
+#'
+#' @details
+#' This function wraps `visNetwork::visInteraction()`, `visNetwork::visOptions()`,
+#' and `visNetwork::visEvents()` to add the following capabilities:
+#'
+#' * **Interactive navigation** – drag nodes, pan the canvas, and zoom.
+#' * **Node selection and editing** – highlight nearest nodes and edit node
+#'   labels/values directly in the viewer.
+#' * **Font size control** – floating “Font Size” button with a live slider.
+#' * **Export buttons** – quick-download buttons for **PNG** and **SVG** versions
+#'   of the rendered network.
+#'
+#' The function injects JavaScript via `visEvents(afterDrawing = "…")` to create
+#' these interactive UI elements dynamically once the graph is rendered.
+#'
+#' @return
+#' A modified `visNetwork` object with interactive and export-ready controls.
+#'
+#' @examples
+#' \dontrun{
+#' library(visNetwork)
+#' nodes <- data.frame(id = 1:3, label = c("A", "B", "C"))
+#' edges <- data.frame(from = c(1, 2), to = c(2, 3))
+#' vis <- visNetwork(nodes, edges)
+#' bn_visNetwork_deliverable_interactivity(vis)
+#' }
+#'
+#' @seealso [visNetwork::visInteraction()], [visNetwork::visOptions()],
+#'   [visNetwork::visEvents()]
+#'
 #' @export
 bn_visNetwork_deliverable_interactivity <- function(obj){
 

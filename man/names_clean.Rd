@@ -7,8 +7,23 @@
 names_clean(x, make_lowercase = TRUE)
 }
 \arguments{
-\item{x}{named df or character vector}
+\item{x}{A data frame, tibble, or character vector whose names you want to clean.}
+
+\item{make_lowercase}{Logical; if TRUE, converts names to lowercase. Default is TRUE.}
+}
+\value{
+\itemize{
+\item If \code{x} is a data frame or tibble, returns \code{x} with cleaned column names.
+\item If \code{x} is a character vector, returns the cleaned vector.
+}
 }
 \description{
-names_clean
+Cleans names of a data frame, tibble, or character vector using \code{str_scrub()}.
+Optionally converts names to lowercase.
+}
+\examples{
+df <- data.frame("Column A" = 1:3, "COLUMN B" = 4:6)
+names_clean(df)
+names_clean(c("Column A", "COLUMN B"))
+
 }

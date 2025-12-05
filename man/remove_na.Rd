@@ -7,8 +7,16 @@
 remove_na(x)
 }
 \arguments{
-\item{x}{vector}
+\item{x}{A vector.}
+}
+\value{
+A vector with \code{NA} values removed.
 }
 \description{
-Returns vector with no values equaling NA
+Removes all \code{NA} values from a vector.
+}
+\examples{
+remove_na(c(1, NA, 3, NA, 5))
+remove_na(c("a", NA, "b"))
+
 }

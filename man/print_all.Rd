@@ -6,6 +6,20 @@
 \usage{
 print_all(x, n = Inf)
 }
+\arguments{
+\item{x}{A data frame or tibble.}
+
+\item{n}{Number of rows to print (default = \code{Inf}, prints all rows).}
+}
+\value{
+Invisibly returns \code{x}.
+}
 \description{
-Prints all rows
+Prints all rows of a data frame or tibble.
+Useful for tibbles that truncate output by default.
+}
+\examples{
+df <- tibble::tibble(a = 1:5, b = letters[1:5])
+print_all(df)
+
 }

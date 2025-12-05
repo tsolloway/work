@@ -1,8 +1,9 @@
 #' if_na_return
-#' @description Returns something if NA. Default to FALSe
-#' @param x vector
-#' @param return_what what to return
+#' @description Replaces NA values in a vector with a specified value.
+#' @param x Vector
+#' @param return_what Value to return in place of NA (default = FALSE)
+#' @return Vector with NAs replaced
 #' @export
-if_na_return <- function(x, return_what = FALSE){
-  x %>% ifelse(is.na(.), return_what, .)
+if_na_return <- function(x, return_what = FALSE) {
+  ifelse(is.na(x), return_what, x)
 }

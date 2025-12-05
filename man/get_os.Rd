@@ -7,5 +7,5 @@
 get_os()
 }
 \description{
-Returns OS
+Returns the operating system type as "windows", "macos", "linux", or "unknown"
 }

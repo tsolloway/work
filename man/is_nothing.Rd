@@ -2,10 +2,22 @@
 % Please edit documentation in R/logicals.R
 \name{is_nothing}
 \alias{is_nothing}
-\title{is_nothing}
+\title{Check if an object is "nothing"}
 \usage{
 is_nothing(x)
 }
+\arguments{
+\item{x}{Object to check.}
+}
+\value{
+Logical; TRUE if x is NULL, length zero, or all NA.
+}
 \description{
-is_nothing
+Returns TRUE if the input is NULL, has length zero, or consists entirely of NA values.
+}
+\examples{
+is_nothing(NULL)          # TRUE
+is_nothing(NA)            # TRUE
+is_nothing(1:3)           # FALSE
+is_nothing(character(0))  # TRUE
 }

@@ -9,7 +9,8 @@ cluster_reduce_vars(
   vars,
   grp,
   type = c("greedy_step", "greedy", "step"),
-  return_only_var = FALSE
+  return_only_var = FALSE,
+  seed = 1
 )
 }
 \description{

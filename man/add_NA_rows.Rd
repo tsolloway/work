@@ -7,10 +7,16 @@
 add_NA_rows(df, n)
 }
 \arguments{
-\item{df}{data.frame / tibble}
+\item{df}{Data frame or tibble.}
 
-\item{n}{number of rows}
+\item{n}{Number of rows to append.}
+}
+\value{
+Original data frame with n NA rows added at the bottom.
 }
 \description{
-Returns empty rows
+Appends n empty rows (NA) to a data frame / tibble.
+}
+\examples{
+add_NA_rows(iris, 3)
 }

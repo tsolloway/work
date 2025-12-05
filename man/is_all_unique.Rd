@@ -7,8 +7,11 @@
 is_all_unique(x)
 }
 \arguments{
-\item{x}{vector}
+\item{x}{Vector to check}
+}
+\value{
+Logical
 }
 \description{
-Returns logical if all values in vector are unique
+Returns TRUE if all non-empty values in a vector are unique
 }

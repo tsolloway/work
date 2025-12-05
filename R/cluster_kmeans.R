@@ -6,6 +6,7 @@ cluster_kmeans <- function(
     vars,
     vars_profiles,
     solution_name,
+    solution_name_prefix = "kmeans",
     resp_id_name = "seg_uuid",
     filter_name = NULL,
     n_min = 4,
@@ -15,7 +16,8 @@ cluster_kmeans <- function(
     iter_max = 100000,
     nstart = 10,
     lda_vars = NULL,
-    lda_vars_profiles = NULL
+    lda_vars_profiles = NULL,
+    seed = 1
 ){
 
     # df = seg[["data"]][["with_solutions"]]
@@ -39,7 +41,7 @@ cluster_kmeans <- function(
     # lda_vars = NULL
 
 
-  set.seed(1)
+  if(!is.null(seed)) set.seed(seed)
 
   priors <- match.arg(priors)
 
@@ -76,11 +78,11 @@ cluster_kmeans <- function(
   result <- tibble::tibble("n" = n_min : n_max) %>%
     mutate(
       "solution_name" = solution_name,
-      "cluster_name" = glue("kmeans_cluster_{solution_name}{n}"),
+      "cluster_name" = glue("{solution_name_prefix}_{solution_name}{n}"),
       "inputs" = list(vars),
       "profiles" = list(vars_profiles),
       "cluster_fit" = purrr::map(n, possibly(~{
-        set.seed(1)
+        if(!is.null(seed)) set.seed(seed)
         stats::kmeans(df_temp, .x, iter.max = iter_max, nstart = nstart)
       }, otherwise = NA)),
       "cluster_seed" = purrr::map2(cluster_fit, cluster_name, possibly(~{
@@ -90,8 +92,8 @@ cluster_kmeans <- function(
       "priors_equal" = purrr::map(n, ~rep(1/.x, .x)),
       "priors_size" = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
       "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, possibly(~{
-        set.seed(1)
-        cluster_reduce_vars(df_temp, reduced_vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)
+        if(!is.null(seed)) set.seed(seed)
+        cluster_reduce_vars(df_temp, reduced_vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE, seed = seed)
       }, otherwise = NA)),
       "reduced_profiles" = purrr::map(reduced_inputs, ~reduced_vars_profiles[match(.x, reduced_vars)])
     )
@@ -108,7 +110,7 @@ cluster_kmeans <- function(
 
 
 
-  set.seed(1)
+  if(!is.null(seed)) set.seed(seed)
   result_all <- result %>%
     cluster_add_lda(
       df = df,
@@ -120,7 +122,8 @@ cluster_kmeans <- function(
       lda_vars_profiles = reduced_vars_profiles
     )
 
-  set.seed(1)
+
+  if(!is.null(seed)) set.seed(seed)
   result_reduced <- result %>%
     cluster_add_lda(
       df = df,

@@ -2,10 +2,49 @@
 % Please edit documentation in R/bn_visNetwork_deliverable_interactivity.R
 \name{bn_visNetwork_deliverable_interactivity}
 \alias{bn_visNetwork_deliverable_interactivity}
-\title{bn_visNetwork_deliverable_interactivity}
+\title{Add Interactivity and Export Controls to a visNetwork Bayesian Network}
 \usage{
 bn_visNetwork_deliverable_interactivity(obj)
 }
+\arguments{
+\item{obj}{A \code{visNetwork} object produced by functions such as
+\code{bn_to_netviz_prep()} or \code{visNetwork::visNetwork()}.}
+}
+\value{
+A modified \code{visNetwork} object with interactive and export-ready controls.
+}
 \description{
-bn_visNetwork_deliverable_interactivity
+Enhances a \code{visNetwork} Bayesian network visualization with advanced
+interactivity features for exploration and export. Adds UI controls for
+zooming, node dragging, multiple selection, node editing, and custom buttons
+for font resizing and exporting the network as PNG or SVG.
+}
+\details{
+This function wraps \code{visNetwork::visInteraction()}, \code{visNetwork::visOptions()},
+and \code{visNetwork::visEvents()} to add the following capabilities:
+\itemize{
+\item \strong{Interactive navigation} – drag nodes, pan the canvas, and zoom.
+\item \strong{Node selection and editing} – highlight nearest nodes and edit node
+labels/values directly in the viewer.
+\item \strong{Font size control} – floating “Font Size” button with a live slider.
+\item \strong{Export buttons} – quick-download buttons for \strong{PNG} and \strong{SVG} versions
+of the rendered network.
+}
+
+The function injects JavaScript via \code{visEvents(afterDrawing = "…")} to create
+these interactive UI elements dynamically once the graph is rendered.
+}
+\examples{
+\dontrun{
+library(visNetwork)
+nodes <- data.frame(id = 1:3, label = c("A", "B", "C"))
+edges <- data.frame(from = c(1, 2), to = c(2, 3))
+vis <- visNetwork(nodes, edges)
+bn_visNetwork_deliverable_interactivity(vis)
+}
+
+}
+\seealso{
+\code{\link[visNetwork:visInteraction]{visNetwork::visInteraction()}}, \code{\link[visNetwork:visOptions]{visNetwork::visOptions()}},
+\code{\link[visNetwork:visEvents]{visNetwork::visEvents()}}
 }

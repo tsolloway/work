@@ -2,18 +2,68 @@
 % Please edit documentation in R/bn_to_netviz_prep.R
 \name{bn_to_netviz_prep}
 \alias{bn_to_netviz_prep}
-\title{bn_to_netviz_prep}
+\title{Prepare Bayesian Network for visNetwork Visualization}
 \usage{
 bn_to_netviz_prep(
-  bn,
+  obj,
+  df = NULL,
   dictionary = NULL,
+  remove_nodes = NULL,
   node_label_type = c("both", "variable", "label"),
   manual_groups = NULL,
   n_groups = NULL,
   node_size = 1,
-  on_exit_detach_igraph = TRUE
+  return_community = TRUE,
+  community_edge_by = c("sum", "mean"),
+  tool_tip_edge_prefix = NULL,
+  on_exit_detach_igraph = FALSE
 )
 }
+\arguments{
+\item{obj}{A fitted Bayesian network (\code{bn} object) or a list containing
+both \code{bn} and \code{arcs}.}
+
+\item{df}{Optional data frame used for scoring or arc strength computation.}
+
+\item{dictionary}{Optional lookup table with columns \code{var} and \code{label} for node relabeling.}
+
+\item{remove_nodes}{Character vector of node names to exclude from the network.}
+
+\item{node_label_type}{One of \code{"both"}, \code{"variable"}, or \code{"label"}; controls how node labels appear.}
+
+\item{manual_groups}{Optional data frame or list specifying manual node group assignments
+(\code{id}, \code{group}, \code{community_name}, \code{color}).}
+
+\item{n_groups}{Optional integer specifying the number of communities to cut into.}
+
+\item{node_size}{Numeric value controlling node size in the visualization.}
+
+\item{return_community}{Logical; if \code{TRUE}, also returns a community-level summary graph.}
+
+\item{community_edge_by}{One of \code{"sum"} or \code{"mean"}; how to aggregate inter-community edges.}
+
+\item{tool_tip_edge_prefix}{Optional character string to prepend to edge tooltips (e.g., "MI =").}
+
+\item{on_exit_detach_igraph}{Logical; if \code{TRUE}, detaches igraph-related packages on exit}
+}
+\value{
+A list with:
+\describe{
+\item{attribute_viz_prep}{Node and edge data for visNetwork visualization.}
+\item{community_viz_prep}{Community-level summary graph (if \code{return_community = TRUE}).}
+}
+}
 \description{
-bn_to_netviz_prep
+Converts a fitted \code{bnlearn} Bayesian network into node and edge data
+compatible with \code{visNetwork}, optionally grouping nodes into detected communities.
+}
+\examples{
+\dontrun{
+bn <- bnlearn::hc(learning.test)
+prep <- bn_to_netviz_prep(obj = bn, df = learning.test)
+visNetwork::visNetwork(
+  prep$attribute_viz_prep$nodes,
+  prep$attribute_viz_prep$edges
+)
+}
 }

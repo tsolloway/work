@@ -1,5 +1,23 @@
-#' hc_theme_picker
-#' @description hc_theme_picker
+#' Pick a Highcharter theme
+#'
+#' @description
+#' Selects a Highcharter theme by name and returns the corresponding theme object.
+#'
+#' @param theme Character; one of the following themes:
+#' "538", "alone", "bloom", "chalk", "darkunica", "db", "economist",
+#' "elementary", "ffx", "flat", "flatdark", "ft", "ggplot2", "google",
+#' "gridlight", "handdrawn", "hcrt", "merge", "monokai", "null",
+#' "sandsignika", "smpl", "sparkline", "sparkline_vb", "superheroes",
+#' "tufte", "tufte2". Defaults to `"null"`.
+#'
+#' @return A Highcharter theme object.
+#'
+#' @examples
+#' \dontrun{
+#' hc_theme_picker("ggplot2")
+#' hc_theme_picker("darkunica")
+#' }
+#'
 #' @export
 hc_theme_picker <- function(
     theme = c(
@@ -9,42 +27,42 @@ hc_theme_picker <- function(
       "sandsignika", "smpl", "sparkline", "sparkline_vb", "superheroes",
       "tufte","tufte2"
     )
-){
+) {
 
-  require(highcharter, quietly = TRUE)
-
-  if( !is_nothing(theme) && !isFALSE(theme) )  theme <- match.arg(theme)
+  if (!requireNamespace("highcharter", quietly = TRUE)) {
+    stop("Package 'highcharter' is required for hc_theme_picker()")
+  }
 
   theme <- match.arg(theme)
 
-  theme <- switch(
+  switch(
     theme,
-    "538" = hc_theme_538(),
-    "alone" = hc_theme_alone(),
-    "bloom" = hc_theme_bloom(),
-    "chalk" = hc_theme_chalk(),
-    "darkunica" = hc_theme_darkunica(),
-    "db" = hc_theme_db(),
-    "economist" = hc_theme_economist(),
-    "elementary" = hc_theme_elementary(),
-    "ffx" = hc_theme_ffx(),
-    "flat" = hc_theme_flat(),
-    "flatdark" = hc_theme_flatdark(),
-    "ft" = hc_theme_ft(),
-    "ggplot2" = hc_theme_ggplot2(),
-    "google" = hc_theme_google(),
-    "gridlight" = hc_theme_gridlight(),
-    "handdrawn" = hc_theme_handdrawn(),
-    "hcrt" = hc_theme_hcrt(),
-    "merge" = hc_theme_merge(),
-    "monokai" = hc_theme_monokai(),
-    "null" = hc_theme_null(),
-    "sandsignika" = hc_theme_sandsignika(),
-    "smpl" = hc_theme_smpl(),
-    "sparkline" = hc_theme_sparkline(),
-    "sparkline_vb" = hc_theme_sparkline_vb(),
-    "superheroes" = hc_theme_superheroes(),
-    "tufte" = hc_theme_tufte(),
-    "tufte2" = hc_theme_tufte2()
+    "538" = highcharter::hc_theme_538(),
+    "alone" = highcharter::hc_theme_alone(),
+    "bloom" = highcharter::hc_theme_bloom(),
+    "chalk" = highcharter::hc_theme_chalk(),
+    "darkunica" = highcharter::hc_theme_darkunica(),
+    "db" = highcharter::hc_theme_db(),
+    "economist" = highcharter::hc_theme_economist(),
+    "elementary" = highcharter::hc_theme_elementary(),
+    "ffx" = highcharter::hc_theme_ffx(),
+    "flat" = highcharter::hc_theme_flat(),
+    "flatdark" = highcharter::hc_theme_flatdark(),
+    "ft" = highcharter::hc_theme_ft(),
+    "ggplot2" = highcharter::hc_theme_ggplot2(),
+    "google" = highcharter::hc_theme_google(),
+    "gridlight" = highcharter::hc_theme_gridlight(),
+    "handdrawn" = highcharter::hc_theme_handdrawn(),
+    "hcrt" = highcharter::hc_theme_hcrt(),
+    "merge" = highcharter::hc_theme_merge(),
+    "monokai" = highcharter::hc_theme_monokai(),
+    "null" = highcharter::hc_theme_null(),
+    "sandsignika" = highcharter::hc_theme_sandsignika(),
+    "smpl" = highcharter::hc_theme_smpl(),
+    "sparkline" = highcharter::hc_theme_sparkline(),
+    "sparkline_vb" = highcharter::hc_theme_sparkline_vb(),
+    "superheroes" = highcharter::hc_theme_superheroes(),
+    "tufte" = highcharter::hc_theme_tufte(),
+    "tufte2" = highcharter::hc_theme_tufte2()
   )
 }

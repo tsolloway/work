@@ -2,10 +2,13 @@
 % Please edit documentation in R/oxl_style.R
 \name{oxl_opt_halign}
 \alias{oxl_opt_halign}
-\title{oxl_opt_halign}
+\title{Horizontal alignment options}
 \usage{
 oxl_opt_halign()
 }
+\value{
+Character vector of horizontal alignment options.
+}
 \description{
-oxl_opt_halign
+Returns available horizontal alignment options for Excel cells.
 }

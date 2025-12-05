@@ -6,6 +6,35 @@
 \usage{
 make_arcs(x, y = NULL, bidirectional = TRUE)
 }
+\arguments{
+\item{x}{Character vector of source node names.}
+
+\item{y}{Optional character vector of target node names. Defaults to \code{x}.}
+
+\item{bidirectional}{Logical; if \code{TRUE}, includes arcs in both directions.}
+}
+\value{
+A tibble with columns:
+\describe{
+\item{from}{Source node.}
+\item{to}{Target node.}
+}
+}
 \description{
-make_arcs
+Generate all possible directed arcs between two sets of nodes.
+
+Given two sets of nodes (\code{x} and \code{y}), this function returns all combinations
+of directed arcs from each element of \code{x} to each element of \code{y}. When
+\code{bidirectional = TRUE}, it also adds the reverse arcs.
+}
+\examples{
+# Simple one-way arcs
+make_arcs(c("A", "B", "C"), bidirectional = FALSE)
+
+# Bidirectional arcs within a single set
+make_arcs(c("A", "B"), bidirectional = TRUE)
+
+# Directed arcs between two distinct sets
+make_arcs(x = c("Input1", "Input2"), y = c("Output1", "Output2"), bidirectional = FALSE)
+
 }

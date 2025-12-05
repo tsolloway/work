@@ -4,8 +4,37 @@
 \alias{find_file_in_dir}
 \title{find_file_in_dir}
 \usage{
-find_file_in_dir(x, type = NULL)
+find_file_in_dir(
+  x,
+  type = NULL,
+  path = ".",
+  normalize_paths = TRUE,
+  must_work = TRUE
+)
+}
+\arguments{
+\item{x}{Character string pattern to match in file names.}
+
+\item{type}{Optional character string pattern to further filter matched files (e.g., file extension like "csv").}
+
+\item{path}{Directory path to search. Defaults to current working directory.}
+
+\item{normalize_paths}{Logical; if TRUE (default), returns absolute normalized paths.}
+
+\item{must_work}{Logical; passed to \code{normalizePath()}. If TRUE (default), throws an error if a file does not exist. If FALSE, allows empty or missing files.}
+}
+\value{
+Character vector of file paths matching the patterns.
 }
 \description{
-find_file_in_dir
+Recursively searches for files in a specified directory (or the current working directory by default),
+optionally filtering by a filename pattern and/or file type (e.g., file extension).
+Returns either normalized absolute paths or relative paths.
+}
+\examples{
+# Find all R scripts in the current directory
+find_file_in_dir("script", type = "R$")
+
+# Find all CSV files containing "data" in the current directory
+find_file_in_dir("data", type = "csv$")
 }

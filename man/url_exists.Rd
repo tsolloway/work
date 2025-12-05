@@ -10,13 +10,13 @@ url_exists(x, non_2xx_return_value = FALSE, quiet = FALSE, ...)
 \item{x}{a single URL}
 
 \item{non_2xx_return_value}{what to do if the site exists but the
-HTTP status code is not in the `2xx` range. Default is to return `FALSE`.}
+HTTP status code is not in the \verb{2xx} range. Default is to return \code{FALSE}.}
 
-\item{quiet}{if not `FALSE`, then every time the `non_2xx_return_value` condition
-arises a warning message will be displayed. Default is `FALSE`.}
+\item{quiet}{if not \code{FALSE}, then every time the \code{non_2xx_return_value} condition
+arises a warning message will be displayed. Default is \code{FALSE}.}
 
-\item{...}{other params (`timeout()` would be a good one) passed directly
-to `httr::HEAD()` and/or `httr::GET()`}
+\item{...}{other params (\code{timeout()} would be a good one) passed directly
+to \code{httr::HEAD()} and/or \code{httr::GET()}}
 }
 \description{
 checks whether a url exists

@@ -2,10 +2,50 @@
 % Please edit documentation in R/bn_arc_chisq.R
 \name{bn_arc_chisq}
 \alias{bn_arc_chisq}
-\title{bn_arc_chisq}
+\title{Compute Arc-Level Mutual Information and Chi-Square Tests}
 \usage{
-bn_arc_chisq(obj, df, dv = NULL, round_to = 4)
+bn_arc_chisq(obj, df, dv = NULL, round_to = NULL)
+}
+\arguments{
+\item{obj}{A Bayesian network object (\code{bnlearn} class) or data frame of arcs with \code{from} and \code{to} columns.}
+
+\item{df}{Data frame containing all variables in the network.}
+
+\item{dv}{Optional dependent variable name. If supplied, output is split into
+\code{all}, \code{dv} (arcs from dv), and \code{ivs} (all other arcs).}
+
+\item{round_to}{Optional integer. If specified, rounds numeric columns to this number of digits.}
+}
+\value{
+If \code{dv} is \code{NULL}, returns a tibble with:
+\describe{
+\item{from, to}{Arc endpoints.}
+\item{mi}{Mutual information.}
+\item{test_statistic}{Chi-square test statistic.}
+\item{p_value}{Associated p-value (bounded below at 0.0001).}
+}
+
+If \code{dv} is supplied, returns a list with:
+\describe{
+\item{all}{Full arc-level results.}
+\item{dv}{Subset of arcs where \code{from == dv}.}
+\item{ivs}{Subset of arcs where \code{from != dv}.}
+}
 }
 \description{
-bn_arc_chisq
+For each arc in a Bayesian network, computes the mutual information (MI)
+and chi-square test statistics using \code{bnlearn::ci.test()}.
+Accepts either a fitted Bayesian network (\code{bn} object) or a data frame of arcs.
+}
+\details{
+If a \code{bn} object is provided, its arcs are extracted via \code{bnlearn::arcs()}.
+Each arc is then evaluated for conditional independence (MI-based) and tested
+with the mutual information chi-square test (\code{test = "mi"}).
+}
+\examples{
+\dontrun{
+bn <- bnlearn::hc(learning.test)
+bn_arc_chisq(bn, learning.test, dv = "A")
+}
+
 }

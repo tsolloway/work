@@ -1,212 +1,286 @@
-#' oxl_opt_halign
-#' @description oxl_opt_halign
+#' Horizontal alignment options
+#'
+#' @description Returns available horizontal alignment options for Excel cells.
+#' @return Character vector of horizontal alignment options.
 #' @export
-oxl_opt_halign <- function(){
-  c("center", "left", 'right', "justify")
+oxl_opt_halign <- function() {
+  c("center", "left", "right", "justify")
 }
 
 
-#' oxl_opt_valign
-#' @description oxl_opt_valign
+
+#' Vertical alignment options
+#'
+#' @description Returns available vertical alignment options for Excel cells.
+#' @return Character vector of vertical alignment options.
 #' @export
-oxl_opt_valign <- function(){
-  c("center", "left", 'right')
+oxl_opt_valign <- function() {
+  c("top", "center", "bottom")
 }
 
 
-#' oxl_style_center
-#' @description oxl_style_center
+
+#' Centered cell style
+#'
+#' @description Creates a cell style with horizontal alignment centered.
+#' @param ... Additional arguments passed to `openxlsx::createStyle`.
+#' @return An `openxlsx` style object.
+#' @examples
+#' openxlsx::createWorkbook() %>%
+#'   oxl_style_center()
 #' @export
-oxl_style_center <- function(...){
+oxl_style_center <- function(...) {
   oxl_style_halign(halign = "center", ...)
 }
 
 
-#' oxl_style_halign
-#' @description oxl_style_halign
-#' @export
-oxl_style_halign <- function(
-    halign = oxl_opt_halign(), ...
-){
-  halign <- match.arg(halign)
 
-  createStyle(halign = halign, ...)
+#' Horizontal alignment cell style
+#'
+#' @description Creates a cell style with specified horizontal alignment.
+#' @param halign Horizontal alignment. One of `oxl_opt_halign()`.
+#' @param ... Additional arguments passed to `openxlsx::createStyle`.
+#' @return An `openxlsx` style object.
+#' @examples
+#' oxl_style_halign("left")
+#' @export
+oxl_style_halign <- function(halign = oxl_opt_halign(), ...) {
+  halign <- match.arg(halign)
+  openxlsx::createStyle(halign = halign, ...)
 }
 
 
-#' oxl_style_percent
-#' @description oxl_style_percent
-#' @export
-oxl_style_percent <- function(
-    deciminal = 0,
-    halign = oxl_opt_halign(),
-    ...
-){
-  halign <- match.arg(halign)
 
-  createStyle(
+#' Percent cell style
+#'
+#' @description Creates a percentage cell style with specified decimal places and alignment.
+#' @param decimal Number of decimal places.
+#' @param halign Horizontal alignment.
+#' @param ... Additional arguments passed to `openxlsx::createStyle`.
+#' @return An `openxlsx` style object.
+#' @examples
+#' oxl_style_percent(1)
+#' @export
+oxl_style_percent <- function(decimal = 0, halign = oxl_opt_halign(), ...) {
+  halign <- match.arg(halign)
+  openxlsx::createStyle(
     halign = halign,
-    numFmt = glue("{format(0, nsmall = deciminal)}%"),
+    numFmt = glue::glue("{format(0, nsmall = decimal)}%"),
     ...
   )
 }
 
 
-#' oxl_style_number
-#' @description oxl_style_number
+
+#' Numeric cell style
+#'
+#' @description Creates a numeric cell style with specified decimal places and alignment.
+#' @param decimal Number of decimal places.
+#' @param halign Horizontal alignment.
+#' @param ... Additional arguments passed to `openxlsx::createStyle`.
+#' @return An `openxlsx` style object.
+#' @examples
+#' oxl_style_number(2)
 #' @export
-oxl_style_number <- function(
-    deciminal = 0,
-    halign = oxl_opt_halign(),
-    ...
-){
+oxl_style_number <- function(decimal = 0, halign = oxl_opt_halign(), ...) {
+
   halign <- match.arg(halign)
 
-  createStyle(
+  openxlsx::createStyle(
     halign = halign,
-    numFmt = format(0, nsmall = deciminal),
+    numFmt = format(0, nsmall = decimal),
     ...
   )
+
 }
 
 
-#' oxl_style_cell_good
-#' @description oxl_style_cell_good
+
+#' Good cell style
+#'
+#' @description Creates a “good” colored cell style. Can be conditional (bgFill) or not (fgFill).
+#' @param halign Horizontal alignment.
+#' @param conditional Logical; if TRUE, uses `bgFill` instead of `fgFill`.
+#' @param ... Additional arguments passed to `openxlsx::createStyle`.
+#' @return An `openxlsx` style object.
+#' @examples
+#' oxl_style_cell_good()
 #' @export
-oxl_style_cell_good <- function(
-    halign = oxl_opt_halign(),
-    conditional = FALSE,
-    ...
-){
+oxl_style_cell_good <- function(halign = oxl_opt_halign(), conditional = FALSE, ...) {
+
   halign <- match.arg(halign)
 
-  if(conditional){
-    createStyle(
+  if (conditional) {
+
+    openxlsx::createStyle(
       halign = halign,
       fontColour = oxl_colorscale_good(2),
       bgFill = oxl_colorscale_good(1),
       ...
     )
-  }else if(!conditional){
-    createStyle(
+
+  } else {
+
+    openxlsx::createStyle(
       halign = halign,
       fontColour = oxl_colorscale_good(2),
       fgFill = oxl_colorscale_good(1),
       ...
     )
+
   }
+
 }
 
 
-#' oxl_style_cell_good_bw
-#' @description oxl_style_cell_good_bw
+
+
+#' Good black-white style
+#'
+#' @description Creates a “good” black/white cell style.
+#' @param halign Horizontal alignment.
+#' @param conditional Logical; if TRUE, uses `bgFill`.
+#' @param ... Additional arguments passed to `openxlsx::createStyle`.
+#' @return An `openxlsx` style object.
+#' @examples
+#' oxl_style_cell_good_bw()
 #' @export
-oxl_style_cell_good_bw <- function(
-    halign = oxl_opt_halign(),
-    conditional = FALSE,
-    ...
-){
+oxl_style_cell_good_bw <- function(halign = oxl_opt_halign(), conditional = FALSE, ...) {
+
   halign <- match.arg(halign)
 
-  if(conditional){
-    createStyle(
+  if (conditional) {
+
+    openxlsx::createStyle(
       halign = halign,
       fontColour = "white",
       bgFill = "black",
       ...
     )
-  }else if(!conditional){
-    createStyle(
+
+  } else {
+
+    openxlsx::createStyle(
       halign = halign,
       fontColour = "white",
       fgFill = "black",
       ...
     )
+
   }
+
 }
 
 
-#' oxl_style_cell_bad
-#' @description oxl_style_cell_bad
+
+#' Bad cell style
+#'
+#' @description Creates a “bad” colored cell style.
+#' @param halign Horizontal alignment.
+#' @param conditional Logical; if TRUE, uses `bgFill`.
+#' @param ... Additional arguments passed to `openxlsx::createStyle`.
+#' @return An `openxlsx` style object.
+#' @examples
+#' oxl_style_cell_bad()
 #' @export
-oxl_style_cell_bad <- function(
-    halign = oxl_opt_halign(),
-    conditional = FALSE,
-    ...
-){
+oxl_style_cell_bad <- function(halign = oxl_opt_halign(), conditional = FALSE, ...) {
+
   halign <- match.arg(halign)
 
-  if(conditional){
-    createStyle(
+  if (conditional) {
+
+    openxlsx::createStyle(
       halign = halign,
       fontColour = oxl_colorscale_bad(2),
       bgFill = oxl_colorscale_bad(1),
       ...
     )
-  }else if(!conditional){
-    createStyle(
+
+  } else {
+    openxlsx::createStyle(
+
       halign = halign,
       fontColour = oxl_colorscale_bad(2),
       fgFill = oxl_colorscale_bad(1),
       ...
     )
+
   }
 }
 
 
-#' oxl_style_cell_bad_bw
-#' @description oxl_style_cell_bad_bw
+
+#' Bad black-white cell style
+#'
+#' @description Creates a “bad” black/white cell style.
+#' @param halign Horizontal alignment.
+#' @param conditional Logical; if TRUE, uses `bgFill`.
+#' @param ... Additional arguments passed to `openxlsx::createStyle`.
+#' @return An `openxlsx` style object.
+#' @examples
+#' oxl_style_cell_bad_bw()
 #' @export
-oxl_style_cell_bad_bw <- function(
-    halign = oxl_opt_halign(),
-    conditional = FALSE,
-    ...
-){
+oxl_style_cell_bad_bw <- function(halign = oxl_opt_halign(), conditional = FALSE, ...) {
+
   halign <- match.arg(halign)
 
-  if(conditional){
-    createStyle(
+  if (conditional) {
+
+    openxlsx::createStyle(
       halign = halign,
       fontColour = "black",
       bgFill = oxl_colorscale_grey(2),
       ...
     )
-  }else if(!conditional){
-    createStyle(
+
+  } else {
+
+    openxlsx::createStyle(
       halign = halign,
       fontColour = "black",
       fgFill = oxl_colorscale_grey(2),
       ...
     )
+
   }
+
 }
 
 
-#' oxl_style_cell_neurtal
-#' @description oxl_style_cell_neurtal
+
+#' Neutral cell style
+#'
+#' @description Creates a “neutral” colored cell style.
+#' @param halign Horizontal alignment.
+#' @param conditional Logical; if TRUE, uses `bgFill`.
+#' @param ... Additional arguments passed to `openxlsx::createStyle`.
+#' @return An `openxlsx` style object.
+#' @examples
+#' oxl_style_cell_neutral()
 #' @export
-oxl_style_cell_neurtal <- function(
-    halign = oxl_opt_halign(),
-    conditional = FALSE,
-    ...
-){
+oxl_style_cell_neutral <- function(halign = oxl_opt_halign(), conditional = FALSE, ...) {
+
   halign <- match.arg(halign)
 
-  if(conditional){
-    createStyle(
-      halign = halign,
-      fontColour = oxl_colorscale_neurtal(2),
-      bgFill = oxl_colorscale_neurtal(1),
-      ...
-    )
-  }else if(!conditional){
-    createStyle(
-      halign = halign,
-      fontColour = oxl_colorscale_neurtal(2),
-      fgFill = oxl_colorscale_neurtal(1),
-      ...
-    )
-  }
-}
+  if (conditional) {
 
+    openxlsx::createStyle(
+      halign = halign,
+      fontColour = oxl_colorscale_neutral(2),
+      bgFill = oxl_colorscale_neutral(1),
+      ...
+    )
+
+  } else {
+
+    openxlsx::createStyle(
+      halign = halign,
+      fontColour = oxl_colorscale_neutral(2),
+      fgFill = oxl_colorscale_neutral(1),
+      ...
+    )
+
+  }
+
+}
 

@@ -6,6 +6,28 @@
 \usage{
 message_collapse(pre = NULL, x, post = NULL, collapse_sep = ", ")
 }
+\arguments{
+\item{pre}{Optional character prefix added before the collapsed message.
+Adds an "s" automatically if length(x) != 1.}
+
+\item{x}{Character vector to be collapsed.}
+
+\item{post}{Optional character suffix added after the collapsed message.}
+
+\item{collapse_sep}{Character string used to separate elements when collapsing.
+Defaults to \code{", "}.}
+}
+\value{
+A single character string combining \code{pre}, the collapsed elements of \code{x},
+and \code{post}.
+}
 \description{
-message_collapse
+Concatenates a character vector into a single message string,
+optionally adding a prefix (\code{pre}) and suffix (\code{post}), with optional pluralization.
+}
+\examples{
+message_collapse(pre = "Item", x = "A")
+message_collapse(pre = "Item", x = c("A", "B", "C"))
+message_collapse(pre = "Task", x = c("X", "Y"), post = " completed")
+
 }

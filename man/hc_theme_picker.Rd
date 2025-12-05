@@ -2,7 +2,7 @@
 % Please edit documentation in R/hc_theme_picker.R
 \name{hc_theme_picker}
 \alias{hc_theme_picker}
-\title{hc_theme_picker}
+\title{Pick a Highcharter theme}
 \usage{
 hc_theme_picker(
   theme = c("538", "alone", "bloom", "chalk", "darkunica", "db", "economist",
@@ -11,6 +11,24 @@ hc_theme_picker(
     "sparkline_vb", "superheroes", "tufte", "tufte2")
 )
 }
+\arguments{
+\item{theme}{Character; one of the following themes:
+"538", "alone", "bloom", "chalk", "darkunica", "db", "economist",
+"elementary", "ffx", "flat", "flatdark", "ft", "ggplot2", "google",
+"gridlight", "handdrawn", "hcrt", "merge", "monokai", "null",
+"sandsignika", "smpl", "sparkline", "sparkline_vb", "superheroes",
+"tufte", "tufte2". Defaults to \code{"null"}.}
+}
+\value{
+A Highcharter theme object.
+}
 \description{
-hc_theme_picker
+Selects a Highcharter theme by name and returns the corresponding theme object.
+}
+\examples{
+\dontrun{
+hc_theme_picker("ggplot2")
+hc_theme_picker("darkunica")
+}
+
 }

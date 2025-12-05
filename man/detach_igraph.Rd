@@ -2,10 +2,13 @@
 % Please edit documentation in R/detach_igraph.R
 \name{detach_igraph}
 \alias{detach_igraph}
-\title{detach_igraph}
+\title{Safely detach igraph-related packages}
 \usage{
 detach_igraph()
 }
 \description{
-detach_igraph
+Detaches a fixed set of packages commonly used with igraph and Bayesian networks:
+\code{"gRain"}, \code{"gRbase"}, \code{"highcharter"}, and \code{"igraph"}.
+Only packages that are currently loaded will be detached. Safe to call in
+functions or scripts without throwing errors if a package is not attached.
 }

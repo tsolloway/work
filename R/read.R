@@ -1,11 +1,35 @@
 #' read
-#' @description reads in files
+#'
+#' @description Reads a file into R. Supports `.csv`, `.xls`, `.xlsx`, and `.sav` files.
+#' For `.sav` files, returns both the data frame and a dictionary of value labels.
+#'
 #' @param path Path to the file.
-#' @param sheet Sheet to read. Either a string (the name of a sheet), or an integer (the position of the sheet). Ignored if the sheet is specified via range. If neither argument specifies the sheet, defaults to the first sheet.
-#' @param range A cell range to read from, as described in cell-specification. Includes typical Excel ranges like "B3:D87", possibly including the sheet name like "Budget!B2:G14", and more. Interpreted strictly, even if the range forces the inclusion of leading or trailing empty rows or columns. Takes precedence over skip, n_max and sheet.
-#' @param col_names TRUE to use the first row as column names, FALSE to get default names, or a character vector giving a name for each column. If user provides col_types as a vector, col_names can have one entry per column, i.e. have the same length as col_types, or one entry per unskipped column.
-#' @param col_types Either NULL to guess all from the spreadsheet or a character vector containing one entry per column from these options: "skip", "guess", "logical", "numeric", "date", "text" or "list". If exactly one col_type is specified, it will be recycled. The content of a cell in a skipped column is never read and that column will not appear in the data frame output. A list cell loads a column as a list of length 1 vectors, which are typed using the type guessing logic from col_types = NULL, but on a cell-by-cell basis.
-#' @param clean_col_names logical on whether to clean the column names.
+#' @param sheet Sheet to read (for Excel). Either a string (sheet name) or integer (sheet index). Ignored if `range` is provided.
+#' @param range Cell range to read from Excel, e.g., `"B3:D87"` or `"Budget!B2:G14"`. Takes precedence over `sheet`.
+#' @param col_names Logical or character vector. Use first row as column names (`TRUE`), default names (`FALSE`), or custom names.
+#' @param col_types NULL or character vector specifying column types for Excel (`"skip"`, `"guess"`, `"logical"`, `"numeric"`, `"date"`, `"text"`, `"list"`).
+#' @param clean_col_names Logical. If `TRUE`, column names are cleaned using `names_clean()`.
+#' @param hard_stop Logical. If `TRUE`, stops immediately on unsupported file types.
+#' @param always_list Logical. If `TRUE`, output is always a list with elements `df` and `dictionary` (Excel/CSV will have `dictionary = NULL`).
+#' @param warning Logical. If `TRUE`, displays a warning for unsupported file types.
+#'
+#' @return For CSV/Excel: tibble or list (if `always_list = TRUE`).
+#' For SAV: list with elements `df` (data frame) and `dictionary` (value labels).
+#'
+#' @examples
+#' \dontrun{
+#' # Read Excel
+#' df <- read("data.xlsx", sheet = 1)
+#'
+#' # Read CSV
+#' df <- read("data.csv")
+#'
+#' # Read SPSS file and get dictionary
+#' output <- read("survey.sav")
+#' df <- output$df
+#' dictionary <- output$dictionary
+#' }
+#'
 #' @export
 read <- function(
     path,
@@ -17,116 +41,83 @@ read <- function(
     hard_stop = FALSE,
     always_list = FALSE,
     warning = TRUE
-){
+) {
 
-
+  # Initialize work environment
   work::start()
 
 
+  # Determine file extension
   ext <- path %>%
     tools::file_ext() %>%
     tolower()
 
 
-
-  if(!ext %in% c("csv", "xls", "xlsx", "sav")){
-
-    msg <- glue("File type '{ext}' type not supported yet.")
-
-    if(hard_stop) stop(msg)
-
-    if(warning) stop(msg)
-
+  # Check supported file types
+  if (!ext %in% c("csv", "xls", "xlsx", "sav")) {
+    msg <- glue::glue("File type '{ext}' not supported yet.")
+    if (hard_stop) stop(msg)
+    if (warning) warning(msg)
+    return(NULL)
   }
 
 
-
+  # Read file based on extension
   df <- switch(
-
     ext,
-
-    csv = read.csv(
-      file = path,
-      stringsAsFactors = FALSE
-    ),
-
+    csv = read.csv(file = path, stringsAsFactors = FALSE),
     xls = read_xl(
-      path = path,
-      sheet = sheet,
-      range = range,
-      col_names = col_names,
-      col_types = col_types,
+      path = path, sheet = sheet, range = range,
+      col_names = col_names, col_types = col_types,
       clean_col_names = clean_col_names
     ),
-
     xlsx = read_xl(
-      path = path,
-      sheet = sheet,
-      range = range,
-      col_names = col_names,
-      col_types = col_types,
+      path = path, sheet = sheet, range = range,
+      col_names = col_names, col_types = col_types,
       clean_col_names = clean_col_names
     ),
-
-    sav = haven::read_sav(
-      file = path
-    ),
-
+    sav = haven::read_sav(file = path),
     NULL
-
   ) %>%
-    as_tibble() %>%
+    dplyr::as_tibble() %>%
     suppressWarnings()
 
 
-
-  if(ext == "sav"){
+  # Process SPSS (.sav) files
+  if (ext == "sav") {
     dictionary <- df %>%
       labelled::look_for() %>%
-      as_tibble %>%
-      mutate(
-        value_labels = value_labels %>%
-          map(~paste( .x, names(.x), sep = " = ", collapse = ", ")) %>%
+      dplyr::as_tibble() %>%
+      dplyr::mutate(
+        value_labels = purrr::map(value_labels, ~ paste(.x, names(.x), sep = " = ", collapse = ", ")) %>%
           unlist()
       ) %>%
-      select(-levels)
+      dplyr::select(-levels)
 
     df <- df %>% haven::zap_labels()
   }
 
 
-
-  if(clean_col_names){
+  # Optionally clean column names
+  if (clean_col_names) {
     df <- df %>% names_clean()
-
-    if(ext == "sav"){
+    if (ext == "sav") {
       dictionary <- dictionary %>%
-        mutate(
-          variable = variable %>% names_clean()
-        )
+        dplyr::mutate(variable = variable %>% names_clean())
     }
   }
 
 
-
-  if(ext == "sav"){
-    output <- list(
-      df = df,
-      dictionary = dictionary
-    )
-  }else{
-    if(always_list){
-      output <- list(
-        df = df,
-        dictionary = NULL
-      )
-    }else{
+  # Determine output
+  if (ext == "sav") {
+    output <- list(df = df, dictionary = dictionary)
+  } else {
+    if (always_list) {
+      output <- list(df = df, dictionary = NULL)
+    } else {
       output <- df
     }
   }
 
-
-
   return(output)
-
 }

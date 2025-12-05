@@ -22,30 +22,47 @@ bn_finalize <- function(
     save_visuals = TRUE
 ){
 
+  work::start()
+
   traditional_driver_engine <- match.arg(traditional_driver_engine)
   community_score_by <- match.arg(community_score_by)
   node_label_type <- match.arg(node_label_type)
 
 
+  redo_bn_obj <- FALSE
+
+
   dictionary <- dictionary_from_named_object(dictionary)
 
 
-  if("meta" %in% names(obj)){
 
-    #logic for bn_tan return objects
+
+  if("meta" %in% names(obj)){
 
     if(obj[["meta"]][["analysis"]] == "bn_model_single"){
 
       if(!is.null(manual_groups)){
 
-        obj[["viz_prep"]] <- bn_to_netviz_prep(
-          bn = obj,
-          dictionary = dictionary,
-          node_label_type = node_label_type,
-          manual_groups = manual_groups,
-          on_exit_detach_igraph = FALSE
-        )
+        if(obj[["summary"]][["nodes"]][["vars"]][[1]] == dv){
 
+          obj[["viz_prep"]] <- bn_to_netviz_prep(
+            obj = obj,
+            dictionary = dictionary,
+            node_label_type = node_label_type,
+            manual_groups = manual_groups,
+            on_exit_detach_igraph = FALSE
+          )
+
+        }
+
+      }else if(obj$summary$nodes[[1, "vars"]] != dv){
+
+        obj <- obj[["viz_prep"]]
+
+        redo_bn_obj <- TRUE
+
+      }else{
+        stop("Unknown situation being passed to the obj parameter.")
       }
     }
 
@@ -55,38 +72,47 @@ bn_finalize <- function(
 
     if(all(c("nodes", "edges") %in% names(obj))){
 
-      xnodes <- obj[["nodes"]]
-      xedges <- obj[["edges"]]
-      xivs <- obj[["nodes"]][["id"]] %>% unlist() %>% as.character() %>% setNames(NULL)
 
+      redo_bn_obj <- TRUE
 
-      black_list <- xivs %>%
-        list(., .) %>%
-        map_dfr(make_arcs)
-
-
-      if("community_name" %in% names(xnodes) && is.null(manual_groups)){
-        manual_groups <- xnodes
-      }
-
-
-      obj <- bn_tan(
-        df = df,
-        dv = dv,
-        ivs = xivs,
-        white_list = xedges %>% select(from, to),
-        black_list = black_list,
-        dictionary = dictionary,
-        cross_battery_first = FALSE,
-        suppress_bn_warning = TRUE,
-        node_label_type = node_label_type,
-        manual_groups = manual_groups,
-        on_exit_detach_igraph = FALSE
-      )
 
     }else{
       stop("Unknown object being passed to the obj parameter.")
     }
+  }
+
+
+
+
+  if(redo_bn_obj){
+
+    xnodes <- obj[["nodes"]]
+    xedges <- obj[["edges"]]
+    xivs <- obj[["nodes"]][["id"]] %>% unlist() %>% as.character() %>% setNames(NULL)
+
+
+    if("community_name" %in% names(xnodes) && is.null(manual_groups)){
+      manual_groups <- xnodes
+    }
+
+    black_list <- xivs %>%
+      list(., .) %>%
+      map_dfr(make_arcs)
+
+    obj <- bn_tan(
+      df = df,
+      dv = dv,
+      ivs = xivs,
+      white_list = xedges %>% select(from, to),
+      black_list = black_list,
+      dictionary = dictionary,
+      cross_battery_priority = FALSE,
+      suppress_bn_warning = TRUE,
+      node_label_type = node_label_type,
+      manual_groups = manual_groups,
+      on_exit_detach_igraph = FALSE
+    )
+
   }
 
 
@@ -126,7 +152,7 @@ bn_finalize <- function(
       black_list = black_list,
       dictionary = dictionary,
       manual_groups = manual_groups,
-      cross_battery_first = FALSE,
+      cross_battery_priority = FALSE,
       compare_to_niave = TRUE,
       suppress_bn_warning = TRUE,
       on_exit_detach_igraph = FALSE

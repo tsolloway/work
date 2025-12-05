@@ -12,10 +12,24 @@ get_path(
 )
 }
 \arguments{
-\item{edit_file}{Logical. If true, opens a file for editing in RStudio.}
+\item{type}{Character; path type to return. Choices: "home", "r_home", "environment", "profile",
+"makevars", "preference_rstudio", "snippets_r", "git", "onedrive", "downloads", "desktop".}
 
-\item{typer}{Character. Path type to be returned.}
+\item{edit_file}{Logical; if TRUE, opens the file in RStudio editor (interactive sessions only).}
+
+\item{scope}{Character; "user" or "project" scope for environment/profile files.}
+}
+\value{
+Character string with the path.
 }
 \description{
-Returns R system utility paths
+Returns R system utility paths, optionally opening for editing.
+}
+\examples{
+\dontrun{
+get_path("home")
+get_path("profile", edit_file = TRUE)
+get_path("downloads")
+}
+
 }

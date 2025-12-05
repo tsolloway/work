@@ -4,8 +4,18 @@
 \alias{oxl_colorscale_good}
 \title{oxl_colorscale_good}
 \usage{
-oxl_colorscale_good(x = as.character(c(1, 2)))
+oxl_colorscale_good(x = c("1", "2"))
+}
+\arguments{
+\item{x}{Character or numeric, one of 1,2.}
+}
+\value{
+Hex color code as character.
 }
 \description{
-oxl_colorscale_good
+Returns “good” colors (green scale) for ordinal scales (1-2).
+}
+\examples{
+oxl_colorscale_good(1)
+oxl_colorscale_good("2")
 }

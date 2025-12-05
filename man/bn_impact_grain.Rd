@@ -2,18 +2,72 @@
 % Please edit documentation in R/bn_impact_grain.r
 \name{bn_impact_grain}
 \alias{bn_impact_grain}
-\title{bn_impact_grain}
+\title{Combine and Summarize Impact Estimates Across BN Subgroups}
 \usage{
 bn_impact_grain(
-  bn,
+  bn_final,
   df,
-  ivs = NULL,
+  community_assignment = NULL,
+  dictionary = NULL,
   n_boot = 1,
-  return_dv_estimate = FALSE,
   use_parallel = FALSE,
   do_community = FALSE
 )
 }
+\arguments{
+\item{bn_final}{A list-like object from a higher-level BN segmentation or
+ensemble analysis, containing a \code{bn_subgroups} element — a named list of
+Bayesian network objects (one per subgroup).}
+
+\item{df}{Data frame used for inference. Must contain subgroup indicator
+variables matching the names of \code{bn_subgroups}, with binary (0/1) flags.}
+
+\item{n_boot}{Integer. Number of bootstrap replicates to pass to
+\code{\link[=bn_impact_grain]{bn_impact_grain()}}. Defaults to 1 (no bootstrapping).}
+
+\item{use_parallel}{Logical. If \code{TRUE}, evaluates subgroup impacts in parallel
+using \code{furrr} with a multisession plan.}
+
+\item{do_community}{Logical. If \code{TRUE}, computes community-level impacts
+instead of variable-level impacts.}
+}
+\value{
+A tibble with one row per variable or community, and one set of impact columns
+(e.g., \code{subgroup1_estimate}, \code{subgroup2_estimate}, etc.) per subgroup.
+
+If \code{do_community = TRUE}, the first column will be named \code{Community}; otherwise,
+it is named \code{Variable}.
+}
 \description{
-bn_impact_grain
+Aggregates results from multiple subgroup-level Bayesian networks (BNs)
+produced by a prior segmentation or multi-BN analysis. For each subgroup BN,
+it computes variable (or community) impacts via \code{\link[=bn_impact_grain]{bn_impact_grain()}}
+and merges the results into a unified, wide-format summary table.
+}
+\details{
+For each subgroup (each element of \code{bn_final[["bn_subgroups"]]}), the function:
+\enumerate{
+\item Filters \code{df} to rows where the subgroup indicator equals 1.
+\item Calls \code{\link[=bn_impact_grain]{bn_impact_grain()}} to estimate impacts.
+\item Renames columns to prefix each subgroup’s name.
+}
+
+All subgroup outputs are then merged using \code{dplyr::full_join()} on the common
+variable (or community) column, producing a single summary table.
+}
+\examples{
+\dontrun{
+# Example: Combine results across multiple subgroup BNs
+result <- work::bn_impact_grain(
+  bn_final = bn_multi_segmentation,
+  df = df_segmented,
+  n_boot = 10,
+  use_parallel = TRUE,
+  do_community = TRUE
+)
+}
+
+}
+\seealso{
+\code{\link[=bn_impact_grain]{bn_impact_grain()}}, \code{\link[=bn_engine]{bn_engine()}}
 }

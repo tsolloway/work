@@ -1,8 +1,13 @@
 #' start
-#' @description loads common libraries
-#' @param lib_sales_force logical on whether to include salesforcer
-#' @param lib_dev logical on whether to include dev packages
-#' @param lib_future logical on whether to include future packages
+#' @description Loads common libraries for work. Stops if a required package is not installed.
+#' @param lib_sales_force Logical; include salesforcer.
+#' @param lib_dev Logical; include dev packages.
+#' @param lib_oxl Logical; include openxlsx.
+#' @param lib_future Logical; include future and future.apply.
+#' @param lib_azure Logical; include AzureStor.
+#' @param lib_viz Logical; include highcharter.
+#' @param lib_shiny_reporter Logical; include Shiny + supporting packages.
+#' @param .quietly Logical; suppress messages from library().
 #' @export
 start <- function(
     lib_sales_force = FALSE,
@@ -13,52 +18,48 @@ start <- function(
     lib_viz = FALSE,
     lib_shiny_reporter = FALSE,
     .quietly = TRUE
-){
+) {
 
-  require(work, quietly = .quietly, warn.conflicts = !.quietly)
-  require(dplyr, quietly = .quietly, warn.conflicts = !.quietly)
-  require(purrr, quietly = .quietly, warn.conflicts = !.quietly)
-  require(magrittr, quietly = .quietly, warn.conflicts = !.quietly)
-  require(glue, quietly = .quietly, warn.conflicts = !.quietly)
+  # Core packages
+  pkgs_to_load <- c("work", "dplyr", "purrr", "magrittr", "glue")
+
+  if (lib_sales_force) {
+    pkgs_to_load <- c(pkgs_to_load, "salesforcer")
+  }
+
+  if (lib_dev) {
+    pkgs_to_load <- c(pkgs_to_load, "tictoc")
+  }
+
+  if (lib_oxl) {
+    pkgs_to_load <- c(pkgs_to_load, "openxlsx")
+  }
+
+  if (lib_future) {
+    pkgs_to_load <- c(pkgs_to_load, "future", "future.apply")
+  }
+
+  if (lib_azure) {
+    pkgs_to_load <- c(pkgs_to_load, "AzureStor")
+  }
+
+  if (lib_viz) {
+    pkgs_to_load <- c(pkgs_to_load, "highcharter")
+  }
+
+  if (lib_shiny_reporter) {
+    shiny_pkgs <- c("shiny", "bs4Dash", "bslib", "auth0", "fresh", "waiter", "highcharter", "DT")
+    pkgs_to_load <- c(pkgs_to_load, shiny_pkgs)
+  }
 
 
-  if(lib_sales_force){
-    require(salesforcer, quietly = .quietly, warn.conflicts = !.quietly)
+  purrr::walk(pkgs_to_load, load_or_stop)
+
+
+  if (lib_sales_force) {
     salesforcer::sf_auth()
   }
 
 
-  if(lib_dev){
-    require(tictoc, quietly = .quietly, warn.conflicts = !.quietly)
-  }
-
-  if(lib_oxl){
-    require(openxlsx, quietly = .quietly, warn.conflicts = !.quietly)
-  }
-
-  if(lib_future){
-    require(future, quietly = .quietly, warn.conflicts = !.quietly)
-    require(future.apply, quietly = .quietly, warn.conflicts = !.quietly)
-  }
-
-  if(lib_azure){
-    require(AzureStor, quietly = .quietly, warn.conflicts = !.quietly)
-  }
-
-  if(lib_viz){
-    require(highcharter, quietly = .quietly, warn.conflicts = !.quietly)
-  }
-
-  if(lib_shiny_reporter){
-    require(shiny, quietly = .quietly, warn.conflicts = !.quietly)
-    require(bs4Dash, quietly = .quietly, warn.conflicts = !.quietly)
-    require(bslib, quietly = .quietly, warn.conflicts = !.quietly)
-    require(auth0, quietly = .quietly, warn.conflicts = !.quietly)
-    require(fresh, quietly = .quietly, warn.conflicts = !.quietly)
-    require(waiter, quietly = .quietly, warn.conflicts = !.quietly)
-    require(highcharter, quietly = .quietly, warn.conflicts = !.quietly)
-    require(DT, quietly = .quietly, warn.conflicts = !.quietly)
-  }
-
+  invisible(pkgs_to_load)
 }
-

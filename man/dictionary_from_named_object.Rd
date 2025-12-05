@@ -2,10 +2,47 @@
 % Please edit documentation in R/dictionary_from_named_object.R
 \name{dictionary_from_named_object}
 \alias{dictionary_from_named_object}
-\title{dictionary_from_named_object}
+\title{Create a standard dictionary data frame from various named objects}
 \usage{
 dictionary_from_named_object(dictionary)
 }
+\arguments{
+\item{dictionary}{A named object to convert. Can be:
+\itemize{
+\item \code{NULL}: returns \code{NULL}
+\item \code{data.frame} or \code{tibble}: should contain a \code{label} column; labels are trimmed
+\item \code{list} or \verb{named vector}: converts to a data frame with names as \code{var} and values as \code{label}
+\item \verb{character vector}: names become \code{var}, values become \code{label}; unnamed vectors get names assigned automatically
+}}
+}
+\value{
+A tibble with columns \code{var} and \code{label}, or \code{NULL} if input is \code{NULL}.
+}
 \description{
-dictionary_from_named_object
+Converts a named object (list, character vector, or data frame/tibble) into a standardized
+dictionary data frame with columns \code{var} (variable name) and \code{label} (human-readable label).
+
+This is useful for preparing variable labels for plotting, tables, or network visualization.
+}
+\examples{
+# Named character vector
+dict_char <- c(Sepal.Length = "Sepal Length", Petal.Width = "Petal Width")
+dictionary_from_named_object(dict_char)
+
+# Unnamed character vector
+dict_unnamed <- c("A", "B")
+dictionary_from_named_object(dict_unnamed)
+
+# List
+dict_list <- list(Sepal.Length = "Sepal Length", Petal.Width = "Petal Width")
+dictionary_from_named_object(dict_list)
+
+# Data frame / tibble
+dict_df <- tibble::tibble(var = c("Sepal.Length", "Petal.Width"),
+                          label = c("Sepal Length", "Petal Width"))
+dictionary_from_named_object(dict_df)
+
+# NULL input
+dictionary_from_named_object(NULL)
+
 }

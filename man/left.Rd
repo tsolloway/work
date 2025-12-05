@@ -7,10 +7,18 @@
 left(x, n = 1)
 }
 \arguments{
-\item{x}{Character / string of single length}
+\item{x}{Character vector. Each element will be truncated to its leftmost \code{n} characters.}
 
-\item{n}{Integer of how many n characters to return}
+\item{n}{Integer scalar specifying how many characters to return from the left.}
+}
+\value{
+A character vector of the same length as \code{x}, where each element is truncated to \code{n} leftmost characters.
 }
 \description{
-Returns left n characters of single string
+Returns the leftmost \code{n} characters of a string (or each element of a character vector).
+}
+\examples{
+left("abcdef", 3)
+left(c("apple", "banana", "cherry"), 2)
+
 }

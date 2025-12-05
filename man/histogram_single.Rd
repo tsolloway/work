@@ -2,7 +2,7 @@
 % Please edit documentation in R/hc_histogram.R
 \name{histogram_single}
 \alias{histogram_single}
-\title{histogram_single}
+\title{Create a single Highcharter histogram}
 \usage{
 histogram_single(
   x,
@@ -20,6 +20,36 @@ histogram_single(
     "sparkline_vb", "superheroes", "tufte", "tufte2")
 )
 }
+\arguments{
+\item{x}{Numeric or factor vector.}
+
+\item{title}{Chart title.}
+
+\item{title_x_axis}{X-axis title.}
+
+\item{title_y_axis}{Y-axis title. Defaults to \code{"Frequency"}.}
+
+\item{likert}{Logical; force Likert treatment. If \code{NULL}, automatically determined.}
+
+\item{arbitrary_likert_cutoff}{Integer; maximum number of unique values to consider Likert. Default 13.}
+
+\item{default_file_name}{Filename used for exporting. Default \code{"filename"}.}
+
+\item{width, height}{Chart size in pixels.}
+
+\item{theme}{Highcharter theme name; see \code{hc_theme_picker()}.}
+}
+\value{
+A \code{highchart} object.
+}
 \description{
-histogram_single
+Creates a histogram (or Likert-style column chart) for a single variable using \code{highcharter}.
+Automatically detects Likert-type variables based on the number of unique values.
+}
+\examples{
+\dontrun{
+histogram_single(1:10)
+histogram_single(iris$Sepal.Length)
+}
+
 }

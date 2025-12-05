@@ -1,19 +1,42 @@
 #' read_xl
-#' @description reads in excel files
-#' @param path Path to the xls/xlsx file.
-#' @param sheet Sheet to read. Either a string (the name of a sheet), or an integer (the position of the sheet). Ignored if the sheet is specified via range. If neither argument specifies the sheet, defaults to the first sheet.
-#' @param range A cell range to read from, as described in cell-specification. Includes typical Excel ranges like "B3:D87", possibly including the sheet name like "Budget!B2:G14", and more. Interpreted strictly, even if the range forces the inclusion of leading or trailing empty rows or columns. Takes precedence over skip, n_max and sheet.
-#' @param col_names TRUE to use the first row as column names, FALSE to get default names, or a character vector giving a name for each column. If user provides col_types as a vector, col_names can have one entry per column, i.e. have the same length as col_types, or one entry per unskipped column.
-#' @param col_types Either NULL to guess all from the spreadsheet or a character vector containing one entry per column from these options: "skip", "guess", "logical", "numeric", "date", "text" or "list". If exactly one col_type is specified, it will be recycled. The content of a cell in a skipped column is never read and that column will not appear in the data frame output. A list cell loads a column as a list of length 1 vectors, which are typed using the type guessing logic from col_types = NULL, but on a cell-by-cell basis.
-#' @param clean_col_names logical on whether to clean the column names.
+#'
+#' @description Reads an Excel file (`.xls` or `.xlsx`) into a tibble.
+#' Optionally cleans column names after reading.
+#'
+#' @param path Path to the Excel file.
+#' @param sheet Sheet to read. Either a string (sheet name) or integer (sheet index). Ignored if `range` is specified. Defaults to the first sheet if not provided.
+#' @param range Cell range to read, e.g. `"B3:D87"` or `"Budget!B2:G14"`. Takes precedence over `sheet`.
+#' @param col_names Logical or character vector. Use first row as column names (`TRUE`), default names (`FALSE`), or custom names.
+#' @param col_types NULL (guess types) or a character vector specifying column types (`"skip"`, `"guess"`, `"logical"`, `"numeric"`, `"date"`, `"text"`, `"list"`). Single values are recycled.
+#' @param clean_col_names Logical. If `TRUE`, column names are cleaned using `names_clean()`.
+#'
+#' @return A tibble containing the Excel data.
+#'
+#' @examples
+#' \dontrun{
+#' # Read first sheet and clean column names
+#' df <- read_xl("data.xlsx")
+#'
+#' # Read specific sheet by name
+#' df <- read_xl("data.xlsx", sheet = "Budget")
+#'
+#' # Read a specific range
+#' df <- read_xl("data.xlsx", range = "B3:D20")
+#'
+#' # Do not clean column names
+#' df <- read_xl("data.xlsx", clean_col_names = FALSE)
+#' }
+#'
 #' @export
 read_xl <- function(
     path, sheet = NULL,
     clean_col_names = TRUE,
     range = NULL,
     col_names = TRUE,
-    col_types = NULL){
+    col_types = NULL
+) {
 
+  # Read the Excel file
   df <- readxl::read_excel(
     path = path,
     sheet = sheet,
@@ -24,9 +47,12 @@ read_xl <- function(
     tibble::as_tibble() %>%
     suppressWarnings()
 
-  if(clean_col_names){
+
+  # Optionally clean column names
+  if (clean_col_names) {
     df <- df %>% names_clean()
   }
+
 
   df
 }

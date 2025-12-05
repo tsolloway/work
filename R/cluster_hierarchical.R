@@ -3,6 +3,7 @@
 #' @export
 cluster_hierarchical <- function(
     df, vars, vars_profiles, solution_name,
+    solution_name_prefix = "hierarchical",
     resp_id_name = NULL,
     filter_name = NULL,
     n_min = 4,
@@ -12,11 +13,12 @@ cluster_hierarchical <- function(
     iter_max = 100000,
     nstart = 10,
     lda_vars = NULL,
-    lda_vars_profiles = NULL
+    lda_vars_profiles = NULL,
+    seed = 1
 ){
 
 
-  set.seed(1)
+  if(!is.null(seed)) set.seed(seed)
 
   priors <- match.arg(priors)
 
@@ -50,14 +52,14 @@ cluster_hierarchical <- function(
   }
 
 
-  set.seed(1)
+  if(!is.null(seed)) set.seed(seed)
   hierarchical_fit <- stats::hclust(stats::dist(df_temp))
 
 
   result <- tibble::tibble("n" = n_min : n_max) %>%
     mutate(
       "solution_name" = solution_name,
-      "cluster_name" = glue("hierarchical_cluster_{solution_name}{n}"),
+      "cluster_name" = glue("{solution_name_prefix}_{solution_name}{n}"),
       "inputs" = list(vars),
       "profiles" = list(vars_profiles),
       "cluster_seed" = purrr::map2(
@@ -71,8 +73,8 @@ cluster_hierarchical <- function(
       "priors_equal" = purrr::map(n, ~rep(1/.x, .x)),
       "priors_size" = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
       "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, possibly(~{
-        set.seed(1)
-        cluster_reduce_vars(df_temp, reduced_vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE)
+        if(!is.null(seed)) set.seed(seed)
+        cluster_reduce_vars(df_temp, reduced_vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE, seed = seed)
         }, otherwise = NA)),
       "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, reduced_vars)])
     )
@@ -87,7 +89,7 @@ cluster_hierarchical <- function(
   }
 
 
-  set.seed(1)
+  if(!is.null(seed)) set.seed(seed)
   result_all <- result %>%
     cluster_add_lda(
       df = df,
@@ -99,7 +101,7 @@ cluster_hierarchical <- function(
       lda_vars_profiles = reduced_vars_profiles
     )
 
-  set.seed(1)
+  if(!is.null(seed)) set.seed(seed)
   result_reduced <- result %>%
     cluster_add_lda(
       df = df,

@@ -17,10 +17,35 @@ str_scrub(
 )
 }
 \arguments{
-\item{x}{Character / string vector}
+\item{x}{Character vector to scrub.}
 
-\item{replacement}{Integer of how many n characters to return}
+\item{replacement}{Character string used to replace spaces. Default "_".}
+
+\item{make_lowercase}{Logical; if TRUE, converts text to lowercase. Default TRUE.}
+
+\item{return_on_error}{Logical; if TRUE, returns input with warning on error, else stops.}
+
+\item{fill_na}{Optional value to replace NA elements.}
+
+\item{fill_null}{Optional value to replace NULL elements.}
+
+\item{keep}{Optional character to retain even if it is punctuation.}
+
+\item{remove_all_spaces}{Logical; if TRUE, replaces spaces with \code{replacement}. Default TRUE.}
+
+\item{remove_utf8}{Logical; if TRUE, removes non-ASCII characters. Default TRUE.}
+}
+\value{
+A character vector with cleaned/scrubbed elements.
 }
 \description{
-Returns a scrubbed string
+Cleans and standardizes a character vector by removing punctuation, extra spaces,
+UTF-8 characters, and optionally converting to lowercase. Spaces can be replaced
+with a custom string. Supports filling NA or NULL values.
+}
+\examples{
+str_scrub("Hello, World!")
+str_scrub(c("A B", "C&D"), replacement = "-")
+str_scrub("Äccent ütf8", remove_utf8 = TRUE)
+
 }

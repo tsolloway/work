@@ -1,7 +1,21 @@
 #' get_path
-#' @description Returns R system utility paths
-#' @param typer Character. Path type to be returned.
-#' @param edit_file Logical. If true, opens a file for editing in RStudio.
+#'
+#' @description Returns R system utility paths, optionally opening for editing.
+#'
+#' @param type Character; path type to return. Choices: "home", "r_home", "environment", "profile",
+#'             "makevars", "preference_rstudio", "snippets_r", "git", "onedrive", "downloads", "desktop".
+#' @param edit_file Logical; if TRUE, opens the file in RStudio editor (interactive sessions only).
+#' @param scope Character; "user" or "project" scope for environment/profile files.
+#'
+#' @return Character string with the path.
+#'
+#' @examples
+#' \dontrun{
+#' get_path("home")
+#' get_path("profile", edit_file = TRUE)
+#' get_path("downloads")
+#' }
+#'
 #' @export
 get_path <- function(
     type = c(
@@ -12,96 +26,39 @@ get_path <- function(
     edit_file = FALSE,
     scope = c("user", "project")
 ){
-
-  # type = "downloads"
-  # scope = "user"
-
   type <- match.arg(type)
-
   scope <- match.arg(scope)
-
 
   path <- switch(
     type,
-    "home" = Sys.getenv("HOME"),
-    "r_home" = Sys.getenv("R_HOME"),
-    "environment" = usethis:::scoped_path_r(scope, ".Renviron", envvar = "R_ENVIRON_USER"),
-    "profile" = usethis:::scoped_path_r(scope, ".Rprofile", envvar = "R_ENVIRON_USER"),
-    "makevars" = usethis:::scoped_path_r(scope, ".R", "Makevars"),
-    "preference_rstudio" = usethis:::rstudio_config_path("rstudio-prefs.json"),
-    "snippets_r" = usethis:::rstudio_config_path("snippets", "r.snippets"),
-    "git" = Sys.getenv("path_git_directory"),
-
-    "onedrive" = {
-
-      if( get_os() == "windows" ){
-        temp <- shell('Dir "%OneDrive%"', intern = TRUE)
-
-        temp[grepl("Directory of", temp, ignore.case = TRUE)] %>%
-          gsub("Directory of", "", ., ignore.case = TRUE) %>%
-          trimws()
-      }
-    },
-
-    "downloads" = {
-      if( get_os() == "windows" ){
-
-        temp <- shell('Dir "%userprofile%/Downloads"', intern = TRUE)
-
-        temp[grepl("Directory of", temp, ignore.case = TRUE)] %>%
-          gsub("Directory of", "", ., ignore.case = TRUE) %>%
-          trimws()
-      }else if( get_os() == "macos" ){
-        "~/Downloads/"
-      }
-    },
-
-    "desktop" = {
-      if( get_os() == "windows" ){
-
-        temp <- shell('Dir "%OneDrive%/Desktop"', intern = TRUE)
-
-        temp[grepl("Directory of", temp, ignore.case = TRUE)] %>%
-          gsub("Directory of", "", ., ignore.case = TRUE) %>%
-          trimws()
-      }else if( get_os() == "macos" ){
-        "~/Desktop/"
-      }
-    }
+    home = Sys.getenv("HOME"),
+    r_home = Sys.getenv("R_HOME") %||% R.home(),
+    environment = usethis::r_env_path(scope),
+    profile = usethis::r_profile_path(scope),
+    makevars = file.path(Sys.getenv("HOME"), ".R", "Makevars"),
+    preference_rstudio = file.path(usethis::rstudio_config_dir(), "rstudio-prefs.json"),
+    snippets_r = file.path(usethis::rstudio_config_dir(), "snippets", "r.snippets"),
+    git = Sys.getenv("path_git_directory"),
+    onedrive = Sys.getenv("OneDrive") %||% stop("OneDrive path not set."),
+    downloads = if (get_os() == "windows") file.path(Sys.getenv("USERPROFILE"), "Downloads") else "~/Downloads",
+    desktop = if (get_os() == "windows") file.path(Sys.getenv("OneDrive") %||% Sys.getenv("USERPROFILE"), "Desktop") else "~/Desktop"
   )
 
-
-  if(
-    (
-      type == "environment" || type == "profile" ||
-      type == "preference_rstudio" || type == "snippets_r"
-    ) &&
-    !file.exists(path)
-  ){
-
-    path %>% file.create()
-
+  # Ensure file exists for editable types
+  if (type %in% c("environment", "profile", "preference_rstudio", "snippets_r") && !file.exists(path)) {
+    file.create(path)
   }
 
-
-
-  if( type == "git" && ( !is_truthy(path) || !dir.exists(path) ) ){
-
-    stop("git path not set or is not valid. Please use `work::set_r_environment('git_local_dir')`")
-
-  }else{
-
-    path <- path %>% normalizePath(mustWork = TRUE, winslash = "/")
+  # Validate git path
+  if (type == "git" && (!is_truthy(path) || !dir.exists(path))) {
+    stop("Git path not set or invalid. Use `work::set_r_environment('git_local_dir')`")
   }
 
+  path <- normalizePath(path, mustWork = FALSE, winslash = "/")
 
-
-  if(edit_file && type != "home" && type != "r_home"){
-
-    path %>% usethis::edit_file()
-
-  }else{
-
-    return(path)
+  if (edit_file && interactive() && !type %in% c("home", "r_home")) {
+    usethis::edit_file(path)
   }
+
+  path
 }

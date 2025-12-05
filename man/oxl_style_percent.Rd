@@ -2,10 +2,23 @@
 % Please edit documentation in R/oxl_style.R
 \name{oxl_style_percent}
 \alias{oxl_style_percent}
-\title{oxl_style_percent}
+\title{Percent cell style}
 \usage{
-oxl_style_percent(deciminal = 0, halign = oxl_opt_halign(), ...)
+oxl_style_percent(decimal = 0, halign = oxl_opt_halign(), ...)
+}
+\arguments{
+\item{decimal}{Number of decimal places.}
+
+\item{halign}{Horizontal alignment.}
+
+\item{...}{Additional arguments passed to \code{openxlsx::createStyle}.}
+}
+\value{
+An \code{openxlsx} style object.
 }
 \description{
-oxl_style_percent
+Creates a percentage cell style with specified decimal places and alignment.
+}
+\examples{
+oxl_style_percent(1)
 }

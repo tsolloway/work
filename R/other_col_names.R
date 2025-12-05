@@ -1,16 +1,28 @@
 #' other_col_names
-#' @description other_col_names
+#'
+#' @description Returns the names of all columns in a data frame except those specified.
+#' Works nicely with the tidyverse pipe (`%>%`) and quasiquotation.
+#'
+#' @param .data A data frame or tibble.
+#' @param ... Column names to exclude (unquoted).
+#'
+#' @return A character vector of column names not specified in `...`.
+#'
 #' @examples
-#' iris %>% other_col_names(Species, hi, Petal.Length)
+#' # Exclude 'Species' and 'Sepal.Length' from iris
+#' iris %>% other_col_names(Species, Sepal.Length)
+#'
+#' # Can also use with a single column
+#' iris %>% other_col_names(Petal.Width)
+#'
 #' @export
-other_col_names <- function(.data, ...){
+other_col_names <- function(.data, ...) {
+  # Capture columns to exclude
+  excluded <- rlang::enquos(...) %>% purrr::map(rlang::quo_get_expr) %>% unlist()
 
-  x <- rlang::enquos(...)
+  # Get all column names
+  cols <- colnames(.data)
 
-  not_col_names <- purrr::map(x, rlang::quo_get_expr) %>% unlist()
-
-  col_names <- .data %>% colnames()
-
-  col_names[!col_names %in% not_col_names]
+  # Return those not in excluded
+  cols[!cols %in% excluded]
 }
-

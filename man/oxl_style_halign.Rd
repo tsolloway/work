@@ -2,10 +2,21 @@
 % Please edit documentation in R/oxl_style.R
 \name{oxl_style_halign}
 \alias{oxl_style_halign}
-\title{oxl_style_halign}
+\title{Horizontal alignment cell style}
 \usage{
 oxl_style_halign(halign = oxl_opt_halign(), ...)
 }
+\arguments{
+\item{halign}{Horizontal alignment. One of \code{oxl_opt_halign()}.}
+
+\item{...}{Additional arguments passed to \code{openxlsx::createStyle}.}
+}
+\value{
+An \code{openxlsx} style object.
+}
 \description{
-oxl_style_halign
+Creates a cell style with specified horizontal alignment.
+}
+\examples{
+oxl_style_halign("left")
 }

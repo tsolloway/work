@@ -6,6 +6,12 @@
 \usage{
 last_month(part = c("number", "start", "end"))
 }
+\arguments{
+\item{part}{One of \code{"number"}, \code{"start"}, or \code{"end"}.}
+}
+\value{
+The month number or a \code{Date} for the start or end of the previous month.
+}
 \description{
-last_month
+Returns information about the previous month.
 }

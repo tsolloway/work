@@ -6,6 +6,31 @@
 \usage{
 bn_community_color(grp_max, na_rm = FALSE)
 }
+\arguments{
+\item{grp_max}{Integer or numeric vector. Either the total number of communities or
+a vector of group labels.}
+
+\item{na_rm}{Logical (default = FALSE). If TRUE, \code{NA} values are ignored when determining
+the maximum group number.}
+}
+\value{
+A tibble with columns:
+\describe{
+\item{group}{Group number from 1 to the maximum number of communities.}
+\item{color}{Hex color code assigned to that group.}
+}
+}
 \description{
-bn_community_color
+Generates a tibble mapping community group numbers to colors for network visualization.
+Supports both small (<=8) and large (>8) numbers of communities.
+}
+\details{
+For small numbers of groups (<= 8), the function uses the discrete Set2 palette from \code{RColorBrewer}.
+For 9–20 groups, it interpolates Set2. For more than 20 groups, it uses \code{scales::hue_pal()} for better distinction.
+}
+\examples{
+bn_community_color(5)
+bn_community_color(c(1, 2, 3, 4, 5, 6))
+bn_community_color(25) # works well for large networks
+
 }

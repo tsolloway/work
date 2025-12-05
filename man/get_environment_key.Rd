@@ -2,10 +2,23 @@
 % Please edit documentation in R/get_environment_key.R
 \name{get_environment_key}
 \alias{get_environment_key}
-\title{get_environment_key}
+\title{Retrieve an environment key with optional interactive prompt}
 \usage{
 get_environment_key(x)
 }
+\arguments{
+\item{x}{Character. The name of the environment variable to retrieve.}
+}
+\value{
+Character string containing the key.
+}
 \description{
-get_environment_key
+Attempts to retrieve a key from the system environment using \code{Sys.getenv()}.
+If the key is not found or is empty, it prompts the user to enter it securely via \code{rstudioapi::askForPassword()}.
+}
+\examples{
+\dontrun{
+api_key <- get_environment_key("MY_API_KEY")
+}
+
 }

@@ -2,10 +2,18 @@
 % Please edit documentation in R/bn_black_list_from_white_list.R
 \name{bn_black_list_from_white_list}
 \alias{bn_black_list_from_white_list}
-\title{bn_black_list_from_white_list}
+\title{Generate a Blacklist from a White List of Nodes}
 \usage{
 bn_black_list_from_white_list(x)
 }
+\arguments{
+\item{x}{A list or vector of node names representing the whitelist.}
+}
+\value{
+A tibble with columns \code{from} and \code{to} representing the blacklist arcs.
+}
 \description{
-bn_black_list_from_white_list
+Given a list or vector of node names (a white list), this function generates
+all possible arcs between the nodes and then removes the arcs that are in the
+white list, producing a blacklist suitable for \code{bnlearn} structure learning.
 }

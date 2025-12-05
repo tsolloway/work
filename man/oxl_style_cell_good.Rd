@@ -2,10 +2,23 @@
 % Please edit documentation in R/oxl_style.R
 \name{oxl_style_cell_good}
 \alias{oxl_style_cell_good}
-\title{oxl_style_cell_good}
+\title{Good cell style}
 \usage{
 oxl_style_cell_good(halign = oxl_opt_halign(), conditional = FALSE, ...)
 }
+\arguments{
+\item{halign}{Horizontal alignment.}
+
+\item{conditional}{Logical; if TRUE, uses \code{bgFill} instead of \code{fgFill}.}
+
+\item{...}{Additional arguments passed to \code{openxlsx::createStyle}.}
+}
+\value{
+An \code{openxlsx} style object.
+}
 \description{
-oxl_style_cell_good
+Creates a “good” colored cell style. Can be conditional (bgFill) or not (fgFill).
+}
+\examples{
+oxl_style_cell_good()
 }

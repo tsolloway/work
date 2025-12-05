@@ -6,9 +6,23 @@
 \usage{
 other_col_names(.data, ...)
 }
+\arguments{
+\item{.data}{A data frame or tibble.}
+
+\item{...}{Column names to exclude (unquoted).}
+}
+\value{
+A character vector of column names not specified in \code{...}.
+}
 \description{
-other_col_names
+Returns the names of all columns in a data frame except those specified.
+Works nicely with the tidyverse pipe (\verb{\%>\%}) and quasiquotation.
 }
 \examples{
-iris \%>\% other_col_names(Species, hi, Petal.Length)
+# Exclude 'Species' and 'Sepal.Length' from iris
+iris \%>\% other_col_names(Species, Sepal.Length)
+
+# Can also use with a single column
+iris \%>\% other_col_names(Petal.Width)
+
 }

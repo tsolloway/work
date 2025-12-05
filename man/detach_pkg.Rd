@@ -2,10 +2,14 @@
 % Please edit documentation in R/detach_pkg.R
 \name{detach_pkg}
 \alias{detach_pkg}
-\title{detach_igraph}
+\title{Safely detach one or more packages}
 \usage{
-detach_pkg(x)
+detach_pkg(pkgs)
+}
+\arguments{
+\item{pkgs}{Character vector of package names to detach.}
 }
 \description{
-detach_igraph
+Detaches the specified packages if they are currently loaded.
+Uses a safe approach that won't throw errors if a package is not attached.
 }

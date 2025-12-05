@@ -9,6 +9,7 @@ cluster_medoid(
   vars,
   vars_profiles,
   solution_name,
+  solution_name_prefix = "medoid",
   resp_id_name = NULL,
   filter_name = NULL,
   n_min = 4,
@@ -18,7 +19,8 @@ cluster_medoid(
   iter_max = 1e+05,
   nstart = 10,
   lda_vars = NULL,
-  lda_vars_profiles = NULL
+  lda_vars_profiles = NULL,
+  seed = 1
 )
 }
 \description{

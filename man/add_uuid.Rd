@@ -6,6 +6,11 @@
 \usage{
 add_uuid(df, uuid_name = "uuid")
 }
+\arguments{
+\item{df}{A data frame or tibble.}
+
+\item{uuid_name}{Name of the UUID column to add (default: "uuid").}
+}
 \description{
-add_uuid
+Adds a UUID column to a data frame.
 }

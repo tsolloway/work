@@ -130,7 +130,7 @@ stack_data <- function(
   if(!is.null(subgroups)){
     df_stack <- df_stack %>%
       right_join(
-        df_flat %>%
+        df %>%
           select(all_of(c(uuid_flat, subgroups))),
         .,
         by = join_by(!!uuid_flat)
@@ -157,7 +157,7 @@ stack_data <- function(
 
 
   if(store_flat){
-    result[["df_flat"]] <- df_flat
+    result[["df_flat"]] <- df
   }
 
 

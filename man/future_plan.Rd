@@ -2,7 +2,7 @@
 % Please edit documentation in R/future_plan.R
 \name{future_plan}
 \alias{future_plan}
-\title{future_plan}
+\title{Set a parallel future plan with automatic worker handling}
 \usage{
 future_plan(
   strategy = c("multisession", "multicore", "sequential", "cluster"),
@@ -10,6 +10,29 @@ future_plan(
   ntasks = NULL
 )
 }
+\arguments{
+\item{strategy}{Character; one of \code{"multisession"}, \code{"multicore"}, \code{"sequential"}, or \code{"cluster"}.}
+
+\item{workers}{Optional integer; number of workers to use. Defaults to \code{availableCores() - 1}.}
+
+\item{ntasks}{Optional integer; if fewer than \code{workers}, the number of workers is reduced accordingly.}
+}
+\value{
+Invisibly returns the result of \code{future::plan()}.
+}
 \description{
-future_plan
+Sets a \code{future} plan for parallel computation with sensible defaults.
+Automatically determines the number of workers based on available cores and the number of tasks.
+If \code{multicore} is unsupported on the system, it falls back to \code{multisession}.
+}
+\examples{
+# Sequential plan
+future_plan("sequential")
+
+# Multisession plan with default workers
+future_plan("multisession")
+
+# Multisession plan with 4 workers
+future_plan("multisession", workers = 4)
+
 }

@@ -2,10 +2,23 @@
 % Please edit documentation in R/oxl_style.R
 \name{oxl_style_number}
 \alias{oxl_style_number}
-\title{oxl_style_number}
+\title{Numeric cell style}
 \usage{
-oxl_style_number(deciminal = 0, halign = oxl_opt_halign(), ...)
+oxl_style_number(decimal = 0, halign = oxl_opt_halign(), ...)
+}
+\arguments{
+\item{decimal}{Number of decimal places.}
+
+\item{halign}{Horizontal alignment.}
+
+\item{...}{Additional arguments passed to \code{openxlsx::createStyle}.}
+}
+\value{
+An \code{openxlsx} style object.
 }
 \description{
-oxl_style_number
+Creates a numeric cell style with specified decimal places and alignment.
+}
+\examples{
+oxl_style_number(2)
 }

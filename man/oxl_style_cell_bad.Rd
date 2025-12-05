@@ -2,10 +2,23 @@
 % Please edit documentation in R/oxl_style.R
 \name{oxl_style_cell_bad}
 \alias{oxl_style_cell_bad}
-\title{oxl_style_cell_bad}
+\title{Bad cell style}
 \usage{
 oxl_style_cell_bad(halign = oxl_opt_halign(), conditional = FALSE, ...)
 }
+\arguments{
+\item{halign}{Horizontal alignment.}
+
+\item{conditional}{Logical; if TRUE, uses \code{bgFill}.}
+
+\item{...}{Additional arguments passed to \code{openxlsx::createStyle}.}
+}
+\value{
+An \code{openxlsx} style object.
+}
 \description{
-oxl_style_cell_bad
+Creates a “bad” colored cell style.
+}
+\examples{
+oxl_style_cell_bad()
 }

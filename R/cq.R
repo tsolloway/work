@@ -1,26 +1,38 @@
 #' cq
-#' @description cq
+#'
+#' @description Concatenate values or bare symbols, preserving names and converting numeric-like inputs to numeric if possible.
+#' @param ... Values, expressions, or bare symbols.
+#' @return A vector (numeric if all inputs are numeric-like, otherwise character) with names preserved.
 #' @examples
-#' c(!!(1:4))
-#' c(!!(1:4), hi ="5")
-#' c(!!(1:4), hi ="5", foo = boo, "hello" = "world")
-cq <- function(...){
-
-  x <- rlang::enquos(...)
-
-  x <- purrr::map(x, rlang::quo_get_expr) %>% unlist()
-
-  if( purrr::map(x, ~!is.na(as.numeric(as.character(.x)))) %>% suppressWarnings() %>% unlist() %>% all() ){
-    x %>% as.numeric() %>% setNames(names(x))
-  }else{
-    x %>% as.character() %>% setNames(names(x))
-  }
-}
-
-#' cbase
-#' @description base::c()
+#' cq(!!(1:4))
+#' cq(!!(1:4), foo)
+#' cq(!!(1:4), hi = "5")
+#' cq(hi, there)
 #' @export
-cbase <- function(...){
-  .Primitive("c")
-}
+cq <- function(...) {
+  quos <- rlang::enquos(...)
 
+  # Convert symbols and literals to character
+  x <- purrr::map(quos, function(q) {
+    expr <- rlang::quo_get_expr(q)
+    if (rlang::is_symbol(expr)) {
+      as.character(expr)
+    } else {
+      expr
+    }
+  }) %>% unlist()
+
+  # Preserve names
+  nms <- names(x)
+
+  # Detect numeric-like
+  numeric_like <- suppressWarnings(!is.na(as.numeric(as.character(x))))
+
+  if (all(numeric_like)) {
+    x <- as.numeric(x)
+  } else {
+    x <- as.character(x)
+  }
+
+  setNames(x, nms)
+}

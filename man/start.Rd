@@ -16,12 +16,22 @@ start(
 )
 }
 \arguments{
-\item{lib_sales_force}{logical on whether to include salesforcer}
+\item{lib_sales_force}{Logical; include salesforcer.}
 
-\item{lib_dev}{logical on whether to include dev packages}
+\item{lib_dev}{Logical; include dev packages.}
 
-\item{lib_future}{logical on whether to include future packages}
+\item{lib_oxl}{Logical; include openxlsx.}
+
+\item{lib_future}{Logical; include future and future.apply.}
+
+\item{lib_azure}{Logical; include AzureStor.}
+
+\item{lib_viz}{Logical; include highcharter.}
+
+\item{lib_shiny_reporter}{Logical; include Shiny + supporting packages.}
+
+\item{.quietly}{Logical; suppress messages from library().}
 }
 \description{
-loads common libraries
+Loads common libraries for work. Stops if a required package is not installed.
 }

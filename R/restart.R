@@ -1,65 +1,108 @@
 #' restart
-#' @description Custom restart function that exectues common tasks
-#' @param keep Logical or character vector. TRUE is keep all objects on restart. FALSE is drop all objects on restart. Character vector specifies which objects to keep.
-#' @param run_gc Logical. If TRUE, gc() is executed after restart. Note that the gc() is executed before the session is restarted.
-#' @param restart_session Logical. IF true, the R session will be restarted
+#'
+#' @description Custom restart function that executes common tasks:
+#' removes objects, detaches packages, runs garbage collection, and optionally restarts the R session.
+#'
+#' @param keep Logical or character vector.
+#'   - `FALSE` (default) drops all objects in the global environment unless `clean = FALSE`.
+#'   - `TRUE` keeps all objects.
+#'   - Character vector specifies which objects to keep.
+#' @param run_gc Logical. If `TRUE` (default), runs `gc()` before restarting.
+#' @param clean Logical. Passed to `.rs.restartR()`. If `FALSE`, the workspace is preserved unless `keep` is a character vector specifying objects to retain.
+#' @param restart_session Logical. If `TRUE` (default), the R session is restarted.
+#' @param start_after Logical. If `TRUE` (default), executes `work::start()` after restart.
+#' @param restart_after_command Optional character vector of commands to execute after restart. If `NULL`, `work::start()` will be used if `start_after = TRUE`.
+#'
+#' @return Invisible `NULL`. The function's main effect is side-effects (cleaning environment, restarting R session).
+#'
 #' @export
 restart <- function(
-    keep = FALSE, run_gc = TRUE, clean = FALSE, restart_session = TRUE,
-    start_after = TRUE, restart_after_command = NULL
-){
+    keep = FALSE,
+    run_gc = TRUE,
+    clean = FALSE,
+    restart_session = TRUE,
+    start_after = TRUE,
+    restart_after_command = NULL
+) {
 
-
+  # Detach work package safely
   code_to_eval <- "purrr::possibly(~detach('package:work', unload = TRUE))()"
 
   environment_objects <- ls(envir = .GlobalEnv)
 
 
-  if( isFALSE(keep) ){
+  # Determine which objects to remove
+  if (isFALSE(clean)) {
 
-    code_to_eval <- c(code_to_eval, "rm(list = environment_objects, envir = .GlobalEnv)")
+    if (is.character(keep)) {
 
-  }else if( isTRUE(keep) ){
+      # Remove everything except specified objects
+      environment_objects <- setdiff(environment_objects, keep)
+      if (length(environment_objects) > 0) {
+        code_to_eval <- c(code_to_eval, "rm(list = environment_objects, envir = .GlobalEnv)")
+      }
 
-    #intentionally blank
+    } else if (isFALSE(keep)) {
 
-  }else if( is.character(keep) ){
+      # clean = FALSE and keep = FALSE → do nothing
+      # (no objects removed)
 
-    environment_objects <- setdiff(environment_objects, keep)
-    code_to_eval <- c(code_to_eval, "rm(list = environment_objects, envir = .GlobalEnv)")
+    } else if (isTRUE(keep)) {
 
-  }else{
-    stop("parameter keep isn't logical or character")
+      # Keep all objects → do nothing
+
+    }
+  } else {
+
+    # clean = TRUE → remove objects based on keep
+    if (isFALSE(keep)) {
+
+      code_to_eval <- c(code_to_eval, "rm(list = environment_objects, envir = .GlobalEnv)")
+
+    } else if (is.character(keep)) {
+
+      environment_objects <- setdiff(environment_objects, keep)
+      if (length(environment_objects) > 0) {
+        code_to_eval <- c(code_to_eval, "rm(list = environment_objects, envir = .GlobalEnv)")
+      }
+
+    } else if (isTRUE(keep)) {
+
+      # Keep all objects → do nothing
+    }
   }
 
 
-  if( run_gc ){
+  # Run garbage collection
+  if (run_gc) {
     code_to_eval <- c(code_to_eval, "gc(verbose = FALSE, reset = TRUE)")
   }
 
 
-
-  if(is.null(restart_after_command) && start_after){
+  # Set commands to run after restart
+  if (is.null(restart_after_command) && start_after) {
     restart_after_command <- "work::start()"
-  }else if(!is.null(restart_after_command) && start_after){
+  } else if (!is.null(restart_after_command) && start_after) {
     restart_after_command <- c(restart_after_command, "work::start()")
-  }else if(!start_after){
-    # do nothing
   }
 
 
+  # Restart session if requested
+  if (restart_session) {
 
-  if( restart_session && is.null(restart_after_command)){
-    code_to_eval <- c(code_to_eval, glue::glue(".rs.restartR(clean = {clean})"))
-  }else if( restart_session && !is.null(restart_after_command)){
-    code_to_eval <- c(code_to_eval, glue::glue(".rs.restartR(afterRestartCommand = {restart_after_command}, clean = {clean})"))
+    if (is.null(restart_after_command)) {
+      code_to_eval <- c(code_to_eval, glue::glue(".rs.restartR(clean = {clean})"))
+    } else {
+      after_cmd <- paste0(restart_after_command, collapse = "; ")
+      code_to_eval <- c(code_to_eval, glue::glue(".rs.restartR(afterRestartCommand = '{after_cmd}', clean = {clean})"))
+    }
   }
 
 
-  code_to_eval <- code_to_eval %>% stringi::stri_remove_empty()
+  # Remove empty lines
+  code_to_eval <- code_to_eval[stringi::stri_length(code_to_eval) > 0]
 
 
-  return(
-    eval(parse(text=code_to_eval))
-  )
+  # Execute
+  invisible(eval(parse(text = code_to_eval)))
 }

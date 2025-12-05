@@ -6,6 +6,31 @@
 \usage{
 object_name(x)
 }
+\arguments{
+\item{x}{Any R object (variable, literal, or piped object).}
+}
+\value{
+A character string with the name of the object or value.
+}
 \description{
-object_name
+Returns the name of the object passed to a function, pipe-safe.
+Handles direct calls, magrittr pipes, and character literals.
+}
+\examples{
+df <- iris
+object_name(df)
+#> "df"
+
+object_name("text")
+#> "text"
+
+df \%>\% object_name()
+#> "df"
+
+iris \%>\% head() \%>\% object_name()
+#> "iris"
+
+mtcars \%>\% head() \%>\% object_name()
+#> "mtcars"
+
 }

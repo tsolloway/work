@@ -7,8 +7,20 @@
 installed_pkgs(pkg)
 }
 \arguments{
-\item{pkg}{Character vector of packages to check to see if installed}
+\item{pkg}{Character vector of package names to check.}
+}
+\value{
+Logical vector of the same length as \code{pkg}, where each element indicates
+whether the corresponding package is installed (\code{TRUE} or \code{FALSE}).
 }
 \description{
-Checks if package is installed.
+Checks whether one or more R packages are installed.
+}
+\examples{
+# Check a single package
+installed_pkgs("ggplot2")
+
+# Check multiple packages
+installed_pkgs(c("dplyr", "bnlearn", "fakepackage"))
+
 }

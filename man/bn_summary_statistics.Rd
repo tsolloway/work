@@ -2,17 +2,50 @@
 % Please edit documentation in R/bn_summary_statistics.R
 \name{bn_summary_statistics}
 \alias{bn_summary_statistics}
-\title{bn_summary_statistics}
+\title{Summarize Bayesian Network Model Fit and Node-Level Statistics}
 \usage{
 bn_summary_statistics(
   bn,
   df,
   dv = NULL,
   fit = NULL,
-  compare_to_niave = TRUE,
-  suppress_bn_warning = FALSE
+  compare_to_naive = TRUE,
+  suppress_bn_warning = FALSE,
+  seed = 1
 )
 }
+\arguments{
+\item{bn}{A fitted or unfitted Bayesian network object (class \code{"bn"}).}
+
+\item{df}{A data frame used for scoring or fitting the Bayesian network.}
+
+\item{dv}{Optional. Character string specifying the dependent variable node to predict.}
+
+\item{fit}{Optional. A pre-fitted \code{bn.fit} object. If \code{NULL}, the network is fitted
+using \code{bn.fit(bn, df, method = "bayes")}.}
+
+\item{compare_to_naive}{Logical; if \code{TRUE} (default), computes a naive Bayes model
+for comparison to the full network.}
+
+\item{suppress_bn_warning}{Logical; if \code{TRUE}, suppresses the BIC direction warning.}
+
+\item{seed}{Integer random seed for reproducibility. Default = 1.}
+}
+\value{
+A named list with elements:
+\describe{
+\item{\code{confusion_matrix}}{A confusion matrix (if \code{dv} specified).}
+\item{\code{nodes}}{A tibble of node-level scores (BIC, EBIC, AIC, log-likelihood).}
+\item{\code{model}}{A tibble of overall model scores and, if applicable, accuracy metrics.}
+}
+}
 \description{
-bn_summary_statistics
+Computes key summary statistics for a fitted or unfitted Bayesian network, including
+node-level scores (BIC, EBIC, AIC, log-likelihood), model-level scores, and—if a
+dependent variable (\code{dv}) is provided—prediction accuracy and comparison against a
+naive Bayes baseline.
+}
+\details{
+BIC values from \code{bnlearn::score()} are \emph{rescaled} (multiplied by -2) in \code{bnlearn},
+so higher values indicate better models.
 }

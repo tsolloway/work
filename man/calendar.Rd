@@ -12,6 +12,20 @@ calendar(
   to_now = FALSE
 )
 }
+\arguments{
+\item{interval}{Interval for sequence ("day", "month", "quarter", "year").}
+
+\item{first_year}{Starting year.}
+
+\item{last_year}{Ending year.}
+
+\item{steps}{Step size.}
+
+\item{to_now}{If \code{TRUE}, truncate dates to the current day.}
+}
+\value{
+A vector of \code{Date} objects.
+}
 \description{
-calendar
+Generate a calendar of dates over a range of years.
 }

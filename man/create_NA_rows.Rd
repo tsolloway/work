@@ -7,10 +7,16 @@
 create_NA_rows(df, n)
 }
 \arguments{
-\item{df}{data.frame / tibble}
+\item{df}{Data frame or tibble.}
 
-\item{n}{number of rows}
+\item{n}{Number of rows to create.}
+}
+\value{
+A data frame with n rows of NA.
 }
 \description{
-Returns empty rows
+Returns a data frame / tibble with n rows of NA matching the columns of df.
+}
+\examples{
+create_NA_rows(iris, 2)
 }

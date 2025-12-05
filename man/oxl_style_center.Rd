@@ -2,10 +2,20 @@
 % Please edit documentation in R/oxl_style.R
 \name{oxl_style_center}
 \alias{oxl_style_center}
-\title{oxl_style_center}
+\title{Centered cell style}
 \usage{
 oxl_style_center(...)
 }
+\arguments{
+\item{...}{Additional arguments passed to \code{openxlsx::createStyle}.}
+}
+\value{
+An \code{openxlsx} style object.
+}
 \description{
-oxl_style_center
+Creates a cell style with horizontal alignment centered.
+}
+\examples{
+openxlsx::createWorkbook() \%>\%
+  oxl_style_center()
 }

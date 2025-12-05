@@ -6,6 +6,9 @@
 \usage{
 today()
 }
+\value{
+A \code{Date} object representing today.
+}
 \description{
-today
+Returns today's date.
 }

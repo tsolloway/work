@@ -15,14 +15,16 @@ cluster_solution_family(
   reduced_inputs_max = NULL,
   vary_percent = 0.1,
   side_bias_percent = 0.1,
-  priors = c("equal", "size"),
+  priors = c("both", "equal", "size"),
   iter_max = 1e+05,
   nstart = 10,
   ok_filter = TRUE,
   do_kmeans = TRUE,
   do_medoid = TRUE,
   do_hierarchical = TRUE,
-  do_gaus_mix = FALSE
+  do_gaus_mix = FALSE,
+  polar_type = c("both", "rs", "source"),
+  seed = 1
 )
 }
 \description{

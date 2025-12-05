@@ -11,6 +11,18 @@ date_seq(
   steps = 1
 )
 }
+\arguments{
+\item{start}{Start date (character or Date).}
+
+\item{stop}{End date (character or Date).}
+
+\item{interval}{One of \code{"day"}, \code{"month"}, \code{"quarter"}, or \code{"year"}.}
+
+\item{steps}{Number of intervals between each date.}
+}
+\value{
+A vector of \code{Date} objects.
+}
 \description{
-date_seq
+Generate a sequence of dates between two points.
 }

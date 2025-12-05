@@ -6,6 +6,18 @@
 \usage{
 describe(df, vars = NULL)
 }
+\arguments{
+\item{df}{A data frame or tibble.}
+
+\item{vars}{Optional vector of variable names to describe. Defaults to all columns.}
+}
+\value{
+A tibble with descriptive statistics, missing counts, completeness, and histogram objects (for numeric variables).
+}
 \description{
-describe
+Provides descriptive statistics, missing counts, completeness, and optional histogram objects for each numeric variable in a data frame.
+}
+\examples{
+describe(iris)
+describe(iris, vars = c("Sepal.Length", "Petal.Length"))
 }

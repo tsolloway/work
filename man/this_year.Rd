@@ -2,10 +2,16 @@
 % Please edit documentation in R/days_months.R
 \name{this_year}
 \alias{this_year}
-\title{this_day}
+\title{this_year}
 \usage{
 this_year(part = c("number", "start", "end"))
 }
+\arguments{
+\item{part}{One of \code{"number"}, \code{"start"}, or \code{"end"}.}
+}
+\value{
+The year number or a \code{Date} for the start or end of the year.
+}
 \description{
-this_day
+Returns information about the current year.
 }

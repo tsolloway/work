@@ -6,6 +6,16 @@
 \usage{
 col_check(df, check_names, hard_stop = TRUE)
 }
+\arguments{
+\item{df}{Data frame to check.}
+
+\item{check_names}{Character vector of column names to check.}
+
+\item{hard_stop}{Logical; if TRUE, stops with an error when columns are missing.}
+}
+\value{
+TRUE if all columns exist; FALSE (or stops) otherwise.
+}
 \description{
-col_check
+Checks that all specified column names exist in a data frame.
 }

@@ -6,6 +6,9 @@
 \usage{
 this_day()
 }
+\value{
+An integer (1–31).
+}
 \description{
-this_day
+Returns the day of the month for today's date.
 }

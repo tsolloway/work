@@ -9,6 +9,7 @@ cluster_kmeans(
   vars,
   vars_profiles,
   solution_name,
+  solution_name_prefix = "kmeans",
   resp_id_name = "seg_uuid",
   filter_name = NULL,
   n_min = 4,
@@ -18,7 +19,8 @@ cluster_kmeans(
   iter_max = 1e+05,
   nstart = 10,
   lda_vars = NULL,
-  lda_vars_profiles = NULL
+  lda_vars_profiles = NULL,
+  seed = 1
 )
 }
 \description{

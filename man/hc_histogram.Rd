@@ -2,7 +2,7 @@
 % Please edit documentation in R/hc_histogram.R
 \name{hc_histogram}
 \alias{hc_histogram}
-\title{hc_histogram}
+\title{Create histograms for one or more variables}
 \usage{
 hc_histogram(
   x,
@@ -22,6 +22,36 @@ hc_histogram(
     "sparkline_vb", "superheroes", "tufte", "tufte2")
 )
 }
+\arguments{
+\item{x}{Numeric vector or data frame.}
+
+\item{variables}{Optional vector of column names if \code{x} is a data frame.}
+
+\item{title, }{title_x_axis, title_y_axis Chart titles and axis labels.}
+
+\item{likert}{Logical; force Likert treatment. Default NULL for auto-detection.}
+
+\item{arbitrary_likert_cutoff}{Integer; maximum unique values for Likert. Default 13.}
+
+\item{default_file_name}{Filename used for exporting. Default \code{"filename"}.}
+
+\item{width, height}{Chart size in pixels.}
+
+\item{grid_n_col}{Number of columns when arranging multiple charts. Default 3.}
+
+\item{theme}{Highcharter theme name; see \code{hc_theme_picker()}.}
+}
+\value{
+A single Highchart or a grid of Highcharts.
+}
 \description{
-hc_histogram
+Generates Highcharter histograms for a single variable, or for multiple variables
+in a data frame. Multiple charts are arranged in a grid.
+}
+\examples{
+\dontrun{
+hc_histogram(iris$Sepal.Length)
+hc_histogram(iris[,1:3])
+}
+
 }

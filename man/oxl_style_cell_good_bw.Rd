@@ -2,10 +2,23 @@
 % Please edit documentation in R/oxl_style.R
 \name{oxl_style_cell_good_bw}
 \alias{oxl_style_cell_good_bw}
-\title{oxl_style_cell_good_bw}
+\title{Good black-white style}
 \usage{
 oxl_style_cell_good_bw(halign = oxl_opt_halign(), conditional = FALSE, ...)
 }
+\arguments{
+\item{halign}{Horizontal alignment.}
+
+\item{conditional}{Logical; if TRUE, uses \code{bgFill}.}
+
+\item{...}{Additional arguments passed to \code{openxlsx::createStyle}.}
+}
+\value{
+An \code{openxlsx} style object.
+}
 \description{
-oxl_style_cell_good_bw
+Creates a “good” black/white cell style.
+}
+\examples{
+oxl_style_cell_good_bw()
 }

@@ -23,7 +23,8 @@ seg_cluster_input_sheet(
   do_gaus_mix = TRUE,
   do_hierarchical = TRUE,
   strategy = c("multisession", "multicore", "sequential", "cluster"),
-  workers = NULL
+  workers = NULL,
+  seed = 1
 )
 }
 \description{

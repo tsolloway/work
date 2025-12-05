@@ -2,10 +2,34 @@
 % Please edit documentation in R/final_excel_clean.r
 \name{final_excel_clean}
 \alias{final_excel_clean}
-\title{final_excel_clean}
+\title{Clean and format a data frame for Excel export}
 \usage{
-final_excel_clean(x)
+final_excel_clean(
+  x,
+  remove_non_ascii = TRUE,
+  remove_ctrl_chars = TRUE,
+  squish_spaces = TRUE
+)
+}
+\arguments{
+\item{x}{A data frame or tibble.}
+
+\item{remove_non_ascii}{Logical; if TRUE, removes non-ASCII characters from character columns. Default TRUE}
+
+\item{remove_ctrl_chars}{Logical; if TRUE, removes tabs, newlines, and carriage returns from character columns. Default TRUE}
+
+\item{squish_spaces}{Logical; if TRUE, trims and collapses extra spaces in character columns. Default TRUE}
+}
+\value{
+A cleaned data frame suitable for Excel export.
 }
 \description{
-final_excel_clean
+Rounds numeric columns to 4 decimal places, formats column names for readability
+(replaces underscores with spaces and converts to title case), and optionally
+cleans character columns for Excel.
+}
+\examples{
+final_excel_clean(iris)
+final_excel_clean(iris, remove_ctrl_chars = TRUE)
+
 }

@@ -1,10 +1,16 @@
-#' bn_black_list_from_white_list
-#' @description bn_black_list_from_white_list
+#' Generate a Blacklist from a White List of Nodes
+#'
+#' @description
+#' Given a list or vector of node names (a white list), this function generates
+#' all possible arcs between the nodes and then removes the arcs that are in the
+#' white list, producing a blacklist suitable for `bnlearn` structure learning.
+#'
+#' @param x A list or vector of node names representing the whitelist.
+#' @return A tibble with columns \code{from} and \code{to} representing the blacklist arcs.
 #' @export
-bn_black_list_from_white_list <- function(x){
+bn_black_list_from_white_list <- function(x) {
   result <- x %>%
     unlist() %>%
-    setNames(NULL) %>%
     unique() %>%
     work::make_arcs() %>%
     setdiff(x) %>%
@@ -14,5 +20,3 @@ bn_black_list_from_white_list <- function(x){
 
   return(result)
 }
-
-

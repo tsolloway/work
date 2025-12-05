@@ -2,10 +2,20 @@
 % Please edit documentation in R/future_stop.R
 \name{future_stop}
 \alias{future_stop}
-\title{future_stop}
+\title{Stop all active future cluster workers}
 \usage{
 future_stop()
 }
+\value{
+Invisibly returns the result of \code{future:::ClusterRegistry("stop")}.
+}
 \description{
-future_stop
+Stops all registered cluster workers in the \code{future} package.
+This is useful to clean up resources after using a parallel \code{future} plan.
+}
+\examples{
+\dontrun{
+future_stop()
+}
+
 }

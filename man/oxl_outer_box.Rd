@@ -14,6 +14,33 @@ oxl_outer_box(
   borderStyle = "thick"
 )
 }
+\arguments{
+\item{wb}{An \code{openxlsx} workbook object.}
+
+\item{sheet_name}{Name of the worksheet where the box will be applied.}
+
+\item{row_start}{Integer. First row of the box.}
+
+\item{row_end}{Integer. Last row of the box.}
+
+\item{col_start}{Integer. First column of the box.}
+
+\item{col_end}{Integer. Last column of the box.}
+
+\item{borderStyle}{Character. Style of the border (default = "thick"). See \code{openxlsx::createStyle} for options.}
+}
+\value{
+Invisibly returns \code{NULL}. The function modifies the workbook in place.
+}
 \description{
-oxl_outer_box
+Draws an outer border around a rectangular range in an Excel sheet.
+Applies top, bottom, left, and right borders individually using \code{openxlsx::addStyle}.
+}
+\examples{
+wb <- openxlsx::createWorkbook()
+openxlsx::addWorksheet(wb, "Sheet1")
+openxlsx::writeData(wb, "Sheet1", head(iris))
+oxl_outer_box(wb, "Sheet1", row_start = 1, row_end = 6, col_start = 1, col_end = 5)
+openxlsx::saveWorkbook(wb, "example.xlsx", overwrite = TRUE)
+
 }

@@ -1,37 +1,53 @@
 #' object_name
-#' @description object_name
+#'
+#' @description Returns the name of the object passed to a function, pipe-safe.
+#' Handles direct calls, magrittr pipes, and character literals.
+#'
+#' @param x Any R object (variable, literal, or piped object).
+#'
+#' @return A character string with the name of the object or value.
+#'
+#' @examples
+#' df <- iris
+#' object_name(df)
+#' #> "df"
+#'
+#' object_name("text")
+#' #> "text"
+#'
+#' df %>% object_name()
+#' #> "df"
+#'
+#' iris %>% head() %>% object_name()
+#' #> "iris"
+#'
+#' mtcars %>% head() %>% object_name()
+#' #> "mtcars"
+#'
 #' @export
-object_name <- function(x){
+object_name <- function(x) {
+  nm <- deparse(substitute(x))  # Capture expression as string
 
-  x_expression <- function(x) {
-    getAST <- function(ee) purrr::map_if(as.list(ee), is.call, getAST)
-
+  # Handle magrittr pipe
+  if (nm %in% c(".", "")) {
     sc <- sys.calls()
-    ASTs <- purrr::map( as.list(sc), getAST ) %>%
-      purrr::keep( ~identical(.[[1]], quote(`%>%`)) )  # Match first element to %>%
-
-    if( length(ASTs) == 0 ) return( enexpr(x) )        # Not in a pipe
-    dplyr::last( ASTs )[[2]]    # Second element is the left-hand side
+    prev <- tail(sc, n = 2)[[1]]  # Call before this function
+    if (length(prev) > 1) {
+      nm <- deparse(prev[[2]])
+    } else {
+      nm <- "."
+    }
   }
 
-  y <- x_expression(x)
-
-  if( y == "x" ){
-    y <- deparse(substitute(x))
+  # Remove surrounding quotes for literals
+  if (startsWith(nm, "\"") && endsWith(nm, "\"")) {
+    nm <- substr(nm, 2, nchar(nm) - 1)
   }
 
-  y %>% as.character()
+  # If nm contains a pipe, keep only the first part
+  if (grepl("%>%", nm)) {
+    nm <- strsplit(nm, "%>%")[[1]][1] %>% trimws()
+  }
+
+  nm
 }
-
-
-
-object_name2 <-  function(x){
-  y <- object_name(x)
-
-  if(y == "x")y  <- deparse(substitute(x))
-  # if(z=="y")z = object_name(y)
-  y
-}
-
-
-

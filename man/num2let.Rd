@@ -6,6 +6,22 @@
 \usage{
 num2let(n, lets = LETTERS)
 }
+\arguments{
+\item{n}{Positive integer or integer vector to convert.}
+
+\item{lets}{Character vector of letters to use (default is \code{LETTERS}).}
+}
+\value{
+Character vector of Excel-style column names.
+}
 \description{
-converts numbers to letters in excel column format
+Converts positive integers to letters in Excel column format.
+For example, 1 -> "A", 27 -> "AA".
+}
+\examples{
+num2let(1)       # "A"
+num2let(26)      # "Z"
+num2let(27)      # "AA"
+num2let(52:55)   # "AZ" "BA" "BB" "BC"
+
 }

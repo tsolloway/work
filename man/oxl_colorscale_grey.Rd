@@ -4,8 +4,18 @@
 \alias{oxl_colorscale_grey}
 \title{oxl_colorscale_grey}
 \usage{
-oxl_colorscale_grey(x = as.character(c(1, 2, 3, 4)))
+oxl_colorscale_grey(x = c("1", "2", "3", "4"))
+}
+\arguments{
+\item{x}{Character or numeric, one of 1,2,3,4.}
+}
+\value{
+Hex color code as character.
 }
 \description{
-oxl_colorscale_grey
+Returns shades of grey for ordinal scales (1-4).
+}
+\examples{
+oxl_colorscale_grey(1)
+oxl_colorscale_grey("3")
 }

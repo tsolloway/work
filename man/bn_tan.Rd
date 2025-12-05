@@ -2,7 +2,7 @@
 % Please edit documentation in R/bn_tan.R
 \name{bn_tan}
 \alias{bn_tan}
-\title{bn_tan}
+\title{Fit a Tree-Augmented Naive (TAN) Bayesian Network}
 \usage{
 bn_tan(
   df,
@@ -10,17 +10,84 @@ bn_tan(
   ivs,
   white_list = NULL,
   black_list = NULL,
-  cross_battery_first = TRUE,
-  compare_to_niave = TRUE,
+  cross_battery_priority = TRUE,
+  compare_to_naive = TRUE,
   dictionary = NULL,
   manual_groups = NULL,
   node_label_type = c("both", "variable", "label"),
   n_groups = NULL,
   node_size = 1,
+  tool_tip_edge_prefix = NULL,
   suppress_bn_warning = FALSE,
-  on_exit_detach_igraph = TRUE
+  on_exit_detach_igraph = TRUE,
+  seed = 1
 )
 }
+\arguments{
+\item{df}{Data frame containing the dependent and independent variables.}
+
+\item{dv}{Character string naming the dependent variable.}
+
+\item{ivs}{Character vector naming the independent variables.}
+
+\item{white_list}{Optional data frame of arcs to force inclusion (\code{from}, \code{to}).}
+
+\item{black_list}{Optional data frame of arcs to exclude (\code{from}, \code{to}).}
+
+\item{cross_battery_priority}{Logical; if \code{TRUE} (default), constructs a cross-battery whitelist before model fitting.}
+
+\item{compare_to_naive}{Logical; if \code{TRUE} (default), includes naive Bayes comparison in the summary.}
+
+\item{dictionary}{Optional dictionary (data frame, list, or named vector) for node labeling.}
+
+\item{manual_groups}{Optional vector or mapping for manually assigning node communities.}
+
+\item{node_label_type}{How to label nodes: \code{"both"}, \code{"variable"}, or \code{"label"}. Default \code{"both"}.}
+
+\item{n_groups}{Optional integer specifying number of community clusters for visualization.}
+
+\item{node_size}{Numeric value controlling relative node size in visualization. Default = 1.}
+
+\item{tool_tip_edge_prefix}{Optional character string to prepend to edge tooltips (e.g., "MI =").}
+
+\item{suppress_bn_warning}{Logical; if \code{TRUE}, suppresses model-fit warnings. Default \code{FALSE}.}
+
+\item{on_exit_detach_igraph}{Logical; if \code{TRUE} (default), detaches igraph-related packages at exit.}
+
+\item{seed}{Integer random seed for reproducibility. Default = 1.}
+}
+\value{
+A named list with components:
+\describe{
+\item{bn}{Fitted TAN Bayesian network object.}
+\item{fit}{Parameterized Bayesian network (\code{bn.fit}).}
+\item{arcs}{Arc-level chi-square statistics from \code{bn_arc_chisq()}.}
+\item{summary}{Model summary statistics and naive comparison.}
+\item{viz_prep}{Node and edge data prepared for visualization.}
+\item{meta}{Metadata including analysis type.}
+}
+}
 \description{
-bn_tan
+Fits a Tree-Augmented Naive (TAN) Bayesian network using \code{bnlearn::tree.bayes()},
+with optional cross-battery whitelist generation, custom dictionaries,
+manual community assignments, and visualization preparation.
+}
+\details{
+The function:
+\enumerate{
+\item Optionally builds a cross-battery whitelist among independent variables (IVs).
+\item Fits a TAN model using \code{bnlearn::tree.bayes()}.
+\item Generates arc-level statistics, model summaries, and visualization-ready data.
+}
+}
+\examples{
+\dontrun{
+result <- bn_tan(
+  df = iris,
+  dv = "Species",
+  ivs = names(iris)[1:4],
+  seed = 42
+)
+}
+
 }

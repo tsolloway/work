@@ -6,11 +6,18 @@
 \usage{
 cq(...)
 }
+\arguments{
+\item{...}{Values, expressions, or bare symbols.}
+}
+\value{
+A vector (numeric if all inputs are numeric-like, otherwise character) with names preserved.
+}
 \description{
-cq
+Concatenate values or bare symbols, preserving names and converting numeric-like inputs to numeric if possible.
 }
 \examples{
-c(!!(1:4))
-c(!!(1:4), hi ="5")
-c(!!(1:4), hi ="5", foo = boo, "hello" = "world")
+cq(!!(1:4))
+cq(!!(1:4), foo)
+cq(!!(1:4), hi = "5")
+cq(hi, there)
 }

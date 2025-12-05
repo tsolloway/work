@@ -12,14 +12,18 @@ install_pkg_local(
 )
 }
 \arguments{
-\item{pkg}{Character. Name or path of local package to install. If characters don't lead to a valid path, the function checks for that package in the set git folder.}
+\item{pkg}{Character. Name or path of local package. If path does not exist, function looks for it in the git folder.}
 
-\item{ask}{Logical. Whether to ask for confirmation when installing a different version of a package that is already installed. Installations that only add new packages never require confirmation.}
+\item{ask}{Logical. Ask confirmation when installing a different version of a package already installed (default FALSE).}
 
-\item{upgrade}{Logical. When FALSE, the default, pak does the minimum amount of work to give you the latest version(s) of pkg. It will only upgrade dependent packages if pkg, or one of their dependencies explicitly require a higher version than what you currently have. It will also prefer a binary package over to source package, even it the binary package is older.}
+\item{upgrade}{Logical. Controls upgrade behavior in pak (default FALSE).}
 
-\item{on_exit_restart}{Logical. Restart R session of install.}
+\item{on_exit_restart}{Logical. Restart R session after installation (default TRUE).}
+}
+\value{
+Invisibly TRUE if installation attempted.
 }
 \description{
-Install local R library
+Installs a local R package from a specified path or git folder.
+Documents the package before installation. Falls back to devtools if pak fails.
 }

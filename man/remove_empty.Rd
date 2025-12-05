@@ -7,8 +7,16 @@
 remove_empty(x)
 }
 \arguments{
-\item{x}{vector}
+\item{x}{A vector.}
+}
+\value{
+A vector with empty values removed.
 }
 \description{
-Returns vector with no values that are empty
+Removes all \code{NA}, \code{NULL}, or empty string (\code{""}) values from a vector.
+}
+\examples{
+remove_empty(c(1, NA, 2, NULL, 3, ""))
+remove_empty(c("a", "", "b", NA, "c"))
+
 }

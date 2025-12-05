@@ -14,12 +14,27 @@ restart(
 )
 }
 \arguments{
-\item{keep}{Logical or character vector. TRUE is keep all objects on restart. FALSE is drop all objects on restart. Character vector specifies which objects to keep.}
+\item{keep}{Logical or character vector.
+\itemize{
+\item \code{FALSE} (default) drops all objects in the global environment unless \code{clean = FALSE}.
+\item \code{TRUE} keeps all objects.
+\item Character vector specifies which objects to keep.
+}}
 
-\item{run_gc}{Logical. If TRUE, gc() is executed after restart. Note that the gc() is executed before the session is restarted.}
+\item{run_gc}{Logical. If \code{TRUE} (default), runs \code{gc()} before restarting.}
 
-\item{restart_session}{Logical. IF true, the R session will be restarted}
+\item{clean}{Logical. Passed to \code{.rs.restartR()}. If \code{FALSE}, the workspace is preserved unless \code{keep} is a character vector specifying objects to retain.}
+
+\item{restart_session}{Logical. If \code{TRUE} (default), the R session is restarted.}
+
+\item{start_after}{Logical. If \code{TRUE} (default), executes \code{work::start()} after restart.}
+
+\item{restart_after_command}{Optional character vector of commands to execute after restart. If \code{NULL}, \code{work::start()} will be used if \code{start_after = TRUE}.}
+}
+\value{
+Invisible \code{NULL}. The function's main effect is side-effects (cleaning environment, restarting R session).
 }
 \description{
-Custom restart function that exectues common tasks
+Custom restart function that executes common tasks:
+removes objects, detaches packages, runs garbage collection, and optionally restarts the R session.
 }

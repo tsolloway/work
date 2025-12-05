@@ -20,7 +20,8 @@ seg_cluster_input_sheet <- function(
     do_gaus_mix = TRUE,
     do_hierarchical = TRUE,
     strategy = c("multisession", "multicore", "sequential", 'cluster'),
-    workers = NULL
+    workers = NULL,
+    seed = 1
 ){
 
 
@@ -90,7 +91,7 @@ seg_cluster_input_sheet <- function(
       seed = TRUE
     )
 
-    set.seed(1)
+    if(!is.null(seed)) set.seed(seed)
     solutions <- furrr::future_imap(
       seg[["solutions"]][["inputs"]],
       ~cluster_solution_family(
@@ -104,7 +105,8 @@ seg_cluster_input_sheet <- function(
         side_bias_percent = side_bias_percent,
         priors = priors, iter_max = iter_max, nstart = nstart,
         do_kmeans = do_kmeans, do_medoid = do_medoid,
-        do_gaus_mix = do_gaus_mix, do_hierarchical = do_hierarchical
+        do_gaus_mix = do_gaus_mix, do_hierarchical = do_hierarchical,
+        seed = seed
       ),
       .options = opts
     )
@@ -121,7 +123,7 @@ seg_cluster_input_sheet <- function(
 
     solutions <- seg[["solutions"]][["analysis"]]
 
-    set.seed(1)
+    if(!is.null(seed)) set.seed(seed)
     solutions[[solution_family]] <- cluster_solution_family(
       seg = seg,
       inputs = seg[["solutions"]][["inputs"]][[solution_family]],
@@ -133,7 +135,8 @@ seg_cluster_input_sheet <- function(
       side_bias_percent = side_bias_percent,
       priors = priors, iter_max = iter_max, nstart = nstart,
       do_kmeans = do_kmeans, do_medoid = do_medoid,
-      do_gaus_mix = do_gaus_mix, do_hierarchical = do_hierarchical
+      do_gaus_mix = do_gaus_mix, do_hierarchical = do_hierarchical,
+      seed = seed
     )
   }
 
