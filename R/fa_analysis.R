@@ -7,10 +7,14 @@ fa_analysis <- function(
       "equamax", "varimax", "quartimax", "bentlerT", "varimin", "geominT", "bifactor",
       "Promax", "promax", "oblimin", "simplimax", "bentlerQ", "geominQ", "biquartimin",
       "none"
-    )
+    ),
+    seed = 1,
+    return_raw_analysis = FALSE
 ){
 
-  require(psych)
+  # method = "pa"
+  # rotation = "equamax"
+  # require(psych)
 
   rotation <- match.arg(rotation)
   detele_label <- FALSE
@@ -25,6 +29,19 @@ fa_analysis <- function(
 
 
   if(!is.null(labels)){
+
+    if(is.character(labels)){
+      labels <- labels %>% work::dictionary_from_named_object()
+    }
+
+    for(i in c("var", "vars", "variables")){
+      if(i %in% tolower(names(labels))) names(labels)[which(tolower(names(labels)) %in% i)] <- "variable"
+    }
+
+    for(i in c("lab", "labs", "labels")){
+      if(i %in% tolower(names(labels))) names(labels)[which(tolower(names(labels)) %in% i)] <- "label"
+    }
+
     if(!identical(names(labels), c("variable", "label"))){
       stop(
         glue('labels object must have colnames c("variable", "label")')
@@ -43,13 +60,17 @@ fa_analysis <- function(
   n_factors <- n_factors[-c(1, 2, length(vars) - 1, length(vars))]
 
 
+  if(!is.null(seed)) set.seed(seed)
   analysis <- imap(
     n_factors,
     possibly(
-      ~ principal(
-        df, nfactors = .x, method = method, rotate = rotation
-      ) %>%
-        suppressWarnings(),
+      ~ {
+        if(!is.null(seed)) set.seed(seed)
+        psych::principal(
+          df, nfactors = .x, method = method, rotate = rotation
+        ) %>%
+          suppressWarnings()
+      },
       otherwise = NA
     )
   ) %>%
@@ -103,7 +124,6 @@ fa_analysis <- function(
       tail(1) %>%
       as_tibble() %>%
       setNames(., names(.) %>% str_scrub())
-    # select(cumulative_var)
   ) %>%
     bind_rows() %>%
     mutate(
@@ -126,6 +146,10 @@ fa_analysis <- function(
     parameters = parameters,
     meta = list(analytic = "fa")
   )
+
+
+  if(return_raw_analysis) results[["raw_analysis"]] <- analysis
+
 
   return(results)
 }

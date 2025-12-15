@@ -11,7 +11,9 @@ fa_analysis(
   method = "pa",
   rotation = c("equamax", "varimax", "quartimax", "bentlerT", "varimin", "geominT",
     "bifactor", "Promax", "promax", "oblimin", "simplimax", "bentlerQ", "geominQ",
-    "biquartimin", "none")
+    "biquartimin", "none"),
+  seed = 1,
+  return_raw_analysis = FALSE
 )
 }
 \description{
