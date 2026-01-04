@@ -408,7 +408,7 @@ seg_typing_tool <- function(
 
     addStyle(
       wb, sheet_name,
-      style = oxl_style_cell_neurtal(textDecoration = "Bold"),
+      style = oxl_style_cell_neutral(textDecoration = "Bold"),
       rows = row_ind_recode,
       cols = seq(col_ind_label_point_first_number - 1, col_ind_label_point_last_number),
       gridExpand = TRUE
@@ -759,7 +759,7 @@ seg_typing_tool <- function(
       cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number),
       rows = row_ind_score,
       rule = glue('{temp_col_result}{row_ind_engine_seg_qc} = FALSE'),
-      style = oxl_style_cell_neurtal(textDecoration = "bold", conditional = TRUE)
+      style = oxl_style_cell_neutral(textDecoration = "bold", conditional = TRUE)
     )
 
 
@@ -768,7 +768,7 @@ seg_typing_tool <- function(
       cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number),
       rows = seq(row_ind_first, row_ind_last),
       rule = glue('AND(${num2let(col_ind_engine_controls_number)}${row_ind_engine_seg_qc} = TRUE, COUNTIF(${num2let(col_ind_label_point_first_number)}{row_ind_first}:${num2let(col_ind_label_point_last_number)}{row_ind_first}, "x") > 1)'),
-      style = oxl_style_cell_neurtal(textDecoration = "bold", conditional = TRUE)
+      style = oxl_style_cell_neutral(textDecoration = "bold", conditional = TRUE)
     )
 
 
@@ -1457,7 +1457,7 @@ seg_typing_tool <- function(
         "Step 1 - Questionnaire",
         "          Ask respondents the Solution Questions, recording their answer for each item.  Respondents must respond to each and all items for their score to be valid.",
         NA,
-        "          We do not recommend randomizing item order.  Do not randomize label sides.  Splitting the item questions into multiple (more than one) question blocks is a subjective choice.",
+        "          We do not recommend randomizing item order or label sides.",
         NA,
         "          The Typing Tool was designed to be asked among respondents who meet the stated qualifications.",
         NA, NA,
@@ -1470,7 +1470,7 @@ seg_typing_tool <- function(
         "          4     ->     4 (no change)",
         NA, NA,
         "Step 3 - Multiply recoded responses with coefficient function",
-        "          For each participant, multiply the rescaled item responses with the coefficeints for each segment. Sum the products for each segment and add the constant.  This will create a score for each segment.",
+        "          For each participant, multiply the rescaled item responses with the coefficients for each segment. Sum the products for each segment and add the constant.  This will create a score for each segment.",
         NA,
         glue('                    Segment 1 Score = ( rs{head(clean_variable_names, 1)} * {coef_func[1, "Seg_1"]} ) + ... + ( rs{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, "Seg_1"]} ) + ( {coef_func[nrow(coef_func), "Seg_1"]} )'),
         NA,
@@ -1482,7 +1482,7 @@ seg_typing_tool <- function(
         NA, NA,
         "Step 4 - Calculate the probability (optional)",
         NA,
-        "          1. Compute the exponetial value for each segment score",
+        "          1. Compute the exponential value for each segment score",
         NA,
         "                    Segment 1 Exponential Score = EXP( Segment 1 Score )",
         "                              OR",
@@ -1494,7 +1494,7 @@ seg_typing_tool <- function(
         "                              OR",
         glue('                    Segment {max(segments)} Exponential Score = EXP( ( rs{head(clean_variable_names, 1)} * {coef_func[1, ncol(coef_func)]} ) + ... + ( rs{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, ncol(coef_func)]} ) + ( {coef_func[nrow(coef_func), ncol(coef_func)]} ) )'),
         NA, NA,
-        "          2. Divide each segment's exponetial value with the sum of all expoential values",
+        "          2. Divide each segment's exponential value with the sum of all exponential values",
         NA,
         glue("                    Segment 1 Probability = Segment 1 Exponential Score / ( Segment 1 Exponential Score + ... + Segment {max(segments)} Exponential Score )"),
         "                              OR",
