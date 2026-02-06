@@ -185,8 +185,10 @@ bn_initial_networks <- function(
 
 
   results[["summary"]] <- results %>%
-    purrr::imap(~.x[["summary"]] %>%
-                  dplyr::mutate(model_type = .y, .before = 1)) %>%
+    purrr::imap(
+      ~.x[["summary"]] %>%
+        dplyr::mutate(model_type = .y, .before = 1)
+    ) %>%
     dplyr::bind_rows() %>%
     dplyr::arrange(-accuracy)
 

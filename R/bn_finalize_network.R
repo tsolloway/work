@@ -9,62 +9,53 @@ bn_finalize_network <- function(
     bn = NULL,
     previous_dv = NULL,
     # traditional_driver_engine = c("linear", "logistic"),
-    # community_score_by = c("sum", "mean"),
     node_label_type = c("both", "variable", "label"),
     manual_groups = NULL,
-    # node_size = NULL,
-    # standardize_traditional_drivers = FALSE,
-    # attribute_viz_label_var_only = TRUE,
-
-    connections_max = 3,
-    connections_multiple_boot_threshold = "auto",
-    connections_multiple_boot_ratio = 1/4,
-    complexity_boot_n = 100,
-    complexity_boot_strength_min = 0.01,
-
-    impact_use_parallel = TRUE,
+    impact_type = c("cp", "gr", "mi"),
     impact_n_boot = 1000,
+    impact_n_querry = 1e5,
 
+    viz_size_node_by_impact = TRUE,
     viz_include_dv = FALSE,
-    vs_layout = "layout_with_fr",
-    vs_height = "100vh",
-    vs_width = "100%",
-    viz_interactive_map_deliverable = TRUE,
-    viz_community_edge_by = c("sum", "mean"),
-    viz_tool_tip_edge_prefix = NULL,
-    save_visuals = TRUE,
+    viz_store = FALSE,
+    model_parallel = FALSE,
+    impact_parallel = TRUE,
     seed = 1
 ){
 
   # traditional_driver_engine = c("linear", "logistic"),
-  # community_score_by = c("sum", "mean"),
+
+  viz_size_node_by_impact = TRUE
   viz_include_dv = FALSE
   viz_prep = NULL
   bn = NULL
   dv = NULL
-  viz_tool_tip_edge_prefix = NULL
   previous_dv = NULL
   node_label_type = "both"
   manual_groups = NULL
-  connections_max = 3
-  connections_multiple_boot_threshold = "auto"
-  connections_multiple_boot_ratio = 1/4
-  impact_n_boot = 10
-  impact_use_parallel = T
-  viz_community_edge_by = "sum"
+  impact_n_boot = 1
+  impact_n_querry = 1e5
+  impact_type = "cp"
+  seed = 1
+  model_parallel = FALSE
+  impact_parallel = TRUE
 
 
   node_label_type <- match.arg(node_label_type)
-  viz_community_edge_by <- match.arg(viz_community_edge_by)
+  impact_type <- match.arg(impact_type)
 
   # traditional_driver_engine <- match.arg(traditional_driver_engine)
-  # community_score_by <- match.arg(community_score_by)
 
 
   results <- list()
   dictionary <- work::dictionary_from_named_object(dictionary)
   df <- df %>% as.data.frame()
 
+
+  if(impact_parallel || model_parallel){
+    original_future_plan <- future::plan()
+    future::plan(future::multisession)
+  }
 
 
   ###############################
@@ -158,29 +149,26 @@ bn_finalize_network <- function(
   # final model
   ###############################
 
+  message("Beginning model estimation")
+
   results[["bn"]] <- work::bn_engine(
     df = df,
     dv = dv,
     ivs = x_ivs,
     dictionary = dictionary,
     white_list = x_edges,
-    connections_max = connections_max,
-    connections_multiple_boot_threshold = connections_multiple_boot_threshold,
-    connections_multiple_boot_ratio = connections_multiple_boot_ratio,
-    complexity_boot_n = complexity_boot_n,
-    complexity_boot_strength_min = complexity_boot_strength_min,
     node_label_type = node_label_type,
     manual_groups = manual_groups,
-    all_ivs_connect_to_dv = viz_include_dv,
     only_white_list = TRUE,
     tool_tip_edge_prefix = viz_tool_tip_edge_prefix,
+    remove_dv_from_viz_prep = if(viz_include_dv) NULL else dv,
     suppress_bn_warning = TRUE,
-    on_exit_detach_igraph = FALSE
+    on_exit_detach_igraph = FALSE,
+    seed = seed
   )
 
 
-
-  results[["bn_subgroups"]] <- work::map_progress(
+  results[["bn_subgroups"]] <- map_progress(
     subgroups,
     function(x) {
       work::bn_engine(
@@ -196,69 +184,158 @@ bn_finalize_network <- function(
         manual_groups = manual_groups,
         only_white_list = TRUE,
         suppress_bn_warning = TRUE,
-        on_exit_detach_igraph = FALSE
+        on_exit_detach_igraph = FALSE,
+        seed = seed
       )[c("bn", "fit", "summary", "meta")]
     },
-    .label = "Running subgroup"
+    .label = "Running subgroup",
+    .parallel = model_parallel
   ) %>%
     setNames(subgroups)
 
 
   results[["bn_subgroups_summary"]] <- results[["bn_subgroups"]] %>%
-    purrr::map(~.x[["summary"]][["model"]]) %>%
+    purrr::imap(
+      ~.x[["summary"]][["model"]] %>%
+        dplyr::mutate(subgroup = .y) %>%
+        dplyr::relocate(subgroup, .before = 1)
+    ) %>%
     dplyr::bind_rows() %>%
     dplyr::arrange(-accuracy)
 
 
   message("Completed model estimation")
 
+
+
   ###############################
   # Impacts attributes
   ###############################
 
+  message("Beginning impact estimation")
+  message("attribute estimation...")
 
+  results[["impact"]] <- list()
 
-  results[["bn_subgroups"]]
-  obj = results$bn
-
-  foo <- work::bn_impact_grain(
-    bn_final = results,
+  results[["impact"]][["attribute"]] <- work::bn_impact(
+    obj = results[["bn_subgroups"]],
     df = df,
+    dv = dv,
+    ivs = x_ivs,
+    do_community = FALSE,
     community_assignment = results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]],
+    type = impact_type,
+    process_subgroups = TRUE,
     n_boot = impact_n_boot,
-    use_parallel = impact_use_parallel,
-    do_community = FALSE)
+    n_querry = impact_n_querry,
+    use_parallel = impact_parallel,
+    seed = seed
+  )
 
-  bn_impact_grain_final
-  bn_impact_grain
+  message("community estimation...")
 
-  bn_final$bn_subgroups$Potential_User %>% names
-
-  work::bn_impact_grain(
-    bn_final = results,
+  results[["impact"]][["community"]] <- work::bn_impact(
+    obj = results[["bn_subgroups"]],
     df = df,
+    dv = dv,
+    ivs = x_ivs,
+    do_community = TRUE,
     community_assignment = results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]],
-    n_boot = 1,
-    # return_dv_estimate = T,
-    use_parallel = FALSE,
-    do_community = F
+    type = impact_type,
+    process_subgroups = TRUE,
+    n_boot = impact_n_boot,
+    n_querry = impact_n_querry,
+    use_parallel = impact_parallel,
+    seed = seed
   )
 
-  bn_impact_grain_engine
-  bn_impact_grain_engine(
-    obj = results$bn_subgroups$Total,
-    df = df,
-    iv = "q14a_10",
-    ivs = NULL,
-    n_boot = 1,
-    return_dv_estimate = T,
-    make_tibble = T,
-    use_parallel = F,
-    seed = 1
-  )
+  message("Completed impact estimation")
 
-  bn_arc_chisq
 
+
+  ###############################
+  # Edge List & Viz Prep Storage
+  ###############################
+
+  results[["edge_list"]] <- list()
+
+  results[["edge_list"]][["all"]] <- results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["edges"]]
+
+  results[["edge_list"]][["iv"]] <- results[["edge_list"]][["all"]] %>% dplyr::filter(from != dv & to != dv)
+
+  results[["edge_list"]][["dv"]] <- results[["edge_list"]][["all"]] %>% dplyr::filter(from == dv | to == dv)
+
+
+
+  if(viz_size_node_by_impact){
+
+    attribute_nodes <- results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]]
+    community_nodes <- results[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]]
+
+    attribute_node_impacts <- results[["impact"]][["attribute"]] %>%
+      dplyr::select(Variable, Total)
+      # dplyr::mutate(Total = Total / 100)
+
+    community_node_impacts <- results[["impact"]][["community"]] %>%
+      dplyr::select(Community, Total)
+      # dplyr::mutate(Total = Total / 100)
+
+    attribute_nodes <- attribute_nodes %>%
+      dplyr::left_join(attribute_node_impacts, by = dplyr::join_by(id == Variable)) %>%
+      dplyr::mutate(value = Total) %>%
+      dplyr::select(-Total)
+
+    community_nodes <- community_nodes %>%
+      dplyr::left_join(community_node_impacts, by = dplyr::join_by(id == Community)) %>%
+      dplyr::mutate(value = Total) %>%
+      dplyr::select(-Total)
+
+
+    results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]] <- attribute_nodes
+    results[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]] <- community_nodes
+
+
+  }
+
+
+
+  results[["viz_prep"]] <- list()
+
+  results[["viz_prep"]][["attribute_viz_prep"]] <- results[["bn"]][["viz_prep"]][["attribute_viz_prep"]]
+
+  results[["viz_prep"]][["community_viz_prep"]] <- results[["bn"]][["viz_prep"]][["community_viz_prep"]]
+
+
+
+  ###############################
+  # Visuals
+  ###############################
+
+  if(viz_store){
+
+    results[["visuals"]] <- list()
+
+    results[["visuals"]][["attribute"]][["none"]] <- results %>% work::bn_visual(type = "none")
+    results[["visuals"]][["attribute"]][["gravity"]] <- results %>% work::bn_visual(type = "gravity")
+    results[["visuals"]][["attribute"]][["charge"]] <- results %>% work::bn_visual(type = "charge")
+    results[["visuals"]][["attribute"]][["hierarchy"]] <- results %>% work::bn_visual(type = "hierarchy")
+
+    results[["visuals"]][["community"]][["none"]] <- results %>% work::bn_visual(type = "none", do_community = TRUE)
+    results[["visuals"]][["community"]][["gravity"]] <- results %>% work::bn_visual(type = "gravity", do_community = TRUE)
+    results[["visuals"]][["community"]][["charge"]] <- results %>% work::bn_visual(type = "charge", do_community = TRUE)
+    results[["visuals"]][["community"]][["hierarchy"]] <- results %>% work::bn_visual(type = "hierarchy", do_community = TRUE)
+
+  }
+
+
+
+  if(impact_parallel || model_parallel){
+    future::plan(original_future_plan)
+  }
+
+
+
+  return(results)
 }
 
 

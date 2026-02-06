@@ -117,6 +117,7 @@ bn_engine <- function(
     cross_battery_priority = TRUE,
     all_ivs_connect_to_dv = TRUE,
     dv_connection_strength = NULL,
+    remove_dv_from_viz_prep = NULL,
     force_dv_connection = NULL,
     only_white_list = FALSE,
     compare_to_naive = TRUE,
@@ -154,6 +155,8 @@ bn_engine <- function(
   # suppress_bn_warning = FALSE
   # on_exit_detach_igraph = TRUE
   # seed = 1
+  # remove_dv_from_viz_prep = NULL
+
 
   if (!is.null(seed)) set.seed(seed)
 
@@ -444,7 +447,7 @@ bn_engine <- function(
         df = dfx,
         dictionary = dictionary,
         manual_groups = manual_groups,
-        remove_nodes = NULL,
+        remove_nodes = if(is.null(remove_dv_from_viz_prep) || isFALSE(remove_dv_from_viz_prep)) NULL else if(exists("dv") && !is.null(dv)) dv else NULL,
         node_label_type = node_label_type,
         n_groups = n_groups,
         node_size = node_size,
@@ -513,7 +516,7 @@ bn_engine <- function(
         df = dfx,
         dictionary = dictionary,
         manual_groups = temp_manual_groups,
-        remove_nodes = NULL,
+        remove_nodes = if(is.null(remove_dv_from_viz_prep) || isFALSE(remove_dv_from_viz_prep)) NULL else if(exists("dv") && !is.null(dv)) dv else NULL,
         node_label_type = node_label_type,
         n_groups = n_groups,
         node_size = node_size,

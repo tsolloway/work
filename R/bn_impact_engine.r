@@ -80,13 +80,23 @@ bn_impact_engine <- function(
     do_community = FALSE,
     community_assignment = NULL,
     type = c("cp", "gr", "mi"),
+    add_index = TRUE,
     n_boot = 1,
     n_querry = 1e5,
     seed = 1
 ){
 
-  type <- match.arg(type)
+  # do_community = T
+  # community_assignment = NULL
+  # type = "cp"
+  # type = "gr"
+  # type = "mi"
+  # n_boot = 10
+  # n_querry = 1e5
+  # seed = 1
 
+
+  type <- match.arg(type)
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
   # ---------------------------
@@ -160,7 +170,6 @@ bn_impact_engine <- function(
 
 
   if(do_community){
-
     community_assignment <- community_assignment %>%
       dplyr::filter(id %in% ivs) %>%
       dplyr::select(community_name, id) %>%
@@ -169,6 +178,9 @@ bn_impact_engine <- function(
         purrr::map(., ~ unique(.x[["community_name"]]))
       ) %>%
       purrr::map(~ .x[["id"]])
+
+  }else if(!do_community){
+    community_assignment <- NULL
   }
 
 
@@ -354,21 +366,14 @@ bn_impact_engine <- function(
   if (n_boot > 1) {
     index_sets <- replicate(n_boot, sample(seq_len(nrow(df)), replace = TRUE), simplify = FALSE)
 
-    # # type = "gr"
-    # engine_diff_multiple(
-    #   indices = index_sets[[1]], data = df,
-    #   bn = bn,
-    #   ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
-    #   add_mi = TRUE, type = type, n_querry = n_querry, fit = NULL, community_assignment = q1_opinion_tb
-    # )
-
     result <- index_sets %>%
       purrr::map(
         ~engine_diff_multiple(
           indices = .x, data = df,
           bn = bn,
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
-          add_mi = TRUE, type = type, n_querry = n_querry, fit = NULL
+          add_mi = TRUE, type = type, n_querry = n_querry, fit = NULL,
+          community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
       ) %>%
@@ -403,8 +408,6 @@ bn_impact_engine <- function(
       )
 
 
-
-
   } else {
 
     result <- engine_diff_multiple(
@@ -417,6 +420,22 @@ bn_impact_engine <- function(
 
   }
 
+
+  if(add_index){
+
+    if(type != "mi"){
+      result <- result %>%
+        dplyr::mutate(
+          index = (abs(effect) / mean(abs(effect))) * 100
+        )
+    }else if(type == "mi"){
+      result <- result %>%
+        dplyr::mutate(
+          index = (abs(mi) / mean(abs(mi))) * 100
+        )
+    }
+
+  }
 
   return(result)
 }

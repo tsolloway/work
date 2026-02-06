@@ -68,7 +68,7 @@ map_progress <- function(
         .x,
         map_fun,
         ...,
-        .options = furrr::furrr_options(packages = .furrr_packages)
+        .options = furrr::furrr_options(packages = .furrr_packages, seed = TRUE)
       )
     } else {
       res <- purrr::map(.x, map_fun, ...)

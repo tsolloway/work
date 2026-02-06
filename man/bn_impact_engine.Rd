@@ -12,6 +12,7 @@ bn_impact_engine(
   do_community = FALSE,
   community_assignment = NULL,
   type = c("cp", "gr", "mi"),
+  add_index = TRUE,
   n_boot = 1,
   n_querry = 1e+05,
   seed = 1

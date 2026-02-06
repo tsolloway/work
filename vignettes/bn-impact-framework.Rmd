@@ -1,0 +1,156 @@
+---
+title: "Resondex Impact Framework"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Resondex Impact Framework}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.retina = 2
+)
+```
+
+# Resondex Impact Framework
+
+The **Resondex Impact Framework** is an executive-ready method for ranking business drivers using two complementary dimensions:
+
+- **Impact Magnitude** — Probability Lift (business-interpretable effect size)  
+- **Evidence Strength** — Mutual Information (MI) significance (statistical credibility)
+
+This framework ensures prioritization focuses on drivers that are **material in business impact** and **reliable in statistical signal**.
+
+---
+
+## Methodology
+
+### 1) Impact Magnitude — Probability Lift
+
+Resondex defines effect size in probability terms:
+
+> **Probability Lift = P(Outcome | Driver = High) − P(Outcome | Driver = Low)**
+
+This expresses impact in **percentage-point change**, aligning directly with conversion lift, revenue upside, risk change, or behavioral movement.
+
+---
+
+### 2) Evidence Strength — Mutual Information Significance
+
+Resondex evaluates dependency between each driver and the outcome using **Mutual Information (MI)**, which:
+
+- Detects **linear and non-linear relationships**
+- Supports **categorical and continuous variables**
+- Captures **any meaningful form of dependence**
+
+The associated **MI p-value** reflects the **statistical credibility** of the relationship.
+
+---
+
+### 3) Prioritization Logic — Impact × Evidence
+
+Drivers are categorized using a two-axis evaluation:
+
+- **High Impact + High Evidence** → primary strategic levers (scale and invest)  
+- **High Impact + Lower Evidence** → promising opportunities (validate via testing)  
+- **Low Impact + High Evidence** → reliable but minor effects (incremental optimization)  
+- **Low Impact + Low Evidence** → de-prioritized signals  
+
+---
+
+## Optional: Resondex Impact Score
+
+For dashboard ranking:
+
+- **Impact Score** = `abs(Probability Lift)`  
+- **Evidence Score** = `-log10(p_value)`  
+- **Resondex Impact Score** = `Impact Score × Evidence Score`
+
+Used for ranking only — underlying metrics should remain visible for transparency.
+
+---
+
+## Client-Ready Half Pager
+
+**Resondex measures each driver two ways.**  
+First, we measure **Impact** using **Probability Lift** — the percentage-point change in outcome likelihood when a driver moves from low to high.
+
+Second, we measure **Confidence** using **Mutual Information significance**, which detects both linear and non-linear relationships across categorical and continuous data.
+
+By combining **Impact (magnitude)** and **Confidence (evidence)**, Resondex prioritizes drivers that are both **material in effect** and **statistically credible**, producing a defensible focus list for investment.
+
+---
+
+## Executive One-Pager
+
+### Purpose  
+Deliver a ranked, decision-ready view of business drivers balancing **business materiality** with **statistical credibility**.
+
+### How We Measure Impact  
+**Impact Magnitude (Probability Lift)**  
+Probability Lift = P(Outcome | Driver = High) − P(Outcome | Driver = Low)
+
+**Evidence Strength (Mutual Information Significance)**  
+Mutual Information detects any meaningful dependency; MI p-values indicate reliability.
+
+### How We Prioritize  
+- High Impact + High Evidence → Scale  
+- High Impact + Lower Evidence → Test  
+- Low Impact + High Evidence → Optimize  
+- Low Impact + Low Evidence → Ignore  
+
+### Outcome  
+A ranked list answering:
+- What moves outcomes most  
+- Which effects we trust  
+- Where investment generates the greatest ROI  
+
+---
+
+## Board-Level Bullets
+
+- Measures impact as **probability lift** (business interpretable)  
+- Validates reliability using **MI significance**  
+- Prioritizes drivers via **Impact × Evidence**  
+- Produces a defensible executive ranking  
+
+---
+
+## Example Usage (Optional)
+
+```{r eval=FALSE}
+out <- bn_impact(
+  obj = bn_fit,
+  df = iris,
+  dv = "Species",
+  ivs = c("Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width"),
+  type = "mi",
+  process_subgroups = FALSE,
+  n_boot = 10,
+  n_querry = 1e4,
+  seed = 1
+)
+
+out
+```
+
+---
+
+## Reporting Language Guidance
+
+Recommended:
+- "statistically reliable association"
+- "strong evidence of a relationship"
+
+Avoid causal language unless causal methods are used.
+
+---
+
+## Implementation Notes
+
+- Probability Lift emphasizes **interpretability**
+- MI p-values reflect **evidence strength**, not causality
+- Consider multiple-testing control when evaluating many drivers

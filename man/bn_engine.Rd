@@ -18,6 +18,7 @@ bn_engine(
   cross_battery_priority = TRUE,
   all_ivs_connect_to_dv = TRUE,
   dv_connection_strength = NULL,
+  remove_dv_from_viz_prep = NULL,
   force_dv_connection = NULL,
   only_white_list = FALSE,
   compare_to_naive = TRUE,

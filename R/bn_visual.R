@@ -130,9 +130,9 @@
 #' @export
 bn_visual <- function(
     obj,
+    type = c("none", "gravity", "charge", "hierarchy"),
     nodes = NULL,
     edges = NULL,
-    type = c("none", "gravity", "charge", "hierarchy"),
     vs_height = "100vh",
     vs_width = "100%",
     gravity_constant = -9000,
