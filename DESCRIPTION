@@ -15,6 +15,7 @@ Depends:
 Imports:
     AzureStor,
     bnlearn,
+    bslib,
     car,
     caret,
     cli,
@@ -25,6 +26,7 @@ Imports:
     devtools,
     dialr,
     dplyr,
+    DT,
     entropy,
     furrr,
     future,
@@ -43,6 +45,7 @@ Imports:
     openxlsx2,
     pak,
     parallelly,
+    plotly,
     psych,
     purrr,
     RColorBrewer,
