@@ -6,9 +6,9 @@
 \usage{
 bn_visual(
   obj,
+  type = c("none", "gravity", "charge", "hierarchy"),
   nodes = NULL,
   edges = NULL,
-  type = c("none", "gravity", "charge", "hierarchy"),
   vs_height = "100vh",
   vs_width = "100\%",
   gravity_constant = -9000,
@@ -27,14 +27,14 @@ bn_visual(
 at least \code{nodes} and \code{edges} data frames. Can also be a higher-level
 object from \code{bn_engine()} or similar that includes \code{viz_prep}.}
 
+\item{type}{Character. Layout type: one of
+\code{"none"}, \code{"gravity"}, \code{"charge"}, or \code{"hierarchy"}. Default \code{"none"}.}
+
 \item{nodes}{Optional data frame of nodes to override those in \code{obj}.
 Must include columns: \code{id}, \code{label}, and optionally \code{group}, \code{color}, etc.}
 
 \item{edges}{Optional data frame of edges to override those in \code{obj}.
 Must include columns: \code{from}, \code{to}.}
-
-\item{type}{Character. Layout type: one of
-\code{"none"}, \code{"gravity"}, \code{"charge"}, or \code{"hierarchy"}. Default \code{"none"}.}
 
 \item{vs_height}{Character. Height of the visualization container
 (e.g., \code{"100vh"}). Default \code{"100vh"}.}
