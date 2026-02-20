@@ -393,13 +393,13 @@ deploy_update_runtime <- function(package_dir = ".") {
 deploy_recommended_packages <- function() {
   c(
     "AzureStor", "bnlearn", "bslib", "car", "caret", "cli",
-    "cluster", "corrplot", "corrr", "DBI", "devtools", "dialr",
+    "cluster", "corrplot", "corrr", "DBI", "devtools",
     "digest", "dplyr", "DT", "entropy", "fs", "furrr", "future",
     "future.apply", "glue", "gsubfn", "haven", "highcharter",
     "Hmisc", "igraph", "janitor", "jsonlite", "klaR", "knitr",
     "lubridate", "magrittr", "mclust", "openxlsx", "openxlsx2",
     "pak", "parallelly", "plotly", "psych", "purrr", "RColorBrewer",
-    "readxl", "rJava", "rlang", "rmarkdown", "rms", "rvest",
+    "readxl", "rlang", "rmarkdown", "rms", "rvest",
     "scales", "shiny", "shinylive", "skimr", "stringi", "stringr",
     "tibble", "tictoc", "usethis", "uuid", "visNetwork", "withr",
     "work", "xfun", "zip"

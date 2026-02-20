@@ -39,7 +39,6 @@
 #' }
 #'
 #' @importFrom dplyr mutate across case_when filter rowwise ungroup
-#' @importFrom bnlearn arcs ci.test
 #' @importFrom entropy mi.plugin
 #' @export
 bn_arc_chisq <- function(

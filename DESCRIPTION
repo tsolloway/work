@@ -14,7 +14,6 @@ Depends:
     magrittr
 Imports:
     AzureStor,
-    bnlearn,
     bslib,
     car,
     caret,
@@ -24,7 +23,6 @@ Imports:
     corrr,
     DBI,
     devtools,
-    dialr,
     digest,
     dplyr,
     DT,
@@ -53,7 +51,6 @@ Imports:
     purrr,
     RColorBrewer,
     readxl,
-    rJava,
     rlang,
     rms,
     rvest,
@@ -72,6 +69,7 @@ Imports:
     xfun,
     zip
 Suggests:
+    bnlearn,
     knitr,
     rmarkdown,
     shinylive (>= 0.3.0)

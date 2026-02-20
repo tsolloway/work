@@ -27,7 +27,6 @@
 #' BIC values from `bnlearn::score()` are *rescaled* (multiplied by -2) in `bnlearn`,
 #' so higher values indicate better models.
 #'
-#' @importFrom bnlearn score bn.fit naive.bayes
 #' @importFrom caret confusionMatrix
 #' @importFrom dplyr mutate relocate as_tibble bind_cols
 #' @importFrom purrr pluck

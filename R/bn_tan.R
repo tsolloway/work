@@ -48,7 +48,6 @@
 #' )
 #' }
 #'
-#' @importFrom bnlearn tree.bayes bn.fit
 #' @export
 bn_tan <- function(
     df,
