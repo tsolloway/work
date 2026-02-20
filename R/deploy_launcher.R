@@ -257,6 +257,9 @@ deploy_launcher <- function(
       }
     }
 
+    # Download missing WASM packages from custom repo
+    .deploy_resolve_custom_wasm_packages(dest_pkg_dir)
+
     # Count .tgz files recursively (they live in subdirectories: {name}/{name}_{version}.tgz)
     tgz_files <- list.files(dest_pkg_dir, pattern = "\\.tgz$",
                             recursive = TRUE, full.names = TRUE)

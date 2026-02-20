@@ -392,7 +392,7 @@ deploy_update_runtime <- function(package_dir = ".") {
 #' @export
 deploy_recommended_packages <- function() {
   c(
-    "AzureStor", "bnlearn", "bslib", "car", "caret", "cli",
+    "AzureStor", "bslib", "car", "caret", "cli",
     "cluster", "corrplot", "corrr", "DBI", "devtools",
     "digest", "dplyr", "DT", "entropy", "fs", "furrr", "future",
     "future.apply", "glue", "gsubfn", "haven", "highcharter",
@@ -585,6 +585,141 @@ deploy_recommended_packages <- function() {
     packages_dir = as.character(pkg_dir),
     cached = FALSE
   )
+}
+
+
+# ---- Custom WASM repo --------------------------------------------------------
+
+#' URL for the custom WASM package repository
+#' @noRd
+.deploy_custom_wasm_repo_url <- function() {
+  "https://tsolloway.github.io/wasm-packages"
+}
+
+#' Download missing WASM packages from custom repo
+#'
+#' After shinylive::export() resolves packages from the official webR CDN,
+#' some packages may be missing (empty assets in metadata.rds). This function
+#' downloads those packages from the custom WASM repo built via rwasm.
+#'
+#' @param packages_dir Path to the packages directory containing metadata.rds
+#'   and package subdirectories.
+#' @return Integer count of packages downloaded.
+#' @noRd
+.deploy_resolve_custom_wasm_packages <- function(packages_dir) {
+  metadata_path <- fs::path(packages_dir, "metadata.rds")
+  if (!fs::file_exists(metadata_path)) {
+    cli::cli_alert_warning("No metadata.rds found — skipping custom WASM repo")
+    return(0L)
+  }
+
+  metadata <- readRDS(metadata_path)
+  missing_pkgs <- names(metadata)[
+    vapply(metadata, function(x) length(x$assets) == 0 && x$type == "package", logical(1))
+  ]
+
+  if (length(missing_pkgs) == 0) {
+    cli::cli_alert_success("All packages have WASM binaries — no custom repo needed")
+    return(0L)
+  }
+
+  cli::cli_alert_info(
+    "Found {length(missing_pkgs)} package(s) missing WASM binaries: {.pkg {missing_pkgs}}"
+  )
+
+  # Fetch PACKAGES file from custom repo to get available versions
+  repo_url <- .deploy_custom_wasm_repo_url()
+  r_version <- paste0(R.version$major, ".", sub("\\..*", "", R.version$minor))
+  packages_url <- paste0(repo_url, "/bin/emscripten/contrib/", r_version, "/PACKAGES")
+
+  packages_file <- tryCatch(
+    readLines(url(packages_url), warn = FALSE),
+    error = function(e) {
+      # Try without minor version matching (e.g., 4.5 vs 4.4)
+      cli::cli_alert_warning("Could not fetch PACKAGES from custom repo for R {r_version}")
+      # Try common R versions
+      for (rv in c("4.5", "4.4", "4.3")) {
+        alt_url <- paste0(repo_url, "/bin/emscripten/contrib/", rv, "/PACKAGES")
+        result <- tryCatch(readLines(url(alt_url), warn = FALSE), error = function(e) NULL)
+        if (!is.null(result)) {
+          r_version <<- rv
+          return(result)
+        }
+      }
+      return(NULL)
+    }
+  )
+
+  if (is.null(packages_file)) {
+    cli::cli_alert_warning("Custom WASM repo not available — skipping")
+    return(0L)
+  }
+
+  # Parse PACKAGES file to get available package names and versions
+  pkg_blocks <- split(packages_file,
+                       cumsum(packages_file == "" | grepl("^Package:", packages_file)))
+  available <- list()
+  for (block in pkg_blocks) {
+    pkg_line <- grep("^Package:", block, value = TRUE)
+    ver_line <- grep("^Version:", block, value = TRUE)
+    if (length(pkg_line) > 0 && length(ver_line) > 0) {
+      pkg_name <- trimws(sub("^Package:", "", pkg_line[1]))
+      pkg_ver <- trimws(sub("^Version:", "", ver_line[1]))
+      available[[pkg_name]] <- pkg_ver
+    }
+  }
+
+  downloaded <- 0L
+  for (pkg in missing_pkgs) {
+    if (!pkg %in% names(available)) next
+
+    ver <- available[[pkg]]
+    tgz_name <- paste0(pkg, "_", ver, ".tgz")
+    tgz_url <- paste0(repo_url, "/bin/emscripten/contrib/", r_version, "/", tgz_name)
+
+    pkg_dest_dir <- fs::path(packages_dir, pkg)
+    fs::dir_create(pkg_dest_dir)
+    dest_file <- fs::path(pkg_dest_dir, tgz_name)
+
+    cli::cli_alert_info("Downloading {.pkg {pkg}} ({ver}) from custom WASM repo...")
+    dl_result <- tryCatch({
+      utils::download.file(tgz_url, dest_file, mode = "wb", quiet = TRUE)
+      TRUE
+    }, error = function(e) {
+      cli::cli_alert_warning("Failed to download {.pkg {pkg}}: {e$message}")
+      FALSE
+    })
+
+    if (dl_result) {
+      # Update metadata entry
+      metadata[[pkg]]$assets <- list(list(
+        filename = tgz_name,
+        url = tgz_url
+      ))
+      metadata[[pkg]]$path <- paste0("packages/", pkg, "/", tgz_name)
+      downloaded <- downloaded + 1L
+      cli::cli_alert_success("Downloaded {.pkg {pkg}} ({ver})")
+    }
+  }
+
+  # Save updated metadata
+  if (downloaded > 0) {
+    saveRDS(metadata, metadata_path)
+    cli::cli_alert_success(
+      "Updated metadata.rds with {downloaded} custom WASM package(s)"
+    )
+  }
+
+  still_missing <- names(metadata)[
+    vapply(metadata, function(x) length(x$assets) == 0 && x$type == "package", logical(1))
+  ]
+  if (length(still_missing) > 0) {
+    cli::cli_alert_warning(
+      "Still missing WASM binaries for: {.pkg {still_missing}}"
+    )
+  }
+
+  downloaded
 }
 
 
