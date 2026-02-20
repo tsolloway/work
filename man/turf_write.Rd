@@ -14,6 +14,7 @@ turf_write(
   labels = NULL,
   top = 50000,
   file_name = "TURF_Analysis",
+  project_name = "Project Name - (#xxxxxxx)",
   where = NULL,
   template = NULL,
   sig_threshold = 0.1,
@@ -52,6 +53,9 @@ size. Default \code{50000}.}
 
 \item{file_name}{Character. File name (without extension). Default
 \code{"TURF_Analysis"}.}
+
+\item{project_name}{Character. Project name displayed in row 3 of Dashboard
+and Best Combos sheets. Default \code{"Project Name - (#xxxxxxx)"}.}
 
 \item{where}{Character. Directory to save to. Default \code{getwd()}.}
 

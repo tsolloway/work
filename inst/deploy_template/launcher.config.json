@@ -1,0 +1,9 @@
+{
+  "appName": "Shiny App Launcher",
+  "headerTitle": "Shiny App Launcher",
+  "headerSubtitle": "Load and run Shinylive apps without R",
+  "headerBackground": "#1a1a2e",
+  "accentColor": "#4361ee",
+  "icon": null,
+  "fileExtension": "resondex"
+}

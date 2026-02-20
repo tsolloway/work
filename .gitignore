@@ -5,3 +5,4 @@
 .httr-oauth-salesforcer
 /doc/
 /Meta/
+inst/deploy_template/runtime/

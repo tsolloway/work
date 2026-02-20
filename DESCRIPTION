@@ -25,9 +25,11 @@ Imports:
     DBI,
     devtools,
     dialr,
+    digest,
     dplyr,
     DT,
     entropy,
+    fs,
     furrr,
     future,
     future.apply,
@@ -38,6 +40,7 @@ Imports:
     Hmisc,
     igraph,
     janitor,
+    jsonlite,
     klaR,
     lubridate,
     mclust,
@@ -51,6 +54,7 @@ Imports:
     RColorBrewer,
     readxl,
     rJava,
+    rlang,
     rms,
     rvest,
     scales,
@@ -64,10 +68,14 @@ Imports:
     usethis,
     uuid,
     visNetwork,
-    xfun
+    withr,
+    xfun,
+    zip
 Suggests:
     knitr,
-    rmarkdown
+    rmarkdown,
+    shinylive (>= 0.3.0)
+SystemRequirements: Node.js (>= 18), npm
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3

@@ -29,6 +29,8 @@
 #'   size. Default \code{50000}.
 #' @param file_name Character. File name (without extension). Default
 #'   \code{"TURF_Analysis"}.
+#' @param project_name Character. Project name displayed in row 3 of Dashboard
+#'   and Best Combos sheets. Default \code{"Project Name - (#xxxxxxx)"}.
 #' @param where Character. Directory to save to. Default \code{getwd()}.
 #' @param template Character. Path to the VBA template .xlsm file. Default
 #'   uses the bundled template from the work package, falling back to
@@ -65,6 +67,7 @@ turf_write <- function(
     subgroups = NULL, weight = NULL, respondent_id = NULL,
     labels = NULL, top = 50000,
     file_name = "TURF_Analysis",
+    project_name = "Project Name - (#xxxxxxx)",
     where = NULL, template = NULL,
     sig_threshold = 0.10,
     marginal_threshold = 0.20,
@@ -217,6 +220,7 @@ turf_write <- function(
   .turf_write_dashboard(
     wb, subgroup_names, n_values, col_info,
     n_items, vars, label_lookup, base_sizes,
+    project_name = project_name,
     sig_threshold = sig_threshold,
     marginal_threshold = marginal_threshold
   )
@@ -230,7 +234,8 @@ turf_write <- function(
   }
 
   .turf_write_best_combos(
-    wb, subgroup_names, n_values, col_info, base_sizes
+    wb, subgroup_names, n_values, col_info, base_sizes,
+    project_name = project_name
   )
 
 
@@ -585,6 +590,7 @@ turf_write <- function(
 .turf_write_dashboard <- function(
     wb, subgroup_names, n_values, col_info,
     n_items, vars, label_lookup, base_sizes,
+    project_name = "Project Name - (#xxxxxxx)",
     sig_threshold = 0.10, marginal_threshold = 0.20
 ) {
 
@@ -599,7 +605,7 @@ turf_write <- function(
   wb$set_row_heights(sheet, rows = 2, heights = 24)
 
   # ---- Row 3: Project name placeholder ----
-  wb$add_data(sheet, x = "Project Name - (#xxxxxxx)", dims = "B3")
+  wb$add_data(sheet, x = project_name, dims = "B3")
   wb$add_font(sheet, dims = "B3", bold = "true", size = 14)
   wb$set_row_heights(sheet, rows = 3, heights = 19)
 
@@ -778,7 +784,8 @@ turf_write <- function(
 # Best Combos builder (controls + combo results table)
 # =============================================================================
 
-.turf_write_best_combos <- function(wb, subgroup_names, n_values, col_info, base_sizes){
+.turf_write_best_combos <- function(wb, subgroup_names, n_values, col_info, base_sizes,
+                                    project_name = "Project Name - (#xxxxxxx)"){
 
   sheet <- "Best Combos"
   grey_fill <- wb_color("D9D9D9")
@@ -793,7 +800,7 @@ turf_write <- function(
   wb$set_row_heights(sheet, rows = 2, heights = 24)
 
   # ---- Row 3: Project name placeholder ----
-  wb$add_data(sheet, x = "Project Name - (#xxxxxxx)", dims = "B3")
+  wb$add_data(sheet, x = project_name, dims = "B3")
   wb$add_font(sheet, dims = "B3", bold = "true", size = 14)
   wb$set_row_heights(sheet, rows = 3, heights = 19)
 
@@ -1099,4 +1106,23 @@ turf_write <- function(
   wb$add_formula(sheet, x = base_f, dims = "O5")
   wb$add_font(sheet, dims = "O5", bold = "true", size = 12)
   .style_control_pair("N5", "O5", "N5:O5")
+
+  # Items: All/None toggle (Dashboard only)
+  if(is_dashboard){
+    wb$add_data(sheet, x = "Select:", dims = "AB3")
+    wb$add_font(sheet, dims = "AB3", bold = "true", size = 12)
+    wb$add_cell_style(sheet, dims = "AB3", horizontal = "center")
+    wb$add_data(sheet, x = "-", dims = "AB5")
+    wb$add_data_validation(
+      sheet, dims = "AB5", type = "list",
+      value = '"-,All,None"'
+    )
+    wb$add_font(sheet, dims = "AB5", size = 12)
+    grey_fill <- wb_color("D9D9D9")
+    wb$add_fill(sheet, dims = "AB5", color = grey_fill)
+    wb$add_cell_style(sheet, dims = "AB5", horizontal = "center", vertical = "center")
+    wb$add_border(sheet, dims = "AB5",
+                  top_border = "medium", bottom_border = "medium",
+                  left_border = "medium", right_border = "medium")
+  }
 }
