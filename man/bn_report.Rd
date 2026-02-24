@@ -11,6 +11,7 @@ bn_report(
   title = "Network Analysis",
   section_height = "800px",
   interactive = TRUE,
+  physics = TRUE,
   add_key = FALSE,
   self_contained = TRUE,
   file = "bn_report.html",

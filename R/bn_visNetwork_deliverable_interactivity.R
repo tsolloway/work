@@ -39,7 +39,7 @@
 #'   [visNetwork::visEvents()]
 #'
 #' @export
-bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = "none"){
+bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = "none", key_json = NULL, key_width = 0.1, panel_ns = NULL){
 
   obj %>%
     visNetwork::visInteraction(
@@ -47,13 +47,13 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       dragView  = TRUE,       # allow moving the canvas
       zoomView  = TRUE,       # allow zoom
       multiselect = TRUE,      # allow multiple selection
-      navigationButtons = TRUE
+      navigationButtons = FALSE
     ) %>%
     visNetwork::visOptions(
       highlightNearest = TRUE,
       nodesIdSelection = list(
         enabled = TRUE,
-        style = "margin: 10px; padding: 6px 10px; border: 1px solid rgb(204, 204, 204); border-radius: 6px; font-size: 14px; background: transparent; cursor: pointer; width: 150px;"
+        style = "margin: 10px; padding: 0 10px; border: 1px solid rgb(204, 204, 204); border-radius: 6px; font-size: 13px; background: transparent; cursor: pointer; width: 130px; height: 34px; box-sizing: border-box;"
       ),
       manipulation = FALSE
     ) %>%
@@ -64,6 +64,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
 
       var network = this;
       var layoutType = '", type, "';
+      var panelNs = ", ifelse(is.null(panel_ns), "null", paste0("'", panel_ns, "'")), ";
       var physicsEnabled = ", tolower(physics), ";
       network.setOptions({ physics: { enabled: physicsEnabled } });"
       , "
@@ -74,29 +75,166 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
       document.head.appendChild(link);
 
+      // shared button dimensions
+      var btnW = 130;
+      var btnH = 34;
+      var btnGap = 6;
+      var btnStyle = 'width:' + btnW + 'px;height:' + btnH + 'px;padding:0 10px;background:transparent;color:black;border:1px solid rgb(204,204,204);border-radius:6px;cursor:pointer;font-size:13px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:4px;flex-shrink:0;white-space:nowrap;';
+
+      // right-side button container (prevents overlap with left-side controls)
+      var rightBar = document.createElement('div');
+      rightBar.id = 'rightButtonBar';
+      rightBar.style.cssText = 'position:fixed;top:10px;right:10px;left:220px;z-index:9999;display:flex;gap:' + btnGap + 'px;justify-content:flex-end;flex-wrap:wrap;pointer-events:none;';
+      document.body.appendChild(rightBar);
+
+      // style the nodesIdSelection select to match button dimensions
+      var selStyle = document.createElement('style');
+      selStyle.textContent = '.vis-configuration-wrapper select, div[style*=\"nodesIdSelection\"] select, .vis-network select { width:' + btnW + 'px !important; height:' + btnH + 'px !important; padding:0 10px !important; font-size:13px !important; border:1px solid rgb(204,204,204) !important; border-radius:6px !important; box-sizing:border-box !important; max-height:300px !important; } #rightButtonBar > button { pointer-events:auto; } .nav-ctrl:hover{background:#f0f0f0!important;border-color:#999!important;} .nav-ctrl:active{background:#e0e0e0!important;}';
+      document.head.appendChild(selStyle);
+
+      // -------------------- Custom Navigation Controls --------------------
+      var navSize = 30;
+      var navGap = 4;
+      var navBtnStyle = 'width:' + navSize + 'px;height:' + navSize + 'px;border-radius:50%;border:1px solid #ccc;background:white;color:black;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;padding:0;';
+      function makeNavBtn(icon) {
+        var b = document.createElement('button');
+        b.className = 'nav-ctrl';
+        b.innerHTML = '<i class=\"fa ' + icon + '\"></i>';
+        b.style.cssText = navBtnStyle;
+        return b;
+      }
+      function panView(dx, dy) {
+        var pos = network.getViewPosition();
+        var s = network.getScale();
+        network.moveTo({ position: { x: pos.x + dx/s, y: pos.y + dy/s } });
+      }
+
+      // directional pad (bottom-left)
+      var navPad = document.createElement('div');
+      navPad.style.cssText = 'position:fixed;bottom:10px;left:10px;z-index:9999;';
+      var navRow1 = document.createElement('div');
+      navRow1.style.cssText = 'display:flex;justify-content:center;margin-bottom:' + navGap + 'px;';
+      var navRow2 = document.createElement('div');
+      navRow2.style.cssText = 'display:flex;gap:' + navGap + 'px;';
+
+      var upBtn = makeNavBtn('fa-chevron-up');
+      upBtn.addEventListener('click', function() { panView(0, -120); });
+      navRow1.appendChild(upBtn);
+      var leftBtn = makeNavBtn('fa-chevron-left');
+      leftBtn.addEventListener('click', function() { panView(-120, 0); });
+      navRow2.appendChild(leftBtn);
+      var downBtn = makeNavBtn('fa-chevron-down');
+      downBtn.addEventListener('click', function() { panView(0, 120); });
+      navRow2.appendChild(downBtn);
+      var rightBtn = makeNavBtn('fa-chevron-right');
+      rightBtn.addEventListener('click', function() { panView(120, 0); });
+      navRow2.appendChild(rightBtn);
+
+      navPad.appendChild(navRow1);
+      navPad.appendChild(navRow2);
+      document.body.appendChild(navPad);
+
+      // zoom controls (bottom-right)
+      var zoomPad = document.createElement('div');
+      zoomPad.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;display:flex;gap:' + navGap + 'px;';
+      var zoomOutBtn = makeNavBtn('fa-minus');
+      zoomOutBtn.addEventListener('click', function() {
+        network.moveTo({ scale: network.getScale() * 0.7, animation: { duration: 200 } });
+      });
+      zoomPad.appendChild(zoomOutBtn);
+      var zoomInBtn = makeNavBtn('fa-plus');
+      zoomInBtn.addEventListener('click', function() {
+        network.moveTo({ scale: network.getScale() * 1.4, animation: { duration: 200 } });
+      });
+      zoomPad.appendChild(zoomInBtn);
+      var fitBtn = makeNavBtn('fa-expand');
+      fitBtn.addEventListener('click', function() { network.fit({ animation: { duration: 300 } }); });
+      zoomPad.appendChild(fitBtn);
+      document.body.appendChild(zoomPad);
+
+      // -------------------- Custom Select Dropdown --------------------
+      // the native select is a sibling of .vis-network, not inside it
+      var idSel = document.querySelector('select');
+      if (idSel) {
+        // hide the native select (and its label wrapper only if it does not contain the network)
+        idSel.style.display = 'none';
+        var selParent = idSel.parentNode;
+        if (selParent && selParent !== document.body && !selParent.querySelector('.vis-network')) {
+          selParent.style.display = 'none';
+        }
+
+        // build node list from the network data directly
+        var nodeList = network.body.data.nodes.get().sort(function(a,b) {
+          return (a.label || a.id.toString()).localeCompare(b.label || b.id.toString());
+        });
+
+        var ddWrap = document.createElement('div');
+        ddWrap.style.cssText = 'position:fixed;top:10px;left:10px;z-index:100000;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
+        var ddBtn = document.createElement('button');
+        ddBtn.id = 'idSelectBtn';
+        ddBtn.style.cssText = 'width:' + btnW + 'px;height:' + btnH + 'px;padding:0 10px;background:transparent;color:black;border:1px solid rgb(204,204,204);border-radius:6px;cursor:pointer;font-size:13px;box-sizing:border-box;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        ddBtn.textContent = 'Select by ID';
+        ddWrap.appendChild(ddBtn);
+
+        var ddPanel = document.createElement('div');
+        ddPanel.style.cssText = 'display:none;position:absolute;top:' + (btnH + 4) + 'px;left:0;min-width:' + btnW + 'px;max-height:300px;overflow-y:auto;background:white;border:1px solid #ccc;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.15);padding:4px 0;';
+
+        nodeList.forEach(function(nd) {
+          var item = document.createElement('div');
+          item.textContent = nd.label || nd.id;
+          item.style.cssText = 'padding:6px 10px;cursor:pointer;font-size:13px;white-space:nowrap;';
+          item.addEventListener('mouseenter', function() { item.style.background = '#f0f0f0'; });
+          item.addEventListener('mouseleave', function() { item.style.background = 'transparent'; });
+          item.addEventListener('click', function() {
+            // drive the hidden native select to trigger highlightNearest
+            idSel.value = nd.id;
+            if (typeof idSel.onchange === 'function') {
+              idSel.onchange();
+            } else {
+              idSel.dispatchEvent(new Event('change', {bubbles:true}));
+            }
+            network.focus(nd.id, { scale: 1, animation: { duration: 300 } });
+            ddBtn.textContent = item.textContent;
+            ddPanel.style.display = 'none';
+          });
+          ddPanel.appendChild(item);
+        });
+
+        ddWrap.appendChild(ddPanel);
+        document.body.appendChild(ddWrap);
+
+        ddBtn.addEventListener('click', function(e) {
+          ddPanel.style.display = ddPanel.style.display === 'none' ? 'block' : 'none';
+          e.stopPropagation();
+        });
+        document.addEventListener('click', function(e) {
+          if (!ddWrap.contains(e.target)) ddPanel.style.display = 'none';
+        });
+
+        // sync button text when nodes are selected/deselected via the graph
+        network.on('selectNode', function(params) {
+          if (params.nodes.length === 1) {
+            var nd = network.body.data.nodes.get(params.nodes[0]);
+            ddBtn.textContent = nd.label || nd.id;
+          }
+        });
+        network.on('deselectNode', function() {
+          ddBtn.textContent = 'Select by ID';
+        });
+      }
+
       // -------------------- Font Size Button --------------------
       var btn = document.createElement('button');
       btn.id = 'fontButton';
       btn.className = 'vis-button';
       btn.innerHTML = '<i class=\"fa fa-pencil-alt\"></i> Font Size';
-      btn.style.position = 'fixed';
-      btn.style.top = '10px';
-      btn.style.left = '40px';
-      btn.style.zIndex = 9999;
-      btn.style.padding = '6px 10px';
-      btn.style.marginBottom = '6px';
-      btn.style.background = 'transparent';
-      btn.style.color = 'black';
-      btn.style.border = '1px solid rgb(204, 204, 204)';
-      btn.style.borderRadius = '6px';
-      btn.style.cursor = 'pointer';
-      document.body.appendChild(btn);
+      btn.style.cssText = btnStyle;
+      rightBar.appendChild(btn);
 
       // Slider container (hidden initially)
       var sliderContainer = document.createElement('div');
       sliderContainer.style.position = 'fixed';
       sliderContainer.style.top = '50px';
-      sliderContainer.style.left = '40px';
       sliderContainer.style.zIndex = 9999;
       sliderContainer.style.padding = '6px 10px';
       sliderContainer.style.background = 'rgba(255,255,255,0.95)';
@@ -124,17 +262,13 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       span.innerHTML = slider.value;
       sliderContainer.appendChild(span);
 
-      // Toggle slider visibility dynamically above the button
+      // Toggle slider visibility below the button
       btn.addEventListener('click', function(e){
         if(sliderContainer.style.display === 'none') {
-          // Get button position
           var rect = btn.getBoundingClientRect();
-          sliderContainer.style.top = (rect.top - sliderContainer.offsetHeight - 6) + 'px';
+          sliderContainer.style.top = (rect.bottom + 6) + 'px';
           sliderContainer.style.left = rect.left + 'px';
           sliderContainer.style.display = 'block';
-          // reposition after display so offsetHeight is accurate
-          var sliderRect = sliderContainer.getBoundingClientRect();
-          sliderContainer.style.top = (rect.top - sliderRect.height - 6) + 'px';
           span.style.display = 'inline';
         } else {
           sliderContainer.style.display = 'none';
@@ -177,17 +311,8 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         physBtn.innerHTML = physicsEnabled
           ? '<i class=\"fa fa-atom\"></i> Physics: On'
           : '<i class=\"fa fa-atom\"></i> Physics: Off';
-        physBtn.style.position = 'fixed';
-        physBtn.style.top = '10px';
-        physBtn.style.left = '200px';
-        physBtn.style.zIndex = 9999;
-        physBtn.style.padding = '6px 10px';
-        physBtn.style.background = physicsEnabled ? 'rgba(200,230,255,0.3)' : 'transparent';
-        physBtn.style.color = 'black';
-        physBtn.style.border = '1px solid rgb(204, 204, 204)';
-        physBtn.style.borderRadius = '6px';
-        physBtn.style.cursor = 'pointer';
-        document.body.appendChild(physBtn);
+        physBtn.style.cssText = btnStyle + (physicsEnabled ? 'background:rgba(200,230,255,0.3);' : '');
+        rightBar.appendChild(physBtn);
 
         physBtn.addEventListener('click', function() {
           physicsEnabled = !physicsEnabled;
@@ -202,48 +327,13 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         });
       }
 
-      // -------------------- Download PNG Button --------------------
-      var pngBtn = document.createElement('button');
-      pngBtn.id = 'pngButton';
-      pngBtn.className = 'vis-button';
-      pngBtn.innerHTML = '<i class=\"fa fa-image\"></i> Download PNG';
-      pngBtn.style.position = 'fixed';
-      pngBtn.style.top = '10px';
-      pngBtn.style.right = '10px';
-      pngBtn.style.zIndex = 9999;
-      pngBtn.style.padding = '6px 10px';
-      pngBtn.style.background = 'transparent';
-      pngBtn.style.color = 'black';
-      pngBtn.style.border = '1px solid rgb(204, 204, 204)';
-      pngBtn.style.borderRadius = '6px';
-      pngBtn.style.cursor = 'pointer';
-      document.body.appendChild(pngBtn);
-
-      pngBtn.addEventListener('click', function() {
-        var canvas = network.canvas.frame.canvas;
-        var dataURL = canvas.toDataURL('image/png');
-        var a = document.createElement('a');
-        a.href = dataURL;
-        a.download = 'network.png';
-        a.click();
-      });
-
       // -------------------- Download SVG Button --------------------
       var svgBtn = document.createElement('button');
       svgBtn.id = 'svgButton';
       svgBtn.className = 'vis-button';
       svgBtn.innerHTML = '<i class=\"fa fa-file-code\"></i> Download SVG';
-      svgBtn.style.position = 'fixed';
-      svgBtn.style.top = '10px';
-      svgBtn.style.right = '150px';
-      svgBtn.style.zIndex = 9999;
-      svgBtn.style.padding = '6px 10px';
-      svgBtn.style.background = 'transparent';
-      svgBtn.style.color = 'black';
-      svgBtn.style.border = '1px solid rgb(204, 204, 204)';
-      svgBtn.style.borderRadius = '6px';
-      svgBtn.style.cursor = 'pointer';
-      document.body.appendChild(svgBtn);
+      svgBtn.style.cssText = btnStyle;
+      rightBar.appendChild(svgBtn);
 
       svgBtn.addEventListener('click', function() {
         var svgNS = 'http://www.w3.org/2000/svg';
@@ -301,23 +391,24 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         a.click();
       });
 
-      // -------------------- Save Layout Button --------------------
-      var saveBtn = document.createElement('button');
-      saveBtn.id = 'saveLayoutButton';
-      saveBtn.className = 'vis-button';
-      saveBtn.innerHTML = '<i class=\"fa fa-floppy-disk\"></i> Save Layout';
-      saveBtn.style.position = 'fixed';
-      saveBtn.style.top = '10px';
-      saveBtn.style.right = '300px';
-      saveBtn.style.zIndex = 9999;
-      saveBtn.style.padding = '6px 10px';
-      saveBtn.style.background = 'transparent';
-      saveBtn.style.color = 'black';
-      saveBtn.style.border = '1px solid rgb(204, 204, 204)';
-      saveBtn.style.borderRadius = '6px';
-      saveBtn.style.cursor = 'pointer';
-      document.body.appendChild(saveBtn);
+      // -------------------- Download PNG Button --------------------
+      var pngBtn = document.createElement('button');
+      pngBtn.id = 'pngButton';
+      pngBtn.className = 'vis-button';
+      pngBtn.innerHTML = '<i class=\"fa fa-image\"></i> Download PNG';
+      pngBtn.style.cssText = btnStyle;
+      rightBar.appendChild(pngBtn);
 
+      pngBtn.addEventListener('click', function() {
+        var canvas = network.canvas.frame.canvas;
+        var dataURL = canvas.toDataURL('image/png');
+        var a = document.createElement('a');
+        a.href = dataURL;
+        a.download = 'network.png';
+        a.click();
+      });
+
+      // -------------------- Snapshot Helpers (always available) --------------------
       // helper: snapshot full node state (positions + edits)
       function getNodeSnapshot() {
         var nodes = network.body.data.nodes.get();
@@ -370,7 +461,6 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         }
         if (updates.length > 0) {
           network.body.data.nodes.update(updates);
-          network.fit();
         }
         // sync font size slider
         if (lastFontSize !== null) {
@@ -379,8 +469,30 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         }
       }
 
+      // -------------------- Save Layout Button (standalone only, hidden in report) --------------------
+      if (!panelNs) {
+      var saveBtn = document.createElement('button');
+      saveBtn.id = 'saveLayoutButton';
+      saveBtn.className = 'vis-button';
+      saveBtn.innerHTML = '<i class=\"fa fa-floppy-disk\"></i> Save Layout';
+      saveBtn.style.position = 'fixed';
+      saveBtn.style.top = '10px';
+      saveBtn.style.right = '300px';
+      saveBtn.style.zIndex = 9999;
+      saveBtn.style.padding = '6px 10px';
+      saveBtn.style.background = 'transparent';
+      saveBtn.style.color = 'black';
+      saveBtn.style.border = '1px solid rgb(204, 204, 204)';
+      saveBtn.style.borderRadius = '6px';
+      saveBtn.style.cursor = 'pointer';
+      document.body.appendChild(saveBtn);
+
       saveBtn.addEventListener('click', function() {
-        var json = JSON.stringify(getNodeSnapshot(), null, 2);
+        var saveData = {
+          nodes: getNodeSnapshot(),
+          keyLabels: keyData ? keyData.map(function(item) { return { color: item.color, label: item.label }; }) : null
+        };
+        var json = JSON.stringify(saveData, null, 2);
         var blob = new Blob([json], {type: 'application/json'});
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -422,7 +534,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         var reader = new FileReader();
         reader.onload = function(e) {
           try {
-            var layout = JSON.parse(e.target.result);
+            var parsed = JSON.parse(e.target.result);
             // turn off physics and straighten edges to preserve loaded positions
             physicsEnabled = false;
             network.setOptions({ physics: { enabled: false }, edges: { smooth: false } });
@@ -431,7 +543,18 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
               physBtn.innerHTML = '<i class=\"fa fa-atom\"></i> Physics: Off';
               physBtn.style.background = 'transparent';
             }
+            // handle new format (object with nodes + keyLabels) and old format (plain array)
+            var layout = parsed.nodes || parsed;
             applyNodeSnapshot(layout);
+            // restore legend labels
+            if (parsed.keyLabels && keyData) {
+              parsed.keyLabels.forEach(function(saved) {
+                keyData.forEach(function(item) {
+                  if (item.color === saved.color) item.label = saved.label;
+                });
+              });
+              renderLegend();
+            }
           } catch(err) {
             alert('Invalid layout file.');
           }
@@ -439,6 +562,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         reader.readAsText(file);
         fileInput.value = '';
       });
+      } // end if (!panelNs) — hide Save/Load buttons in report context
 
       // -------------------- localStorage Auto-save --------------------
       // Build a storage key from node ids to identify this specific network
@@ -451,18 +575,61 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       try {
         var saved = localStorage.getItem(storageKey);
         if (saved) {
-          applyNodeSnapshot(JSON.parse(saved));
+          var parsed = JSON.parse(saved);
+          var layout = parsed.nodes || parsed;
+          applyNodeSnapshot(layout);
+          if (parsed.keyLabels && keyData) {
+            parsed.keyLabels.forEach(function(s) {
+              keyData.forEach(function(item) {
+                if (item.color === s.color) item.label = s.label;
+              });
+            });
+            if (typeof renderLegend === 'function') renderLegend();
+          }
         }
       } catch(e) {}
 
       // Auto-save full node state to localStorage after drag or edit
+      function getFullSnapshot() {
+        return {
+          nodes: getNodeSnapshot(),
+          keyLabels: keyData ? keyData.map(function(item) { return { color: item.color, label: item.label }; }) : null
+        };
+      }
+
       function saveToLocalStorage() {
         try {
-          localStorage.setItem(storageKey, JSON.stringify(getNodeSnapshot()));
+          localStorage.setItem(storageKey, JSON.stringify(getFullSnapshot()));
         } catch(e) {}
       }
-      network.on('dragEnd', saveToLocalStorage);
-      network.body.data.nodes.on('update', saveToLocalStorage);
+
+      // push snapshot to parent page (for report-level save/load)
+      var suppressPush = false;
+      function pushToParent() {
+        if (!panelNs || suppressPush) return;
+        try {
+          window.parent.postMessage({ type: 'snapshotPush', nsKey: panelNs, data: getFullSnapshot() }, '*');
+        } catch(e) {}
+      }
+
+      function saveState() {
+        saveToLocalStorage();
+        pushToParent();
+      }
+
+      network.on('dragEnd', saveState);
+      network.on('stabilized', saveState);
+      network.body.data.nodes.on('update', saveState);
+
+      // push initial state to parent (delayed to allow layout to settle)
+      setTimeout(pushToParent, 500);
+
+      // tell parent this iframe is ready (so parent can send pending load data)
+      if (panelNs) {
+        try {
+          window.parent.postMessage({ type: 'iframeReady', nsKey: panelNs }, '*');
+        } catch(e) {}
+      }
 
       // -------------------- Right-click Edit Modal --------------------
       var modal = document.createElement('div');
@@ -504,6 +671,14 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
           if (val !== '') update.value = parseFloat(val);
           network.body.data.nodes.update(update);
           modal.style.display = 'none';
+          // only sync to legend/attribute if this is a community tab (no keyData)
+          if (!keyData) {
+            try {
+              var edits = {};
+              edits[orig.color] = update.label;
+              window.parent.postMessage({ type: 'nodeUpdate', edits: edits }, '*');
+            } catch(e) {}
+          }
         };
       }
 
@@ -518,22 +693,134 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         openEditModal(nodeId);
       });
 
-      // -------------------- Right-click Edit Legend Labels --------------------
-      var legendContainer = document.querySelector('div[id^=\"legend\"]');
-      if (legendContainer && legendContainer.network) {
-        var legendNet = legendContainer.network;
-        legendNet.on('oncontext', function(params) {
-          var raw = params.event.srcEvent || params.event;
-          raw.preventDefault();
-          var nodeId = legendNet.getNodeAt(params.pointer.DOM);
-          if (!nodeId) return;
-          var nd = legendNet.body.data.nodes.get(nodeId);
-          var newLabel = prompt('Edit key label:', nd.label);
-          if (newLabel !== null) {
-            legendNet.body.data.nodes.update({ id: nodeId, label: newLabel, color: nd.color, shape: nd.shape });
-          }
-        });
+      // -------------------- Custom HTML Legend Overlay --------------------
+      var keyData = ", ifelse(is.null(key_json), "null", as.character(key_json)), ";
+      if (keyData) {
+        var legend = document.createElement('div');
+        legend.id = 'customLegend';
+        legend.style.cssText = 'position:fixed;top:50px;left:10px;min-width:' + btnW + 'px;max-width:200px;max-height:70%;overflow-x:hidden;overflow-y:auto;background:rgba(255,255,255,0.95);border:1px solid #ccc;border-radius:6px;padding:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;z-index:99999;pointer-events:auto;box-sizing:border-box;';
+        document.body.appendChild(legend);
+        legend.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+
+        function openKeyEditAll() {
+          var html = '<div style=\"font-size:16px;font-weight:600;margin-bottom:12px;\">Edit Community Names</div>';
+          keyData.forEach(function(item, i) {
+            html += '<div style=\"display:flex;align-items:center;margin-bottom:8px;\">'
+              + '<span style=\"display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;flex-shrink:0;background:' + item.color + ';\"></span>'
+              + '<input id=\"keyLabel_' + i + '\" type=\"text\" value=\"' + (item.label || '').replace(/\"/g,'&quot;') + '\" style=\"flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:14px;box-sizing:border-box;\">'
+              + '</div>';
+          });
+          html += '<div style=\"text-align:right;margin-top:8px;\">'
+            + '<button id=\"editCancel\" style=\"padding:6px 14px;margin-right:8px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;font-size:14px;\">Cancel</button>'
+            + '<button id=\"editSave\" style=\"padding:6px 14px;border:none;border-radius:4px;background:#4A90D9;color:#fff;cursor:pointer;font-size:14px;\">Save</button>'
+            + '</div>';
+          box.innerHTML = html;
+          modal.style.display = 'block';
+          document.getElementById('keyLabel_0').focus();
+          document.getElementById('editCancel').onclick = function() { modal.style.display = 'none'; };
+          box.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') document.getElementById('editSave').click(); });
+          document.getElementById('editSave').onclick = function() {
+            keyData.forEach(function(item, i) {
+              item.label = document.getElementById('keyLabel_' + i).value;
+            });
+            renderLegend();
+            modal.style.display = 'none';
+            // notify parent page so community tabs can sync
+            try { window.parent.postMessage({ type: 'legendUpdate', keyData: keyData }, '*'); } catch(e) {}
+            pushToParent();
+          };
+        }
+
+        function renderLegend() {
+          legend.innerHTML = '';
+          keyData.forEach(function(item, idx) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:flex-start;padding:4px 0;cursor:default;';
+            var dot = document.createElement('span');
+            dot.style.cssText = 'display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;margin-top:2px;flex-shrink:0;background:' + item.color + ';';
+            var lbl = document.createElement('span');
+            lbl.textContent = item.label;
+            lbl.style.cssText = 'flex:1;word-wrap:break-word;overflow-wrap:break-word;';
+            row.appendChild(dot);
+            row.appendChild(lbl);
+            legend.appendChild(row);
+
+            row.style.cursor = 'pointer';
+            row.addEventListener('dblclick', function(e) { e.preventDefault(); e.stopPropagation(); openKeyEditAll(); });
+            row.addEventListener('mousedown', function(e) { if (e.button === 2) { e.preventDefault(); e.stopPropagation(); openKeyEditAll(); } });
+          });
+        }
+        renderLegend();
       }
+
+      // listen for messages from parent page
+      window.addEventListener('message', function(evt) {
+        if (!evt.data) return;
+
+        // legend/node sync between tabs
+        var edits = evt.data.edits || {};
+        if (Object.keys(edits).length > 0) {
+          if (evt.data.type === 'legendUpdate') {
+            var nodes = network.body.data.nodes.get();
+            var changed = [];
+            nodes.forEach(function(n) {
+              if (edits[n.color] && n.label !== edits[n.color]) {
+                changed.push({ id: n.id, label: edits[n.color], group: n.group, color: n.color });
+              }
+            });
+            if (changed.length > 0) network.body.data.nodes.update(changed);
+          }
+          if (evt.data.type === 'nodeUpdate' && keyData) {
+            var redraw = false;
+            keyData.forEach(function(item) {
+              if (edits[item.color] && item.label !== edits[item.color]) {
+                item.label = edits[item.color];
+                redraw = true;
+              }
+            });
+            if (redraw) renderLegend();
+          }
+        }
+
+        // report-level load: parent sends snapshot data directly
+        if (evt.data.type === 'applyReportLoad' && evt.data.snapshot) {
+          window.bnApplySnapshot(evt.data.snapshot);
+        }
+
+        // parent tells us to re-fit (e.g. after becoming visible)
+        if (evt.data.type === 'fitNetwork') {
+          network.fit();
+        }
+      });
+
+      // expose global functions for parent to call directly
+      window.bnGetSnapshot = function() {
+        return getFullSnapshot();
+      };
+
+      window.bnApplySnapshot = function(d) {
+        if (!d) return;
+        suppressPush = true;
+        physicsEnabled = false;
+        network.setOptions({ physics: { enabled: false }, edges: { smooth: false } });
+        var physBtn = document.getElementById('physicsButton');
+        if (physBtn) {
+          physBtn.innerHTML = '<i class=\"fa fa-atom\"></i> Physics: Off';
+          physBtn.style.background = 'transparent';
+        }
+        var layout = d.nodes || d;
+        applyNodeSnapshot(layout);
+        if (d.keyLabels && keyData) {
+          d.keyLabels.forEach(function(s) {
+            keyData.forEach(function(item) {
+              if (item.color === s.color) item.label = s.label;
+            });
+          });
+          if (typeof renderLegend === 'function') renderLegend();
+        }
+        suppressPush = false;
+        pushToParent();
+      };
 
     }
   ")

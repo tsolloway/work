@@ -4,7 +4,14 @@
 \alias{bn_visNetwork_deliverable_interactivity}
 \title{Add Interactivity and Export Controls to a visNetwork Bayesian Network}
 \usage{
-bn_visNetwork_deliverable_interactivity(obj)
+bn_visNetwork_deliverable_interactivity(
+  obj,
+  physics = TRUE,
+  type = "none",
+  key_json = NULL,
+  key_width = 0.1,
+  panel_ns = NULL
+)
 }
 \arguments{
 \item{obj}{A \code{visNetwork} object produced by functions such as

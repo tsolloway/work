@@ -95,7 +95,14 @@ bn_report <- function(
 
 
   # --- helper: render one widget to iframe html ---
-  render_widget <- function(result, type, do_community_val) {
+  render_widget <- function(result, type, do_community_val, result_name = NULL) {
+
+    # no legend on community tabs
+    use_key <- add_key && !do_community_val
+
+    # build namespace key for report-level save/load
+    view_name <- if (do_community_val) "community" else "attribute"
+    ns <- if (!is.null(result_name)) paste(result_name, type, view_name, sep = "|") else NULL
 
     viz <- tryCatch(
       bn_visual(
@@ -105,7 +112,8 @@ bn_report <- function(
         vs_height = "95vh",
         interactive = interactive,
         physics = physics,
-        add_key = add_key,
+        add_key = use_key,
+        panel_ns = ns,
         save_visuals = FALSE,
         seed = seed
       ),
@@ -138,14 +146,8 @@ bn_report <- function(
         "<head><style>",
         "body,html{margin:0!important;padding:0!important;height:100%!important;overflow:hidden!important;}",
         " .htmlwidget{height:100%!important;}",
-        # move font size button to bottom-left (away from visNetwork select-by-id at top)
-        " #fontButton{top:auto!important;bottom:10px!important;left:10px!important;}",
-        " #physicsButton{top:10px!important;left:200px!important;}",
-        # keep download buttons at top-right
-        " #pngButton{top:10px!important;right:10px!important;left:auto!important;}",
-        " #svgButton{top:10px!important;right:160px!important;left:auto!important;}",
-        " #saveLayoutButton{top:10px!important;right:300px!important;left:auto!important;}",
-        " #loadLayoutButton{top:10px!important;right:440px!important;left:auto!important;}",
+        # right group: buttons are flex children of #rightButtonBar
+        " #pngButton,#svgButton,#fontButton,#physicsButton{width:130px!important;height:34px!important;}",
         "</style>"
       ),
       widget_html
@@ -201,8 +203,8 @@ bn_report <- function(
 
       if (has_tabs) {
 
-        tab_attr <- render_widget(result, type, FALSE)
-        tab_comm <- render_widget(result, type, TRUE)
+        tab_attr <- render_widget(result, type, FALSE, result_name = name)
+        tab_comm <- render_widget(result, type, TRUE, result_name = name)
 
         attr_id <- glue::glue("{panel_id}_attr")
         comm_id <- glue::glue("{panel_id}_comm")
@@ -213,14 +215,14 @@ bn_report <- function(
           '    <button class="tab-btn active" onclick="switchTab(this, \'{attr_id}\')">Attribute</button>',
           '    <button class="tab-btn" onclick="switchTab(this, \'{comm_id}\')">Community</button>',
           '  </div>',
-          '  <div id="{attr_id}" class="tab-panel active">{tab_attr}</div>',
-          '  <div id="{comm_id}" class="tab-panel">{tab_comm}</div>',
+          '  <div id="{attr_id}" class="tab-panel active attr-panel" data-result="{name}" data-layout="{type}" data-view="attribute">{tab_attr}</div>',
+          '  <div id="{comm_id}" class="tab-panel comm-panel" data-result="{name}" data-layout="{type}" data-view="community">{tab_comm}</div>',
           '</div>'
         )
 
       } else {
 
-        panel_content <- render_widget(result, type, do_community[1])
+        panel_content <- render_widget(result, type, do_community[1], result_name = name)
 
         glue::glue(
           '<div id="{panel_id}" class="type-panel" style="display: {visible};">',
@@ -241,6 +243,9 @@ bn_report <- function(
       '      <select id="{rid}_select" onchange="switchType(\'{rid}\', this.value)">',
       '        {options_str}',
       '      </select>',
+      '      <button class="report-btn" onclick="saveAllLayouts(\'{rid}\')">Save</button>',
+      '      <button class="report-btn" onclick="document.getElementById(\'{rid}_fileInput\').click()">Load</button>',
+      '      <input type="file" id="{rid}_fileInput" accept=".resondex_bn,.json" style="display:none" onchange="loadAllLayouts(\'{rid}\', this)">',
       '    </div>',
       '    {type_panels_str}',
       '  </div>',
@@ -318,6 +323,19 @@ bn_report <- function(
       cursor: pointer;
     }}
 
+    .report-btn {{
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      color: #333;
+      cursor: pointer;
+    }}
+    .report-btn:hover {{
+      background: #f0f0f0;
+    }}
+
     /* type panels */
     .type-panel {{
       padding: 0;
@@ -372,7 +390,20 @@ bn_report <- function(
         p.style.display = "none";
       }});
       // show selected
-      document.getElementById(panelId).style.display = "block";
+      var panel = document.getElementById(panelId);
+      panel.style.display = "block";
+
+      // deliver any pending load data to iframes in this panel
+      if (Object.keys(window.pendingLoads).length > 0) {{
+        panel.querySelectorAll(".tab-panel[data-result]").forEach(function(tp) {{
+          sendSnapshotToPanel(tp);
+        }});
+      }}
+
+      // re-fit all visible iframes (they may have been sized while hidden)
+      panel.querySelectorAll("iframe").forEach(function(iframe) {{
+        try {{ iframe.contentWindow.postMessage({{ type: "fitNetwork" }}, "*"); }} catch(e) {{}}
+      }});
     }}
 
     function switchTab(btn, panelId) {{
@@ -385,6 +416,157 @@ bn_report <- function(
       var typePanel = bar.parentElement;
       typePanel.querySelectorAll(".tab-panel").forEach(function(p) {{ p.classList.remove("active"); }});
       document.getElementById(panelId).classList.add("active");
+    }}
+
+    // store edits from both directions
+    var legendEdits = {{}};
+    window.addEventListener("message", function(evt) {{
+      if (!evt.data) return;
+      if (evt.data.type === "legendUpdate") {{
+        // attribute legend was edited — store and forward to community iframes
+        evt.data.keyData.forEach(function(item) {{
+          legendEdits[item.color] = item.label;
+        }});
+      }}
+      if (evt.data.type === "nodeUpdate") {{
+        // community node was edited — store and forward to attribute iframes
+        var edits = evt.data.edits || {{}};
+        Object.keys(edits).forEach(function(color) {{
+          legendEdits[color] = edits[color];
+        }});
+        document.querySelectorAll(".attr-panel iframe").forEach(function(iframe) {{
+          try {{ iframe.contentWindow.postMessage({{ type: "nodeUpdate", edits: edits }}, "*"); }} catch(e) {{}}
+        }});
+      }}
+    }});
+
+    // when switching tabs, apply stored edits and check for pending loads
+    var origSwitchTab = switchTab;
+    switchTab = function(btn, panelId) {{
+      origSwitchTab(btn, panelId);
+      var panel = document.getElementById(panelId);
+      if (!panel) return;
+      var iframe = panel.querySelector("iframe");
+      if (!iframe) return;
+
+      // apply legend/node edits
+      if (Object.keys(legendEdits).length > 0) {{
+        if (panel.classList.contains("comm-panel")) {{
+          try {{ iframe.contentWindow.postMessage({{ type: "legendUpdate", edits: legendEdits }}, "*"); }} catch(e) {{}}
+        }}
+        if (panel.classList.contains("attr-panel")) {{
+          try {{ iframe.contentWindow.postMessage({{ type: "nodeUpdate", edits: legendEdits }}, "*"); }} catch(e) {{}}
+        }}
+      }}
+
+      // deliver any pending load data
+      if (Object.keys(window.pendingLoads).length > 0) {{
+        sendSnapshotToPanel(panel);
+      }}
+
+      // re-fit iframe (may have been sized while hidden)
+      try {{ iframe.contentWindow.postMessage({{ type: "fitNetwork" }}, "*"); }} catch(e) {{}}
+    }};
+
+    // -------------------- Report-level Save/Load All Layouts --------------------
+    // store snapshots pushed from iframes
+    var snapshotStore = {{}};
+
+    // pending loads: iframes poll this object for data to apply
+    window.pendingLoads = {{}};
+
+    // listen for snapshot pushes and iframe ready signals
+    window.addEventListener("message", function(evt) {{
+      if (!evt.data) return;
+      if (evt.data.type === "snapshotPush" && evt.data.nsKey) {{
+        snapshotStore[evt.data.nsKey] = evt.data.data;
+        // clear pending once iframe confirms it applied the load
+        delete window.pendingLoads[evt.data.nsKey];
+      }}
+      if (evt.data.type === "iframeReady" && evt.data.nsKey) {{
+        var nsKey = evt.data.nsKey;
+        var data = window.pendingLoads[nsKey];
+        if (data) {{
+          var merged = mergeEditsIntoSnapshot(data);
+          try {{ evt.source.postMessage({{ type: "applyReportLoad", snapshot: merged }}, "*"); }} catch(e) {{}}
+        }}
+      }}
+    }});
+
+    // helper: build namespace key from a tab-panel element
+    function panelKey(panel) {{
+      var r = panel.getAttribute("data-result") || "";
+      var l = panel.getAttribute("data-layout") || "";
+      var v = panel.getAttribute("data-view") || "";
+      return r + "|" + l + "|" + v;
+    }}
+
+    function saveAllLayouts(rid) {{
+      var json = JSON.stringify({{ panels: snapshotStore, legendEdits: legendEdits }}, null, 2);
+      var blob = new Blob([json], {{ type: "application/json" }});
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "report_layout.resondex_bn";
+      a.click();
+    }}
+
+    // merge legendEdits into snapshot keyLabels before sending
+    function mergeEditsIntoSnapshot(data) {{
+      if (!data || !data.keyLabels || Object.keys(legendEdits).length === 0) return data;
+      // deep-copy to avoid mutating pendingLoads
+      var copy = JSON.parse(JSON.stringify(data));
+      copy.keyLabels.forEach(function(item) {{
+        if (legendEdits[item.color]) item.label = legendEdits[item.color];
+      }});
+      return copy;
+    }}
+
+    function sendSnapshotToPanel(panel) {{
+      var key = panelKey(panel);
+      var data = window.pendingLoads[key];
+      if (!data) return;
+      var iframe = panel.querySelector("iframe");
+      if (!iframe) return;
+      try {{
+        var merged = mergeEditsIntoSnapshot(data);
+        iframe.contentWindow.postMessage({{ type: "applyReportLoad", snapshot: merged }}, "*");
+      }} catch(ex) {{}}
+    }}
+
+    function loadAllLayouts(rid, input) {{
+      var file = input.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function(e) {{
+        try {{
+          var parsed = JSON.parse(e.target.result);
+          var savedPanels = parsed.panels || {{}};
+
+          // restore legend edits
+          if (parsed.legendEdits) {{
+            Object.keys(parsed.legendEdits).forEach(function(color) {{
+              legendEdits[color] = parsed.legendEdits[color];
+            }});
+          }}
+
+          // store all panels as pending
+          Object.keys(savedPanels).forEach(function(nsKey) {{
+            window.pendingLoads[nsKey] = savedPanels[nsKey];
+          }});
+
+          // send data directly to all tab-panels in this accordion
+          var accordion = document.getElementById(rid + "_select").closest(".result-accordion");
+          var panels = accordion.querySelectorAll(".tab-panel[data-result]");
+          panels.forEach(function(panel) {{
+            sendSnapshotToPanel(panel);
+          }});
+
+        }} catch(err) {{
+          alert("Invalid layout file.");
+        }}
+      }};
+      reader.readAsText(file);
+      input.value = "";
     }}
   </script>
 </body>

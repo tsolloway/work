@@ -152,6 +152,7 @@ bn_visual <- function(
     node_positions = NULL,
     interactive = TRUE,
     physics = TRUE,
+    panel_ns = NULL,
     save_visuals = FALSE,
     save_file_name = "Network Visual",
     seed = 1
@@ -297,11 +298,11 @@ bn_visual <- function(
       dplyr::arrange(group) %>%
       dplyr::select(community_name, color) %>%
       dplyr::distinct() %>%
-      dplyr::rename(label = community_name) %>%
-      dplyr::mutate(shape = "dot", size = 20)
+      dplyr::rename(label = community_name)
 
-
-    viz <- viz %>% visNetwork::visLegend(useGroups = FALSE, addNodes = df_key, zoom = FALSE, width = key_width)
+    key_json <- jsonlite::toJSON(df_key, auto_unbox = TRUE)
+  } else {
+    key_json <- NULL
   }
 
 
@@ -309,7 +310,7 @@ bn_visual <- function(
   # interactivity
   ########################
 
-  if(interactive) viz <- viz %>% bn_visNetwork_deliverable_interactivity(physics = physics, type = type)
+  if(interactive) viz <- viz %>% bn_visNetwork_deliverable_interactivity(physics = physics, type = type, key_json = key_json, key_width = key_width, panel_ns = panel_ns)
 
 
   ########################

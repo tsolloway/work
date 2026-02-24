@@ -16,7 +16,11 @@ bn_visual(
   charge_layout = "layout_with_fr",
   do_community = FALSE,
   add_key = TRUE,
+  key_width = 0.1,
+  node_positions = NULL,
   interactive = TRUE,
+  physics = TRUE,
+  panel_ns = NULL,
   save_visuals = FALSE,
   save_file_name = "Network Visual",
   seed = 1
@@ -95,6 +99,18 @@ instead of node-level attributes (requires community prep).}
 
 \item{add_key}{Logical. If \code{TRUE}, adds a legend for community or group colors.
 Default \code{TRUE}.}
+
+\item{key_width}{Numeric. Width of the legend as a proportion of the widget
+(0 to 1). Default \code{0.1} (10\%).}
+
+\item{node_positions}{Optional. Pre-saved node positions to restore a
+previous layout. Accepts:
+\itemize{
+\item A file path to a JSON file exported by the "Save Layout" button.
+\item A data frame with columns \code{id}, \code{x}, \code{y}.
+When provided, node coordinates are set before rendering and physics
+is disabled to preserve the layout.
+}}
 
 \item{interactive}{Logical. If \code{TRUE}, adds enhanced interactivity (zoom,
 drag, font slider, PNG/SVG export) via
