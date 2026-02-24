@@ -69,6 +69,12 @@
 #'   Default `TRUE`.
 #' @param key_width Numeric. Width of the legend as a proportion of the widget
 #'   (0 to 1). Default `0.1` (10%).
+#' @param node_positions Optional. Pre-saved node positions to restore a
+#'   previous layout. Accepts:
+#'   - A file path to a JSON file exported by the "Save Layout" button.
+#'   - A data frame with columns `id`, `x`, `y`.
+#'   When provided, node coordinates are set before rendering and physics
+#'   is disabled to preserve the layout.
 #' @param interactive Logical. If `TRUE`, adds enhanced interactivity (zoom,
 #'   drag, font slider, PNG/SVG export) via
 #'   `work::bn_visNetwork_deliverable_interactivity()`.
@@ -143,6 +149,7 @@ bn_visual <- function(
     do_community = FALSE,
     add_key = TRUE,
     key_width = 0.1,
+    node_positions = NULL,
     interactive = TRUE,
     save_visuals = FALSE,
     save_file_name = "Network Visual",
@@ -205,6 +212,33 @@ bn_visual <- function(
 
 
   ########################
+  # apply saved node positions
+  ########################
+  use_saved_positions <- FALSE
+
+  if (!is.null(node_positions)) {
+
+    # read from JSON file if path provided
+    if (is.character(node_positions) && length(node_positions) == 1 && file.exists(node_positions)) {
+      pos_json <- jsonlite::fromJSON(node_positions)
+      node_positions <- tibble::as_tibble(pos_json)
+    }
+
+    # merge x/y into nodes
+    if (is.data.frame(node_positions) && all(c("id", "x", "y") %in% names(node_positions))) {
+      pos_lookup <- node_positions %>% dplyr::select(id, x, y)
+
+      # drop existing x/y if present to avoid suffix collision
+      viz_obj[["nodes"]] <- viz_obj[["nodes"]] %>%
+        dplyr::select(-dplyr::any_of(c("x", "y"))) %>%
+        dplyr::left_join(pos_lookup, by = "id")
+
+      use_saved_positions <- TRUE
+    }
+  }
+
+
+  ########################
   # base visual no layout
   ########################
   viz <- visNetwork::visNetwork(
@@ -218,7 +252,12 @@ bn_visual <- function(
   if (!is.null(seed)) viz <- viz %>% visNetwork::visLayout(randomSeed = seed)
 
 
-  if(type == "gravity"){
+  # if saved positions provided, disable physics and skip layout engines
+  if (use_saved_positions) {
+
+    viz <- viz %>% visNetwork::visPhysics(enabled = FALSE)
+
+  } else if(type == "gravity"){
 
     viz <- viz %>%
       visNetwork::visPhysics(

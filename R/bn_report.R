@@ -141,6 +141,8 @@ bn_report <- function(
         # keep download buttons at top-right
         " #pngButton{top:10px!important;right:10px!important;left:auto!important;}",
         " #svgButton{top:10px!important;right:160px!important;left:auto!important;}",
+        " #saveLayoutButton{top:10px!important;right:300px!important;left:auto!important;}",
+        " #loadLayoutButton{top:10px!important;right:440px!important;left:auto!important;}",
         "</style>"
       ),
       widget_html

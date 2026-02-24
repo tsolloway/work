@@ -276,6 +276,161 @@ bn_visNetwork_deliverable_interactivity <- function(obj){
         a.click();
       });
 
+      // -------------------- Save Layout Button --------------------
+      var saveBtn = document.createElement('button');
+      saveBtn.id = 'saveLayoutButton';
+      saveBtn.className = 'vis-button';
+      saveBtn.innerHTML = '<i class=\"fa fa-floppy-disk\"></i> Save Layout';
+      saveBtn.style.position = 'fixed';
+      saveBtn.style.top = '10px';
+      saveBtn.style.right = '300px';
+      saveBtn.style.zIndex = 9999;
+      saveBtn.style.padding = '6px 10px';
+      saveBtn.style.background = 'transparent';
+      saveBtn.style.color = 'black';
+      saveBtn.style.border = '1px solid rgb(204, 204, 204)';
+      saveBtn.style.borderRadius = '6px';
+      saveBtn.style.cursor = 'pointer';
+      document.body.appendChild(saveBtn);
+
+      // helper: snapshot full node state (positions + edits)
+      function getNodeSnapshot() {
+        var nodes = network.body.data.nodes.get();
+        var positions = network.getPositions();
+        return nodes.map(function(n) {
+          var pos = positions[n.id];
+          var snap = {
+            id: n.id,
+            label: n.label,
+            x: Math.round(pos.x),
+            y: Math.round(pos.y)
+          };
+          if (n.value !== undefined) snap.value = n.value;
+          if (n.font && n.font.size) snap.fontSize = n.font.size;
+          if (n.color) snap.color = n.color;
+          return snap;
+        });
+      }
+
+      // helper: apply a snapshot to the network
+      function applyNodeSnapshot(layout) {
+        var updates = [];
+        var lastFontSize = null;
+        if (Array.isArray(layout)) {
+          layout.forEach(function(item) {
+            var update = { id: item.id, x: item.x, y: item.y };
+            if (item.label !== undefined) update.label = item.label;
+            if (item.value !== undefined) update.value = item.value;
+            if (item.fontSize !== undefined) {
+              update.font = { size: item.fontSize };
+              lastFontSize = item.fontSize;
+            }
+            if (item.color !== undefined) update.color = item.color;
+            updates.push(update);
+          });
+        } else {
+          // object format {id: {x, y, ...}} from localStorage
+          Object.keys(layout).forEach(function(id) {
+            var item = layout[id];
+            var update = { id: id, x: item.x, y: item.y };
+            if (item.label !== undefined) update.label = item.label;
+            if (item.value !== undefined) update.value = item.value;
+            if (item.fontSize !== undefined) {
+              update.font = { size: item.fontSize };
+              lastFontSize = item.fontSize;
+            }
+            if (item.color !== undefined) update.color = item.color;
+            updates.push(update);
+          });
+        }
+        if (updates.length > 0) {
+          network.body.data.nodes.update(updates);
+          network.fit();
+        }
+        // sync font size slider
+        if (lastFontSize !== null) {
+          slider.value = lastFontSize;
+          span.innerHTML = lastFontSize;
+        }
+      }
+
+      saveBtn.addEventListener('click', function() {
+        var json = JSON.stringify(getNodeSnapshot(), null, 2);
+        var blob = new Blob([json], {type: 'application/json'});
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'network_layout.json';
+        a.click();
+      });
+
+      // -------------------- Load Layout Button --------------------
+      var loadBtn = document.createElement('button');
+      loadBtn.id = 'loadLayoutButton';
+      loadBtn.className = 'vis-button';
+      loadBtn.innerHTML = '<i class=\"fa fa-folder-open\"></i> Load Layout';
+      loadBtn.style.position = 'fixed';
+      loadBtn.style.top = '10px';
+      loadBtn.style.right = '440px';
+      loadBtn.style.zIndex = 9999;
+      loadBtn.style.padding = '6px 10px';
+      loadBtn.style.background = 'transparent';
+      loadBtn.style.color = 'black';
+      loadBtn.style.border = '1px solid rgb(204, 204, 204)';
+      loadBtn.style.borderRadius = '6px';
+      loadBtn.style.cursor = 'pointer';
+      document.body.appendChild(loadBtn);
+
+      // hidden file input
+      var fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.json';
+      fileInput.style.display = 'none';
+      document.body.appendChild(fileInput);
+
+      loadBtn.addEventListener('click', function() {
+        fileInput.click();
+      });
+
+      fileInput.addEventListener('change', function() {
+        var file = fileInput.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            var layout = JSON.parse(e.target.result);
+            applyNodeSnapshot(layout);
+          } catch(err) {
+            alert('Invalid layout file.');
+          }
+        };
+        reader.readAsText(file);
+        fileInput.value = '';
+      });
+
+      // -------------------- localStorage Auto-save --------------------
+      // Build a storage key from node ids to identify this specific network
+      var nodeIds = network.body.data.nodes.getIds().sort().join(',');
+      var storageKey = 'bn_layout_' + nodeIds.split('').reduce(function(h, c) {
+        return ((h << 5) - h + c.charCodeAt(0)) | 0;
+      }, 0);
+
+      // Restore saved state from localStorage
+      try {
+        var saved = localStorage.getItem(storageKey);
+        if (saved) {
+          applyNodeSnapshot(JSON.parse(saved));
+        }
+      } catch(e) {}
+
+      // Auto-save full node state to localStorage after drag or edit
+      function saveToLocalStorage() {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(getNodeSnapshot()));
+        } catch(e) {}
+      }
+      network.on('dragEnd', saveToLocalStorage);
+      network.body.data.nodes.on('update', saveToLocalStorage);
+
     }
   "
     )
