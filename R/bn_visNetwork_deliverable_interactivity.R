@@ -51,7 +51,10 @@ bn_visNetwork_deliverable_interactivity <- function(obj){
     ) %>%
     visNetwork::visOptions(
       highlightNearest = TRUE,
-      nodesIdSelection = TRUE,
+      nodesIdSelection = list(
+        enabled = TRUE,
+        style = "margin: 10px; padding: 6px 10px; border: 1px solid rgb(204, 204, 204); border-radius: 6px; font-size: 14px; background: transparent; cursor: pointer; max-width: 200px;"
+      ),
       manipulation = list(
         enabled = TRUE,
         addNode = FALSE,
@@ -129,14 +132,17 @@ bn_visNetwork_deliverable_interactivity <- function(obj){
       span.innerHTML = slider.value;
       sliderContainer.appendChild(span);
 
-      // Toggle slider visibility dynamically under the button
+      // Toggle slider visibility dynamically above the button
       btn.addEventListener('click', function(e){
         if(sliderContainer.style.display === 'none') {
           // Get button position
           var rect = btn.getBoundingClientRect();
-          sliderContainer.style.top = (rect.bottom + 6) + 'px'; // 6px margin
+          sliderContainer.style.top = (rect.top - sliderContainer.offsetHeight - 6) + 'px';
           sliderContainer.style.left = rect.left + 'px';
           sliderContainer.style.display = 'block';
+          // reposition after display so offsetHeight is accurate
+          var sliderRect = sliderContainer.getBoundingClientRect();
+          sliderContainer.style.top = (rect.top - sliderRect.height - 6) + 'px';
           span.style.display = 'inline';
         } else {
           sliderContainer.style.display = 'none';

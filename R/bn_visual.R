@@ -67,6 +67,8 @@
 #'   instead of node-level attributes (requires community prep).
 #' @param add_key Logical. If `TRUE`, adds a legend for community or group colors.
 #'   Default `TRUE`.
+#' @param key_width Numeric. Width of the legend as a proportion of the widget
+#'   (0 to 1). Default `0.1` (10%).
 #' @param interactive Logical. If `TRUE`, adds enhanced interactivity (zoom,
 #'   drag, font slider, PNG/SVG export) via
 #'   `work::bn_visNetwork_deliverable_interactivity()`.
@@ -140,6 +142,7 @@ bn_visual <- function(
     charge_layout = "layout_with_fr",
     do_community = FALSE,
     add_key = TRUE,
+    key_width = 0.1,
     interactive = TRUE,
     save_visuals = FALSE,
     save_file_name = "Network Visual",
@@ -258,7 +261,7 @@ bn_visual <- function(
       dplyr::mutate(shape = "dot", size = 20)
 
 
-    viz <- viz %>% visNetwork::visLegend(useGroups = FALSE, addNodes = df_key)
+    viz <- viz %>% visNetwork::visLegend(useGroups = FALSE, addNodes = df_key, zoom = FALSE, width = key_width)
   }
 
 
@@ -266,7 +269,7 @@ bn_visual <- function(
   # interactivity
   ########################
 
-  if(interactive) viz <- viz %>% work::bn_visNetwork_deliverable_interactivity()
+  if(interactive) viz <- viz %>% bn_visNetwork_deliverable_interactivity()
 
 
   ########################

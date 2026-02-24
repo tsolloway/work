@@ -73,7 +73,12 @@ bn_to_netviz_prep <- function(
 
 
   if("meta" %in% names(obj)){
-    x_edges <- obj[["arcs"]][["ivs"]]
+
+    # bn_tan() stores $arcs$ivs; bn_engine / bn_engine_unsupervised do not
+    if (!is.null(obj[["arcs"]])) {
+      x_edges <- obj[["arcs"]][["ivs"]]
+    }
+
     obj <- obj[["bn"]]
   }
 
@@ -87,6 +92,15 @@ bn_to_netviz_prep <- function(
 
   # --- compute or use existing arcs ---
   if (is.null(x_edges)) {
+
+    if (is.null(df)) {
+      stop(
+        "bn_to_netviz_prep() requires 'df' when the input object doesn't contain pre-computed arcs.\n",
+        "Either pass df explicitly, or use the pre-computed $viz_prep from the engine result.",
+        call. = FALSE
+      )
+    }
+
     x_edges <- obj %>% work::bn_arc_chisq(df) %>% as.data.frame()
 
     if (!is.null(remove_nodes)) {

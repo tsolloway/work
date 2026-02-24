@@ -54,15 +54,11 @@ bn_increase_complexity <- function(
     stop("'df' must be provided as a data frame.")
   }
 
-  if (is.null(dv)) {
-    stop("'dv' must be specified.")
-  }
-
   if (is.null(white_list_base) || nrow(white_list_base) == 0) {
     stop("'white_list_base' must contain at least one arc. Cannot expand complexity on an empty structure.")
   }
 
-  if (!dv %in% names(df)) {
+  if (!is.null(dv) && !dv %in% names(df)) {
     stop(glue::glue("Dependent variable '{dv}' not found in the data frame."))
   }
 
@@ -149,7 +145,7 @@ bn_increase_complexity <- function(
     if (return_strength) {
 
       # Previous arcs get NA strength
-      white_list_layer[[i]] <- dplry::bind_rows(
+      white_list_layer[[i]] <- dplyr::bind_rows(
         temp_white_list %>% dplyr::mutate(strength = NA_real_),
         temp_iv_arc_boot
       ) %>%

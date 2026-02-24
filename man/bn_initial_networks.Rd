@@ -6,7 +6,7 @@
 \usage{
 bn_initial_networks(
   df,
-  dv,
+  dv = NULL,
   ivs,
   dictionary = NULL,
   manual_groups = NULL,
@@ -14,6 +14,8 @@ bn_initial_networks(
   black_list = NULL,
   cb_type = c("both", "cross_battery", "natural_fallout"),
   path_type = c("both", "direct", "hierarchical"),
+  algorithm = c("tabu", "hc"),
+  score = c("bic", "aic"),
   connections_max = 1,
   connections_multiple_boot_threshold = "auto",
   connections_multiple_boot_ratio = 1/4,
@@ -25,17 +27,21 @@ bn_initial_networks(
   n_groups = NULL,
   node_size = 1,
   reachability_max_iter = 10,
+  ensure_connectivity = TRUE,
+  connectivity_boot_n = 50,
   complexity_boot_n = 10,
   complexity_boot_strength_min = 0.01,
-  suppress_bn_warning = TRUE,
+  suppress_bn_warning = FALSE,
   on_exit_detach_igraph = TRUE,
+  tool_tip_edge_prefix = NULL,
   seed = 1
 )
 }
 \arguments{
 \item{df}{A data frame containing the variables used for the network(s).}
 
-\item{dv}{Character; dependent variable(s).}
+\item{dv}{Character or NULL; dependent variable(s). When \code{NULL}, builds
+unsupervised networks via \code{\link[=bn_engine_unsupervised]{bn_engine_unsupervised()}}.}
 
 \item{ivs}{Character vector or named list of independent variables. If not
 a list, the function automatically switches to \code{"natural_fallout"} mode.}
@@ -46,25 +52,34 @@ a list, the function automatically switches to \code{"natural_fallout"} mode.}
 \item{manual_groups}{Optional manual node grouping data frame.}
 
 \item{white_list, black_list}{Optional arc constraints passed to
-\code{\link[=bn_engine]{bn_engine()}}.}
+\code{\link[=bn_engine]{bn_engine()}} or \code{\link[=bn_engine_unsupervised]{bn_engine_unsupervised()}}.}
 
 \item{cb_type}{Character; type of cross-battery configuration.
 One of \code{"both"}, \code{"cross_battery"}, or \code{"natural_fallout"}.}
 
-\item{path_type}{Character; type of path structure.
-One of \code{"both"}, \code{"direct"}, or \code{"hierarchical"}.}
+\item{path_type}{Character; type of path structure (supervised only).
+One of \code{"both"}, \code{"direct"}, or \code{"hierarchical"}. Ignored when \code{dv = NULL}.}
+
+\item{algorithm}{Character; structure learning algorithm for unsupervised mode.
+One of \code{"tabu"} or \code{"hc"}. Ignored when \code{dv} is provided.}
+
+\item{score}{Character; scoring function for unsupervised mode.
+One of \code{"bic"} or \code{"aic"}. Ignored when \code{dv} is provided.}
 
 \item{connections_max}{Integer; maximum parent connections per node.}
 
 \item{connections_multiple_boot_threshold, connections_multiple_boot_ratio}{Control multiple-connection bootstrap behavior (see \code{\link[=bn_engine]{bn_engine()}}).}
 
-\item{dv_connection_strength}{Optional numeric [0, \1]; override for DV arc strength.}
+\item{dv_connection_strength}{Optional numeric [0, \1]; override for DV arc strength.
+Ignored when \code{dv = NULL}.}
 
-\item{force_dv_connection}{Optional logical; force DV arcs regardless of strength.}
+\item{force_dv_connection}{Optional logical; force DV arcs regardless of strength.
+Ignored when \code{dv = NULL}.}
 
 \item{only_white_list}{Logical; if \code{TRUE}, only whitelist arcs are considered.}
 
-\item{compare_to_naive}{Logical; if \code{TRUE}, adds naive-Bayes comparison.}
+\item{compare_to_naive}{Logical; if \code{TRUE}, adds naive-Bayes comparison.
+Ignored when \code{dv = NULL}.}
 
 \item{node_label_type}{Character; node label display mode (\code{"both"}, \code{"variable"}, \code{"label"}).}
 
@@ -72,7 +87,14 @@ One of \code{"both"}, \code{"direct"}, or \code{"hierarchical"}.}
 
 \item{node_size}{Numeric; relative node size in visualization.}
 
-\item{reachability_max_iter}{Integer; max iterations for reachability check.}
+\item{reachability_max_iter}{Integer; max iterations for reachability check.
+Ignored when \code{dv = NULL}.}
+
+\item{ensure_connectivity}{Logical; if \code{TRUE} (default), ensures unsupervised
+networks are fully connected. Ignored when \code{dv} is provided.}
+
+\item{connectivity_boot_n}{Integer; bootstrap replicates for connectivity bridging.
+Ignored when \code{dv} is provided.}
 
 \item{complexity_boot_n}{Integer; number of bootstrap replicates for complexity.}
 
@@ -82,18 +104,22 @@ One of \code{"both"}, \code{"direct"}, or \code{"hierarchical"}.}
 
 \item{on_exit_detach_igraph}{Logical; whether to detach igraph on exit.}
 
+\item{tool_tip_edge_prefix}{Optional character string to prepend to edge tooltips.}
+
 \item{seed}{Optional integer; random seed for reproducibility.}
 }
 \value{
 A named list of Bayesian network objects, potentially containing:
 \itemize{
-\item \verb{$cb_direct}, \verb{$cb_hierarchy}, \verb{$ncb_direct}, \verb{$ncb_hierarchy}
+\item Supervised: \verb{$cb_direct}, \verb{$cb_hierarchy}, \verb{$ncb_direct}, \verb{$ncb_hierarchy}
+\item Unsupervised: \verb{$cb}, \verb{$ncb}
 \item \verb{$summary}: a combined data frame summarizing all models.
 }
 }
 \description{
 Constructs one or more Bayesian network configurations based on combinations
-of cross-battery and path structure types. Specifically, it can generate:
+of cross-battery and path structure types. When a DV is provided, generates
+supervised networks:
 \itemize{
 \item Cross-battery direct
 \item Cross-battery hierarchical
@@ -101,13 +127,19 @@ of cross-battery and path structure types. Specifically, it can generate:
 \item Natural-fallout hierarchical
 }
 
-Each configuration calls \code{\link[=bn_engine]{bn_engine()}} internally with parameterized
-control over connection strength, direction, and bootstrapping complexity.
-The resulting networks are stored in a named list, with a combined summary
-table appended under \verb{$summary}.
+When \code{dv = NULL}, generates unsupervised networks using
+\code{\link[=bn_engine_unsupervised]{bn_engine_unsupervised()}}. In this mode, \code{path_type} does not apply
+(there is no DV to create direct/hierarchical paths to), and only cross-battery
+vs natural-fallout configurations are generated.
+
+Each configuration calls \code{\link[=bn_engine]{bn_engine()}} or \code{\link[=bn_engine_unsupervised]{bn_engine_unsupervised()}}
+internally with parameterized control over connection strength, direction, and
+bootstrapping complexity. The resulting networks are stored in a named list,
+with a combined summary table appended under \verb{$summary}.
 }
 \examples{
 \dontrun{
+# --- Supervised (with DV) ---
 bn_initial_networks(
   df = iris,
   dv = "Species",
@@ -117,6 +149,17 @@ bn_initial_networks(
   ),
   cb_type = "both",
   path_type = "both"
+)
+
+# --- Unsupervised (no DV) ---
+bn_initial_networks(
+  df = iris,
+  dv = NULL,
+  ivs = list(
+    measures = c("Sepal.Length", "Sepal.Width"),
+    attributes = c("Petal.Length", "Petal.Width")
+  ),
+  cb_type = "both"
 )
 }
 
