@@ -62,6 +62,7 @@ bn_report <- function(
     title = "Network Analysis",
     section_height = "800px",
     interactive = TRUE,
+    physics = TRUE,
     add_key = FALSE,
     self_contained = TRUE,
     file = "bn_report.html",
@@ -75,7 +76,7 @@ bn_report <- function(
   # --- type labels ---
   type_labels <- purrr::map_chr(types, function(type) {
     switch(type,
-      none = "None",
+      none = "Dynamic",
       gravity = "Gravity",
       charge = "Charge",
       hierarchy = "Hierarchy",
@@ -103,6 +104,7 @@ bn_report <- function(
         do_community = do_community_val,
         vs_height = "95vh",
         interactive = interactive,
+        physics = physics,
         add_key = add_key,
         save_visuals = FALSE,
         seed = seed
@@ -138,6 +140,7 @@ bn_report <- function(
         " .htmlwidget{height:100%!important;}",
         # move font size button to bottom-left (away from visNetwork select-by-id at top)
         " #fontButton{top:auto!important;bottom:10px!important;left:10px!important;}",
+        " #physicsButton{top:10px!important;left:200px!important;}",
         # keep download buttons at top-right
         " #pngButton{top:10px!important;right:10px!important;left:auto!important;}",
         " #svgButton{top:10px!important;right:160px!important;left:auto!important;}",

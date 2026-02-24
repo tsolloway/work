@@ -39,7 +39,7 @@
 #'   [visNetwork::visEvents()]
 #'
 #' @export
-bn_visNetwork_deliverable_interactivity <- function(obj){
+bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = "none"){
 
   obj %>%
     visNetwork::visInteraction(
@@ -53,28 +53,20 @@ bn_visNetwork_deliverable_interactivity <- function(obj){
       highlightNearest = TRUE,
       nodesIdSelection = list(
         enabled = TRUE,
-        style = "margin: 10px; padding: 6px 10px; border: 1px solid rgb(204, 204, 204); border-radius: 6px; font-size: 14px; background: transparent; cursor: pointer; max-width: 200px;"
+        style = "margin: 10px; padding: 6px 10px; border: 1px solid rgb(204, 204, 204); border-radius: 6px; font-size: 14px; background: transparent; cursor: pointer; width: 150px;"
       ),
-      manipulation = list(
-        enabled = TRUE,
-        addNode = FALSE,
-        addEdge = FALSE,
-        deleteNode = FALSE,
-        deleteEdge = FALSE,
-        editEdge = FALSE,
-        editNode = TRUE,
-        editNodeCols = list(
-          "text" = c("id", "label"),
-          "number" = c("value")
-        )
-      )
+      manipulation = FALSE
     ) %>%
     visNetwork::visEvents(
-      afterDrawing = "
+      afterDrawing = paste0("
     function() {
       if(document.getElementById('fontButton')) return;
 
       var network = this;
+      var layoutType = '", type, "';
+      var physicsEnabled = ", tolower(physics), ";
+      network.setOptions({ physics: { enabled: physicsEnabled } });"
+      , "
 
       // Load Font Awesome
       var link = document.createElement('link');
@@ -176,6 +168,39 @@ bn_visNetwork_deliverable_interactivity <- function(obj){
         nodesData.forEach(function(n){ n.font.size = size; });
         network.body.data.nodes.update(nodesData);
       });
+
+      // -------------------- Physics Toggle Button --------------------
+      if (layoutType !== 'charge') {
+        var physBtn = document.createElement('button');
+        physBtn.id = 'physicsButton';
+        physBtn.className = 'vis-button';
+        physBtn.innerHTML = physicsEnabled
+          ? '<i class=\"fa fa-atom\"></i> Physics: On'
+          : '<i class=\"fa fa-atom\"></i> Physics: Off';
+        physBtn.style.position = 'fixed';
+        physBtn.style.top = '10px';
+        physBtn.style.left = '200px';
+        physBtn.style.zIndex = 9999;
+        physBtn.style.padding = '6px 10px';
+        physBtn.style.background = physicsEnabled ? 'rgba(200,230,255,0.3)' : 'transparent';
+        physBtn.style.color = 'black';
+        physBtn.style.border = '1px solid rgb(204, 204, 204)';
+        physBtn.style.borderRadius = '6px';
+        physBtn.style.cursor = 'pointer';
+        document.body.appendChild(physBtn);
+
+        physBtn.addEventListener('click', function() {
+          physicsEnabled = !physicsEnabled;
+          network.setOptions({ physics: { enabled: physicsEnabled } });
+          if (physicsEnabled) {
+            physBtn.innerHTML = '<i class=\"fa fa-atom\"></i> Physics: On';
+            physBtn.style.background = 'rgba(200,230,255,0.3)';
+          } else {
+            physBtn.innerHTML = '<i class=\"fa fa-atom\"></i> Physics: Off';
+            physBtn.style.background = 'transparent';
+          }
+        });
+      }
 
       // -------------------- Download PNG Button --------------------
       var pngBtn = document.createElement('button');
@@ -359,7 +384,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj){
         var blob = new Blob([json], {type: 'application/json'});
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'network_layout.json';
+        a.download = 'network_layout.resondex_bn';
         a.click();
       });
 
@@ -383,7 +408,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj){
       // hidden file input
       var fileInput = document.createElement('input');
       fileInput.type = 'file';
-      fileInput.accept = '.json';
+      fileInput.accept = '.resondex_bn,.json';
       fileInput.style.display = 'none';
       document.body.appendChild(fileInput);
 
@@ -398,6 +423,14 @@ bn_visNetwork_deliverable_interactivity <- function(obj){
         reader.onload = function(e) {
           try {
             var layout = JSON.parse(e.target.result);
+            // turn off physics and straighten edges to preserve loaded positions
+            physicsEnabled = false;
+            network.setOptions({ physics: { enabled: false }, edges: { smooth: false } });
+            var physBtn = document.getElementById('physicsButton');
+            if (physBtn) {
+              physBtn.innerHTML = '<i class=\"fa fa-atom\"></i> Physics: Off';
+              physBtn.style.background = 'transparent';
+            }
             applyNodeSnapshot(layout);
           } catch(err) {
             alert('Invalid layout file.');
@@ -431,8 +464,79 @@ bn_visNetwork_deliverable_interactivity <- function(obj){
       network.on('dragEnd', saveToLocalStorage);
       network.body.data.nodes.on('update', saveToLocalStorage);
 
+      // -------------------- Right-click Edit Modal --------------------
+      var modal = document.createElement('div');
+      modal.id = 'editNodeModal';
+      modal.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:99999;background:rgba(0,0,0,0.3);font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
+      var box = document.createElement('div');
+      box.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:8px;padding:20px;min-width:280px;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+      modal.appendChild(box);
+      document.body.appendChild(modal);
+
+      var editNodeId = null;
+
+      function openEditModal(nodeId) {
+        editNodeId = nodeId;
+        var nd = network.body.data.nodes.get(nodeId);
+        box.innerHTML = '<div style=\"font-size:16px;font-weight:600;margin-bottom:12px;\">Edit Node</div>'
+          + '<label style=\"font-size:13px;color:#555;\">Label</label>'
+          + '<input id=\"editLabel\" type=\"text\" value=\"' + (nd.label || '').replace(/\"/g,'&quot;') + '\" style=\"display:block;width:100%;padding:6px 8px;margin:4px 0 12px;border:1px solid #ccc;border-radius:4px;font-size:14px;box-sizing:border-box;\">'
+          + '<label style=\"font-size:13px;color:#555;\">Value</label>'
+          + '<input id=\"editValue\" type=\"number\" value=\"' + (nd.value !== undefined ? nd.value : '') + '\" style=\"display:block;width:100%;padding:6px 8px;margin:4px 0 16px;border:1px solid #ccc;border-radius:4px;font-size:14px;box-sizing:border-box;\">'
+          + '<div style=\"text-align:right;\">'
+          + '<button id=\"editCancel\" style=\"padding:6px 14px;margin-right:8px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;font-size:14px;\">Cancel</button>'
+          + '<button id=\"editSave\" style=\"padding:6px 14px;border:none;border-radius:4px;background:#4A90D9;color:#fff;cursor:pointer;font-size:14px;\">Save</button>'
+          + '</div>';
+        modal.style.display = 'block';
+        document.getElementById('editLabel').focus();
+
+        document.getElementById('editCancel').onclick = function() { modal.style.display = 'none'; };
+        box.addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('editSave').click(); });
+        document.getElementById('editSave').onclick = function() {
+          var orig = network.body.data.nodes.get(editNodeId);
+          var update = {
+            id: editNodeId,
+            label: document.getElementById('editLabel').value,
+            group: orig.group,
+            color: orig.color
+          };
+          var val = document.getElementById('editValue').value;
+          if (val !== '') update.value = parseFloat(val);
+          network.body.data.nodes.update(update);
+          modal.style.display = 'none';
+        };
+      }
+
+      // close modal on background click
+      modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+
+      network.on('oncontext', function(params) {
+        var raw = params.event.srcEvent || params.event;
+        raw.preventDefault();
+        var nodeId = network.getNodeAt(params.pointer.DOM);
+        if (!nodeId) return;
+        openEditModal(nodeId);
+      });
+
+      // -------------------- Right-click Edit Legend Labels --------------------
+      var legendContainer = document.querySelector('div[id^=\"legend\"]');
+      if (legendContainer && legendContainer.network) {
+        var legendNet = legendContainer.network;
+        legendNet.on('oncontext', function(params) {
+          var raw = params.event.srcEvent || params.event;
+          raw.preventDefault();
+          var nodeId = legendNet.getNodeAt(params.pointer.DOM);
+          if (!nodeId) return;
+          var nd = legendNet.body.data.nodes.get(nodeId);
+          var newLabel = prompt('Edit key label:', nd.label);
+          if (newLabel !== null) {
+            legendNet.body.data.nodes.update({ id: nodeId, label: newLabel, color: nd.color, shape: nd.shape });
+          }
+        });
+      }
+
     }
-  "
+  ")
     )
 
 }
