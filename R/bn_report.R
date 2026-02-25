@@ -20,20 +20,36 @@
 #'   Default `c(FALSE, TRUE)` renders both attribute and community views.
 #'   Use `FALSE` for attribute-only or `TRUE` for community-only.
 #' @param title Character. Report title displayed as H1 header.
-#'   Default `"Bayesian Network Report"`.
+#'   Default `"Network Analysis"`.
+#' @param subtitle Character or `NULL`. Optional subtitle displayed below the
+#'   title, above the border line. Default `NULL` (no subtitle).
 #' @param section_height Character. CSS height per network panel.
 #'   Default `"800px"`.
 #' @param interactive Logical. Passed through to `bn_visual()`.
 #'   Default `TRUE`.
+#' @param default_type Character or `NULL`. Which layout type to show by
+#'   default in the dropdown selector. Must be one of `types`. If `NULL`
+#'   (default), uses the first element of `types`.
+#' @param gravity_constant Numeric. Gravitational constant for the gravity
+#'   layout. Passed through to `bn_visual()`. Default `-9000`.
+#' @param central_gravity Numeric. Central gravity strength for the gravity
+#'   layout. Passed through to `bn_visual()`. Default `0.2`.
+#' @param charge_layout Character. igraph layout algorithm for the charge
+#'   layout. Passed through to `bn_visual()`. Default `"layout_with_fr"`.
 #' @param add_key Logical. If `TRUE`, adds a community color legend to each
 #'   network. Default `FALSE` (legend can cause overflow in iframes).
 #' @param self_contained Logical. If `TRUE` (default), embeds all widget
 #'   JS/CSS into a single HTML file via base64 iframes. If `FALSE`, writes
 #'   widget dependencies to a `lib/` folder alongside the HTML file (faster
 #'   to generate, but not portable as a single file).
-#' @param file Character. Output HTML file path. Default `"bn_report.html"`.
+#' @param file Character or `NULL`. Output HTML file path. If `NULL` (default),
+#'   auto-generates from `title` and `subtitle` (e.g., `"Network Analysis.html"`
+#'   or `"Network Analysis - Feb 2026.html"`).
 #' @param open Logical. If `TRUE`, opens the file in the browser.
-#'   Default `TRUE`.
+#'   Default `FALSE`.
+#' @param save_name Character or `NULL`. Name portion of the Save Layout
+#'   filename (without extension). If `NULL` (default), auto-generates from
+#'   `title` and `subtitle`.
 #' @param seed Numeric. Passed through to `bn_visual()`. Default `1`.
 #'
 #' @return The file path (invisibly).
@@ -58,17 +74,37 @@
 bn_report <- function(
     results,
     types = c("none", "gravity", "charge"),
-    do_community = c(FALSE, TRUE),
+    do_community = c(TRUE, FALSE),
     title = "Network Analysis",
+    subtitle = NULL,
     section_height = "800px",
     interactive = TRUE,
     physics = TRUE,
-    add_key = FALSE,
+    default_type = NULL,
+    gravity_constant = -9000,
+    central_gravity = 0.2,
+    charge_layout = "layout_with_fr",
+    add_key = TRUE,
     self_contained = TRUE,
-    file = "bn_report.html",
-    open = TRUE,
+    save_name = NULL,
+    file = NULL,
+    open = FALSE,
     seed = 1
 ){
+
+  # --- auto-name from title/subtitle ---
+  auto_name <- if (!is.null(subtitle)) {
+    paste(title, subtitle, sep = " - ")
+  } else {
+    title
+  }
+
+  if (is.null(save_name)) save_name <- auto_name
+  if (is.null(file)) file <- paste0(auto_name, ".html")
+
+  # --- default type ---
+  if (is.null(default_type)) default_type <- types[1]
+  default_type <- match.arg(default_type, types)
 
   # --- detect input shape and normalize to named list of engine results ---
   results <- .bn_report_normalize_results(results)
@@ -105,13 +141,16 @@ bn_report <- function(
     ns <- if (!is.null(result_name)) paste(result_name, type, view_name, sep = "|") else NULL
 
     viz <- tryCatch(
-      bn_visual(
+      work::bn_visual(
         obj = result,
         type = type,
         do_community = do_community_val,
         vs_height = "95vh",
         interactive = interactive,
         physics = physics,
+        gravity_constant = gravity_constant,
+        central_gravity = central_gravity,
+        charge_layout = charge_layout,
         add_key = use_key,
         panel_ns = ns,
         save_visuals = FALSE,
@@ -159,20 +198,24 @@ bn_report <- function(
       widget_b64 <- base64enc::base64encode(charToRaw(widget_html))
 
       glue::glue(
+        '<div class="iframe-wrap">',
+        '<div class="spinner-overlay"><div class="spinner"><div class="spinner-bar"></div><div class="spinner-bar"></div><div class="spinner-bar"></div></div></div>',
         '<iframe src="data:text/html;base64,{widget_b64}" ',
         'style="width: 100%; height: 70vh; border: none;" ',
         'sandbox="allow-scripts allow-same-origin allow-downloads">',
-        '</iframe>'
+        '</iframe></div>'
       )
     } else {
       widget_rel <- glue::glue("lib/widget_{widget_counter}.html")
       writeLines(widget_html, widget_file)
 
       glue::glue(
+        '<div class="iframe-wrap">',
+        '<div class="spinner-overlay"><div class="spinner"><div class="spinner-bar"></div><div class="spinner-bar"></div><div class="spinner-bar"></div></div></div>',
         '<iframe src="{widget_rel}" ',
         'style="width: 100%; height: 70vh; border: none;" ',
         'sandbox="allow-scripts allow-same-origin allow-downloads">',
-        '</iframe>'
+        '</iframe></div>'
       )
     }
   }
@@ -190,7 +233,8 @@ bn_report <- function(
 
     # build dropdown options
     options_html <- purrr::map2_chr(types, type_labels, function(type, label) {
-      glue::glue('<option value="{rid}_{type}">{label}</option>')
+      sel <- if (type == default_type) " selected" else ""
+      glue::glue('<option value="{rid}_{type}"{sel}>{label}</option>')
     })
     options_str <- paste(options_html, collapse = "\n          ")
 
@@ -198,8 +242,7 @@ bn_report <- function(
     type_panels <- purrr::map2_chr(types, type_labels, function(type, label) {
 
       panel_id <- glue::glue("{rid}_{type}")
-      first_type <- types[1]
-      visible <- if (type == first_type) "block" else "none"
+      visible <- if (type == default_type) "block" else "none"
 
       if (has_tabs) {
 
@@ -243,9 +286,6 @@ bn_report <- function(
       '      <select id="{rid}_select" onchange="switchType(\'{rid}\', this.value)">',
       '        {options_str}',
       '      </select>',
-      '      <button class="report-btn" onclick="saveAllLayouts(\'{rid}\')">Save</button>',
-      '      <button class="report-btn" onclick="document.getElementById(\'{rid}_fileInput\').click()">Load</button>',
-      '      <input type="file" id="{rid}_fileInput" accept=".resondex_bn,.json" style="display:none" onchange="loadAllLayouts(\'{rid}\', this)">',
       '    </div>',
       '    {type_panels_str}',
       '  </div>',
@@ -256,6 +296,21 @@ bn_report <- function(
 
   # --- assemble full html page ---
   html_body <- paste(sections, collapse = "\n")
+
+  # subtitle html (empty string if NULL)
+  subtitle_html <- if (!is.null(subtitle)) {
+    glue::glue('<p class="subtitle">{subtitle}</p>')
+  } else {
+    ""
+  }
+
+  # save download filename — injected after glue to avoid brace conflicts
+  save_js <- paste0(
+    'var a = document.createElement("a");\n',
+    '      a.href = URL.createObjectURL(blob);\n',
+    '      a.download = "', save_name, '.resondex_bn";\n',
+    '      a.click();'
+  )
 
   full_html <- glue::glue('
 <!DOCTYPE html>
@@ -270,8 +325,25 @@ bn_report <- function(
       background: #fafafa;
     }}
     h1 {{
+      margin: 0;
+    }}
+    .subtitle {{
+      margin: 2px 0 0 0;
+      font-size: 14px;
+      font-weight: 400;
+      color: #666;
+    }}
+    .page-header {{
       border-bottom: 2px solid #333;
-      padding-bottom: 10px;
+      padding-bottom: 4px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }}
+    .header-actions {{
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
     }}
 
     /* accordion */
@@ -376,10 +448,53 @@ bn_report <- function(
     .tab-panel.active {{
       display: block;
     }}
+
+    /* loading spinner */
+    .iframe-wrap {{
+      position: relative;
+    }}
+    .spinner-overlay {{
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      z-index: 1;
+    }}
+    .spinner {{
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+      height: 96px;
+    }}
+    .spinner-bar {{
+      width: 16px;
+      background: #333;
+      border-radius: 6px;
+      animation: bars 0.8s ease-in-out infinite;
+    }}
+    .spinner-bar:nth-child(1) {{ height: 48px; animation-delay: 0s; }}
+    .spinner-bar:nth-child(2) {{ height: 72px; animation-delay: 0.15s; }}
+    .spinner-bar:nth-child(3) {{ height: 56px; animation-delay: 0.3s; }}
+    @keyframes bars {{
+      0%, 100% {{ transform: scaleY(0.4); opacity: 0.3; }}
+      50% {{ transform: scaleY(1); opacity: 1; }}
+    }}
   </style>
 </head>
 <body>
-  <h1>{title}</h1>
+  <div class="page-header">
+    <div>
+      <h1>{title}</h1>
+      {subtitle_html}
+    </div>
+    <div class="header-actions">
+      <button class="report-btn" onclick="saveAllLayouts()">Save</button>
+      <button class="report-btn" onclick="document.getElementById(&quot;globalFileInput&quot;).click()">Load</button>
+      <input type="file" id="globalFileInput" accept=".resondex_bn,.json" style="display:none" onchange="loadAllLayouts(this)">
+    </div>
+  </div>
   {html_body}
 
   <script>
@@ -418,23 +533,42 @@ bn_report <- function(
       document.getElementById(panelId).classList.add("active");
     }}
 
-    // store edits from both directions
+    // store edits per result (keyed by result name) to prevent cross-contamination
     var legendEdits = {{}};
+
+    // helper: find the accordion + result name for a message source
+    function findSourceResult(evtSource) {{
+      var result = {{ accordion: null, name: null }};
+      document.querySelectorAll("iframe").forEach(function(f) {{
+        if (f.contentWindow === evtSource) {{
+          result.accordion = f.closest(".result-accordion");
+          var panel = f.closest(".tab-panel[data-result]");
+          if (panel) result.name = panel.getAttribute("data-result");
+        }}
+      }});
+      return result;
+    }}
+
     window.addEventListener("message", function(evt) {{
       if (!evt.data) return;
+      var src = findSourceResult(evt.source);
+      var rName = src.name || "_default";
+
       if (evt.data.type === "legendUpdate") {{
-        // attribute legend was edited — store and forward to community iframes
+        // attribute legend was edited — store per-result and forward to community iframes in same accordion
+        if (!legendEdits[rName]) legendEdits[rName] = {{}};
         evt.data.keyData.forEach(function(item) {{
-          legendEdits[item.color] = item.label;
+          legendEdits[rName][item.color] = item.label;
         }});
       }}
       if (evt.data.type === "nodeUpdate") {{
-        // community node was edited — store and forward to attribute iframes
+        // community node was edited — store per-result and forward to attribute iframes in same accordion
         var edits = evt.data.edits || {{}};
+        if (!legendEdits[rName]) legendEdits[rName] = {{}};
         Object.keys(edits).forEach(function(color) {{
-          legendEdits[color] = edits[color];
+          legendEdits[rName][color] = edits[color];
         }});
-        document.querySelectorAll(".attr-panel iframe").forEach(function(iframe) {{
+        (src.accordion || document).querySelectorAll(".attr-panel iframe").forEach(function(iframe) {{
           try {{ iframe.contentWindow.postMessage({{ type: "nodeUpdate", edits: edits }}, "*"); }} catch(e) {{}}
         }});
       }}
@@ -449,13 +583,15 @@ bn_report <- function(
       var iframe = panel.querySelector("iframe");
       if (!iframe) return;
 
-      // apply legend/node edits
-      if (Object.keys(legendEdits).length > 0) {{
+      // apply legend/node edits scoped to this result
+      var rName = panel.getAttribute("data-result") || "_default";
+      var rEdits = legendEdits[rName] || {{}};
+      if (Object.keys(rEdits).length > 0) {{
         if (panel.classList.contains("comm-panel")) {{
-          try {{ iframe.contentWindow.postMessage({{ type: "legendUpdate", edits: legendEdits }}, "*"); }} catch(e) {{}}
+          try {{ iframe.contentWindow.postMessage({{ type: "legendUpdate", edits: rEdits }}, "*"); }} catch(e) {{}}
         }}
         if (panel.classList.contains("attr-panel")) {{
-          try {{ iframe.contentWindow.postMessage({{ type: "nodeUpdate", edits: legendEdits }}, "*"); }} catch(e) {{}}
+          try {{ iframe.contentWindow.postMessage({{ type: "nodeUpdate", edits: rEdits }}, "*"); }} catch(e) {{}}
         }}
       }}
 
@@ -475,11 +611,22 @@ bn_report <- function(
     // pending loads: iframes poll this object for data to apply
     window.pendingLoads = {{}};
 
+    // hide spinner when an iframe signals it is ready
+    function dismissSpinner(source) {{
+      document.querySelectorAll("iframe").forEach(function(f) {{
+        if (f.contentWindow === source) {{
+          var overlay = f.parentElement && f.parentElement.querySelector(".spinner-overlay");
+          if (overlay) overlay.style.display = "none";
+        }}
+      }});
+    }}
+
     // listen for snapshot pushes and iframe ready signals
     window.addEventListener("message", function(evt) {{
       if (!evt.data) return;
       if (evt.data.type === "snapshotPush" && evt.data.nsKey) {{
         snapshotStore[evt.data.nsKey] = evt.data.data;
+        dismissSpinner(evt.source);
         // clear pending once iframe confirms it applied the load
         delete window.pendingLoads[evt.data.nsKey];
       }}
@@ -487,7 +634,8 @@ bn_report <- function(
         var nsKey = evt.data.nsKey;
         var data = window.pendingLoads[nsKey];
         if (data) {{
-          var merged = mergeEditsIntoSnapshot(data);
+          var rName = nsKey.split("|")[0] || "_default";
+          var merged = mergeEditsIntoSnapshot(data, rName);
           try {{ evt.source.postMessage({{ type: "applyReportLoad", snapshot: merged }}, "*"); }} catch(e) {{}}
         }}
       }}
@@ -501,22 +649,20 @@ bn_report <- function(
       return r + "|" + l + "|" + v;
     }}
 
-    function saveAllLayouts(rid) {{
+    function saveAllLayouts() {{
       var json = JSON.stringify({{ panels: snapshotStore, legendEdits: legendEdits }}, null, 2);
       var blob = new Blob([json], {{ type: "application/json" }});
-      var a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "report_layout.resondex_bn";
-      a.click();
+      ___SAVE_JS___
     }}
 
     // merge legendEdits into snapshot keyLabels before sending
-    function mergeEditsIntoSnapshot(data) {{
-      if (!data || !data.keyLabels || Object.keys(legendEdits).length === 0) return data;
+    function mergeEditsIntoSnapshot(data, rName) {{
+      var rEdits = legendEdits[rName] || {{}};
+      if (!data || !data.keyLabels || Object.keys(rEdits).length === 0) return data;
       // deep-copy to avoid mutating pendingLoads
       var copy = JSON.parse(JSON.stringify(data));
       copy.keyLabels.forEach(function(item) {{
-        if (legendEdits[item.color]) item.label = legendEdits[item.color];
+        if (rEdits[item.color]) item.label = rEdits[item.color];
       }});
       return copy;
     }}
@@ -528,12 +674,13 @@ bn_report <- function(
       var iframe = panel.querySelector("iframe");
       if (!iframe) return;
       try {{
-        var merged = mergeEditsIntoSnapshot(data);
+        var rName = panel.getAttribute("data-result") || "_default";
+        var merged = mergeEditsIntoSnapshot(data, rName);
         iframe.contentWindow.postMessage({{ type: "applyReportLoad", snapshot: merged }}, "*");
       }} catch(ex) {{}}
     }}
 
-    function loadAllLayouts(rid, input) {{
+    function loadAllLayouts(input) {{
       var file = input.files[0];
       if (!file) return;
       var reader = new FileReader();
@@ -554,10 +701,8 @@ bn_report <- function(
             window.pendingLoads[nsKey] = savedPanels[nsKey];
           }});
 
-          // send data directly to all tab-panels in this accordion
-          var accordion = document.getElementById(rid + "_select").closest(".result-accordion");
-          var panels = accordion.querySelectorAll(".tab-panel[data-result]");
-          panels.forEach(function(panel) {{
+          // send data to all tab-panels across all accordions
+          document.querySelectorAll(".tab-panel[data-result]").forEach(function(panel) {{
             sendSnapshotToPanel(panel);
           }});
 
@@ -571,6 +716,9 @@ bn_report <- function(
   </script>
 </body>
 </html>')
+
+  # --- inject save JS after glue (braces in save_js would confuse glue) ---
+  full_html <- sub("___SAVE_JS___", save_js, full_html, fixed = TRUE)
 
   # --- write ---
   writeLines(full_html, file)

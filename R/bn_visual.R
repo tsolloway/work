@@ -310,7 +310,7 @@ bn_visual <- function(
   # interactivity
   ########################
 
-  if(interactive) viz <- viz %>% bn_visNetwork_deliverable_interactivity(physics = physics, type = type, key_json = key_json, key_width = key_width, panel_ns = panel_ns)
+  if(interactive) viz <- viz %>% work::bn_visNetwork_deliverable_interactivity(physics = physics, type = type, key_json = key_json, key_width = key_width, panel_ns = panel_ns)
 
 
   ########################

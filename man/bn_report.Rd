@@ -7,15 +7,21 @@
 bn_report(
   results,
   types = c("none", "gravity", "charge"),
-  do_community = c(FALSE, TRUE),
+  do_community = c(TRUE, FALSE),
   title = "Network Analysis",
+  subtitle = NULL,
   section_height = "800px",
   interactive = TRUE,
   physics = TRUE,
-  add_key = FALSE,
+  default_type = NULL,
+  gravity_constant = -9000,
+  central_gravity = 0.2,
+  charge_layout = "layout_with_fr",
+  add_key = TRUE,
   self_contained = TRUE,
-  file = "bn_report.html",
-  open = TRUE,
+  save_name = NULL,
+  file = NULL,
+  open = FALSE,
   seed = 1
 )
 }
@@ -33,13 +39,29 @@ Default \code{c(FALSE, TRUE)} renders both attribute and community views.
 Use \code{FALSE} for attribute-only or \code{TRUE} for community-only.}
 
 \item{title}{Character. Report title displayed as H1 header.
-Default \code{"Bayesian Network Report"}.}
+Default \code{"Network Analysis"}.}
+
+\item{subtitle}{Character or \code{NULL}. Optional subtitle displayed below the
+title, above the border line. Default \code{NULL} (no subtitle).}
 
 \item{section_height}{Character. CSS height per network panel.
 Default \code{"800px"}.}
 
 \item{interactive}{Logical. Passed through to \code{bn_visual()}.
 Default \code{TRUE}.}
+
+\item{default_type}{Character or \code{NULL}. Which layout type to show by
+default in the dropdown selector. Must be one of \code{types}. If \code{NULL}
+(default), uses the first element of \code{types}.}
+
+\item{gravity_constant}{Numeric. Gravitational constant for the gravity
+layout. Passed through to \code{bn_visual()}. Default \code{-9000}.}
+
+\item{central_gravity}{Numeric. Central gravity strength for the gravity
+layout. Passed through to \code{bn_visual()}. Default \code{0.2}.}
+
+\item{charge_layout}{Character. igraph layout algorithm for the charge
+layout. Passed through to \code{bn_visual()}. Default \code{"layout_with_fr"}.}
 
 \item{add_key}{Logical. If \code{TRUE}, adds a community color legend to each
 network. Default \code{FALSE} (legend can cause overflow in iframes).}
@@ -49,10 +71,16 @@ JS/CSS into a single HTML file via base64 iframes. If \code{FALSE}, writes
 widget dependencies to a \verb{lib/} folder alongside the HTML file (faster
 to generate, but not portable as a single file).}
 
-\item{file}{Character. Output HTML file path. Default \code{"bn_report.html"}.}
+\item{save_name}{Character or \code{NULL}. Name portion of the Save Layout
+filename (without extension). If \code{NULL} (default), auto-generates from
+\code{title} and \code{subtitle}.}
+
+\item{file}{Character or \code{NULL}. Output HTML file path. If \code{NULL} (default),
+auto-generates from \code{title} and \code{subtitle} (e.g., \code{"Network Analysis.html"}
+or \code{"Network Analysis - Feb 2026.html"}).}
 
 \item{open}{Logical. If \code{TRUE}, opens the file in the browser.
-Default \code{TRUE}.}
+Default \code{FALSE}.}
 
 \item{seed}{Numeric. Passed through to \code{bn_visual()}. Default \code{1}.}
 }

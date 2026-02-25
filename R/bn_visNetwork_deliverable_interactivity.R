@@ -822,6 +822,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         pushToParent();
       };
 
+
     }
   ")
     )
