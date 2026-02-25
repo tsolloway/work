@@ -39,7 +39,7 @@
 #'   [visNetwork::visEvents()]
 #'
 #' @export
-bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = "none", key_json = NULL, key_width = 0.1, panel_ns = NULL){
+bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = "none", key_json = NULL, key_width = 0.1, panel_ns = NULL, download_prefix = "network"){
 
   obj %>%
     visNetwork::visInteraction(
@@ -65,6 +65,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       var network = this;
       var layoutType = '", type, "';
       var panelNs = ", ifelse(is.null(panel_ns), "null", paste0("'", panel_ns, "'")), ";
+      var downloadPrefix = '", download_prefix, "';
       var physicsEnabled = ", tolower(physics), ";
       network.setOptions({ physics: { enabled: physicsEnabled } });"
       , "
@@ -387,7 +388,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         var blob = new Blob([source], {type:'image/svg+xml'});
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'network.svg';
+        a.download = downloadPrefix + '.svg';
         a.click();
       });
 
@@ -404,7 +405,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         var dataURL = canvas.toDataURL('image/png');
         var a = document.createElement('a');
         a.href = dataURL;
-        a.download = 'network.png';
+        a.download = downloadPrefix + '.png';
         a.click();
       });
 
@@ -496,7 +497,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         var blob = new Blob([json], {type: 'application/json'});
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'network_layout.resondex_bn';
+        a.download = downloadPrefix + '_layout.resondex_bn';
         a.click();
       });
 

@@ -88,7 +88,7 @@ bn_report <- function(
     self_contained = TRUE,
     save_name = NULL,
     file = NULL,
-    open = FALSE,
+    open = TRUE,
     seed = 1
 ){
 
@@ -140,8 +140,13 @@ bn_report <- function(
     view_name <- if (do_community_val) "community" else "attribute"
     ns <- if (!is.null(result_name)) paste(result_name, type, view_name, sep = "|") else NULL
 
+    # build download prefix: {title} - {subtitle} - {accordion} - {tab}
+    tab_label <- if (do_community_val) "Community" else "Attribute"
+    dl_parts <- c(title, subtitle, result_name, tab_label)
+    dl_prefix <- paste(dl_parts[nchar(dl_parts) > 0], collapse = " - ")
+
     viz <- tryCatch(
-      work::bn_visual(
+      bn_visual(
         obj = result,
         type = type,
         do_community = do_community_val,
@@ -153,6 +158,7 @@ bn_report <- function(
         charge_layout = charge_layout,
         add_key = use_key,
         panel_ns = ns,
+        download_prefix = dl_prefix,
         save_visuals = FALSE,
         seed = seed
       ),

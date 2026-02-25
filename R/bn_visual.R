@@ -153,6 +153,7 @@ bn_visual <- function(
     interactive = TRUE,
     physics = TRUE,
     panel_ns = NULL,
+    download_prefix = "network",
     save_visuals = FALSE,
     save_file_name = "Network Visual",
     seed = 1
@@ -310,7 +311,11 @@ bn_visual <- function(
   # interactivity
   ########################
 
-  if(interactive) viz <- viz %>% work::bn_visNetwork_deliverable_interactivity(physics = physics, type = type, key_json = key_json, key_width = key_width, panel_ns = panel_ns)
+  if(interactive) viz <- viz %>% bn_visNetwork_deliverable_interactivity(
+    physics = physics, type = type,
+    key_json = key_json, key_width = key_width,
+    panel_ns = panel_ns, download_prefix = download_prefix
+  )
 
 
   ########################
