@@ -8,15 +8,14 @@ deploy_launcher(
   app_name,
   version = "1.0.0",
   header_title = app_name,
-  header_subtitle = "Load and run Shinylive apps",
+  header_subtitle = "Load and run Shiny apps",
   header_background = "#1a1a2e",
   accent_color = "#4361ee",
   icon = NULL,
   file_extension = "resondex",
-  default_packages = NULL,
-  include_recommended_packages = TRUE,
+  r_home = NULL,
   output_dir = ".",
-  targets = c("mac-arm64", "mac-x64", "win-x64"),
+  targets = c("mac-arm64", "win-x64"),
   cleanup = TRUE
 )
 }
@@ -33,65 +32,37 @@ the installer metadata. Defaults to \code{"1.0.0"}.}
 launcher's header bar. Defaults to \code{app_name}.}
 
 \item{header_subtitle}{Character. The subtitle text displayed below the
-header title. Defaults to \code{"Load and run Shinylive apps"}.}
+header title. Defaults to \code{"Load and run Shiny apps"}.}
 
 \item{header_background}{Character. The header background, specified as
 either a CSS color value (e.g., \code{"#1a1a2e"}, \code{"rgb(26,26,46)"}), a
-path to a local image file (e.g., \code{"assets/header-bg.png"}), or a URL
-to an image (e.g., \code{"https://example.com/bg.jpg"}). URLs are
-automatically downloaded. For images, recommended dimensions are at
-least 1200x200 pixels (or wider) in \code{.png} or \code{.jpg} format; the image
-is displayed as \code{center/cover} so wider landscape images work best.
+path to a local image file (e.g., \code{"assets/header-bg.png"}), or a URL.
 Defaults to \code{"#1a1a2e"}.}
 
 \item{accent_color}{Character. Hex color code for accent and interactive
-elements including buttons, card hover borders, the floating action
-button, loading indicators, and input focus borders. Defaults to
-\code{"#4361ee"}.}
+elements. Defaults to \code{"#4361ee"}.}
 
 \item{icon}{Character or \code{NULL}. Path to a local application icon file or
-a URL to one. Accepts \code{.png}, \code{.jpg} (works on all platforms), \code{.icns}
-(macOS), or \code{.ico} (Windows). URLs are automatically downloaded. The
-image should be square and at least 512x512 pixels (1024x1024
-recommended); electron-builder uses this to generate all required icon
-sizes. If \code{NULL} (the default), the bundled Resondex logo is used. The
-icon appears in the window title bar, taskbar/dock, and installer.}
+a URL to one. Accepts \code{.png}, \code{.jpg}, \code{.icns}, or \code{.ico}. If \code{NULL},
+the bundled Resondex logo is used.}
 
 \item{file_extension}{Character. The custom file extension (without dot)
-that the launcher accepts and associates with at the OS level. End users
-can double-click files with this extension to open them in the launcher.
-Defaults to \code{"resondex"}.}
+that the launcher accepts. Defaults to \code{"resondex"}.}
 
-\item{default_packages}{Character vector or \code{NULL}. Names of R packages to
-pre-load into the launcher runtime. These packages (and all their
-dependencies) are resolved via \code{\link[shinylive:export]{shinylive::export()}} and included in the
-runtime's \verb{packages/} directory. Bundles built with \code{\link[=deploy_build_bundle]{deploy_build_bundle()}} can
-then pass the same list to \code{default_packages} to exclude these packages,
-producing much smaller bundles. Defaults to \code{NULL} (no extra packages).}
-
-\item{include_recommended_packages}{Logical. If \code{TRUE}, merges the curated
-list from \code{\link[=deploy_recommended_packages]{deploy_recommended_packages()}} into \code{default_packages}. This is the
-easiest way to include a broad set of commonly used packages. The
-recommended set covers tidyverse, visualization (plotly, leaflet, DT,
-highcharter), Shiny UI (bslib, shinyWidgets, shinyjs), and more.
-Defaults to \code{TRUE}.}
+\item{r_home}{Character or \code{NULL}. Path to the R installation to bundle.
+If \code{NULL} (default), uses \code{R.home()} from the running R session.}
 
 \item{output_dir}{Character. Directory where the installer files will be
 placed. Created if it doesn't exist. Defaults to the current working
 directory.}
 
-\item{targets}{Character vector. Which platform installers to build. One
-or more of:
-\itemize{
-\item \code{"mac-arm64"} — macOS Apple Silicon DMG
-\item \code{"mac-x64"} — macOS Intel DMG
-\item \code{"win-x64"} — Windows x64 NSIS installer (.exe)
-}
-Defaults to all three.}
+\item{targets}{Character vector. Which platform installers to build.
+One or more of \code{"mac-arm64"}, \code{"mac-x64"}, \code{"win-x64"}.
+Defaults to \code{c("mac-arm64", "win-x64")}.}
 
 \item{cleanup}{Logical. Whether to remove the temporary build directory
-after completion. Set to \code{FALSE} to inspect the build output for
-debugging. Defaults to \code{TRUE}.}
+after completion. Set to \code{FALSE} to inspect the build output.
+Defaults to \code{TRUE}.}
 }
 \value{
 A character vector of paths to the created installer files,
@@ -100,7 +71,8 @@ returned invisibly.
 \description{
 Creates a branded Electron-based desktop application with cross-platform
 installers. The launcher serves as a hub where end users (who don't have R)
-can load and run Shinylive app bundles.
+can load and run Shiny app bundles. The launcher ships with a bundled
+portable R installation and all \code{work} package dependencies pre-installed.
 }
 \details{
 \subsection{Build Process}{
@@ -108,39 +80,38 @@ can load and run Shinylive app bundles.
 The function performs the following steps:
 \enumerate{
 \item Validates inputs and checks that Node.js and npm are installed
-\item Copies the launcher template (including the shinylive/webR runtime)
-to a temporary build directory
-\item Writes \code{launcher.config.json} with your branding parameters
-\item Runs \verb{node sync-config.js} to propagate config into \code{package.json}
-\item Runs \verb{npm install} to install Electron and electron-builder
-\item Runs \code{electron-builder} for each target platform
+\item Copies the launcher template to a temporary build directory
+\item Bundles a portable R installation into \verb{RPortable/}
+\item Copies all \code{work} package dependencies into \verb{RPortable/library/}
+\item Writes \code{launcher.config.json} with branding parameters
+\item Runs \verb{npm install} and \code{electron-builder} for each target
 \item Copies the resulting installer files to \code{output_dir}
 }
 }
 
-\subsection{Cross-Platform Notes}{
+\subsection{What Ships in the Launcher}{
 
-Building macOS DMGs on macOS works natively. Building Windows NSIS
-installers from macOS uses electron-builder's cross-compilation support,
-which works but does not support Windows code signing.
+The launcher includes:
+\itemize{
+\item Base R installation (portable, no system install needed)
+\item All \code{work} package dependencies pre-installed in \verb{RPortable/library/}
+\item The Electron app shell with branding
 }
 
-\subsection{File Association}{
-
-The built launcher registers the specified \code{file_extension} with the
-operating system. When installed, users can double-click \verb{.\{extension\}}
-files to open them directly in the launcher.
+At runtime, the launcher spawns R as a child process running
+\code{shiny::runApp()}, and the Electron BrowserWindow loads the result.
 }
 }
 \examples{
 \dontrun{
-# Basic usage with defaults
+# Basic usage
 deploy_launcher(
   app_name = "My Data Tools",
+  file_extension = "mydata",
   output_dir = "~/Desktop/installers"
 )
 
-# Fully customized branding
+# Fully customized
 deploy_launcher(
   app_name = "Acme Analytics",
   header_title = "Acme Analytics Suite",
@@ -151,13 +122,6 @@ deploy_launcher(
   file_extension = "acmeapp",
   output_dir = "dist/installers",
   targets = c("mac-arm64", "win-x64")
-)
-
-# Build only macOS installers, keep build dir for debugging
-deploy_launcher(
-  app_name = "Debug Test",
-  targets = c("mac-arm64", "mac-x64"),
-  cleanup = FALSE
 )
 }
 

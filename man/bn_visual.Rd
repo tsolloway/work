@@ -21,6 +21,7 @@ bn_visual(
   interactive = TRUE,
   physics = TRUE,
   panel_ns = NULL,
+  download_prefix = "network",
   save_visuals = FALSE,
   save_file_name = "Network Visual",
   seed = 1

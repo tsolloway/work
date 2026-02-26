@@ -116,7 +116,7 @@ seg_split_segments <- function(
       .,
       by = join_by(seg_uuid == id)
     ) %>% mutate(
-      "seed_{new_solution_name}" := !!sym(solution_name) %>% case_match(seg_splits ~ NA, .default = !!sym(solution_name))
+      "seed_{new_solution_name}" := !!sym(solution_name) %>% replace_values(seg_splits ~ NA)
     ) #%>%
     # select(-all_of(solution_name))
 

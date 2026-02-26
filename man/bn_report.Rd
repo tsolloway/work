@@ -21,7 +21,7 @@ bn_report(
   self_contained = TRUE,
   save_name = NULL,
   file = NULL,
-  open = FALSE,
+  open = TRUE,
   seed = 1
 )
 }

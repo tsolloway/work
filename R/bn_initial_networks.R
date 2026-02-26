@@ -200,7 +200,7 @@ bn_initial_networks <- function(
         connectivity_boot_n = connectivity_boot_n,
         complexity_boot_n = complexity_boot_n,
         complexity_boot_strength_min = complexity_boot_strength_min,
-        suppress_bn_warning = suppress_bn_warning,
+        suppress_bn_warning = TRUE,
         on_exit_detach_igraph = FALSE,
         tool_tip_edge_prefix = tool_tip_edge_prefix,
         seed = seed
@@ -250,7 +250,7 @@ bn_initial_networks <- function(
         dictionary = dictionary,
         cross_battery_priority = cross_battery,
         all_ivs_connect_to_dv = direct,
-        suppress_bn_warning = suppress_bn_warning,
+        suppress_bn_warning = TRUE,
         on_exit_detach_igraph = FALSE,
         manual_groups = manual_groups,
         white_list = white_list,

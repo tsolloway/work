@@ -227,6 +227,75 @@ bn_report <- function(
   }
 
 
+  # --- helper: render membership table + card views ---
+  render_membership <- function(result, result_name) {
+    nodes_df <- tryCatch(
+      work::find_recursive(result, x_name = "attribute_viz_prep")$nodes,
+      error = function(e) NULL
+    )
+    if (is.null(nodes_df)) return("")
+
+    # group nodes by community
+    groups <- nodes_df %>%
+      dplyr::arrange(group) %>%
+      dplyr::group_by(community_name, color) %>%
+      dplyr::summarise(
+        nodes = list(tibble::tibble(id = id, label = label)),
+        .groups = "drop"
+      )
+
+    # --- table view ---
+    table_rows <- purrr::pmap_chr(groups, function(community_name, color, nodes) {
+      pills <- purrr::map_chr(seq_len(nrow(nodes)), function(i) {
+        glue::glue('<span class="node-pill" data-node-id="{nodes$id[i]}">{nodes$label[i]}</span>')
+      })
+      pills_str <- paste(pills, collapse = "")
+      n_nodes <- nrow(nodes)
+      glue::glue(
+        '<tr>',
+        '<td><span class="membership-dot" style="background: {color};"></span>',
+        '<span class="community-label" data-color="{color}">{community_name}</span>',
+        '<span class="card-count">{n_nodes}</span></td>',
+        '<td><div class="card-nodes">{pills_str}</div></td>',
+        '</tr>'
+      )
+    })
+    table_html <- paste0(
+      '<table class="membership-table">',
+      '<thead><tr><th>Community</th><th>Attributes</th></tr></thead>',
+      '<tbody>', paste(table_rows, collapse = ""), '</tbody></table>'
+    )
+
+    # --- card view ---
+    cards <- purrr::pmap_chr(groups, function(community_name, color, nodes) {
+      pills <- purrr::map_chr(seq_len(nrow(nodes)), function(i) {
+        glue::glue('<span class="node-pill" data-node-id="{nodes$id[i]}">{nodes$label[i]}</span>')
+      })
+      pills_str <- paste(pills, collapse = "")
+      n_nodes <- nrow(nodes)
+      glue::glue(
+        '<div class="membership-card" style="border-left: 4px solid {color};">',
+        '<div class="card-header"><span class="membership-dot" style="background: {color};"></span>',
+        '<span class="community-label" data-color="{color}">{community_name}</span>',
+        '<span class="card-count">{n_nodes}</span></div>',
+        '<div class="card-nodes">{pills_str}</div>',
+        '</div>'
+      )
+    })
+    cards_html <- paste0('<div class="membership-cards">', paste(cards, collapse = ""), '</div>')
+
+    # wrap both views with toggle
+    paste0(
+      '<div class="membership-wrap" data-result="', result_name, '">',
+      '<div class="membership-toolbar">',
+      '<button class="report-btn membership-toggle" onclick="toggleMembershipView(this)" title="Switch view">',
+      '&#9776; Toggle View</button></div>',
+      '<div class="membership-view membership-table-view">', table_html, '</div>',
+      '<div class="membership-view membership-card-view" style="display:none;">', cards_html, '</div>',
+      '</div>'
+    )
+  }
+
   # --- build html sections ---
   # structure: result (accordion) > type (dropdown) > view (tabs)
 
@@ -254,18 +323,22 @@ bn_report <- function(
 
         tab_attr <- render_widget(result, type, FALSE, result_name = name)
         tab_comm <- render_widget(result, type, TRUE, result_name = name)
+        tab_memb <- render_membership(result, name)
 
         attr_id <- glue::glue("{panel_id}_attr")
         comm_id <- glue::glue("{panel_id}_comm")
+        memb_id <- glue::glue("{panel_id}_memb")
 
         glue::glue(
           '<div id="{panel_id}" class="type-panel" style="display: {visible};">',
           '  <div class="tab-bar">',
           '    <button class="tab-btn active" onclick="switchTab(this, \'{attr_id}\')">Attribute</button>',
           '    <button class="tab-btn" onclick="switchTab(this, \'{comm_id}\')">Community</button>',
+          '    <button class="tab-btn" onclick="switchTab(this, \'{memb_id}\')">Community Assignments</button>',
           '  </div>',
           '  <div id="{attr_id}" class="tab-panel active attr-panel" data-result="{name}" data-layout="{type}" data-view="attribute">{tab_attr}</div>',
           '  <div id="{comm_id}" class="tab-panel comm-panel" data-result="{name}" data-layout="{type}" data-view="community">{tab_comm}</div>',
+          '  <div id="{memb_id}" class="tab-panel membership-panel" data-result="{name}" data-layout="{type}" data-view="membership">{tab_memb}</div>',
           '</div>'
         )
 
@@ -455,6 +528,94 @@ bn_report <- function(
       display: block;
     }}
 
+    /* membership tab */
+    .membership-wrap {{
+      padding: 20px;
+    }}
+    .membership-toolbar {{
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 12px;
+    }}
+    .membership-toggle {{
+      font-size: 14px;
+      padding: 4px 10px;
+    }}
+    .membership-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }}
+    .membership-table th {{
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid #ddd;
+      font-weight: 600;
+      color: #555;
+    }}
+    .membership-table th:first-child,
+    .membership-table td:first-child {{
+      min-width: 125px;
+      max-width: 150px;
+    }}
+    .membership-table td {{
+      padding: 10px 12px;
+      border-bottom: 1px solid #eee;
+      vertical-align: top;
+    }}
+    .membership-table tr:hover {{
+      background: #f8f8f8;
+    }}
+    .membership-dot {{
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+      vertical-align: middle;
+    }}
+    .membership-cards {{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }}
+    .membership-card {{
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 16px;
+    }}
+    .card-header {{
+      font-weight: 600;
+      font-size: 15px;
+      color: #333;
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+    }}
+    .card-count {{
+      margin-left: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #888;
+      background: #f0f0f0;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }}
+    .card-nodes {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }}
+    .node-pill {{
+      display: inline-block;
+      padding: 4px 10px;
+      background: #f0f0f0;
+      border-radius: 12px;
+      font-size: 13px;
+      color: #444;
+    }}
+
     /* loading spinner */
     .iframe-wrap {{
       position: relative;
@@ -510,9 +671,32 @@ bn_report <- function(
       accordion.querySelectorAll(".type-panel").forEach(function(p) {{
         p.style.display = "none";
       }});
-      // show selected
       var panel = document.getElementById(panelId);
+
+      // check if edits need to be synced
+      var activePanel = panel.querySelector(".tab-panel.active");
+      var hasEdits = false;
+      if (activePanel) {{
+        var rName = activePanel.getAttribute("data-result") || "_default";
+        var rEdits = legendEdits[rName] || {{}};
+        hasEdits = Object.keys(rEdits).length > 0 || Object.keys(nodeLabelEdits).length > 0;
+      }}
+
       panel.style.display = "block";
+
+      if (hasEdits) {{
+        panel.style.opacity = "0";
+        // send edits after browser completes layout (iframe is ready)
+        requestAnimationFrame(function() {{
+          var rEdits = legendEdits[rName] || {{}};
+          sendSyncEdits(activePanel, rEdits);
+        }});
+      }} else {{
+        // no edits - just fit
+        panel.querySelectorAll("iframe").forEach(function(iframe) {{
+          try {{ iframe.contentWindow.postMessage({{ type: "fitNetwork" }}, "*"); }} catch(e) {{}}
+        }});
+      }}
 
       // deliver any pending load data to iframes in this panel
       if (Object.keys(window.pendingLoads).length > 0) {{
@@ -520,11 +704,21 @@ bn_report <- function(
           sendSnapshotToPanel(tp);
         }});
       }}
+    }}
 
-      // re-fit all visible iframes (they may have been sized while hidden)
-      panel.querySelectorAll("iframe").forEach(function(iframe) {{
-        try {{ iframe.contentWindow.postMessage({{ type: "fitNetwork" }}, "*"); }} catch(e) {{}}
-      }});
+    // send consolidated edits to an iframe panel and wait for confirmation
+    function sendSyncEdits(tabPanel, legend) {{
+      var iframe = tabPanel.querySelector("iframe");
+      if (!iframe) return;
+      try {{
+        iframe.contentWindow.postMessage({{
+          type: "syncEdits",
+          legend: legend,
+          nodeLabels: nodeLabelEdits
+        }}, "*");
+      }} catch(e) {{}}
+      // also fit after sync
+      try {{ iframe.contentWindow.postMessage({{ type: "fitNetwork" }}, "*"); }} catch(e) {{}}
     }}
 
     function switchTab(btn, panelId) {{
@@ -539,8 +733,22 @@ bn_report <- function(
       document.getElementById(panelId).classList.add("active");
     }}
 
-    // store edits per result (keyed by result name) to prevent cross-contamination
+    // toggle membership table/card view
+    function toggleMembershipView(btn) {{
+      var wrap = btn.closest(".membership-wrap");
+      var tbl = wrap.querySelector(".membership-table-view");
+      var crd = wrap.querySelector(".membership-card-view");
+      if (tbl.style.display === "none") {{
+        tbl.style.display = ""; crd.style.display = "none";
+      }} else {{
+        tbl.style.display = "none"; crd.style.display = "";
+      }}
+    }}
+
+    // community labels: scoped per result (accordion) to prevent cross-contamination
     var legendEdits = {{}};
+    // node labels: global across all results (accordions)
+    var nodeLabelEdits = {{}};
 
     // helper: find the accordion + result name for a message source
     function findSourceResult(evtSource) {{
@@ -561,53 +769,88 @@ bn_report <- function(
       var rName = src.name || "_default";
 
       if (evt.data.type === "legendUpdate") {{
-        // attribute legend was edited — store per-result and forward to community iframes in same accordion
+        // attribute legend was edited - store per-result and forward within same accordion
         if (!legendEdits[rName]) legendEdits[rName] = {{}};
+        var legendEditsMap = {{}};
         evt.data.keyData.forEach(function(item) {{
           legendEdits[rName][item.color] = item.label;
+          legendEditsMap[item.color] = item.label;
+        }});
+        // forward to community iframes (updates community node labels)
+        var scope = src.accordion || document;
+        scope.querySelectorAll(".comm-panel iframe").forEach(function(iframe) {{
+          try {{ iframe.contentWindow.postMessage({{ type: "legendUpdate", edits: legendEditsMap }}, "*"); }} catch(e) {{}}
+        }});
+        // forward to other attribute iframes (updates their legend keys)
+        scope.querySelectorAll(".attr-panel iframe").forEach(function(iframe) {{
+          if (iframe.contentWindow !== evt.source) {{
+            try {{ iframe.contentWindow.postMessage({{ type: "nodeUpdate", edits: legendEditsMap }}, "*"); }} catch(e) {{}}
+          }}
         }});
       }}
       if (evt.data.type === "nodeUpdate") {{
-        // community node was edited — store per-result and forward to attribute iframes in same accordion
+        // community node was edited - store per-result and forward within same accordion
         var edits = evt.data.edits || {{}};
         if (!legendEdits[rName]) legendEdits[rName] = {{}};
         Object.keys(edits).forEach(function(color) {{
           legendEdits[rName][color] = edits[color];
         }});
-        (src.accordion || document).querySelectorAll(".attr-panel iframe").forEach(function(iframe) {{
+        var scope = src.accordion || document;
+        // forward to attribute iframes (updates legend key labels)
+        scope.querySelectorAll(".attr-panel iframe").forEach(function(iframe) {{
           try {{ iframe.contentWindow.postMessage({{ type: "nodeUpdate", edits: edits }}, "*"); }} catch(e) {{}}
+        }});
+        // forward to other community iframes (updates community node labels on other layouts)
+        scope.querySelectorAll(".comm-panel iframe").forEach(function(iframe) {{
+          if (iframe.contentWindow !== evt.source) {{
+            try {{ iframe.contentWindow.postMessage({{ type: "legendUpdate", edits: edits }}, "*"); }} catch(e) {{}}
+          }}
+        }});
+      }}
+      if (evt.data.type === "nodeLabelUpdate") {{
+        // individual node label was edited - store globally and forward to ALL attribute iframes
+        nodeLabelEdits[evt.data.nodeId] = evt.data.label;
+        document.querySelectorAll(".attr-panel iframe").forEach(function(iframe) {{
+          if (iframe.contentWindow !== evt.source) {{
+            try {{ iframe.contentWindow.postMessage({{ type: "nodeLabelUpdate", nodeId: evt.data.nodeId, label: evt.data.label }}, "*"); }} catch(e) {{}}
+          }}
+        }});
+      }}
+
+      // iframe confirms edits applied - reveal the panel
+      if (evt.data.type === "editsSynced") {{
+        document.querySelectorAll("iframe").forEach(function(f) {{
+          if (f.contentWindow === evt.source) {{
+            var typePanel = f.closest(".type-panel");
+            if (typePanel) typePanel.style.opacity = "1";
+          }}
         }});
       }}
     }});
 
     // when switching tabs, apply stored edits and check for pending loads
     var origSwitchTab = switchTab;
-    switchTab = function(btn, panelId) {{
-      origSwitchTab(btn, panelId);
+    switchTab = function(btn, panelId, skipToggle) {{
+      if (!skipToggle) origSwitchTab(btn, panelId);
       var panel = document.getElementById(panelId);
       if (!panel) return;
-      var iframe = panel.querySelector("iframe");
-      if (!iframe) return;
-
-      // apply legend/node edits scoped to this result
       var rName = panel.getAttribute("data-result") || "_default";
-      var rEdits = legendEdits[rName] || {{}};
-      if (Object.keys(rEdits).length > 0) {{
-        if (panel.classList.contains("comm-panel")) {{
-          try {{ iframe.contentWindow.postMessage({{ type: "legendUpdate", edits: rEdits }}, "*"); }} catch(e) {{}}
-        }}
-        if (panel.classList.contains("attr-panel")) {{
-          try {{ iframe.contentWindow.postMessage({{ type: "nodeUpdate", edits: rEdits }}, "*"); }} catch(e) {{}}
-        }}
+
+      // membership panel - apply community + node label edits to static HTML
+      if (panel.classList.contains("membership-panel")) {{
+        ___MEMBERSHIP_SYNC_JS___
+        return;
       }}
+
+      // iframe panels (attribute / community) - send consolidated edits
+      var rEdits = legendEdits[rName] || {{}};
+      sendSyncEdits(panel, rEdits);
 
       // deliver any pending load data
       if (Object.keys(window.pendingLoads).length > 0) {{
         sendSnapshotToPanel(panel);
       }}
 
-      // re-fit iframe (may have been sized while hidden)
-      try {{ iframe.contentWindow.postMessage({{ type: "fitNetwork" }}, "*"); }} catch(e) {{}}
     }};
 
     // -------------------- Report-level Save/Load All Layouts --------------------
@@ -656,7 +899,7 @@ bn_report <- function(
     }}
 
     function saveAllLayouts() {{
-      var json = JSON.stringify({{ panels: snapshotStore, legendEdits: legendEdits }}, null, 2);
+      var json = JSON.stringify({{ panels: snapshotStore, legendEdits: legendEdits, nodeLabelEdits: nodeLabelEdits }}, null, 2);
       var blob = new Blob([json], {{ type: "application/json" }});
       ___SAVE_JS___
     }}
@@ -697,8 +940,14 @@ bn_report <- function(
 
           // restore legend edits
           if (parsed.legendEdits) {{
-            Object.keys(parsed.legendEdits).forEach(function(color) {{
-              legendEdits[color] = parsed.legendEdits[color];
+            Object.keys(parsed.legendEdits).forEach(function(key) {{
+              legendEdits[key] = parsed.legendEdits[key];
+            }});
+          }}
+          // restore node label edits
+          if (parsed.nodeLabelEdits) {{
+            Object.keys(parsed.nodeLabelEdits).forEach(function(key) {{
+              nodeLabelEdits[key] = parsed.nodeLabelEdits[key];
             }});
           }}
 
@@ -723,8 +972,24 @@ bn_report <- function(
 </body>
 </html>')
 
-  # --- inject save JS after glue (braces in save_js would confuse glue) ---
+  # --- inject JS after glue (braces/quotes in these strings would confuse glue) ---
   full_html <- sub("___SAVE_JS___", save_js, full_html, fixed = TRUE)
+
+  membership_sync_js <- paste0(
+    'var rEdits = legendEdits[rName] || {};\n',
+    '        Object.keys(rEdits).forEach(function(color) {\n',
+    '          panel.querySelectorAll(\'.community-label[data-color="\' + color + \'"]\').forEach(function(el) {\n',
+    '            el.textContent = rEdits[color];\n',
+    '          });\n',
+    '        });\n',
+    '        var nEdits = nodeLabelEdits;\n',
+    '        Object.keys(nEdits).forEach(function(nodeId) {\n',
+    '          panel.querySelectorAll(\'[data-node-id="\' + nodeId + \'"]\').forEach(function(el) {\n',
+    '            el.textContent = nEdits[nodeId];\n',
+    '          });\n',
+    '        });'
+  )
+  full_html <- sub("___MEMBERSHIP_SYNC_JS___", membership_sync_js, full_html, fixed = TRUE)
 
   # --- write ---
   writeLines(full_html, file)

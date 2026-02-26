@@ -1,7 +1,7 @@
 {
-  "name": "shiny-launcher",
+  "name": "app-launcher",
   "version": "1.0.0",
-  "description": "Desktop launcher for Shinylive apps",
+  "description": "Desktop launcher for Shiny apps",
   "main": "main.js",
   "scripts": {
     "start": "node sync-config.js && electron .",
@@ -15,13 +15,13 @@
   "license": "ISC",
   "type": "commonjs",
   "build": {
-    "appId": "com.tylersolloway.shiny-launcher",
-    "productName": "Shiny App Launcher",
+    "appId": "com.tylersolloway.app-launcher",
+    "productName": "App Launcher",
     "files": [
       "main.js",
       "preload.js",
       "renderer/**/*",
-      "runtime/**/*",
+      "RPortable/**/*",
       "launcher.config.json"
     ],
     "mac": {
@@ -29,10 +29,6 @@
         {
           "target": "dmg",
           "arch": "arm64"
-        },
-        {
-          "target": "dmg",
-          "arch": "x64"
         }
       ],
       "category": "public.app-category.developer-tools"
@@ -52,8 +48,8 @@
     "fileAssociations": [
       {
         "ext": "resondex",
-        "name": "Shiny App Launcher Bundle",
-        "description": "Application bundle for Shiny App Launcher",
+        "name": "App Launcher Bundle",
+        "description": "Application bundle for App Launcher",
         "mimeType": "application/x-resondex",
         "role": "Viewer"
       }

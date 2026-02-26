@@ -29,8 +29,6 @@ seg_typing_tool <- function(
   # polar_label_width = 65
   # doc_label_cell_merge = 6
 
-  work::start(lib_oxl = TRUE)
-
   row_title <- start_row
 
   where <- seg[["paths"]][["folders"]][["solution"]]
@@ -42,7 +40,7 @@ seg_typing_tool <- function(
   # setup styles
   #######################
 
-  style_header <- createStyle(
+  style_header <- openxlsx::createStyle(
     textDecoration ="bold",
     halign = "center",
     fgFill = oxl_colorscale_grey(2),
@@ -50,7 +48,7 @@ seg_typing_tool <- function(
   )
 
 
-  style_header2 <- createStyle(
+  style_header2 <- openxlsx::createStyle(
     textDecoration ="bold",
     halign = "center",
     fgFill = oxl_colorscale_grey(3),
@@ -58,14 +56,14 @@ seg_typing_tool <- function(
   )
 
 
-  style_title <- createStyle(
+  style_title <- openxlsx::createStyle(
     textDecoration ="bold",
     halign = "left",
     fontSize = 16
   )
 
 
-  style_table <- createStyle(
+  style_table <- openxlsx::createStyle(
     fgFill = NULL,
     halign = "center"
   )
@@ -367,7 +365,7 @@ seg_typing_tool <- function(
     # write indi ui
     #######################
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Individual Typing Tool",
       startRow = row_title,
@@ -376,7 +374,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_title,
       rows = row_title,
@@ -385,7 +383,7 @@ seg_typing_tool <- function(
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Response Recode",
       startRow = row_ind_recode,
@@ -394,7 +392,7 @@ seg_typing_tool <- function(
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = recode_values,
       startRow = row_ind_recode,
@@ -406,7 +404,7 @@ seg_typing_tool <- function(
     range_recode <- glue('${num2let(col_ind_label_point_first_number)}${row_ind_recode}:${num2let(col_ind_label_point_first_number + ncol(recode_values) - 1)}${row_ind_recode}')
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = oxl_style_cell_neutral(textDecoration = "Bold"),
       rows = row_ind_recode,
@@ -434,16 +432,16 @@ seg_typing_tool <- function(
 
     for(i in c("ui", "doc")){
 
-      setColWidths(wb, sheet_name, cols = seq(col_ind_clean_var_number, col_ind_label_point_last_number) + diff_question(i, "col"), widths = 10)
-      setColWidths(wb, sheet_name, cols = col_ind_survey_var_number + diff_question(i, "col"), hidden = TRUE)
-      groupRows(wb, sheet_name, rows = row_ind_recode, hidden = TRUE)
+      openxlsx::setColWidths(wb, sheet_name, cols = seq(col_ind_clean_var_number, col_ind_label_point_last_number) + diff_question(i, "col"), widths = 10)
+      openxlsx::setColWidths(wb, sheet_name, cols = col_ind_survey_var_number + diff_question(i, "col"), hidden = TRUE)
+      openxlsx::groupRows(wb, sheet_name, rows = row_ind_recode, hidden = TRUE)
 
 
       if(i == "ui"){
 
-        setColWidths(wb, sheet_name, cols = c(col_ind_label_left_number, col_ind_label_right_number) + diff_question(i, "col"), widths = polar_label_width)
+        openxlsx::setColWidths(wb, sheet_name, cols = c(col_ind_label_left_number, col_ind_label_right_number) + diff_question(i, "col"), widths = polar_label_width)
 
-        writeData(
+        openxlsx::writeData(
           wb, sheet_name,
           x = ind_ui,
           startRow = row_header + diff_question(i, "row"),
@@ -453,7 +451,7 @@ seg_typing_tool <- function(
           borders = "all",
         )
 
-        writeData(
+        openxlsx::writeData(
           wb, sheet_name,
           x = ind_response,
           startRow = row_ind_first,
@@ -485,7 +483,7 @@ seg_typing_tool <- function(
               col_ind_label_right_number + diff_question(i, "col") + doc_label_cell_merge
             )){
 
-              mergeCells(
+              openxlsx::mergeCells(
                 wb, sheet_name,
                 rows = seq(row_header + diff_question(i, "row"), row_header + diff_question(i, "row") + doc_row_gap),
                 cols = seq(y, y + doc_label_cell_merge)
@@ -493,7 +491,7 @@ seg_typing_tool <- function(
             }
 
           }else{
-            mergeCells(
+            openxlsx::mergeCells(
               wb, sheet_name,
               rows = seq(row_header + diff_question(i, "row"), row_header + diff_question(i, "row") + doc_row_gap),
               cols = y
@@ -503,7 +501,7 @@ seg_typing_tool <- function(
 
         for(tc in c(col_ind_label_left_number, col_ind_label_right_number + doc_label_cell_merge) + diff_question(i, "col")){
           for(tr in seq(row_ind_first, row_ind_last) + diff_question(i, "row", TRUE)){
-            mergeCells(
+            openxlsx::mergeCells(
               wb, sheet_name,
               rows = tr,
               cols = seq(tc, tc + doc_label_cell_merge)
@@ -526,7 +524,7 @@ seg_typing_tool <- function(
             rep(ncol(temp_doc_ui), doc_label_cell_merge - 1)
           )]
 
-        writeData(
+        openxlsx::writeData(
           wb, sheet_name,
           x = temp_doc_ui,
           startRow = row_header + diff_question(i, "row"),
@@ -539,7 +537,7 @@ seg_typing_tool <- function(
 
         # write values into questionaire doc instructions
 
-        writeData(
+        openxlsx::writeData(
           wb, sheet_name,
           x = map(
             ind_response %>%
@@ -558,7 +556,7 @@ seg_typing_tool <- function(
         )
 
 
-        addStyle(
+        openxlsx::addStyle(
           wb, sheet_name,
           style = style_header,
           rows = seq(
@@ -573,14 +571,14 @@ seg_typing_tool <- function(
         )
 
 
-        mergeCells(
+        openxlsx::mergeCells(
           wb, sheet_name,
           rows = row_header + diff_question(i, "row") - 2,
           cols = seq(col_doc_start, col_last)
         )
 
 
-        writeData(
+        openxlsx::writeData(
           wb, sheet_name,
           x = "Solution Questions",
           startRow = row_header + diff_question(i, "row") - 2,
@@ -589,7 +587,7 @@ seg_typing_tool <- function(
         )
 
 
-        addStyle(
+        openxlsx::addStyle(
           wb, sheet_name,
           style = style_header2,
           rows = row_header + diff_question(i, "row") - 2,
@@ -611,9 +609,9 @@ seg_typing_tool <- function(
       }
 
 
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
-        style = createStyle(fontSize = 8),
+        style = openxlsx::createStyle(fontSize = 8),
         rows = row_header + diff_question(i, "row"),
         cols = seq(
           col_ind_label_point_first_number,
@@ -624,7 +622,7 @@ seg_typing_tool <- function(
       )
 
 
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
         style = style_table,
         rows = seq(row_ind_first, row_ind_last) + diff_question(i, "row", TRUE),
@@ -659,7 +657,7 @@ seg_typing_tool <- function(
       if(i == "ui") temp_row_instructions <- row_instructions
       if(i == "doc") temp_row_instructions <- row_instructions + diff_question(i, "row") + 1
 
-      mergeCells(
+      openxlsx::mergeCells(
         wb, sheet_name,
         rows = temp_row_instructions,
         cols = seq(
@@ -682,7 +680,7 @@ seg_typing_tool <- function(
       if(i == "ui") temp_response_instructions <- ind_ui_response_instructions
       if(i == "doc") temp_response_instructions <- ind_doc_response_instructions
 
-      writeData(
+      openxlsx::writeData(
         wb, sheet_name,
         x = temp_response_instructions,
         startRow = temp_row_instructions,
@@ -691,7 +689,7 @@ seg_typing_tool <- function(
       )
 
 
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
         style = style_header,
         rows = temp_row_instructions,
@@ -706,7 +704,7 @@ seg_typing_tool <- function(
 
 
 
-    mergeCells(
+    openxlsx::mergeCells(
       wb, sheet_name,
       rows = row_ind_score,
       cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number)
@@ -721,7 +719,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_header,
       rows = row_ind_score,
@@ -732,7 +730,7 @@ seg_typing_tool <- function(
 
     temp_col_result <- num2let(col_ind_engine_survey_var_number)
     temp_col_control <- num2let(col_ind_engine_controls_number)
-    writeFormula(
+    openxlsx::writeFormula(
       wb, sheet_name,
       x = glue(
         '=IF(
@@ -746,7 +744,7 @@ seg_typing_tool <- function(
       startCol = col_ind_label_point_first_number
     )
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number),
       rows = row_ind_score,
@@ -754,7 +752,7 @@ seg_typing_tool <- function(
       style = oxl_style_cell_good(textDecoration = "bold", conditional = TRUE)
     )
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number),
       rows = row_ind_score,
@@ -763,7 +761,7 @@ seg_typing_tool <- function(
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number),
       rows = seq(row_ind_first, row_ind_last),
@@ -776,7 +774,7 @@ seg_typing_tool <- function(
     # write indi engine
     #######################
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Individual Typing Tool - Engine",
       startRow = row_title,
@@ -785,7 +783,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_title,
       rows = row_title,
@@ -848,14 +846,14 @@ seg_typing_tool <- function(
 
         temp_header_text <- "Solution Coefficient Function"
 
-        mergeCells(
+        openxlsx::mergeCells(
           wb, sheet_name,
           rows = temp_row_header,
           cols = seq(col_ind_engine_answer_number, col_ind_engine_qc_number)
         )
 
 
-        writeData(
+        openxlsx::writeData(
           wb, sheet_name,
           x = "Response Processing",
           startRow = temp_row_header %>% head(1),
@@ -864,7 +862,7 @@ seg_typing_tool <- function(
         )
 
 
-        addStyle(
+        openxlsx::addStyle(
           wb, sheet_name,
           style = style_header2,
           rows = temp_row_header,
@@ -914,7 +912,7 @@ seg_typing_tool <- function(
       }
 
 
-      writeData(
+      openxlsx::writeData(
         wb, sheet_name,
         x = temp_coef_func,
         startRow = i,
@@ -925,7 +923,7 @@ seg_typing_tool <- function(
       )
 
 
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
         style = style_table,
         rows = seq(i, i + nrow(temp_coef_func)),
@@ -934,14 +932,14 @@ seg_typing_tool <- function(
       )
 
 
-      mergeCells(
+      openxlsx::mergeCells(
         wb, sheet_name,
         rows = temp_row_header,
         cols = seq(col_ind_engine_clean_var_number, col_ind_engine_answer_number - 1) + diff_function(i, "col")
       )
 
 
-      writeData(
+      openxlsx::writeData(
         wb, sheet_name,
         x = temp_header_text,
         startRow = temp_row_header %>% head(1),
@@ -950,7 +948,7 @@ seg_typing_tool <- function(
       )
 
 
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
         style = style_header2,
         rows = temp_row_header,
@@ -1003,14 +1001,14 @@ seg_typing_tool <- function(
 
     for(i in seq(row_ind_first, row_ind_last)){
 
-      writeFormula(
+      openxlsx::writeFormula(
         wb, sheet_name,
         x = glue('MATCH("x", {num2let(col_ind_label_point_first_number)}{i}:{num2let(col_ind_label_point_last_number)}{i}, 0)'),
         startRow = i,
         startCol = col_ind_engine_answer_number,
       )
 
-      writeFormula(
+      openxlsx::writeFormula(
         wb, sheet_name,
         x = glue('INDEX(${num2let(col_ind_label_point_first_number)}${row_ind_recode}:${num2let(col_ind_label_point_last_number)}${row_ind_recode},,{num2let(col_ind_engine_answer_number)}{i})'),
         startRow = i,
@@ -1018,14 +1016,14 @@ seg_typing_tool <- function(
         array = T
       )
 
-      writeFormula(
+      openxlsx::writeFormula(
         wb, sheet_name,
         x = glue('COUNTIF({num2let(col_ind_label_point_first_number)}{i}:{num2let(col_ind_label_point_last_number)}{i},"x")'),
         startRow = i,
         startCol = col_ind_engine_qc_number
       )
 
-      conditionalFormatting(
+      openxlsx::conditionalFormatting(
         wb, sheet_name,
         rows = i,
         cols = col_ind_engine_qc_number,
@@ -1033,7 +1031,7 @@ seg_typing_tool <- function(
         style = oxl_style_cell_good(conditional = TRUE)
       )
 
-      conditionalFormatting(
+      openxlsx::conditionalFormatting(
         wb, sheet_name,
         rows = i,
         cols = col_ind_engine_qc_number,
@@ -1042,7 +1040,7 @@ seg_typing_tool <- function(
       )
 
       if(i == row_ind_last){
-        writeData(
+        openxlsx::writeData(
           wb, sheet_name,
           x = rep(1, 2) %>% matrix(nrow = 1),
           startRow = i + 1,
@@ -1058,7 +1056,7 @@ seg_typing_tool <- function(
     for(i in seq(row_ind_engine_first, row_ind_engine_last)){
 
       for(x in seq(col_ind_engine_survey_var_number + 1, col_ind_engine_answer_number - 1)){
-        writeFormula(
+        openxlsx::writeFormula(
           wb, sheet_name,
           x = glue('{num2let(x)}{i - row_eng_coef_diff} * ${num2let(col_ind_engine_recode_number)}{i - row_eng_coef_diff}'),
           startRow = i,
@@ -1066,7 +1064,7 @@ seg_typing_tool <- function(
         )
 
         if(i == row_ind_engine_last){
-          writeData(
+          openxlsx::writeData(
             wb, sheet_name,
             x = c("Score", "Probability") %>% matrix(ncol = 1),
             startRow = i + 1,
@@ -1074,14 +1072,14 @@ seg_typing_tool <- function(
             colNames = FALSE
           )
 
-          writeFormula(
+          openxlsx::writeFormula(
             wb, sheet_name,
             x = glue('EXP(SUM({num2let(x)}${row_ind_engine_first}:{num2let(x)}${row_ind_engine_last}))'),
             startRow = i + 1,
             startCol = x,
           )
 
-          writeFormula(
+          openxlsx::writeFormula(
             wb, sheet_name,
             x = glue('{num2let(x)}{i+1} / SUM(${num2let(col_ind_engine_survey_var_number + 1)}${i+1}:${num2let(col_ind_engine_answer_number - 1)}${i+1})'),
             startRow = row_ind_engine_prob,
@@ -1093,7 +1091,7 @@ seg_typing_tool <- function(
 
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = oxl_style_percent(2),
       rows = row_ind_engine_prob,
@@ -1107,12 +1105,12 @@ seg_typing_tool <- function(
       row_ind_engine_seg_prob, row_ind_engine_seg_qc
     )){
       for(xc in c(col_ind_engine_survey_var_number, col_ind_engine_controls_number)){
-        mergeCells(
+        openxlsx::mergeCells(
           wb, sheet_name,
           rows = seq(i, i + 1),
           cols = xc - 1
         )
-        mergeCells(
+        openxlsx::mergeCells(
           wb, sheet_name,
           rows = seq(i, i + 1),
           cols = xc
@@ -1121,7 +1119,7 @@ seg_typing_tool <- function(
     }
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = data.frame(
         Results = c("Segment", NA, "Segment Name", NA, "Segment Probability", NA, "QC Check", NA),
@@ -1134,7 +1132,7 @@ seg_typing_tool <- function(
       headerStyle = style_header2
     )
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = data.frame(
         Controls = c("Feedback Style", NA, "Show Probability", NA, "Probability Decimals", NA, "Question Feedback", NA),
@@ -1148,7 +1146,7 @@ seg_typing_tool <- function(
     )
 
     for(i in c(row_ind_control_feedback_style, row_ind_control_prob_dec)){
-      writeData(
+      openxlsx::writeData(
         wb, sheet_name,
         x = 1,
         startRow = i,
@@ -1160,14 +1158,14 @@ seg_typing_tool <- function(
 
     for(xc in c(col_ind_engine_clean_var_number, col_ind_engine_controls_number - 1)){
 
-      mergeCells(
+      openxlsx::mergeCells(
         wb, sheet_name,
         rows = row_ind_engine_seg - 1,
         cols = seq(xc, xc + 1)
       )
 
 
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
         style = style_header,
         rows = seq(row_ind_engine_seg, row_ind_engine_seg_qc + 1),
@@ -1176,7 +1174,7 @@ seg_typing_tool <- function(
       )
 
 
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
         style = oxl_style_center(valign = "center", wrapText = TRUE),
         rows = seq(row_ind_engine_seg, row_ind_engine_seg_qc + 1),
@@ -1210,7 +1208,7 @@ seg_typing_tool <- function(
     }
 
 
-    writeFormula(
+    openxlsx::writeFormula(
       wb, sheet_name,
       x = glue('MATCH(MAX({range_ind_prob}), {range_ind_prob}, 0)'),
       startRow = row_ind_engine_seg,
@@ -1220,7 +1218,7 @@ seg_typing_tool <- function(
 
     range_seg_name <- glue("${num2let(col_doc_seg_name_value)}${row_doc_seg_name_first}:${num2let(col_doc_seg_name_value)}${row_doc_seg_name_last}")
 
-    writeFormula(
+    openxlsx::writeFormula(
       wb, sheet_name,
       x = glue("INDEX({range_seg_name}, {num2let(col_ind_engine_survey_var_number)}{row_ind_engine_seg}, 1)"),
       startRow = row_ind_engine_seg_name,
@@ -1228,7 +1226,7 @@ seg_typing_tool <- function(
     )
 
 
-    writeFormula(
+    openxlsx::writeFormula(
       wb, sheet_name,
       x = glue('MAX({range_ind_prob})'),
       startRow = row_ind_engine_seg_prob,
@@ -1236,7 +1234,7 @@ seg_typing_tool <- function(
     )
 
 
-    writeFormula(
+    openxlsx::writeFormula(
       wb, sheet_name,
       x = glue('=COUNTIF({num2let(col_ind_engine_qc_number)}{row_ind_first}:{num2let(col_ind_engine_qc_number)}{row_ind_last},1) = {length(clean_variable_names)}'),
       startRow = row_ind_engine_seg_qc,
@@ -1244,7 +1242,7 @@ seg_typing_tool <- function(
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       rows = seq(row_ind_engine_seg_qc, row_ind_engine_seg_qc + 1),
       cols = col_ind_engine_survey_var_number,
@@ -1253,7 +1251,7 @@ seg_typing_tool <- function(
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       rows = seq(row_ind_engine_seg_qc, row_ind_engine_seg_qc + 1),
       cols = col_ind_engine_survey_var_number,
@@ -1262,7 +1260,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = oxl_style_percent(2, valign = "center"),
       rows = row_ind_engine_seg_prob,
@@ -1271,14 +1269,14 @@ seg_typing_tool <- function(
     )
 
 
-    writeComment(
+    openxlsx::writeComment(
       wb, sheet_name,
       row = row_ind_control_feedback_style,
       col = col_ind_engine_controls_number,
-      comment = createComment(
+      comment = openxlsx::createComment(
         comment = "1 = Segment number\n2 = Segment name\n3 = Both",
         author = "Analytic Provider",
-        style = createStyle(fontSize = 11),
+        style = openxlsx::createStyle(fontSize = 11),
         visible = TRUE,
         width = 1, height = 1
       )
@@ -1289,7 +1287,7 @@ seg_typing_tool <- function(
     # write documentation
     #######################
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Typing Tool Documentation",
       startRow = row_title,
@@ -1298,7 +1296,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_title,
       rows = row_title,
@@ -1307,7 +1305,7 @@ seg_typing_tool <- function(
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = glue("These instructions create the {xfun::numbers_to_words(length(segments))} segment solution from {xfun::numbers_to_words(length(clean_variable_names))} items"),
       startRow = row_doc_intro,
@@ -1317,7 +1315,7 @@ seg_typing_tool <- function(
 
 
     for(xr in seq(row_doc_qualification, row_doc_qualification_last)){
-      mergeCells(
+      openxlsx::mergeCells(
         wb, sheet_name,
         cols = seq(col_doc_start, col_doc_qualification_last),
         rows = xr
@@ -1332,7 +1330,7 @@ seg_typing_tool <- function(
 
     qualification_instructions_table <- qualification_instructions_table[, c(1, rep(2, col_doc_qualification_last - col_doc_start))]
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = qualification_instructions_table,
       startRow = row_doc_qualification,
@@ -1342,9 +1340,9 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
-      style = createStyle(fgFill = "white"),
+      style = openxlsx::createStyle(fgFill = "white"),
       rows = seq(row_doc_qualification + 1, row_doc_qualification_last),
       cols = seq(col_doc_start, col_doc_qualification_last),
       gridExpand = TRUE, stack = TRUE
@@ -1378,7 +1376,7 @@ seg_typing_tool <- function(
     temp_seg_names <- temp_seg_names[, c(1, rep(2, length(segments) + 1))]
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = temp_seg_names,
       startRow = row_doc_seg_name_header,
@@ -1391,13 +1389,13 @@ seg_typing_tool <- function(
 
     for(tr in seq(row_doc_seg_name_header, row_doc_seg_name_last)){
       if(tr == row_doc_seg_name_header){
-        mergeCells(
+        openxlsx::mergeCells(
           wb, sheet_name,
           rows = tr,
           cols = seq(col_doc_seg_name_header, col_last)
         )
       }else{
-        mergeCells(
+        openxlsx::mergeCells(
           wb, sheet_name,
           rows = tr,
           cols = seq(col_doc_seg_name_value, col_last)
@@ -1406,7 +1404,7 @@ seg_typing_tool <- function(
     }
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_header,
       rows = seq(row_doc_seg_name_first, row_doc_seg_name_last),
@@ -1527,7 +1525,7 @@ seg_typing_tool <- function(
 
 
     for(xr in seq(row_doc_steps, row_doc_steps + nrow(calulation_steps))){
-      mergeCells(
+      openxlsx::mergeCells(
         wb, sheet_name,
         cols = seq(col_doc_start, col_last),
         rows = xr
@@ -1535,7 +1533,7 @@ seg_typing_tool <- function(
     }
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = calulation_steps,
       startRow = row_doc_steps,
@@ -1545,9 +1543,9 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
-      style = createStyle(fgFill = "white"),
+      style = openxlsx::createStyle(fgFill = "white"),
       rows = seq(row_doc_steps + 1, row_doc_steps + nrow(calulation_steps)),
       cols = seq(col_doc_start, col_last),
       gridExpand = TRUE, stack = TRUE
@@ -1555,9 +1553,9 @@ seg_typing_tool <- function(
 
 
     for(i in seq(row_doc_steps + 1, row_doc_steps + nrow(calulation_steps))[calulation_steps_bold]){
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
-        style = createStyle(textDecoration = "bold"),
+        style = openxlsx::createStyle(textDecoration = "bold"),
         rows = i,
         cols = seq(col_doc_start, col_last),
         gridExpand = TRUE, stack = TRUE
@@ -1586,14 +1584,14 @@ seg_typing_tool <- function(
     # final column group
     #######################
 
-    groupColumns(
+    openxlsx::groupColumns(
       wb, sheet_name,
       cols = seq(col_ind_engine_clean_var_number, col_ind_engine_qc_number),
       hidden = TRUE
     )
 
 
-    groupColumns(
+    openxlsx::groupColumns(
       wb, sheet_name,
       cols = seq(col_doc_start, col_last),
       hidden = TRUE
@@ -1674,7 +1672,7 @@ seg_typing_tool <- function(
     # bulk title
     #######################
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Bulk Typing Tool",
       startRow = row_title,
@@ -1683,7 +1681,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_title,
       rows = row_title,
@@ -1696,7 +1694,7 @@ seg_typing_tool <- function(
     # input data
     #######################
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = data.frame(
         y = c("Original Questionnaire", inputs_raw),
@@ -1708,7 +1706,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_header,
       rows = seq(row_header - 1, row_header),
@@ -1717,14 +1715,14 @@ seg_typing_tool <- function(
     )
 
 
-    mergeCells(
+    openxlsx::mergeCells(
       wb, sheet_name,
       rows = row_header - 2,
       cols = seq(start_col, col_input_last)
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Data Input",
       startRow = row_header - 2,
@@ -1733,7 +1731,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_header2,
       rows = row_header - 2,
@@ -1768,7 +1766,7 @@ seg_typing_tool <- function(
       set_names(clean_variable_names)
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = temp_data_inputs,
       startRow = row_data_first,
@@ -1778,7 +1776,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_table,
       rows = seq(row_data_first, row_last),
@@ -1808,7 +1806,7 @@ seg_typing_tool <- function(
     class(temp_qc[[1]]) <- "formula"
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = temp_qc,
       startRow = row_header,
@@ -1819,7 +1817,7 @@ seg_typing_tool <- function(
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "QC",
       startRow = row_header - 2,
@@ -1828,7 +1826,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_table,
       rows = seq(row_data_first, row_last),
@@ -1836,7 +1834,7 @@ seg_typing_tool <- function(
       gridExpand = TRUE, stack = TRUE
     )
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_header2,
       rows = row_header - 2,
@@ -1866,7 +1864,7 @@ seg_typing_tool <- function(
       col_end = col_calculation_qc
     )
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = col_calculation_qc,
       rows = seq(row_data_first, row_last),
@@ -1875,16 +1873,16 @@ seg_typing_tool <- function(
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = col_calculation_qc,
       rows = seq(row_data_first, row_last),
       rule = glue('AND(${num2let(col_calculation_qc)}{row_data_first} = FALSE, COUNTIFS(${num2let(col_input_first)}{row_data_first}:${num2let(col_input_last)}{row_data_first},">={min(polar_points)}", ${num2let(col_input_first)}{row_data_first}:${num2let(col_input_last)}{row_data_first},"<={max(polar_points)}") = 0)'),
-      style = createStyle(fontColour = "white")
+      style = openxlsx::createStyle(fontColour = "white")
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = col_calculation_qc,
       rows = seq(row_data_first, row_last),
@@ -1917,7 +1915,7 @@ seg_typing_tool <- function(
       }
 
 
-      writeData(
+      openxlsx::writeData(
         wb, sheet_name,
         x = temp,
         startRow = row_header,
@@ -1928,14 +1926,14 @@ seg_typing_tool <- function(
       )
 
 
-      mergeCells(
+      openxlsx::mergeCells(
         wb, sheet_name,
         rows = row_header - 2,
         cols = seq(col_recode_first, col_recode_last)
       )
 
 
-      writeData(
+      openxlsx::writeData(
         wb, sheet_name,
         x = "Recode Inputs",
         startRow = row_header - 2,
@@ -1944,7 +1942,7 @@ seg_typing_tool <- function(
       )
 
 
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
         style = style_header2,
         rows = row_header - 2,
@@ -1965,7 +1963,7 @@ seg_typing_tool <- function(
       }
 
 
-      addStyle(
+      openxlsx::addStyle(
         wb, sheet_name,
         style = style_table,
         rows = seq(row_data_first, row_last),
@@ -2007,7 +2005,7 @@ seg_typing_tool <- function(
     }
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = temp,
       startRow = row_header,
@@ -2018,14 +2016,14 @@ seg_typing_tool <- function(
     )
 
 
-    mergeCells(
+    openxlsx::mergeCells(
       wb, sheet_name,
       rows = row_header - 2,
       cols = seq(col_score_first, col_score_last)
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Calculate Exponential Scores",
       startRow = row_header - 2,
@@ -2034,7 +2032,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_header2,
       rows = row_header - 2,
@@ -2055,7 +2053,7 @@ seg_typing_tool <- function(
     }
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_table,
       rows = seq(row_data_first, row_last),
@@ -2095,7 +2093,7 @@ seg_typing_tool <- function(
     }
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = temp,
       startRow = row_header,
@@ -2106,14 +2104,14 @@ seg_typing_tool <- function(
     )
 
 
-    mergeCells(
+    openxlsx::mergeCells(
       wb, sheet_name,
       rows = row_header - 2,
       cols = seq(col_prob_first, col_prob_last)
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Calculate Probabilities",
       startRow = row_header - 2,
@@ -2122,7 +2120,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_header2,
       rows = row_header - 2,
@@ -2143,7 +2141,7 @@ seg_typing_tool <- function(
     }
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_table,
       rows = seq(row_data_first, row_last),
@@ -2152,7 +2150,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = oxl_style_percent(2),
       rows = seq(row_data_first, row_last),
@@ -2183,7 +2181,7 @@ seg_typing_tool <- function(
     class(temp[["Name"]]) <- "formula"
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = temp,
       startRow = row_header,
@@ -2194,7 +2192,7 @@ seg_typing_tool <- function(
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Membership",
       startRow = row_header - 2,
@@ -2203,14 +2201,14 @@ seg_typing_tool <- function(
     )
 
 
-    mergeCells(
+    openxlsx::mergeCells(
       wb, sheet_name,
       rows = row_header - 2,
       cols = c(col_seg, col_seg_name)
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_header2,
       rows = row_header - 2,
@@ -2231,7 +2229,7 @@ seg_typing_tool <- function(
     }
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_table,
       rows = seq(row_data_first, row_last),
@@ -2254,7 +2252,7 @@ seg_typing_tool <- function(
     # bulk QC
     #######################
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = data_solution_check,
       startRow = row_header,
@@ -2284,7 +2282,7 @@ seg_typing_tool <- function(
     }
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = data_solution_check_formulas,
       startRow = row_header,
@@ -2295,7 +2293,7 @@ seg_typing_tool <- function(
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = "Bulk QC Check",
       startRow = row_header - 2,
@@ -2304,14 +2302,14 @@ seg_typing_tool <- function(
     )
 
 
-    mergeCells(
+    openxlsx::mergeCells(
       wb, sheet_name,
       rows = row_header - 2,
       cols = seq(col_bulk_qc_first, col_bulk_qc_formula_last)
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_header2,
       rows = row_header - 2,
@@ -2332,7 +2330,7 @@ seg_typing_tool <- function(
     }
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = style_table,
       rows = seq(row_header + 1, row_header + nrow(data_solution_check)),
@@ -2341,7 +2339,7 @@ seg_typing_tool <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       style = oxl_style_percent(4),
       rows = seq(row_header + 1, row_header + nrow(data_solution_check)),
@@ -2370,7 +2368,7 @@ seg_typing_tool <- function(
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = seq(col_bulk_qc_formula_first, col_bulk_qc_formula_last),
       rows = seq(row_header + 1, row_header + nrow(data_solution_check)),
@@ -2379,7 +2377,7 @@ seg_typing_tool <- function(
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = seq(col_bulk_qc_formula_first, col_bulk_qc_formula_last),
       rows = seq(row_header + 1, row_header + nrow(data_solution_check)),
@@ -2392,10 +2390,10 @@ seg_typing_tool <- function(
     # final column group
     #######################
 
-    setColWidths(wb, sheet_name, cols = col_seg, widths = 15)
-    setColWidths(wb, sheet_name, cols = c(start_col, col_seg_name), widths = 25)
+    openxlsx::setColWidths(wb, sheet_name, cols = col_seg, widths = 15)
+    openxlsx::setColWidths(wb, sheet_name, cols = c(start_col, col_seg_name), widths = 25)
 
-    groupColumns(
+    openxlsx::groupColumns(
       wb, sheet_name,
       cols = seq(col_recode_first, col_score_last),
       hidden = TRUE
@@ -2413,13 +2411,13 @@ seg_typing_tool <- function(
 
   sheet_name <- "Typing Tool"
 
-  addWorksheet(wb, sheet_name)
+  openxlsx::addWorksheet(wb, sheet_name)
 
   row_last_formatting <- (start_row + 6) + ((start_row + 6 + nrow(data_inputs)) %>% divide_by(1000) %>% ceiling() %>% multiply_by(1000)) + 1
 
-  addStyle(
+  openxlsx::addStyle(
     wb, sheet_name,
-    style = createStyle(fgFill = oxl_colorscale_grey(1)),
+    style = openxlsx::createStyle(fgFill = oxl_colorscale_grey(1)),
     rows = seq(1, row_last_formatting),
     cols = seq(1, 200),
     gridExpand = TRUE
@@ -2460,6 +2458,6 @@ seg_typing_tool <- function(
 
   file_name <- glue("{where}/{file_name}.xlsx")
 
-  saveWorkbook(wb, file_name, overwrite = TRUE)
+  openxlsx::saveWorkbook(wb, file_name, overwrite = TRUE)
 
 }

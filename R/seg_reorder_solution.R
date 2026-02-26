@@ -72,7 +72,7 @@ seg_reorder_solution <- function(
       select(all_of(c("id", !!solution_old))) %>%
       mutate(
         !!solution_new := .data[[solution_old]] %>%
-          case_match(
+          recode_values(
             !!!rlang::parse_exprs(glue("{sort(new_order)}~{new_order}"))
           )
       ) %>%

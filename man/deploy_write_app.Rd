@@ -2,7 +2,7 @@
 % Please edit documentation in R/deploy_build_bundle.R
 \name{deploy_write_app}
 \alias{deploy_write_app}
-\title{Write a self-contained Shinylive-compatible app directory}
+\title{Write a Shiny app to a directory for bundling}
 \usage{
 deploy_write_app(app, app_dir)
 }
@@ -10,8 +10,8 @@ deploy_write_app(app, app_dir)
 \item{app}{A Shiny app object, typically from \code{\link[=app_deliverable]{app_deliverable()}}.}
 
 \item{app_dir}{Character. Path to the output directory. Created if it
-doesn't exist. Any existing \code{app.R}, \code{ui.rds}, and \code{server.rds} files
-in the directory will be overwritten.}
+doesn't exist. Any existing \code{app.R} and \code{app_object.rds} files in the
+directory will be overwritten.}
 }
 \value{
 The \code{app_dir} path, invisibly. This can be piped directly to
@@ -19,15 +19,11 @@ The \code{app_dir} path, invisibly. This can be piped directly to
 }
 \description{
 Takes a Shiny app object (e.g., from \code{\link[=app_deliverable]{app_deliverable()}}) and writes it
-to a directory as a self-contained app that can run in Shinylive/webR
-\strong{without} needing the \code{work} package at runtime.
+to a directory that can be run with \code{shiny::runApp()}. The app object is
+saved as an RDS file and a minimal \code{app.R} is written that loads and runs
+it.
 }
 \details{
-The function extracts the fully-constructed UI (HTML tags) and server
-function (with all data captured in its closure) from the app object,
-saves them as RDS files, and writes a minimal \code{app.R} that only needs
-\code{shiny} to reconstruct and serve the app.
-
 The output directory can then be passed to \code{\link[=deploy_build_bundle]{deploy_build_bundle()}} to
 create a distributable bundle.
 }

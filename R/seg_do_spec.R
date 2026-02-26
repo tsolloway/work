@@ -3,6 +3,8 @@
 #' @export
 seg_do_spec <- function(seg, debug = FALSE){
 
+  library(tidyr)
+
   if(is.null(seg[["data"]][["original"]])){
     stop("No data. Run get_data first.")
 
@@ -24,12 +26,6 @@ seg_do_spec <- function(seg, debug = FALSE){
   }
 
 
-  # if(!is.null(seg[["meta"]][["weight_variable"]])){
-  #   stop("Weighting not programmed.  Fix this before doing this seg please.")
-  # }
-
-
-
   #########################
   # internal functions
   #########################
@@ -46,28 +42,40 @@ seg_do_spec <- function(seg, debug = FALSE){
       ) %>%
       remove_empty()
 
+    # Split into rowwise (%in%, mean) vs vectorized (everything else)
+    # Users can manually override syntax, so keep rowwise for both
+    needs_rowwise <- grepl("%in%|mean\\(", x)
+    x_vec <- x[!needs_rowwise]
+    x_row <- x[needs_rowwise]
+
     if(debug){
-      for(i in seq(length(x))){
+      for(i in seq_along(x)){
         tryCatch({
-          df <- df %>%
-            rowwise() %>%
-            mutate(
-              !!!rlang::parse_exprs(x[i])
-            )
+          if(needs_rowwise[i]){
+            df <- df %>% rowwise() %>% mutate(!!!rlang::parse_exprs(x[i])) %>% ungroup()
+          } else {
+            df <- df %>% mutate(!!!rlang::parse_exprs(x[i]))
+          }
         }, error=function(e){
           print(i)
           print(names(x)[i])
           print(x[i])
         })
       }
+      return(df)
     }
 
-    df %>%
-      rowwise() %>%
-      mutate(
-        !!!rlang::parse_exprs(x)
-      ) %>%
-      ungroup()
+    # Vectorized expressions (fast)
+    if(length(x_vec) > 0){
+      df <- df %>% mutate(!!!rlang::parse_exprs(x_vec))
+    }
+
+    # Rowwise expressions only where needed (%in%, mean)
+    if(length(x_row) > 0){
+      df <- df %>% rowwise() %>% mutate(!!!rlang::parse_exprs(x_row)) %>% ungroup()
+    }
+
+    df
   }
 
 
@@ -83,6 +91,9 @@ seg_do_spec <- function(seg, debug = FALSE){
   df <- df %>%
     execute_syntax(spec_polars, debug) %>%
     execute_syntax(spec_profiles, debug)
+
+
+
 
 
   if(!debug){
@@ -108,7 +119,7 @@ seg_do_spec <- function(seg, debug = FALSE){
     df <- df %>% mutate(
       across(
         .cols = inputs[["source_var"]],
-        .fns = ~ .x %>% case_match(1 ~ -4, 2 ~ -2, 3 ~ 2, 4 ~ 4),
+        .fns = ~ .x %>% recode_values(1 ~ -4, 2 ~ -2, 3 ~ 2, 4 ~ 4),
         .names = "rs_{.col}"
       )
     )

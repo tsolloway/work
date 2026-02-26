@@ -2,7 +2,7 @@
 % Please edit documentation in R/deploy_build_bundle.R
 \name{deploy_build_bundle}
 \alias{deploy_build_bundle}
-\title{Create a distributable Shinylive app bundle}
+\title{Create a distributable app bundle}
 \usage{
 deploy_build_bundle(
   app_dir,
@@ -12,8 +12,7 @@ deploy_build_bundle(
   icon_background = "#ffffff",
   icon_border = "#000000",
   extension = "resondex",
-  default_packages = deploy_recommended_packages(),
-  full_bundle = FALSE
+  extra_packages = NULL
 )
 }
 \arguments{
@@ -21,7 +20,7 @@ deploy_build_bundle(
 or a direct path to an \code{app.R} file. If a file path is given, its parent
 directory is used as the app directory.}
 
-\item{output_dir}{Character. Directory where the bundle file(s) will be
+\item{output_dir}{Character. Directory where the bundle file will be
 placed. Created if it doesn't exist. Defaults to the current working
 directory.}
 
@@ -30,145 +29,79 @@ app. Used to derive the bundle filename (slugified). If \code{NULL}, the name
 is derived from the app directory name.}
 
 \item{icon}{Character or \code{NULL}. Path to a local \code{.png} or \code{.jpg} image
-file, or a URL to one. Included as the app's icon inside the bundle.
-URLs are automatically downloaded. When the bundle is imported into a
-launcher, this icon is displayed on the app card instead of a generic
-initial letter. The image should be square, ideally 256x256 pixels
-(512x512 max); larger images are displayed scaled down. Keep file size
-under 100 KB to avoid bloating the lightweight bundle.}
+file, or a URL to one. Included as the app's icon inside the bundle.}
 
-\item{icon_background}{Character. CSS color value for the background behind
-the icon image on the app card. Stored in the bundle metadata and applied
-by the launcher when displaying the card. Defaults to \code{"#ffffff"} (white).}
+\item{icon_background}{Character. CSS color for the icon background on the
+app card. Defaults to \code{"#ffffff"}.}
 
-\item{icon_border}{Character. CSS color value for the border around the
-icon on the app card. Defaults to \code{"#000000"} (black).}
+\item{icon_border}{Character. CSS color for the icon border on the app
+card. Defaults to \code{"#000000"}.}
 
-\item{extension}{Character. The file extension (without dot) for the output
-bundle. This should match the \code{file_extension} used when building the
-target launcher with \code{\link{deploy_launcher}}. Defaults to \code{"resondex"}.}
+\item{extension}{Character. File extension (without dot) for the output
+bundle. Should match the \code{file_extension} used when building the target
+launcher. Defaults to \code{"resondex"}.}
 
-\item{default_packages}{Character vector or \code{NULL}. Names of R packages that
-are already pre-loaded in the target launcher's runtime (via the
-\code{default_packages} or \code{include_recommended_packages} arguments of
-\code{\link{deploy_launcher}}). Packages in this list (and their
-dependencies) are excluded from the bundle, dramatically reducing its
-size. Defaults to \code{\link{deploy_recommended_packages}()}, which
-matches the launcher default of \code{include_recommended_packages = TRUE}.
-Set to \code{NULL} to include all packages in the bundle.}
-
-\item{full_bundle}{Logical. If \code{TRUE}, also creates a full/standalone bundle
-containing the complete shinylive export alongside the lightweight bundle.
-The full bundle is named \verb{\{slug\}-full.\{extension\}}. Defaults to \code{FALSE}.}
+\item{extra_packages}{Character vector or \code{NULL}. Names of additional R
+packages that the app needs but are NOT already in the launcher's
+library. These packages will be copied from the local R library into
+the bundle. Defaults to \code{NULL} (no extra packages — assumes the
+launcher's library has everything needed).}
 }
 \value{
-A character vector of paths to the created bundle file(s), returned
-invisibly. The first element is always the lightweight bundle. If
-\code{full_bundle = TRUE}, the second element is the full bundle path.
+The path to the created bundle file, returned invisibly.
 }
 \description{
-Takes a Shiny application (an \code{app.R} file or a directory containing one),
-exports it via \code{\link[shinylive:export]{shinylive::export()}}, and packages the result into a
-compressed \verb{.\{extension\}} bundle file that can be loaded by a launcher built
-with \code{\link{deploy_launcher}}.
+Takes a directory containing an \code{app.R} file and packages it into a
+compressed \verb{.\{extension\}} bundle file that can be loaded by a launcher
+built with \code{\link{deploy_launcher}}.
 }
 \details{
-Two bundle types are supported:
+The bundle contains the app files and optionally any extra R packages
+that are not already included in the launcher's library.
+\subsection{Bundle Structure}{
+
+The bundle is a zip file with the following contents:
 \describe{
-\item{Lightweight bundle (default)}{Contains only \code{app.json} and any
-extra R packages not part of base webR. Requires a launcher with a
-bundled shinylive runtime to run. Typically ~100–200 KB.}
-\item{Full bundle}{Contains the complete shinylive export (runtime, webR,
-base packages, and app). Can run standalone without a launcher runtime.
-Typically ~40–50 MB.}
-}
-\subsection{Build Process}{
-
-The function performs the following steps:
-\enumerate{
-\item Validates that the \link[shinylive:export]{shinylive} package is
-installed and that the app directory contains an \code{app.R} file
-\item Calls \code{\link[shinylive:export]{shinylive::export()}} to create a complete static site in a
-temporary directory
-\item Extracts \code{app.json} and any extra R packages from the export into
-a lightweight bundle zip
-\item If \code{icon} is provided, copies the icon into the bundle and writes
-a \code{bundle-meta.json} metadata file
-\item If \code{full_bundle = TRUE}, also zips the entire export directory into
-a standalone bundle
-\item Copies the resulting bundle file(s) to \code{output_dir}
+\item{\code{app.R}}{The main app entry point}
+\item{\code{app_object.rds}}{The serialized Shiny app (if created by
+\code{\link[=deploy_write_app]{deploy_write_app()}})}
+\item{\code{bundle-meta.json}}{Metadata (app name, icon info)}
+\item{\code{icon.png}}{Optional app icon}
+\item{\verb{library/}}{Optional directory containing extra R packages
+not in the launcher}
 }
 }
 
-\subsection{Lightweight vs Full Bundles}{
+\subsection{Launcher vs Bundle Packages}{
 
-\strong{Lightweight bundles} are designed to work with a launcher built by
-\code{\link{deploy_launcher}}. The launcher already includes the shinylive runtime
-(~59 MB), so the lightweight bundle only needs the app-specific files.
-This dramatically reduces bundle size — a typical app with one or two extra
-packages produces a bundle under 200 KB.
-
-\strong{Full bundles} include everything needed to run the app, including the
-shinylive framework, webR engine, and base R packages. They are larger
-(~40–50 MB) but can be used independently or with launchers that detect and
-handle full bundles.
-}
-
-\subsection{Bundle Contents}{
-
-A lightweight bundle zip contains:
-\itemize{
-\item \code{app.json} — The app's R source files serialized as JSON
-\item \verb{packages/} — Any additional R packages (compiled to WebAssembly)
-that are not included in the base webR distribution. Only present if the
-app uses non-base packages.
-\item \code{bundle-meta.json} — Optional metadata (present when \code{icon} is
-provided). Contains the app name and icon filename.
-\item \code{icon.png} — Optional app icon image (present when \code{icon} is
-provided).
-}
-}
-
-\subsection{App Icon}{
-
-When an \code{icon} is provided, it is included in the bundle as \code{icon.png}
-along with a \code{bundle-meta.json} file. Launchers that support per-app icons
-read this metadata when importing the bundle and display the icon on the
-app's card in the launcher UI.
+The launcher (built by \code{\link[=deploy_launcher]{deploy_launcher()}}) ships with base R and all
+\code{work} package dependencies pre-installed. Most apps will not need any
+extra packages. If an app uses packages outside of \code{work}'s dependency
+tree, pass them via \code{extra_packages} and they will be included in the
+bundle.
 }
 }
 \examples{
 \dontrun{
-# Basic usage: create a lightweight bundle from an app directory
+# Basic usage
 deploy_build_bundle(
   app_dir = "path/to/my-app",
-  output_dir = "~/Desktop/bundles"
+  app_name = "My Dashboard",
+  extension = "kadra"
 )
 
-# Specify a custom app name and file extension
-deploy_build_bundle(
-  app_dir = "path/to/my-app/app.R",
-  app_name = "My Data Dashboard",
-  extension = "acmeapp",
-  output_dir = "dist"
-)
-
-# Include an app icon for the launcher card
+# With extra packages not in the launcher
 deploy_build_bundle(
   app_dir = "path/to/my-app",
-  app_name = "Sales Report",
-  icon = "assets/sales-icon.png",
-  output_dir = "dist"
+  app_name = "My Dashboard",
+  extension = "kadra",
+  extra_packages = c("leaflet", "sf")
 )
 
-# Create both lightweight and full bundles
-deploy_build_bundle(
-  app_dir = "path/to/my-app",
-  app_name = "Iris Predictor",
-  icon = "assets/iris-icon.png",
-  full_bundle = TRUE,
-  output_dir = "~/Desktop/bundles"
-)
+# Piped from deploy_write_app()
+app_deliverable(title = "My App", modules = list(mod)) \%>\%
+  deploy_write_app("my-app") \%>\%
+  deploy_build_bundle(app_name = "My App", extension = "kadra")
 }
 
 }

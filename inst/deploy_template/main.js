@@ -1,17 +1,17 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const http = require("http");
+const net = require("net");
+const { spawn } = require("child_process");
 const AdmZip = require("adm-zip");
 
 // ---- Configuration ----------------------------------------------------------
 
-// Load launcher config (branding, colors, icon, file extension)
 const CONFIG_FILE = path.join(__dirname, "launcher.config.json");
 let launcherConfig = {
-  appName: "Shiny App Launcher",
-  headerTitle: "Shiny App Launcher",
-  headerSubtitle: "Load and run Shinylive apps without R",
+  appName: "App Launcher",
+  headerTitle: "App Launcher",
+  headerSubtitle: "Load and run Shiny apps",
   headerBackground: "#1a1a2e",
   accentColor: "#4361ee",
   icon: null,
@@ -24,7 +24,7 @@ try {
   // Fall back to defaults
 }
 
-const APP_EXTENSION = launcherConfig.fileExtension; // Custom file extension (no dot)
+const APP_EXTENSION = launcherConfig.fileExtension;
 
 // ---- Pending file open (received before window is ready) --------------------
 let pendingFilePath = null;
@@ -34,29 +34,24 @@ const USER_DATA = app.getPath("userData");
 const APPS_DIR = path.join(USER_DATA, "apps");
 const LIBRARY_FILE = path.join(USER_DATA, "library.json");
 
-// ---- Runtime paths ----------------------------------------------------------
-// RUNTIME_DIR: bundled with the Electron app (read-only source of truth)
-// SHARED_RUNTIME_DIR: single writable copy in userData, shared by all apps
-const RUNTIME_DIR = path.join(__dirname, "runtime");
-const SHARED_RUNTIME_DIR = path.join(USER_DATA, "runtime");
+// ---- R process tracking -----------------------------------------------------
+// Map of appId -> { process, port }
+const activeRProcesses = new Map();
 
 // ---- Fresh install detection -------------------------------------------------
-// On first launch after a new install, clear any stale app data that may have
-// been left by a previous build sharing the same userData path.
 const INSTALL_MARKER = path.join(USER_DATA, ".install-id");
-const currentInstallId = `${launcherConfig.appName}-${app.getVersion()}`;
+const BUILD_TIMESTAMP = launcherConfig.buildTimestamp || "unknown";
+const currentInstallId = `${launcherConfig.appName}-${app.getVersion()}-${BUILD_TIMESTAMP}`;
 
 function cleanStaleData() {
   try {
     if (fs.existsSync(INSTALL_MARKER)) {
       const existing = fs.readFileSync(INSTALL_MARKER, "utf-8").trim();
-      if (existing === currentInstallId) return; // same install, keep data
+      if (existing === currentInstallId) return;
     }
-    // New install or different app — wipe apps, library, and shared runtime
     console.log("[init] New install detected, clearing stale app data...");
     if (fs.existsSync(APPS_DIR)) fs.rmSync(APPS_DIR, { recursive: true, force: true });
     if (fs.existsSync(LIBRARY_FILE)) fs.unlinkSync(LIBRARY_FILE);
-    if (fs.existsSync(SHARED_RUNTIME_DIR)) fs.rmSync(SHARED_RUNTIME_DIR, { recursive: true, force: true });
     fs.mkdirSync(APPS_DIR, { recursive: true });
     fs.writeFileSync(INSTALL_MARKER, currentInstallId);
     console.log("[init] Clean slate ready");
@@ -66,7 +61,6 @@ function cleanStaleData() {
 }
 
 cleanStaleData();
-ensureSharedRuntime();
 
 if (!fs.existsSync(APPS_DIR)) fs.mkdirSync(APPS_DIR, { recursive: true });
 
@@ -84,95 +78,163 @@ function saveLibrary(library) {
   fs.writeFileSync(LIBRARY_FILE, JSON.stringify(library, null, 2));
 }
 
-// ---- MIME types -------------------------------------------------------------
-const MIME_TYPES = {
-  ".html": "text/html",
-  ".js": "application/javascript",
-  ".mjs": "application/javascript",
-  ".cjs": "application/javascript",
-  ".json": "application/json",
-  ".css": "text/css",
-  ".wasm": "application/wasm",
-  ".png": "image/png",
-  ".ico": "image/x-icon",
-  ".svg": "image/svg+xml",
-  ".txt": "text/plain",
-  ".woff2": "font/woff2",
-  ".woff": "font/woff",
-  ".ttf": "font/ttf",
-  ".otf": "font/otf",
-  ".gz": "application/gzip",
-  ".so": "application/octet-stream",
-  ".map": "application/json",
-  ".rds": "application/octet-stream",
-  ".tgz": "application/gzip",
-  ".ts": "application/javascript",
-  ".data": "application/octet-stream",
-};
+// ---- R paths ----------------------------------------------------------------
+// Determine where the bundled R installation lives. In a packaged Electron
+// app, __dirname is inside the asar archive, but asarUnpack puts RPortable/
+// in the unpacked resources directory.
+function getRPaths() {
+  const isPackaged = app.isPackaged;
+  let resourcesPath;
 
-// Currently running server for a launched app
-let activeServer = null;
-let activeAppId = null;
+  if (isPackaged) {
+    // In packaged app: resources are at <app>.app/Contents/Resources/app.asar.unpacked/
+    resourcesPath = path.join(path.dirname(app.getAppPath()), "app.asar.unpacked");
+  } else {
+    // In development: same dir as main.js
+    resourcesPath = __dirname;
+  }
 
-// ---- HTTP server for a Shinylive app (layered fallback) ---------------------
-// Serves files from the app directory first. If not found there, falls back
-// to the shared runtime in userData/runtime/. This allows lightweight bundles
-// to store only app-specific files while sharing the 59 MB runtime.
-function startAppServer(appDir) {
+  const rHome = path.join(resourcesPath, "RPortable");
+  const rBin = process.platform === "win32"
+    ? path.join(rHome, "bin", "Rscript.exe")
+    : path.join(rHome, "bin", "Rscript");
+  const launcherLib = path.join(rHome, "library");
+
+  return { rHome, rBin, launcherLib, resourcesPath };
+}
+
+// ---- Port utilities ---------------------------------------------------------
+function findFreePort() {
   return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      const urlPath = decodeURIComponent(req.url.split("?")[0]);
-      const requestedPath = urlPath === "/" ? "index.html" : urlPath;
-      const appFilePath = path.join(appDir, requestedPath);
-      const runtimeFilePath = path.join(SHARED_RUNTIME_DIR, requestedPath);
-      const ext = path.extname(requestedPath);
-      const contentType = MIME_TYPES[ext] || "application/octet-stream";
-
-      // Add CORS and service worker headers
-      const headers = {
-        "Content-Type": contentType,
-        "Access-Control-Allow-Origin": "*",
-      };
-
-      // Service worker scope requires this header
-      if (urlPath.endsWith("shinylive-sw.js") || urlPath.endsWith("webr-serviceworker.js")) {
-        headers["Service-Worker-Allowed"] = "/";
-      }
-
-      // Try app-specific file first, fall back to shared runtime
-      fs.readFile(appFilePath, (err, data) => {
-        if (err) {
-          // Not in app dir — try shared runtime
-          fs.readFile(runtimeFilePath, (err2, data2) => {
-            if (err2) {
-              console.log(`[HTTP 404] ${urlPath} (not in app or runtime)`);
-              res.writeHead(404);
-              res.end("Not found");
-              return;
-            }
-            res.writeHead(200, headers);
-            res.end(data2);
-          });
-          return;
-        }
-        res.writeHead(200, headers);
-        res.end(data);
-      });
-    });
-
-    server.listen(0, "127.0.0.1", () => {
-      resolve({ server, port: server.address().port });
-    });
-
+    const server = net.createServer();
+    server.unref();
     server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
   });
 }
 
-function stopActiveServer() {
-  if (activeServer) {
-    activeServer.close();
-    activeServer = null;
-    activeAppId = null;
+function waitForPort(port, timeout = 30000) {
+  const start = Date.now();
+  return new Promise((resolve, reject) => {
+    function tryConnect() {
+      if (Date.now() - start > timeout) {
+        return reject(new Error(`R process did not start within ${timeout / 1000}s`));
+      }
+      const sock = net.createConnection({ port, host: "127.0.0.1" }, () => {
+        sock.end();
+        resolve();
+      });
+      sock.on("error", () => {
+        setTimeout(tryConnect, 200);
+      });
+    }
+    tryConnect();
+  });
+}
+
+// ---- R process management ---------------------------------------------------
+function launchRProcess(appDir, port) {
+  const { rHome, rBin, launcherLib } = getRPaths();
+
+  if (!fs.existsSync(rBin)) {
+    throw new Error(`R not found at ${rBin}. The launcher may be missing its bundled R installation.`);
+  }
+
+  // Build library paths: app-specific library (extras) takes priority,
+  // launcher library (base + work deps) as fallback
+  const appLib = path.join(appDir, "library");
+  const libPaths = fs.existsSync(appLib)
+    ? [appLib, launcherLib]
+    : [launcherLib];
+
+  const rCode = [
+    `.libPaths(c(${libPaths.map(p => `"${p.replace(/\\/g, '/')}"` ).join(", ")}))`,
+    `shiny::runApp("${appDir.replace(/\\/g, '/')}", port = ${port}, host = "127.0.0.1", launch.browser = FALSE)`
+  ].join("; ");
+
+  const env = { ...process.env, R_HOME: rHome };
+
+  // macOS: set dynamic library path so R can find its shared libraries
+  if (process.platform === "darwin") {
+    const rLib = path.join(rHome, "lib");
+    env.DYLD_LIBRARY_PATH = env.DYLD_LIBRARY_PATH
+      ? `${rLib}:${env.DYLD_LIBRARY_PATH}`
+      : rLib;
+    // Prevent R from trying to use the user's site library
+    env.R_LIBS_USER = " ";
+  }
+
+  // Windows: add R bin to PATH
+  if (process.platform === "win32") {
+    const rBinDir = path.join(rHome, "bin", "x64");
+    env.PATH = `${rBinDir};${env.PATH || ""}`;
+    env.R_LIBS_USER = " ";
+  }
+
+  console.log(`[R] Spawning: ${rBin} -e "${rCode}"`);
+  console.log(`[R] R_HOME: ${rHome}`);
+  console.log(`[R] Library paths: ${libPaths.join(", ")}`);
+
+  const child = spawn(rBin, ["-e", rCode], {
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+
+  child.stdout.on("data", (data) => {
+    console.log(`[R stdout] ${data.toString().trim()}`);
+  });
+
+  child.stderr.on("data", (data) => {
+    console.log(`[R stderr] ${data.toString().trim()}`);
+  });
+
+  child.on("error", (err) => {
+    console.error(`[R] Process error: ${err.message}`);
+  });
+
+  child.on("exit", (code, signal) => {
+    console.log(`[R] Process exited — code: ${code}, signal: ${signal}`);
+  });
+
+  return child;
+}
+
+function stopRProcess(appId) {
+  const entry = activeRProcesses.get(appId);
+  if (!entry) return;
+
+  const { process: proc } = entry;
+  console.log(`[R] Stopping process for app ${appId} (pid: ${proc.pid})`);
+
+  try {
+    if (process.platform === "win32") {
+      // Windows: use taskkill to kill the process tree
+      spawn("taskkill", ["/pid", proc.pid.toString(), "/f", "/t"], { windowsHide: true });
+    } else {
+      proc.kill("SIGTERM");
+      // Force kill after 3 seconds if still running
+      setTimeout(() => {
+        try {
+          proc.kill("SIGKILL");
+        } catch {
+          // Already dead, ignore
+        }
+      }, 3000);
+    }
+  } catch {
+    // Process may already be dead
+  }
+
+  activeRProcesses.delete(appId);
+}
+
+function stopAllRProcesses() {
+  for (const appId of activeRProcesses.keys()) {
+    stopRProcess(appId);
   }
 }
 
@@ -190,28 +252,10 @@ function copyDirSync(src, dest) {
   }
 }
 
-// ---- Ensure shared runtime exists in userData -------------------------------
-function ensureSharedRuntime() {
-  if (fs.existsSync(SHARED_RUNTIME_DIR)) {
-    const hasIndex = fs.existsSync(path.join(SHARED_RUNTIME_DIR, "index.html"));
-    const hasSW = fs.existsSync(path.join(SHARED_RUNTIME_DIR, "shinylive-sw.js"));
-    if (hasIndex && hasSW) {
-      console.log("[init] Shared runtime already exists and is valid");
-      return;
-    }
-    console.log("[init] Shared runtime invalid, recreating...");
-    fs.rmSync(SHARED_RUNTIME_DIR, { recursive: true, force: true });
-  }
-  console.log("[init] Creating shared runtime from bundled template...");
-  copyDirSync(RUNTIME_DIR, SHARED_RUNTIME_DIR);
-  console.log("[init] Shared runtime ready");
-}
-
 // ---- Extract and assemble app -----------------------------------------------
 function extractAndAssembleApp(zipPath, destDir) {
   fs.mkdirSync(destDir, { recursive: true });
 
-  // Extract the bundle
   const zip = new AdmZip(zipPath);
   const tmpDir = destDir + "-tmp";
   fs.mkdirSync(tmpDir, { recursive: true });
@@ -230,44 +274,8 @@ function extractAndAssembleApp(zipPath, destDir) {
     }
   }
 
-  // Detect if this is a lightweight bundle (has app.json but no index.html)
-  // or a full bundle (has index.html)
-  const isLightweight =
-    fs.existsSync(path.join(tmpDir, "app.json")) &&
-    !fs.existsSync(path.join(tmpDir, "index.html"));
-
-  if (isLightweight) {
-    // Lightweight bundle: only store app-specific files.
-    // The shared runtime in userData/runtime/ is used at serve time
-    // via layered fallback in startAppServer().
-    console.log("[add-app] Lightweight bundle — using shared runtime (no 59 MB copy)");
-
-    // Copy app.json (the app's R source code)
-    fs.copyFileSync(path.join(tmpDir, "app.json"), path.join(destDir, "app.json"));
-
-    // Copy extra R packages if present (app-specific packages only)
-    const pkgDir = path.join(tmpDir, "packages");
-    if (fs.existsSync(pkgDir)) {
-      const destPkgDir = path.join(destDir, "shinylive", "webr", "packages");
-      fs.mkdirSync(destPkgDir, { recursive: true });
-      copyDirSync(pkgDir, destPkgDir);
-      console.log("[add-app] Copied app-specific packages");
-    }
-
-    // Copy bundle metadata and icon (for per-app icons in the launcher)
-    const metaFile = path.join(tmpDir, "bundle-meta.json");
-    if (fs.existsSync(metaFile)) {
-      fs.copyFileSync(metaFile, path.join(destDir, "bundle-meta.json"));
-    }
-    const iconFile = path.join(tmpDir, "icon.png");
-    if (fs.existsSync(iconFile)) {
-      fs.copyFileSync(iconFile, path.join(destDir, "icon.png"));
-    }
-  } else {
-    // Full bundle — copy everything directly (includes its own runtime)
-    console.log("[add-app] Full bundle — copying complete runtime");
-    copyDirSync(tmpDir, destDir);
-  }
+  // Copy all extracted files to the destination
+  copyDirSync(tmpDir, destDir);
 
   // Clean up temp dir
   fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -285,17 +293,13 @@ function importAppFromPath(zipPath) {
     console.log(`[add-app] Extracting ${zipPath} to ${appDir}`);
     extractAndAssembleApp(zipPath, appDir);
 
-    // Check for critical files in app dir OR shared runtime
-    const hasAppIndex = fs.existsSync(path.join(appDir, "index.html"));
-    const hasRuntimeIndex = fs.existsSync(path.join(SHARED_RUNTIME_DIR, "index.html"));
-    const hasAppJson = fs.existsSync(path.join(appDir, "app.json"));
-    const hasAppSW = fs.existsSync(path.join(appDir, "shinylive-sw.js"));
-    const hasRuntimeSW = fs.existsSync(path.join(SHARED_RUNTIME_DIR, "shinylive-sw.js"));
-    console.log(`[add-app] Assembly complete — index.html: app=${hasAppIndex} runtime=${hasRuntimeIndex}, app.json: ${hasAppJson}, shinylive-sw.js: app=${hasAppSW} runtime=${hasRuntimeSW}`);
+    // Validate: must contain app.R
+    const hasAppR = fs.existsSync(path.join(appDir, "app.R"));
+    console.log(`[add-app] Assembly complete — app.R: ${hasAppR}`);
 
-    if (!hasAppIndex && !hasRuntimeIndex) {
+    if (!hasAppR) {
       fs.rmSync(appDir, { recursive: true, force: true });
-      return { error: "No index.html found in app or shared runtime. Make sure this is a valid Shinylive bundle." };
+      return { error: "No app.R found in bundle. Make sure this is a valid app bundle." };
     }
 
     const library = loadLibrary();
@@ -308,11 +312,11 @@ function importAppFromPath(zipPath) {
         const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
         if (meta.appName) entry.name = meta.appName;
         if (meta.icon && fs.existsSync(path.join(appDir, meta.icon))) {
-          entry.icon = meta.icon; // relative path within the app folder
+          entry.icon = meta.icon;
         }
         if (meta.iconBackground) entry.iconBackground = meta.iconBackground;
         if (meta.iconBorder) entry.iconBorder = meta.iconBorder;
-        console.log(`[add-app] Read bundle-meta.json — name: "${entry.name}", icon: ${entry.icon || "none"}, iconBg: ${entry.iconBackground || "default"}, iconBorder: ${entry.iconBorder || "default"}`);
+        console.log(`[add-app] Read bundle-meta.json — name: "${entry.name}", icon: ${entry.icon || "none"}`);
       } catch {
         console.log("[add-app] Could not parse bundle-meta.json, using defaults");
       }
@@ -340,7 +344,6 @@ ipcMain.handle("get-app-icon", (event, id) => {
   if (!entry || !entry.icon) return null;
   const iconPath = path.join(APPS_DIR, entry.folderName, entry.icon);
   if (!fs.existsSync(iconPath)) return null;
-  // Read icon as base64 data URL so the renderer can display it directly
   const data = fs.readFileSync(iconPath);
   const ext = path.extname(entry.icon).slice(1).toLowerCase();
   const mime = ext === "png" ? "image/png" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
@@ -351,9 +354,9 @@ ipcMain.handle("add-app", async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
 
   const result = await dialog.showOpenDialog(win, {
-    title: `Select a Shinylive App (.${APP_EXTENSION})`,
+    title: `Select an App Bundle (.${APP_EXTENSION})`,
     filters: [
-      { name: "Shinylive App", extensions: [APP_EXTENSION] },
+      { name: "App Bundle", extensions: [APP_EXTENSION] },
       { name: "Zip Archives", extensions: ["zip"] },
     ],
     properties: ["openFile"],
@@ -382,7 +385,8 @@ ipcMain.handle("remove-app", (event, id) => {
   const entry = library.find((a) => a.id === id);
   if (!entry) return false;
 
-  if (activeAppId === id) stopActiveServer();
+  // Stop R process if running for this app
+  stopRProcess(id);
 
   const appDir = path.join(APPS_DIR, entry.folderName);
   if (fs.existsSync(appDir)) fs.rmSync(appDir, { recursive: true, force: true });
@@ -399,44 +403,48 @@ ipcMain.handle("launch-app", async (event, id) => {
   const appDir = path.join(APPS_DIR, entry.folderName);
   if (!fs.existsSync(appDir)) return { error: "App files missing" };
 
-  // Verify critical files exist (check both app dir and shared runtime)
-  const hasAppIndex = fs.existsSync(path.join(appDir, "index.html"));
-  const hasRuntimeIndex = fs.existsSync(path.join(SHARED_RUNTIME_DIR, "index.html"));
-  const hasAppSW = fs.existsSync(path.join(appDir, "shinylive-sw.js"));
-  const hasRuntimeSW = fs.existsSync(path.join(SHARED_RUNTIME_DIR, "shinylive-sw.js"));
-  console.log(`[launch] App dir: ${appDir}`);
-  console.log(`[launch] index.html: app=${hasAppIndex} runtime=${hasRuntimeIndex}`);
-  console.log(`[launch] shinylive-sw.js: app=${hasAppSW} runtime=${hasRuntimeSW}`);
-  console.log(`[launch] app.json: ${fs.existsSync(path.join(appDir, "app.json"))}`);
-
-  if (!hasAppIndex && !hasRuntimeIndex) {
-    return { error: "index.html not found in app directory or shared runtime" };
+  // Verify app.R exists
+  if (!fs.existsSync(path.join(appDir, "app.R"))) {
+    return { error: "app.R not found in app directory" };
   }
 
-  // Stop any previously running app server
-  stopActiveServer();
+  // Stop any previously running R process for this app
+  stopRProcess(id);
 
   try {
-    const { server, port } = await startAppServer(appDir);
-    activeServer = server;
-    activeAppId = id;
-    console.log(`[launch] Server started on http://127.0.0.1:${port}`);
-    return { success: true, port, name: entry.name };
+    const port = await findFreePort();
+    console.log(`[launch] Starting R for "${entry.name}" on port ${port}`);
+    console.log(`[launch] App dir: ${appDir}`);
+
+    const rProc = launchRProcess(appDir, port);
+
+    activeRProcesses.set(id, { process: rProc, port });
+
+    // Wait for R/Shiny to start listening on the port
+    await waitForPort(port);
+    console.log(`[launch] R is ready on http://127.0.0.1:${port}`);
+
+    return { success: true, port, name: entry.name, appId: id };
   } catch (err) {
     console.error(`[launch] Error: ${err.message}`);
+    stopRProcess(id);
     return { error: err.message };
   }
 });
 
-ipcMain.handle("stop-app", () => {
-  stopActiveServer();
+ipcMain.handle("stop-app", (event, appId) => {
+  if (appId) {
+    stopRProcess(appId);
+  } else {
+    // Stop all R processes (backward compat)
+    stopAllRProcesses();
+  }
   return true;
 });
 
 // ---- Main window ------------------------------------------------------------
 let mainWindow;
 
-// Set the About panel to always show Resondex copyright
 app.setAboutPanelOptions({
   applicationName: launcherConfig.appName,
   copyright: `Copyright \u00A9 ${new Date().getFullYear()} Resondex`,
@@ -482,7 +490,6 @@ function createMainWindow() {
     },
   };
 
-  // Set window icon if configured
   if (launcherConfig.icon) {
     const iconPath = path.resolve(__dirname, launcherConfig.icon);
     if (fs.existsSync(iconPath)) {
@@ -496,13 +503,11 @@ function createMainWindow() {
 }
 
 // ---- Handle file open from OS -----------------------------------------------
-// macOS: open-file fires when user double-clicks a .resondex file
 app.on("open-file", (event, filePath) => {
   event.preventDefault();
   console.log(`[open-file] Received: ${filePath}`);
 
   if (!mainWindow) {
-    // App not ready yet — queue it
     pendingFilePath = filePath;
     return;
   }
@@ -522,19 +527,17 @@ function handleExternalFileOpen(filePath) {
   }
 }
 
-// ---- Single-instance lock (Windows/Linux: second launch passes file to first) -
+// ---- Single-instance lock ---------------------------------------------------
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
   app.on("second-instance", (event, argv) => {
-    // Focus existing window
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
 
-    // On Windows/Linux, the file path is in argv
     const fileArg = argv.find((arg) => {
       const ext = path.extname(arg).toLowerCase();
       return ext === `.${APP_EXTENSION}` || ext === ".zip";
@@ -546,13 +549,11 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     createMainWindow();
 
-    // Windows/Linux: file path is passed as a command-line argument on first launch
     const fileArg = process.argv.find((arg) => {
       const ext = path.extname(arg).toLowerCase();
       return ext === `.${APP_EXTENSION}` || ext === ".zip";
     });
 
-    // Process pending file (macOS open-file before ready) or argv file
     const fileToOpen = pendingFilePath || fileArg;
     if (fileToOpen) {
       mainWindow.webContents.once("did-finish-load", () => {
@@ -562,13 +563,12 @@ if (!gotTheLock) {
     }
   });
 
-  // macOS: re-open window when dock icon is clicked
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 
   app.on("window-all-closed", () => {
-    stopActiveServer();
+    stopAllRProcesses();
     app.quit();
   });
 }

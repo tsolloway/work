@@ -679,6 +679,11 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
               edits[orig.color] = update.label;
               window.parent.postMessage({ type: 'nodeUpdate', edits: edits }, '*');
             } catch(e) {}
+          } else {
+            // attribute tab — notify parent of individual node label edit
+            try {
+              window.parent.postMessage({ type: 'nodeLabelUpdate', nodeId: editNodeId, label: update.label }, '*');
+            } catch(e) {}
           }
         };
       }
@@ -783,6 +788,14 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
           }
         }
 
+        // attribute node label edit forwarded from another accordion
+        if (evt.data.type === 'nodeLabelUpdate' && evt.data.nodeId && evt.data.label) {
+          var node = network.body.data.nodes.get(evt.data.nodeId);
+          if (node && node.label !== evt.data.label) {
+            network.body.data.nodes.update({ id: evt.data.nodeId, label: evt.data.label });
+          }
+        }
+
         // report-level load: parent sends snapshot data directly
         if (evt.data.type === 'applyReportLoad' && evt.data.snapshot) {
           window.bnApplySnapshot(evt.data.snapshot);
@@ -791,6 +804,54 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         // parent tells us to re-fit (e.g. after becoming visible)
         if (evt.data.type === 'fitNetwork') {
           network.fit();
+        }
+
+        // consolidated edit sync from parent (on layout/tab switch)
+        if (evt.data.type === 'syncEdits') {
+          var legend = evt.data.legend || {};
+          var nodeLabels = evt.data.nodeLabels || {};
+
+          // apply community/legend edits
+          if (Object.keys(legend).length > 0) {
+            if (keyData) {
+              // attribute view: update legend key labels only
+              var redraw = false;
+              keyData.forEach(function(item) {
+                if (legend[item.color] && item.label !== legend[item.color]) {
+                  item.label = legend[item.color];
+                  redraw = true;
+                }
+              });
+              if (redraw) renderLegend();
+            } else {
+              // community view: update node labels by color
+              var nodes = network.body.data.nodes.get();
+              var changed = [];
+              nodes.forEach(function(n) {
+                if (legend[n.color] && n.label !== legend[n.color]) {
+                  changed.push({ id: n.id, label: legend[n.color], group: n.group, color: n.color });
+                }
+              });
+              if (changed.length > 0) network.body.data.nodes.update(changed);
+            }
+          }
+
+          // apply individual node label edits
+          if (Object.keys(nodeLabels).length > 0) {
+            var nlChanged = [];
+            Object.keys(nodeLabels).forEach(function(nodeId) {
+              var node = network.body.data.nodes.get(nodeId);
+              if (node && node.label !== nodeLabels[nodeId]) {
+                nlChanged.push({ id: nodeId, label: nodeLabels[nodeId] });
+              }
+            });
+            if (nlChanged.length > 0) network.body.data.nodes.update(nlChanged);
+          }
+
+          // confirm to parent that edits are applied
+          try {
+            window.parent.postMessage({ type: 'editsSynced', nsKey: panelNs }, '*');
+          } catch(e) {}
         }
       });
 

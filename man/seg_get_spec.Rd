@@ -4,7 +4,7 @@
 \alias{seg_get_spec}
 \title{seg_get_spec}
 \usage{
-seg_get_spec(seg, spec_path = NULL, exeute = TRUE, execute_debug = FALSE)
+seg_get_spec(seg, spec_path = NULL, execute = TRUE, execute_debug = FALSE)
 }
 \description{
 seg_get_spec

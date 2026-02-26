@@ -10,7 +10,8 @@ bn_visNetwork_deliverable_interactivity(
   type = "none",
   key_json = NULL,
   key_width = 0.1,
-  panel_ns = NULL
+  panel_ns = NULL,
+  download_prefix = "network"
 )
 }
 \arguments{

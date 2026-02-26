@@ -10,19 +10,8 @@ deploy_recommended_packages()
 A character vector of package names (alphabetical).
 }
 \description{
-Returns a curated character vector of R package names commonly used in Shiny
-apps. When passed to \code{\link[=deploy_launcher]{deploy_launcher()}} via \code{include_recommended_packages = TRUE},
-these packages are pre-loaded into the launcher's runtime so that bundles
-built with \code{\link[=deploy_build_bundle]{deploy_build_bundle()}} don't need to include them — dramatically
-reducing bundle size.
-}
-\details{
-The list is intentionally kept in one place so it's easy to edit. To add
-custom packages on top of the recommended set, combine them:
-
-\if{html}{\out{<div class="sourceCode">}}\preformatted{deploy_build_bundle(
-  ...,
-  default_packages = c(deploy_recommended_packages(), "my_extra_pkg")
-)
-}\if{html}{\out{</div>}}
+Returns the full recursive dependency tree of the \pkg{work} package.
+These are the packages that the launcher bundles in its \verb{RPortable/library/}
+directory. Used by \code{\link[=deploy_build_bundle]{deploy_build_bundle()}} to determine which packages
+are already in the launcher (so bundles only need to include extras).
 }

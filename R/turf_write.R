@@ -131,6 +131,9 @@ turf_write <- function(
 
   n_items <- length(vars)
 
+  # ---- Build short subgroup keys (Excel 31-char sheet name limit) ----
+  sg_keys <- setNames(paste0("s", seq_along(subgroup_names)), subgroup_names)
+
 
   # ---- Compute base sizes per subgroup ----
   base_sizes <- .turf_compute_bases(raw, subgroups, subgroup_names)
@@ -176,7 +179,7 @@ turf_write <- function(
         n_val <- gsub("^n_", "", nk)
 
         for(sort_by in c("reach", "freq")){
-          sheet_name <- paste0("d_", sg, "_", n_val, "_", sort_by)
+          sheet_name <- paste0("d_", sg_keys[sg], "_", n_val, "_", sort_by)
           prepared <- .turf_prepare_sheet(tbl, top, col_info, sort_by = sort_by)
 
           wb$add_worksheet(sheet_name)
@@ -189,7 +192,7 @@ turf_write <- function(
 
   # ---- Write _config sheet ----
   .turf_write_config(wb, subgroup_names, n_values, col_info, has_subgroups,
-                     top, n_items, vars, label_lookup, base_sizes,
+                     top, n_items, vars, label_lookup, base_sizes, sg_keys,
                      sig_threshold = sig_threshold,
                      marginal_threshold = marginal_threshold)
 
@@ -454,7 +457,7 @@ turf_write <- function(
 
 .turf_write_config <- function(wb, subgroup_names, n_values, col_info,
                                 has_subgroups, top, n_items, vars,
-                                label_lookup, base_sizes,
+                                label_lookup, base_sizes, sg_keys,
                                 sig_threshold = 0.10, marginal_threshold = 0.20){
 
   wb$add_worksheet("_config")
@@ -484,10 +487,11 @@ turf_write <- function(
   wb$add_data("_config", x = sig_threshold, dims = "B8")
   wb$add_data("_config", x = marginal_threshold, dims = "B9")
 
-  # ---- Subgroups + base sizes: F/G starting row 1 ----
+  # ---- Subgroups + base sizes + short keys: F/G/H starting row 1 ----
   base_df <- data.frame(
     subgroup = names(base_sizes),
     base = unname(base_sizes),
+    key = unname(sg_keys[names(base_sizes)]),
     stringsAsFactors = FALSE
   )
   wb$add_data("_config", x = base_df, start_col = 6, start_row = 1)
@@ -538,9 +542,11 @@ turf_write <- function(
   wb$add_data("_controls", x = "sort_key", dims = "A7")
   wb$add_formula("_controls", x = 'IF(B3="Reach","reach","freq")', dims = "B7")
 
-  # Row 8: data sheet name
+  # Row 8: data sheet name (uses short subgroup key from _config col H)
   wb$add_data("_controls", x = "data_sheet", dims = "A8")
-  wb$add_formula("_controls", x = '"d_"&B1&"_"&B2&"_"&B7', dims = "B8")
+  n_sg <- length(subgroup_names)
+  sg_key_f <- paste0('INDEX(_config!H2:H', 1 + n_sg, ',MATCH(B1,_config!F2:F', 1 + n_sg, ',0))')
+  wb$add_formula("_controls", x = paste0('"d_"&', sg_key_f, '&"_"&B2&"_"&B7'), dims = "B8")
 
   # Row 9: invalidate best combos flag (1 = needs rebuild, 0 = current)
   wb$add_data("_controls", x = "invalidate_bc", dims = "A9")

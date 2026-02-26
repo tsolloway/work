@@ -3,14 +3,12 @@
 #' @export
 seg_get_input_sheet <- function(seg, file_location = NULL, row_start = 6){
 
-  require(openxlsx)
-
   if(is.null(file_location)){
     file_location <- seg[["paths"]][["files"]][["input"]]
   }
 
 
-  input_table <- readWorkbook(
+  input_table <- openxlsx::readWorkbook(
     file_location, sheet = "Inputs", startRow = row_start
   ) %>%
     select(any_of(c("Source", "Profile", "RS", LETTERS))) %>%

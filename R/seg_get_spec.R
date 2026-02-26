@@ -1,14 +1,15 @@
 #' seg_get_spec
 #' @description seg_get_spec
 #' @export
-seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = FALSE){
+seg_get_spec <- function(seg, spec_path = NULL, execute = TRUE, execute_debug = FALSE){
 
   work::start()
-  require(openxlsx)
-  require(stringr)
 
   if(is.null(spec_path)){
-    spec_path <- find_file_in_dir("spec", "xlsx")
+    spec_path <- seg[["paths"]][["files"]][["spec"]]
+    if(is.null(spec_path)){
+      spec_path <- find_file_in_dir("spec", "xlsx")
+    }
   }
 
   if(length(spec_path) != 1) stop("More than 1 spec path identified. Please fix.")
@@ -23,8 +24,8 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
   clean_sheets <- function(spec_path, sheet = c("Polars", "Profiles"), startRow = 3){
     sheet <- match.arg(sheet)
 
-    sheet <- loadWorkbook(spec_path) %>%
-      readWorkbook(sheet = sheet, startRow = 3) %>%
+    sheet <- openxlsx::loadWorkbook(spec_path) %>%
+      openxlsx::readWorkbook(sheet = sheet, startRow = 3) %>%
       as_tibble() %>%
       select(-Notes) %>%
       names_clean()
@@ -39,14 +40,14 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
       select(any_of(c("var", "label", "source_var", "syntax", "source_label", "opposite_label", "left_label", "right_label"))) %>%
       mutate(
         syntax = syntax %>%
-          str_squish() %>%
-          str_replace("&gt;", ">") %>%
-          str_replace("&lt;", "<") %>%
-          str_replace_all("&amp;", "&") %>%
-          str_replace(fixed(",)"), ")"),
+          stringr::str_squish() %>%
+          stringr::str_replace("&gt;", ">") %>%
+          stringr::str_replace("&lt;", "<") %>%
+          stringr::str_replace_all("&amp;", "&") %>%
+          stringr::str_replace(stringr::fixed(",)"), ")"),
         label = label %>%
-          str_squish() %>%
-          str_replace_all("&amp;", "&")
+          stringr::str_squish() %>%
+          stringr::str_replace_all("&amp;", "&")
       )
 
 
@@ -54,8 +55,8 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
       sheet <- sheet %>%
         mutate(
           source_label = source_label %>%
-          str_squish() %>%
-          str_replace("&amp;", "&")
+            stringr::str_squish() %>%
+            stringr::str_replace("&amp;", "&")
         )
     }
 
@@ -64,8 +65,8 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
       sheet <- sheet %>%
         mutate(
           opposite_label = opposite_label %>%
-            str_squish() %>%
-            str_replace("&amp;", "&")
+            stringr::str_squish() %>%
+            stringr::str_replace("&amp;", "&")
         )
     }
 
@@ -76,7 +77,7 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
           grep(glue("^{.x}0|^{.x}1|^{.x}2|^{.x}3|^{.x}4|^{.x}5"), sheet$var) %>%
             slice(sheet, .) %>%
             mutate(
-              var = var %>% case_match(.x~NA, .default = var)
+              var = var %>% replace_values(.x ~ NA)
             )
         })
       )
@@ -89,7 +90,73 @@ seg_get_spec <- function(seg, spec_path = NULL, exeute = TRUE, execute_debug = F
   )
 
 
-  if(exeute){
+
+  # check for duplicate var names across polars and profiles
+  all_vars <- c(
+    bind_rows(seg[["spec"]][["polars"]][["vars"]])[["var"]],
+    bind_rows(seg[["spec"]][["profiles"]][["vars"]])[["var"]]
+  ) %>% stats::na.omit()
+
+  dup_vars <- all_vars[duplicated(all_vars)] %>% unique()
+
+  if(length(dup_vars) > 0){
+    stop(
+      glue("Duplicate variable names found in spec: {paste(dup_vars, collapse = ', ')}"),
+      call. = FALSE
+    )
+  }
+
+
+  #check to see if we need to collapse any inputs
+  if(any(grepl(",", bind_rows(seg[["spec"]][["polars"]][["vars"]])[["source_var"]]))){
+
+    spec_profiles <- seg[["spec"]][["polars"]]
+
+    all_coalesce <- list()
+
+    for(j in seq_along(spec_profiles[["vars"]])){
+      x <- spec_profiles[["vars"]][[j]]
+
+      if(x[["source_var"]] %>% grepl(",", .) %>% any()){
+
+        source_var_collapsed <- x[["source_var"]] %>% gsub(" ", "", .) %>% gsub(",", "_", .)
+
+        coalesce_instructions <- setNames(
+          lapply(x[["source_var"]], function(var_pair) {
+            vars <- strsplit(var_pair, ",\\s*")[[1]]
+            rlang::expr(coalesce(!!!rlang::syms(vars)))
+          }),
+          source_var_collapsed
+        )
+
+        all_coalesce <- c(all_coalesce, coalesce_instructions)
+
+        x[["syntax"]] <- pmap_chr(
+          list(
+            x[["source_var"]],
+            source_var_collapsed,
+            x[["syntax"]]
+          ),
+          function(x,y,z)gsub(x, y, z)
+        )
+
+        x[["source_var"]] <- source_var_collapsed
+
+        spec_profiles[["vars"]][[j]] <- x
+      }
+    }
+
+    if(length(all_coalesce) > 0){
+      seg[["data"]][["original"]] <- seg[["data"]][["original"]] %>%
+        mutate(!!!all_coalesce)
+    }
+
+    seg[["spec"]][["polars"]] <- spec_profiles
+  }
+
+
+
+  if(execute){
 
     if(is.null(seg[["data"]][["original"]])){
 

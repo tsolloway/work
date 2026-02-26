@@ -1171,8 +1171,18 @@ Private Sub WriteComboResults( _
     Dim sortKey As String
     sortKey = selOptimize
 
+    ' Look up short subgroup key from _config col H (keyed by col F)
+    Dim sgKey As String
+    Dim sgMatch As Variant
+    sgMatch = Application.Match(selSubgroup, cfgWs.Range("F2:F100"), 0)
+    If IsError(sgMatch) Then
+        sgKey = selSubgroup  ' fallback to full name
+    Else
+        sgKey = CStr(cfgWs.Cells(1 + CLng(sgMatch), 8).Value)  ' col H
+    End If
+
     Dim dataSheetName As String
-    dataSheetName = "d_" & selSubgroup & "_" & CStr(selCombo) & "_" & sortKey
+    dataSheetName = "d_" & sgKey & "_" & CStr(selCombo) & "_" & sortKey
 
     Dim dataWs As Worksheet
     On Error Resume Next

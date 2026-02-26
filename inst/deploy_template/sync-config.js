@@ -51,6 +51,9 @@ if (config.icon) {
 // Disable macOS code signing (set identity to null in config)
 pkg.build.mac.identity = null;
 
+// ---- Unpack RPortable from asar so R can be spawned at runtime ----
+pkg.build.asarUnpack = ["RPortable/**/*"];
+
 // ---- Include launcher.config.json in the build ----
 if (!pkg.build.files.includes("launcher.config.json")) {
   pkg.build.files.push("launcher.config.json");

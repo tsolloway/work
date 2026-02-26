@@ -10,9 +10,6 @@ seg_input_sheet <- function(
     add_proj_name_to_file = TRUE
 ){
 
-  require(openxlsx)
-
-
   if(is.null(where)){
 
     where <- seg[["paths"]][["folders"]][["process"]]
@@ -45,7 +42,7 @@ seg_input_sheet <- function(
     }
 
 
-    addWorksheet(wb, sheet_name, gridLines = FALSE)
+    openxlsx::addWorksheet(wb, sheet_name, gridLines = FALSE)
 
 
     rows_all <- seq(row_start + 1, row_start + nrow(input_table))
@@ -83,9 +80,9 @@ seg_input_sheet <- function(
     walk(
       seq(4,2),
       ~ {
-        mergeCells(wb, sheet_name, cols = c(col_start, col_start + 1), rows = row_start - .x)
+        openxlsx::mergeCells(wb, sheet_name, cols = c(col_start, col_start + 1), rows = row_start - .x)
         if(.x == 2){
-          mergeCells(wb, sheet_name, cols = c(col_start + 3, col_start + 13), rows = row_start - .x)
+          openxlsx::mergeCells(wb, sheet_name, cols = c(col_start + 3, col_start + 13), rows = row_start - .x)
           oxl_outer_box(
             wb, sheet_name,
             row_start = row_start - .x, row_end = row_start - .x,
@@ -97,7 +94,7 @@ seg_input_sheet <- function(
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = data.frame(
         x = c("Quote", "Var Type", "Solution"),
@@ -112,15 +109,15 @@ seg_input_sheet <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
-      style = createStyle(textDecoration = "bold", halign = "center", fgFill = "#FCD5B4"),
+      style = openxlsx::createStyle(textDecoration = "bold", halign = "center", fgFill = "#FCD5B4"),
       rows = row_start - 4:2, cols = col_start + 0:2,
       gridExpand = TRUE, stack = TRUE
     )
 
 
-    writeFormula(
+    openxlsx::writeFormula(
       wb, sheet_name,
       startCol = col_start + 3,
       startRow = row_start - 2,
@@ -139,22 +136,22 @@ seg_input_sheet <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
-      style = createStyle(fgFill = "#B7DEE8", border = "TopBottomLeftRight", borderStyle = "thick"),
+      style = openxlsx::createStyle(fgFill = "#B7DEE8", border = "TopBottomLeftRight", borderStyle = "thick"),
       rows = row_start - 2, cols = col_start + 3,
       gridExpand = TRUE, stack = TRUE
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = input_table,
       startRow = row_start,
       startCol = col_start,
       colNames = TRUE,
       borders = "all",
-      headerStyle = createStyle(
+      headerStyle = openxlsx::createStyle(
         textDecoration = "bold", fgFill = "#BFBFBF",
         halign = "center", valign = "center", wrapText = TRUE
       )
@@ -177,17 +174,17 @@ seg_input_sheet <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
-      style = createStyle(halign = "center"),
+      style = openxlsx::createStyle(halign = "center"),
       rows = rows_all, cols = cols_all[-c(12, 13)],
       gridExpand = TRUE, stack = TRUE
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
-      style = createStyle(numFmt = "0.00"),
+      style = openxlsx::createStyle(numFmt = "0.00"),
       rows = rows_all, cols = col_start + c(4, 5, 8, 10),
       gridExpand = TRUE, stack = TRUE
     )
@@ -195,7 +192,7 @@ seg_input_sheet <- function(
 
     walk(
       cols_solutions,
-      ~writeFormula(
+      ~openxlsx::writeFormula(
         wb, sheet_name,
         startRow = row_start - 1, startCol = .x,
         x = glue('=COUNTIF({num2let(.x)}${rows_first}:{num2let(.x)}${rows_end},"x")')
@@ -203,9 +200,9 @@ seg_input_sheet <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
-      style = createStyle(numFmt = "0", halign = "center", border = "TopBottomLeftRight"),
+      style = openxlsx::createStyle(numFmt = "0", halign = "center", border = "TopBottomLeftRight"),
       rows = row_start - 1, cols = cols_solutions,
       gridExpand = TRUE, stack = TRUE
     )
@@ -219,29 +216,29 @@ seg_input_sheet <- function(
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = cols_all, rows = rows_all,
       rule = glue("=ISEVEN(${num2let(col_start)}{head(rows_all, 1)})"),
-      style = createStyle(bgFill = "#e0e0e0")
+      style = openxlsx::createStyle(bgFill = "#e0e0e0")
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = cols_solutions, rows = rows_all,
       rule = glue('=AND(
               UPPER(TRIM({cell_solution})) = UPPER(TRIM({cols_solutions %>% head(1) %>% num2let()}${row_start})),
               UPPER(TRIM({cols_solutions %>% head(1) %>% num2let()}{rows_first})) = "X"
               )'),
-      style = createStyle(textDecoration = "bold", bgFill = "#FCD5B4")
+      style = openxlsx::createStyle(textDecoration = "bold", bgFill = "#FCD5B4")
     )
 
 
 
     walk(
       col_start + c(4:5, 7:9),
-      ~conditionalFormatting(
+      ~openxlsx::conditionalFormatting(
         wb, sheet_name,
         rows = rows_all, cols = .x,
         type = "colourScale",
@@ -250,7 +247,7 @@ seg_input_sheet <- function(
     )
 
 
-    conditionalFormatting(
+    openxlsx::conditionalFormatting(
       wb, sheet_name,
       rows = rows_all, cols = col_start + 10,,
       type = "colourScale",
@@ -258,21 +255,21 @@ seg_input_sheet <- function(
     )
 
 
-    setColWidths(wb, sheet_name, cols = c(col_start - 1, cols_all[length(cols_all)] + 1), widths = 1)
-    setColWidths(wb, sheet_name, cols = cols_all[14], widths = .1)
-    setColWidths(wb, sheet_name, cols = cols_all[c(1:3, 5:6, 8:11)], widths = 6)
-    setColWidths(wb, sheet_name, cols = cols_all[15:length(cols_all)], widths = 3)
-    setColWidths(wb, sheet_name, cols = cols_all[c(4, 7)], widths = 8)
-    setColWidths(wb, sheet_name, cols = cols_all[c(12, 13)], widths = 80)#, hidden = c(FALSE, TRUE))
+    openxlsx::setColWidths(wb, sheet_name, cols = c(col_start - 1, cols_all[length(cols_all)] + 1), widths = 1)
+    openxlsx::setColWidths(wb, sheet_name, cols = cols_all[14], widths = .1)
+    openxlsx::setColWidths(wb, sheet_name, cols = cols_all[c(1:3, 5:6, 8:11)], widths = 6)
+    openxlsx::setColWidths(wb, sheet_name, cols = cols_all[15:length(cols_all)], widths = 3)
+    openxlsx::setColWidths(wb, sheet_name, cols = cols_all[c(4, 7)], widths = 8)
+    openxlsx::setColWidths(wb, sheet_name, cols = cols_all[c(12, 13)], widths = 80)#, hidden = c(FALSE, TRUE))
 
-    setRowHeights(wb, sheet_name, rows = row_start, heights = 55)
+    openxlsx::setRowHeights(wb, sheet_name, rows = row_start, heights = 55)
 
-    addFilter(wb, sheet_name, rows = row_start, cols = cols_all)
+    openxlsx::addFilter(wb, sheet_name, rows = row_start, cols = cols_all)
 
-    groupRows(wb, sheet_name, rows = c(row_start - 4:3), hidden = TRUE) %>% suppressWarnings()
-    groupColumns(wb, sheet_name, cols = cols_all[13], hidden = TRUE) %>% suppressWarnings()
+    openxlsx::groupRows(wb, sheet_name, rows = c(row_start - 4:3), hidden = TRUE) %>% suppressWarnings()
+    openxlsx::groupColumns(wb, sheet_name, cols = cols_all[13], hidden = TRUE) %>% suppressWarnings()
 
-    freezePane(
+    openxlsx::freezePane(
       wb, sheet_name,
       firstActiveRow = rows_first,
       firstActiveCol = cols_solutions %>% head(1),
@@ -291,17 +288,17 @@ seg_input_sheet <- function(
     rows_all <- seq(row_start + 1, row_start + nrow(rational_table))
 
 
-    addWorksheet(wb, sheet_name, gridLines = FALSE)
+    openxlsx::addWorksheet(wb, sheet_name, gridLines = FALSE)
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = rational_table,
       startRow = row_start,
       startCol = col_start,
       colNames = TRUE,
       borders = "all",
-      headerStyle = createStyle(
+      headerStyle = openxlsx::createStyle(
         textDecoration = "bold", fgFill = "#BFBFBF",
         halign = "center", valign = "center"
       )
@@ -324,29 +321,29 @@ seg_input_sheet <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
-      style = createStyle(halign = "center", valign = "center", textDecoration = "bold"),
+      style = openxlsx::createStyle(halign = "center", valign = "center", textDecoration = "bold"),
       rows = rows_all, cols = col_start,
       gridExpand = TRUE, stack = TRUE
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
-      style = createStyle(valign = "center", wrapText = TRUE),
+      style = openxlsx::createStyle(valign = "center", wrapText = TRUE),
       rows = rows_all, cols = col_start + 1,
       gridExpand = TRUE, stack = TRUE
     )
 
 
-    setColWidths(wb, sheet_name, cols = c(col_start - 1, col_start + 2), widths = 1)
-    setColWidths(wb, sheet_name, cols = col_start, widths = 10)
-    setColWidths(wb, sheet_name, cols = col_start + 1, widths = 100)
+    openxlsx::setColWidths(wb, sheet_name, cols = c(col_start - 1, col_start + 2), widths = 1)
+    openxlsx::setColWidths(wb, sheet_name, cols = col_start, widths = 10)
+    openxlsx::setColWidths(wb, sheet_name, cols = col_start + 1, widths = 100)
 
-    setRowHeights(wb, sheet_name, rows = rows_all, heights = 20)
+    openxlsx::setRowHeights(wb, sheet_name, rows = rows_all, heights = 20)
 
-    freezePane(wb, sheet_name, firstActiveRow = row_start + 1)
+    openxlsx::freezePane(wb, sheet_name, firstActiveRow = row_start + 1)
 
   }
 
@@ -375,10 +372,10 @@ seg_input_sheet <- function(
     rows_all <- seq(row_start + 1, row_start + nrow(prototype_table))
 
 
-    addWorksheet(wb, sheet_name, gridLines = TRUE)
+    openxlsx::addWorksheet(wb, sheet_name, gridLines = TRUE)
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = prototype_table,
       startRow = row_start,
@@ -386,7 +383,7 @@ seg_input_sheet <- function(
       colNames = TRUE,
       borders = "surrounding",
       borderStyle = "thick",
-      headerStyle = createStyle(
+      headerStyle = openxlsx::createStyle(
         textDecoration = "bold", fgFill = "#BFBFBF", halign = "center"
       )
     )
@@ -400,41 +397,41 @@ seg_input_sheet <- function(
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       rows = rows_all, cols = col_start + 1,
-      style = createStyle(halign = "center"),
+      style = openxlsx::createStyle(halign = "center"),
       gridExpand = TRUE, stack = TRUE
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       rows = rows_all, cols = col_start + 2,
-      style = createStyle(numFmt = "0.0%", halign = "center"),
+      style = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
       gridExpand = TRUE, stack = TRUE
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       rows = rows_all, cols = col_start + 3,
-      style = createStyle(numFmt = "0.00", halign = "center"),
+      style = openxlsx::createStyle(numFmt = "0.00", halign = "center"),
       gridExpand = TRUE, stack = TRUE
     )
 
 
-    addStyle(
+    openxlsx::addStyle(
       wb, sheet_name,
       rows = rows_all, cols = c(cols_seg, cols_seg_func),
-      style = createStyle(halign = "center"),
+      style = openxlsx::createStyle(halign = "center"),
       gridExpand = TRUE, stack = TRUE
     )
 
 
     walk(
       2:3,
-      ~conditionalFormatting(
+      ~openxlsx::conditionalFormatting(
         wb, sheet_name,
         rows = rows_all, cols = col_start + .x,
         type = "colourScale",
@@ -443,7 +440,7 @@ seg_input_sheet <- function(
     )
 
 
-    writeData(
+    openxlsx::writeData(
       wb, sheet_name,
       x = data.frame(
         Solution = glue("seed_seg_{seq(segs_max)}"),
@@ -454,7 +451,7 @@ seg_input_sheet <- function(
       colNames = TRUE,
       borders = "surrounding",
       borderStyle = "thick",
-      headerStyle = createStyle(
+      headerStyle = openxlsx::createStyle(
         textDecoration = "bold", fgFill = "#BFBFBF", halign = "center"
       )
     )
@@ -490,7 +487,7 @@ seg_input_sheet <- function(
         ~{
           cell_seg <- glue('{num2let(cols_seg[i])}{.x}')
           cell_var <- glue('${num2let(col_start)}{.x}')
-          writeFormula(
+          openxlsx::writeFormula(
             wb, sheet_name,
             startCol = cols_seg_func[i],
             startRow = .x,
@@ -504,7 +501,7 @@ seg_input_sheet <- function(
         }
       )
 
-      writeFormula(
+      openxlsx::writeFormula(
         wb, sheet_name,
         startCol = cols_seg_func %>% tail(1) + 3,
         startRow = rows_all[i],
@@ -514,15 +511,15 @@ seg_input_sheet <- function(
     }
 
 
-    setColWidths(wb, sheet_name, cols = cols_seg, widths = 6)
+    openxlsx::setColWidths(wb, sheet_name, cols = cols_seg, widths = 6)
 
-    setColWidths(wb, sheet_name, cols = cols_seg_func, widths = 9)
+    openxlsx::setColWidths(wb, sheet_name, cols = cols_seg_func, widths = 9)
 
-    groupColumns(wb, sheet_name, cols = cols_seg_func, hidden = TRUE) %>% suppressWarnings()
+    openxlsx::groupColumns(wb, sheet_name, cols = cols_seg_func, hidden = TRUE) %>% suppressWarnings()
 
-    setColWidths(wb, sheet_name, cols = c(col_start - 1, cols_seg_func %>% tail(1) + 1), widths = 1)
+    openxlsx::setColWidths(wb, sheet_name, cols = c(col_start - 1, cols_seg_func %>% tail(1) + 1), widths = 1)
 
-    freezePane(
+    openxlsx::freezePane(
       wb, sheet_name,
       firstActiveCol =  cols_seg %>% head(1),
       firstActiveRow = rows_all %>% head(1)
@@ -559,7 +556,7 @@ seg_input_sheet <- function(
   file_location <- glue("{where}/{file_name}.xlsx")
 
 
-  saveWorkbook(wb, file_location, overwrite = TRUE)
+  openxlsx::saveWorkbook(wb, file_location, overwrite = TRUE)
 
 
   seg[["paths"]][["files"]][["input"]] <- file_location

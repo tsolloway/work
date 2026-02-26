@@ -3,9 +3,6 @@
 #' @export
 seg_get_fa_winner <- function(seg, winner, row_header = 4, file_location = NULL){
 
-  require(openxlsx)
-
-
   polars_table <- seg[["spec"]][["polars_table"]]
 
 
@@ -14,7 +11,7 @@ seg_get_fa_winner <- function(seg, winner, row_header = 4, file_location = NULL)
   }
 
 
-  df <- read.xlsx(
+  df <- openxlsx::read.xlsx(
     xlsxFile = file_location,
     sheet = as.character(winner),
     startRow = row_header

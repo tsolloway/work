@@ -7,6 +7,7 @@ const fabAdd = document.getElementById("fab-add");
 const backBtn = document.getElementById("back-btn");
 const appBarTitle = document.getElementById("app-bar-title");
 const appFrame = document.getElementById("app-frame");
+const loadingOverlay = document.getElementById("loading-overlay");
 const renameModal = document.getElementById("rename-modal");
 const renameInput = document.getElementById("rename-input");
 const renameCancel = document.getElementById("rename-cancel");
@@ -14,21 +15,37 @@ const renameSave = document.getElementById("rename-save");
 
 let renameTargetId = null;
 let appFileExtension = "resondex"; // Updated from config on init
+let currentAppId = null; // Track which app is currently running
 
 // ---- View switching ---------------------------------------------------------
 function showLibrary() {
   appFrame.src = "about:blank";
-  window.launcherAPI.stopApp();
+  loadingOverlay.style.display = "none";
+  if (currentAppId) {
+    window.launcherAPI.stopApp(currentAppId);
+    currentAppId = null;
+  }
   appView.style.display = "none";
   libraryView.style.display = "flex";
   renderApps();
 }
 
-function showApp(port, name) {
+function showApp(port, name, appId) {
   libraryView.style.display = "none";
   appView.style.display = "flex";
   appBarTitle.textContent = name;
-  appFrame.src = `http://localhost:${port}`;
+  currentAppId = appId;
+
+  // Hide loading overlay and show the app
+  loadingOverlay.style.display = "none";
+  appFrame.src = `http://127.0.0.1:${port}`;
+}
+
+function showLoading() {
+  libraryView.style.display = "none";
+  appView.style.display = "flex";
+  loadingOverlay.style.display = "flex";
+  appFrame.src = "about:blank";
 }
 
 // ---- Render apps ------------------------------------------------------------
@@ -68,7 +85,6 @@ async function renderApps() {
     // Load per-app icon if available
     if (app.icon) {
       const iconEl = card.querySelector(".app-icon");
-      // Apply per-app icon styling from bundle metadata
       if (app.iconBackground) iconEl.style.background = app.iconBackground;
       if (app.iconBorder) iconEl.style.borderColor = app.iconBorder;
 
@@ -82,13 +98,17 @@ async function renderApps() {
 
     card.addEventListener("click", async (e) => {
       if (e.target.closest(".app-actions")) return;
-      card.classList.add("loading");
+
+      // Show loading screen immediately
+      appBarTitle.textContent = app.name;
+      showLoading();
+
       const result = await window.launcherAPI.launchApp(app.id);
-      card.classList.remove("loading");
       if (result.error) {
+        showLibrary();
         alert("Failed to launch: " + result.error);
       } else {
-        showApp(result.port, result.name);
+        showApp(result.port, result.name, result.appId);
       }
     });
 
@@ -204,7 +224,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---- Handle files opened externally (double-click .resondex in Finder) ------
+// ---- Handle files opened externally (double-click in Finder) ----------------
 window.launcherAPI.onFileOpened((result) => {
   if (result && result.error) {
     alert("Failed to add app: " + result.error);
@@ -216,31 +236,23 @@ window.launcherAPI.onFileOpened((result) => {
 async function applyConfig() {
   const config = await window.launcherAPI.getConfig();
 
-  // Set header text
   document.getElementById("header-title").textContent = config.headerTitle;
   document.getElementById("header-subtitle").textContent = config.headerSubtitle;
-
-  // Set page title
   document.title = config.appName;
 
-  // Apply CSS custom properties for colors
   const root = document.documentElement;
   root.style.setProperty("--accent-color", config.accentColor);
 
-  // Header background: detect color vs image path
   const bg = config.headerBackground;
   const isColor = /^(#|rgb|hsl|hwb|lab|lch|oklch|oklab|transparent|inherit|currentColor)/.test(bg.trim());
   if (isColor) {
     root.style.setProperty("--header-bg", bg);
   } else {
-    // Treat as image path (relative to app root or absolute)
     root.style.setProperty("--header-bg", `url("${bg}") center/cover no-repeat`);
   }
 
-  // File extension
   appFileExtension = config.fileExtension || "resondex";
 
-  // Update empty state help text with configured extension
   const emptyHint = document.querySelector("#empty-state p");
   if (emptyHint) {
     emptyHint.textContent = `Drag a .${appFileExtension} file here or click the button below`;
