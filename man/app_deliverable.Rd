@@ -7,6 +7,7 @@
 app_deliverable(
   title = "Project Name (#XXXXXXX)",
   modules = list(),
+  nested = FALSE,
   theme = NULL
 )
 }
@@ -25,6 +26,12 @@ Defaults to \code{"Project Name (#XXXXXXX)"}.}
 \item{css}{Character string of CSS or \code{NULL}.}
 \item{head_tags}{List of additional \code{<head>} tags or \code{NULL}.}
 }}
+
+\item{nested}{Logical. If \code{FALSE} (default), all module tabs are
+flattened into the top-level navbar. If \code{TRUE}, each module gets
+its own top-level nav panel (title derived from the list name, with
+underscores replaced by spaces), and the module's tabs become nested
+card tabs inside that panel.}
 
 \item{theme}{Character (Bootswatch theme name) or a \code{bslib::bs_theme}
 object. Default \code{NULL} uses \code{"flatly"}. See
@@ -52,6 +59,13 @@ mod_turf <- app_deliverable_add_turf(
 app_deliverable(
   title   = "Ice Cream TURF (#1234567)",
   modules = list(mod_turf)
+)
+
+# Nested layout — each module gets its own top-level tab
+app_deliverable(
+  title   = "Multi-Study (#1234567)",
+  modules = list(Brand_Health = mod1, Ad_Tracker = mod2),
+  nested  = TRUE
 )
 }
 

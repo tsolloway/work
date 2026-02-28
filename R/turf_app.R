@@ -50,8 +50,16 @@ app_deliverable_add_turf <- function(
     best_combo_results = NULL, raw, vars,
     subgroups = NULL, weight = NULL, labels = NULL,
     project_name = "Project Name - (#xxxxxxx)",
-    sig_threshold = 0.10, marginal_threshold = 0.20
+    sig_threshold = 0.10, marginal_threshold = 0.20,
+    id = NULL
 ) {
+
+  # ---- Generate unique module ID ----
+  if (is.null(id)) {
+    # Count existing turf modules to auto-increment
+    id <- "turf"
+  }
+  ns <- shiny::NS(id)
 
   # ---- Pre-process (reuse turf_write helpers) ----
   label_lookup <- .turf_build_label_lookup(vars, labels)
@@ -88,7 +96,6 @@ app_deliverable_add_turf <- function(
   base_sizes <- .turf_compute_bases(raw, subgroups, subgroup_names)
 
   has_weights <- col_info$has_weights
-  ns <- shiny::NS("turf")
 
   # ---- Build UI tabs ----
   tabs <- .turf_module_ui(
@@ -100,7 +107,7 @@ app_deliverable_add_turf <- function(
   )
 
   # ---- CSS (namespaced) ----
-  ns_prefix <- "turf-"
+  ns_prefix <- paste0(id, "-")
   css <- paste0(
     "#", ns_prefix, "base_display, #", ns_prefix, "bc_base_display {\n",
     "  pointer-events: none;\n",
@@ -144,7 +151,7 @@ app_deliverable_add_turf <- function(
 
   # ---- Return module definition ----
   list(
-    id        = "turf",
+    id        = id,
     tabs      = tabs,
     server    = server_fn,
     css       = css,

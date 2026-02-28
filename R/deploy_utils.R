@@ -303,6 +303,9 @@ deploy_recommended_packages <- function() {
     }
   }
 
+  # Patch bin/R to use self-referencing R_HOME instead of hardcoded path
+  .deploy_patch_r_home(dest_dir, r_home)
+
   # Compute size
   r_size <- sum(fs::file_info(fs::dir_ls(dest_dir, recurse = TRUE, type = "file"))$size,
                 na.rm = TRUE)
@@ -421,6 +424,77 @@ deploy_recommended_packages <- function() {
   cli::cli_alert_success(
     "Library populated: {copied} copied, {skipped} already present ({(.deploy_format_size(lib_size))})"
   )
+}
+
+
+#' Patch bin/R to use a self-referencing R_HOME
+#'
+#' The `bin/R` shell script has R_HOME_DIR hardcoded to the original
+#' install location (e.g., `/opt/homebrew/Cellar/r/4.5.2_1/lib/R`).
+#' This replaces it with a dynamic path computed from the script's own
+#' location, making the R installation portable.
+#'
+#' @param dest_dir Character. Path to the RPortable directory.
+#' @param original_r_home Character. The original R.home() path that
+#'   is hardcoded in bin/R.
+#' @noRd
+.deploy_patch_r_home <- function(dest_dir, original_r_home) {
+  r_script <- fs::path(dest_dir, "bin", "R")
+  if (!fs::file_exists(r_script)) {
+    cli::cli_alert_warning("bin/R not found, skipping R_HOME patching")
+    return(invisible(NULL))
+  }
+
+  cli::cli_alert_info("Patching bin/R to use portable R_HOME...")
+
+  lines <- readLines(r_script)
+  original <- paste(lines, collapse = "\n")
+
+  # Normalize the original path (remove trailing slash)
+  original_r_home <- sub("/$", "", original_r_home)
+
+  # Replace the hardcoded R_HOME_DIR assignment with a self-referencing one
+  # Original: R_HOME_DIR=/opt/homebrew/Cellar/r/4.5.2_1/lib/R
+  # New: R_HOME_DIR=$(cd "$(dirname "$0")/.." && pwd)
+  patched <- sub(
+    paste0("R_HOME_DIR=", original_r_home),
+    'R_HOME_DIR="$(cd \\"$(dirname \\"$0\\")/..\\\" && pwd)"',
+    original,
+    fixed = TRUE
+  )
+
+  # Actually, the escaping is tricky — let's use a simpler approach:
+  # Replace all occurrences of the original path with ${R_HOME_DIR}
+  # EXCEPT the first assignment line, which we handle specially
+
+  # Step 1: Replace the first R_HOME_DIR= assignment
+  patched <- original
+  patched <- sub(
+    paste0("R_HOME_DIR=", original_r_home),
+    "R_HOME_DIR=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"",
+    patched,
+    fixed = TRUE
+  )
+
+  # Step 2: Replace all remaining hardcoded paths with ${R_HOME_DIR}
+  patched <- gsub(original_r_home, "${R_HOME_DIR}", patched, fixed = TRUE)
+
+  # Step 3: Remove the WARNING block about ignoring R_HOME — we want to
+
+  # respect the env var now, or at least not confuse users
+  patched <- gsub(
+    'if test -n "\\$\\{R_HOME\\}" &&\\s*\n\\s*test "\\$\\{R_HOME\\}" != "\\$\\{R_HOME_DIR\\}"; then\\s*\n\\s*echo "WARNING: ignoring environment value of R_HOME"\\s*\nfi',
+    "",
+    patched,
+    perl = TRUE
+  )
+
+  writeLines(patched, r_script)
+
+  # Ensure bin/R is executable
+  Sys.chmod(r_script, mode = "0755")
+
+  cli::cli_alert_success("Patched bin/R for portability")
 }
 
 

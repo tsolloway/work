@@ -17,6 +17,11 @@
 #'     \item{css}{Character string of CSS or \code{NULL}.}
 #'     \item{head_tags}{List of additional \code{<head>} tags or \code{NULL}.}
 #'   }
+#' @param nested Logical. If \code{FALSE} (default), all module tabs are
+#'   flattened into the top-level navbar. If \code{TRUE}, each module gets
+#'   its own top-level nav panel (title derived from the list name, with
+#'   underscores replaced by spaces), and the module's tabs become nested
+#'   card tabs inside that panel.
 #' @param theme Character (Bootswatch theme name) or a \code{bslib::bs_theme}
 #'   object. Default \code{NULL} uses \code{"flatly"}. See
 #'   \url{https://bootswatch.com/} for available themes.
@@ -38,12 +43,20 @@
 #'   title   = "Ice Cream TURF (#1234567)",
 #'   modules = list(mod_turf)
 #' )
+#'
+#' # Nested layout — each module gets its own top-level tab
+#' app_deliverable(
+#'   title   = "Multi-Study (#1234567)",
+#'   modules = list(Brand_Health = mod1, Ad_Tracker = mod2),
+#'   nested  = TRUE
+#' )
 #' }
 #'
 #' @export
 app_deliverable <- function(
     title = "Project Name (#XXXXXXX)",
     modules = list(),
+    nested = FALSE,
     theme = NULL
 ) {
 
@@ -56,12 +69,29 @@ app_deliverable <- function(
   all_tabs <- list()
   all_css <- character(0)
   all_head_tags <- list()
+  mod_names <- names(modules)
 
-
-  for (mod in modules) {
-    all_tabs <- c(all_tabs, mod$tabs)
+  for (i in seq_along(modules)) {
+    mod <- modules[[i]]
     if (!is.null(mod$css)) all_css <- c(all_css, mod$css)
     if (!is.null(mod$head_tags)) all_head_tags <- c(all_head_tags, mod$head_tags)
+
+    if (nested) {
+      # Derive panel title from list name (replace _ with space)
+      panel_title <- if (!is.null(mod_names) && nchar(mod_names[i]) > 0) {
+        gsub("_", " ", mod_names[i])
+      } else {
+        mod$id
+      }
+      # Wrap module tabs inside a top-level nav_panel with nested card tabs
+      nested_panel <- bslib::nav_panel(
+        panel_title,
+        do.call(bslib::navset_card_tab, mod$tabs)
+      )
+      all_tabs <- c(all_tabs, list(nested_panel))
+    } else {
+      all_tabs <- c(all_tabs, mod$tabs)
+    }
   }
 
   # ---- Build header ----

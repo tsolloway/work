@@ -52,11 +52,16 @@ deploy_write_app <- function(app, app_dir) {
   rds_path <- fs::path(app_dir, "app_object.rds")
   saveRDS(app, rds_path)
 
-  # Write a minimal app.R that loads and runs the app
+  # Write a minimal app.R that loads the app object.
+
+  # The last expression must evaluate to the app object — shiny::runApp()
+
+  # will source this file and use the return value. Do NOT call
+  # shiny::runApp() here, or it will start a second server on a random port.
   writeLines(
     c(
       'app <- readRDS("app_object.rds")',
-      "shiny::runApp(app)"
+      "app"
     ),
     fs::path(app_dir, "app.R")
   )

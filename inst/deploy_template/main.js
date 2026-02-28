@@ -95,9 +95,12 @@ function getRPaths() {
   }
 
   const rHome = path.join(resourcesPath, "RPortable");
+  // On macOS, use bin/R (shell script) instead of bin/Rscript (compiled binary)
+  // because Rscript has R_HOME hardcoded at compile time and can't be relocated.
+  // bin/R is a shell script we patch to compute R_HOME from its own location.
   const rBin = process.platform === "win32"
     ? path.join(rHome, "bin", "Rscript.exe")
-    : path.join(rHome, "bin", "Rscript");
+    : path.join(rHome, "bin", "R");
   const launcherLib = path.join(rHome, "library");
 
   return { rHome, rBin, launcherLib, resourcesPath };
@@ -174,11 +177,19 @@ function launchRProcess(appDir, port) {
     env.R_LIBS_USER = " ";
   }
 
-  console.log(`[R] Spawning: ${rBin} -e "${rCode}"`);
+  // On macOS, use "R --no-echo -e" instead of "Rscript -e" because the
+  // Rscript binary has R_HOME hardcoded at compile time.
+  const spawnArgs = process.platform === "win32"
+    ? ["-e", rCode]
+    : ["--no-echo", "-e", rCode];
+
+  console.log(`[R] Spawning: ${rBin} ${spawnArgs.join(" ")}`);
   console.log(`[R] R_HOME: ${rHome}`);
+  console.log(`[R] App dir: ${appDir}`);
   console.log(`[R] Library paths: ${libPaths.join(", ")}`);
 
-  const child = spawn(rBin, ["-e", rCode], {
+  const child = spawn(rBin, spawnArgs, {
+    cwd: appDir,
     env,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -420,8 +431,25 @@ ipcMain.handle("launch-app", async (event, id) => {
 
     activeRProcesses.set(id, { process: rProc, port });
 
-    // Wait for R/Shiny to start listening on the port
-    await waitForPort(port);
+    // Collect stderr for error reporting
+    let stderrBuf = "";
+    rProc.stderr.on("data", (data) => {
+      stderrBuf += data.toString();
+    });
+
+    // Race: wait for port to open OR R process to exit (whichever comes first)
+    await Promise.race([
+      waitForPort(port),
+      new Promise((_, reject) => {
+        rProc.on("exit", (code, signal) => {
+          const reason = stderrBuf.trim()
+            ? `R exited (code ${code}): ${stderrBuf.trim().split("\n").slice(-10).join("\n")}`
+            : `R exited with code ${code} (signal: ${signal})`;
+          reject(new Error(reason));
+        });
+      }),
+    ]);
+
     console.log(`[launch] R is ready on http://127.0.0.1:${port}`);
 
     return { success: true, port, name: entry.name, appId: id };
