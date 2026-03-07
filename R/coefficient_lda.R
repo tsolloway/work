@@ -60,11 +60,11 @@ coefficient_lda <- function(fit, input = NULL, grp = NULL){
 
   result <- rbind(cons, Betas) %>%
     as.data.frame() %>%
-    setNames(glue("seg_{names(prior)}")) %>%
-    mutate(
+    setNames(glue::glue("seg_{names(prior)}")) %>%
+    dplyr::mutate(
       variable = c("constant", colnames(GM))
     ) %>%
-    relocate(variable, .before = 1) %>%
+    dplyr::relocate(variable, .before = 1) %>%
     tibble::as_tibble()
 
 

@@ -17,7 +17,7 @@
     var_weight <- "temp_weight"
 
     df <- df %>%
-      mutate(
+      dplyr::mutate(
         {{var_weight}} := 1
       )
   }
@@ -25,9 +25,9 @@
 
   if(!remove_total){
 
-    total <- bind_rows(
-      reframe(df, across(all_of(vars), ~sum(!is.na(.)))),
-      reframe(df, across(all_of(vars), ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)))
+    total <- dplyr::bind_rows(
+      dplyr::reframe(df, dplyr::across(dplyr::all_of(vars), ~sum(!is.na(.)))),
+      dplyr::reframe(df, dplyr::across(dplyr::all_of(vars), ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)))
     ) %>%
       t() %>%
       as.data.frame() %>%
@@ -37,22 +37,22 @@
       replace(is.na(.), 0)
   }
 
-  table_summary <- reframe(
+  table_summary <- dplyr::reframe(
     df,
-    across(all_of(vars), ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)),
+    dplyr::across(dplyr::all_of(vars), ~weighted.mean(., w = .data[[var_weight]], na.rm = TRUE)),
     .by = !!solution_var
   ) %>%
-    ungroup() %>%
-    arrange(.data[[solution_var]]) %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(.data[[solution_var]]) %>%
     t() %>%
     as.data.frame() %>%
     round(5) %>%
     setNames(
-      glue("seg_{.[1,]}")
+      glue::glue("seg_{.[1,]}")
     ) %>%
     tibble::rownames_to_column("var") %>%
-    filter(var != solution_var) %>%
-    select(-var) %>%
+    dplyr::filter(var != solution_var) %>%
+    dplyr::select(-var) %>%
     replace(is.na(.), 0)
 
 
@@ -67,7 +67,7 @@
 
   }else if(add_desc == "diff"){
     table_summary <- table_summary %>%
-      mutate(
+      dplyr::mutate(
         Diff = target - others
       ) %>%
       suppressMessages()
@@ -96,25 +96,25 @@
 
 
   if(!remove_total){
-    table_summary <- bind_cols(total, table_summary)
+    table_summary <- dplyr::bind_cols(total, table_summary)
   }else if(remove_total){
-    table_summary <- bind_cols(var = unique(vars), table_summary)
+    table_summary <- dplyr::bind_cols(var = unique(vars), table_summary)
   }
 
 
-  table_summary <- left_join(
+  table_summary <- dplyr::left_join(
     shell_all,
     table_summary,
-    by = join_by(var)
+    by = dplyr::join_by(var)
   ) %>%
     tidyr::nest(by = -c(block_header, type))
 
 
   if(sort_table){
     if(add_desc == "range"){
-      table_summary[["by"]] <- table_summary[["by"]] %>% map(~{.x %>% arrange(-range)})
+      table_summary[["by"]] <- table_summary[["by"]] %>% purrr::map(~{.x %>% dplyr::arrange(-range)})
     }else if(add_desc == "diff"){
-      table_summary[["by"]] <- table_summary[["by"]] %>% map(~{.x %>% arrange(-Diff)})
+      table_summary[["by"]] <- table_summary[["by"]] %>% purrr::map(~{.x %>% dplyr::arrange(-Diff)})
     }
   }
 
@@ -131,10 +131,10 @@
 
   if(is.null(var_weight)){
     var_weight <- "temp_weight"
-    df <- df %>% mutate({{var_weight}} := 1)
+    df <- df %>% dplyr::mutate({{var_weight}} := 1)
   }
 
-  seg_max <- df %>% select(all_of(solution_var)) %>% unlist() %>% max()
+  seg_max <- df %>% dplyr::select(dplyr::all_of(solution_var)) %>% unlist() %>% max()
   seg_vals <- seq(seg_max)
 
   # pre-extract matrices for vectorized target/others means and p-values
@@ -147,7 +147,7 @@
   not_na <- !is.na(var_mat_clean)
 
   seg_vals %>%
-    map(~{
+    purrr::map(~{
       k <- .x
 
       # vectorized target means across all vars at once
@@ -164,7 +164,7 @@
         target = as.numeric(target),
         others = as.numeric(others)
       ) %>%
-        mutate(Diff = target - others)
+        dplyr::mutate(Diff = target - others)
 
       # vectorized chi-squared p-values for binary split (2x2 with Yates correction)
       is_target <- grp_clean == k
@@ -193,16 +193,16 @@
 
       table_summary[, "p_value"] <- p_values
 
-      table_summary <- bind_cols(var = uv, table_summary)
+      table_summary <- dplyr::bind_cols(var = uv, table_summary)
 
-      table_summary <- left_join(
+      table_summary <- dplyr::left_join(
         shell_all,
         table_summary,
-        by = join_by(var)
+        by = dplyr::join_by(var)
       ) %>%
         tidyr::nest(by = -c(block_header, type))
 
-      table_summary[["by"]] <- table_summary[["by"]] %>% map(~{.x %>% arrange(-Diff)})
+      table_summary[["by"]] <- table_summary[["by"]] %>% purrr::map(~{.x %>% dplyr::arrange(-Diff)})
 
       table_summary
     })
@@ -220,13 +220,13 @@
   shell_profiles <- seg[["shell"]][["profiles"]] %>%
     tidyr::unnest(cols = vars)
 
-  shell_all <- bind_rows(shell_polars, shell_profiles) %>%
-    mutate(
-      label = glue("{var} - {label}") %>% stringr::str_squish(),
-      block_header = glue("{prefix} - {block_label}"),
+  shell_all <- dplyr::bind_rows(shell_polars, shell_profiles) %>%
+    dplyr::mutate(
+      label = glue::glue("{var} - {label}") %>% stringr::str_squish(),
+      block_header = glue::glue("{prefix} - {block_label}"),
       type = ifelse(prefix %in% seg[["spec"]][["polars"]][["prefix"]], "polar", "profile")
     ) %>%
-    select(block_header, type, var, label)
+    dplyr::select(block_header, type, var, label)
 
 
   summary_table <- df %>% .seg_do_summary_means(
@@ -244,8 +244,8 @@
     if(solution_var %in% seg[["solutions"]][["summary_table"]][["lda_name"]]){
 
       key <- seg[["solutions"]][["summary_table"]] %>%
-        filter(lda_name == solution_var) %>%
-        select(lda_profiles) %>%
+        dplyr::filter(lda_name == solution_var) %>%
+        dplyr::select(lda_profiles) %>%
         unlist() %>%
         setNames(NULL)
     }
@@ -257,9 +257,9 @@
     summary_key <- df %>%
       .seg_do_summary_means(
         solution_var = solution_var,
-        shell_all = shell_all %>% filter(var %in% key)
+        shell_all = shell_all %>% dplyr::filter(var %in% key)
       ) %>% tidyr::unnest(by) %>%
-      mutate(
+      dplyr::mutate(
         block_header = ifelse(type == "polar", "Key Polars", "Key Profiles")
       ) %>%
       tidyr::nest(by = -c(block_header, type))
@@ -270,7 +270,7 @@
 
 
   solution_frequency <- df %>%
-    select(all_of(solution_var)) %>%
+    dplyr::select(dplyr::all_of(solution_var)) %>%
     table() %>%
     as.numeric() %>%
     tibble(
@@ -282,7 +282,7 @@
 
 
 
-  names(solution_frequency) <- glue("Seg {seq(ncol(solution_frequency))}")
+  names(solution_frequency) <- glue::glue("Seg {seq(ncol(solution_frequency))}")
 
   names(segment_tables) <- names(solution_frequency)
 
@@ -382,9 +382,9 @@
     col_dynamic_number <- col_start + 5 + seg_count + 4
     col_type_number <- col_start + 5 + seg_count + 6
 
-    xdf_label <- data_table %>% select(var, label, count, mean) %>% mutate(label = label %>% gsub(" || ",  "   ||   ", ., fixed = TRUE))
-    xdf_seg <- data_table %>% select(-c(var, label, count, mean, range, p_value, type))
-    xdf_eval <- data_table %>% select(range, p_value)
+    xdf_label <- data_table %>% dplyr::select(var, label, count, mean) %>% dplyr::mutate(label = label %>% gsub(" || ",  "   ||   ", ., fixed = TRUE))
+    xdf_seg <- data_table %>% dplyr::select(-c(var, label, count, mean, range, p_value, type))
+    xdf_eval <- data_table %>% dplyr::select(range, p_value)
 
   }else if(segment_specific){
 
@@ -401,9 +401,9 @@
     col_type_number <- col_start + 11
 
 
-    xdf_label <- data_table %>% select(var, label) %>% mutate(label = label %>% gsub(" || ",  "   ||   ", ., fixed = TRUE))
-    xdf_seg <- data_table %>% select(target, others)
-    xdf_eval <- data_table %>% select(Diff, p_value)
+    xdf_label <- data_table %>% dplyr::select(var, label) %>% dplyr::mutate(label = label %>% gsub(" || ",  "   ||   ", ., fixed = TRUE))
+    xdf_seg <- data_table %>% dplyr::select(target, others)
+    xdf_eval <- data_table %>% dplyr::select(Diff, p_value)
 
 
     if(version == "both"){
@@ -421,7 +421,7 @@
       Rxdf_seg <- 1 - xdf_seg
 
       Rxdf_eval <- xdf_eval %>%
-        mutate(
+        dplyr::mutate(
           Diff = Rxdf_seg[["target"]] - Rxdf_seg[["others"]]
         )
 
@@ -434,13 +434,13 @@
 
   col_first_letter <- col_start %>% num2let()
   col_second_letter <- (col_start + 1) %>% num2let()
-  cell_rule_polar <- glue("${col_rule}$2")
-  cell_rule_profile <- glue("${col_rule}$3")
-  cell_rule_tolerance <- glue("${col_rule}$4")
-  cell_rule_pvalue <- glue("${col_rule}$5")
-  cell_rule_diff <- glue("${col_rule}$6")
-  cell_rule_type <- glue("${col_rule}$7")
-  cell_rule_color <- glue("${col_rule}$8")
+  cell_rule_polar <- glue::glue("${col_rule}$2")
+  cell_rule_profile <- glue::glue("${col_rule}$3")
+  cell_rule_tolerance <- glue::glue("${col_rule}$4")
+  cell_rule_pvalue <- glue::glue("${col_rule}$5")
+  cell_rule_diff <- glue::glue("${col_rule}$6")
+  cell_rule_type <- glue::glue("${col_rule}$7")
+  cell_rule_color <- glue::glue("${col_rule}$8")
 
   col_seg_first <- col_seg_first_number %>% num2let()
   col_seg_last <- col_seg_last_number %>% num2let()
@@ -513,7 +513,7 @@
 
     openxlsx::writeData(
       wb, sheet_name,
-      x = xdf_label %>% mutate(foo = " ") %>% select(foo),
+      x = xdf_label %>% dplyr::mutate(foo = " ") %>% dplyr::select(foo),
       startRow = row_start,
       startCol = col_start + 2,
       colNames = FALSE
@@ -525,7 +525,7 @@
     wb, sheet_name,
     row_start = row_start, row_end = row_end,
     col_start = col_start, col_end = col_start,
-    borderStyle = "thick"
+    borderStyle = "medium"
   )
 
 
@@ -533,7 +533,7 @@
     wb, sheet_name,
     row_start = row_start, row_end = row_end,
     col_start = col_start + 1 , col_end = col_label_last,
-    borderStyle = "thick"
+    borderStyle = "medium"
   )
 
 
@@ -578,7 +578,7 @@
     wb, sheet_name,
     row_start = row_start, row_end = row_end,
     col_start = col_seg_first_number, col_end = col_seg_last_number,
-    borderStyle = "thick"
+    borderStyle = "medium"
   )
 
 
@@ -598,7 +598,7 @@
       wb, sheet_name,
       row_start = row_start, row_end = row_end,
       col_start = Rcol_seg_first_number, col_end = Rcol_seg_last_number,
-      borderStyle = "thick"
+      borderStyle = "medium"
     )
   }
 
@@ -628,7 +628,7 @@
     row_start = row_start, row_end = row_end,
     col_start = col_range_number,
     col_end = col_pvalue_number,
-    borderStyle = "thick"
+    borderStyle = "medium"
   )
 
   if(hide_pvalue){
@@ -637,7 +637,7 @@
       row_start = row_start, row_end = row_end,
       col_start = col_range_number,
       col_end = col_range_number,
-      borderStyle = "thick"
+      borderStyle = "medium"
     )
   }
 
@@ -657,7 +657,7 @@
       wb, sheet_name,
       row_start = row_start, row_end = row_end,
       col_start = Rcol_range_number, col_end = Rcol_pvalue_number,
-      borderStyle = "thick"
+      borderStyle = "medium"
     )
 
     if(hide_pvalue){
@@ -665,7 +665,7 @@
         wb, sheet_name,
         row_start = row_start, row_end = row_end,
         col_start = Rcol_range_number, col_end = Rcol_range_number,
-        borderStyle = "thick"
+        borderStyle = "medium"
       )
     }
 
@@ -690,19 +690,19 @@
 
   openxlsx::writeData(
     wb, sheet_name,
-    x = data_table %>% select(type),
+    x = data_table %>% dplyr::select(type),
     startRow = row_start,
     startCol = col_type_number,
     colNames = FALSE,
     borders = "surrounding",
-    borderStyle = "thick"
+    borderStyle = "medium"
   )
 
 
   if(segment_specific){
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue("=VLOOKUP(${col_first_letter}{rows_all},
+      x = glue::glue("=VLOOKUP(${col_first_letter}{rows_all},
                {sheet_name_summary}!${col_first_letter}:$AL,
                MATCH(${col_type}${row_data_start - 4}, {sheet_name_summary}!${col_first_letter}${row_data_start - 4}:$AL${row_data_start - 4}, 0),
                FALSE
@@ -731,7 +731,7 @@
         wb, sheet_name,
         cols = xc,
         rows = rows_all,
-        rule = glue('OR(
+        rule = glue::glue('OR(
       AND(
       {cell_rule_color} = {x}, {cell_rule_type} = 1, ${col_type}{row_start} = "polar", ${col_range}{row_start} {y} {cell_rule_polar} * {z}
       ),
@@ -757,7 +757,7 @@
     )
 
 
-    pwalk(
+    purrr::pwalk(
       conditional_coloring_instructions,
       function(x,y,z,s){
         temp_func(x, y, z, s, xc = all_cond_cols)
@@ -771,7 +771,7 @@
 
       conditional_coloring_instructions[["s"]] <- c(neg_style, seg_neg_style_bw, pos_style, seg_pos_style_bw)
 
-      pwalk(
+      purrr::pwalk(
         conditional_coloring_instructions,
         function(x,y,z,s){
           temp_func(x, y, z, s, xc = all_cond_cols_r)
@@ -784,7 +784,7 @@
       wb, sheet_name,
       startCol = col_dynamic_number,
       startRow = row_start,
-      x = glue('IFERROR(
+      x = glue::glue('IFERROR(
                 IF(
                 ${col_seg_first}{rows_all} >= MAX(INDEX(summary!${col_seg_summary_first}${row_start}:${col_seg_summary_last}${row_end},MATCH(${col_second_letter}{rows_all},summary!${col_second_letter}${row_start}:${col_second_letter}${row_end},0),)) - {cell_rule_tolerance},
                 "High",
@@ -808,7 +808,7 @@
         wb, sheet_name,
         startCol = Rcol_dynamic_number,
         startRow = row_start,
-        x = glue('
+        x = glue::glue('
                 IF(
                 ${col_dynamic}{rows_all} = "High",
                 "Low",
@@ -831,7 +831,7 @@
 
   }else if(!segment_specific){
 
-    pwalk(
+    purrr::pwalk(
       list(
         x = c(1, 0, 1, 0),
         y = c(">= max", ">= max", "<= min", "<= min"),
@@ -843,7 +843,7 @@
           wb, sheet_name,
           cols = col_seg_number_all,
           rows = rows_all,
-          rule = glue('AND(
+          rule = glue::glue('AND(
                       {cell_rule_color} = {x}, {col_seg_first}{row_start} {y}(${col_seg_first}{row_start}:${col_seg_last}{row_start}) {z} {cell_rule_tolerance},
                       OR(
                       AND({cell_rule_type} = 1, ${col_type}{row_start} = "polar", ${col_range}{row_start} >= {cell_rule_polar}),
@@ -862,7 +862,7 @@
       wb, sheet_name,
       startCol = col_dynamic_number,
       startRow = row_start,
-      x = glue('IFERROR(
+      x = glue::glue('IFERROR(
                AVERAGEIF(${col_seg_first}${row_data_start - 5}:${col_seg_last}${row_data_start - 5}, "=x", {col_seg_first}{rows_all}:{col_seg_last}{rows_all}),
                0) -
                IFERROR(
@@ -878,7 +878,7 @@
       gridExpand = TRUE, stack = TRUE
     )
 
-    pwalk(
+    purrr::pwalk(
       list(
         x = c(1, 0, 1, 0),
         y = c(">=", ">=", "<=-", "<=-"),
@@ -889,7 +889,7 @@
           wb, sheet_name,
           cols = col_dynamic_number,
           rows = rows_all,
-          rule = glue('OR(AND({cell_rule_color} = {x}, {col_dynamic}{row_start} {y} {cell_rule_diff}), )'),
+          rule = glue::glue('OR(AND({cell_rule_color} = {x}, {col_dynamic}{row_start} {y} {cell_rule_diff}), )'),
           style = z
         )
       })
@@ -1042,18 +1042,18 @@
   for(i in seq(nrow(xtable))){
 
     temp_type <- xtable %>%
-      slice(i) %>%
-      select(type) %>%
+      dplyr::slice(i) %>%
+      dplyr::select(type) %>%
       unlist()
 
     temp_header <- xtable %>%
-      slice(i) %>%
-      select(block_header) %>%
+      dplyr::slice(i) %>%
+      dplyr::select(block_header) %>%
       unlist()
 
     temp <- xtable %>%
-      select(by, type) %>%
-      slice(i) %>%
+      dplyr::select(by, type) %>%
+      dplyr::slice(i) %>%
       tidyr::unnest(cols = by) %>%
       as.data.frame()
 
@@ -1083,9 +1083,9 @@
 
     if(truncate){
 
-      type <- temp %>% select(any_of("type")) %>% unlist() %>% unique()
+      type <- temp %>% dplyr::select(dplyr::any_of("type")) %>% unlist() %>% unique()
 
-      diff <- temp %>% select(any_of(c("Diff", "range"))) %>% unlist() %>% abs()
+      diff <- temp %>% dplyr::select(dplyr::any_of(c("Diff", "range"))) %>% unlist() %>% abs()
 
 
       truncate_threshold <- ifelse(type == "polar", truncate_polar_threshold, truncate_profile_threshold)
@@ -1130,7 +1130,7 @@
 
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue('=trim({summary_sheet_name}!{col_summary_seg_first}{row_data_start - 4}) & " (" & trim({summary_sheet_name}!{col_second_letter}{row_data_start - 4}) & ")"'),
+      x = glue::glue('=trim({summary_sheet_name}!{col_summary_seg_first}{row_data_start - 4}) & " (" & trim({summary_sheet_name}!{col_second_letter}{row_data_start - 4}) & ")"'),
       startRow = row_data_start - 4,
       startCol = col_start + 1
     )
@@ -1138,7 +1138,7 @@
   }else if(!segment_specific){
     openxlsx::writeData(
       wb, sheet_name,
-      x = glue("Solution - {solution_var}"),
+      x = glue::glue("Solution - {solution_var}"),
       colNames = FALSE,
       startRow = row_data_start - 4,
       startCol = col_start + 1
@@ -1147,7 +1147,7 @@
 
   openxlsx::addStyle(
     wb, sheet_name,
-    style = openxlsx::createStyle(textDecoration = "Bold", fontSize = 16),
+    style = openxlsx::createStyle(textDecoration = "Bold", fontSize = 18),
     rows = row_data_start - 4,
     cols = col_start + 1,
     stack = T
@@ -1171,7 +1171,7 @@
 
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue('=trim({summary_sheet_name}!{col_summary_seg_first}{row_data_start - 4})'),
+      x = glue::glue('=trim({summary_sheet_name}!{col_summary_seg_first}{row_data_start - 4})'),
       startRow = row_data_start - 4,
       startCol = col_start + 3
     )
@@ -1195,7 +1195,7 @@
 
       openxlsx::writeFormula(
         wb, sheet_name,
-        x = glue('=trim({summary_sheet_name}!{col_summary_seg_first}{row_data_start - 4})'),
+        x = glue::glue('=trim({summary_sheet_name}!{col_summary_seg_first}{row_data_start - 4})'),
         startRow = row_data_start - 4,
         startCol = col_start + 11
       )
@@ -1301,7 +1301,7 @@
 
           openxlsx::writeFormula(
             wb, sheet_name,
-            x = glue('=trim({summary_sheet_name}!{num2let(i)}{row_data_start - 4})'),
+            x = glue::glue('=trim({summary_sheet_name}!{num2let(i)}{row_data_start - 4})'),
             startRow = row_data_start - 4,
             startCol = i
           )
@@ -1310,7 +1310,7 @@
             for(xr in seq(0,1)){
               openxlsx::writeFormula(
                 wb, sheet_name,
-                x = glue('={summary_sheet_name}!{num2let(i)}{row_data_start - 3 + xr}'),
+                x = glue::glue('={summary_sheet_name}!{num2let(i)}{row_data_start - 3 + xr}'),
                 startRow = row_data_start - 3 + xr,
                 startCol = i
               )
@@ -1400,7 +1400,7 @@
     startRow = 2,
     startCol = col_controls,
     borders = "surrounding",
-    borderStyle = "thick"
+    borderStyle = "medium"
   )
 
 
@@ -1412,11 +1412,11 @@
     for(i in seq(2, 8)){
 
       if(i <= 3 && segment_specific){
-        xrule <- glue("={summary_sheet_name}!$H${i} - .05")
+        xrule <- glue::glue("={summary_sheet_name}!$H${i} - .05")
       }else if(i == 4 && segment_specific){
-        xrule <- glue("={summary_sheet_name}!$H${i} / 10")
+        xrule <- glue::glue("={summary_sheet_name}!$H${i} / 10")
       }else if(i >= 5 || add_key){
-        xrule <- glue("={summary_sheet_name}!$H${i}")
+        xrule <- glue::glue("={summary_sheet_name}!$H${i}")
       }
 
       openxlsx::writeFormula(
@@ -1465,7 +1465,7 @@
         wb, sheet_name,
         startCol = col_dynamic_number,
         startRow = i,
-        x = glue('IFERROR(
+        x = glue::glue('IFERROR(
                  AVERAGEIF(${col_seg_first}${row_data_start - 5}:${col_seg_last}${row_data_start - 5}, "=x", {col_seg_first}{i}:{col_seg_last}{i}), 0
                  ) -
                  IFERROR(
@@ -1531,10 +1531,54 @@
 
 }
 
-
+#########################
+# MAIN FUNCTION
+#########################
 
 #' seg_write_shell
-#' @description seg_write_shell
+#'
+#' @description Generates the segmentation shell Excel workbook for a chosen
+#'   clustering solution. Computes segment means, significance tests (chi-square
+#'   for profiles, t-tests for polars), and writes a formatted deliverable with
+#'   conditional formatting, thresholds, and optional truncation.
+#'
+#' @param seg A seg object with data, spec, and solutions populated.
+#' @param solution_var Character. Name of the segment assignment column.
+#' @param key Named character vector mapping segment numbers to labels, or
+#'   `NULL` for auto-numbering.
+#' @param add_key Logical. If `TRUE`, appends a key sheet (default: `FALSE`).
+#' @param label_width Numeric. Column width for label columns (default: `75`).
+#' @param hide_pvalue Logical. If `TRUE`, hides p-value columns (default:
+#'   `FALSE`).
+#' @param truncate Logical. If `TRUE`, removes non-discriminating variables
+#'   (default: `FALSE`).
+#' @param truncate_polar_threshold Numeric. Min diff to keep a polar variable
+#'   when truncating (default: `0.15`).
+#' @param truncate_profile_threshold Numeric. Min diff to keep a profile
+#'   variable when truncating (default: `0.1`).
+#' @param var_weight Character. Weight variable name, or `NULL`.
+#' @param use_weight Logical. If `TRUE` (default), applies weight if available.
+#' @param version Character. Output version: `"traditional"` or `"both"`.
+#' @param do_seg_bw Logical. Include black/white formatted sheet (default:
+#'   `TRUE`).
+#' @param do_italic Logical. Italicize non-significant values (default: `TRUE`).
+#' @param switched_polars Logical. If `TRUE`, reverses polar direction (default:
+#'   `FALSE`).
+#' @param setting_polar_threshold Numeric. Polar threshold for conditional
+#'   formatting (default: `0.2`).
+#' @param setting_profile_threshold Numeric. Profile threshold for conditional
+#'   formatting (default: `0.15`).
+#' @param setting_tolerance Numeric. Tolerance band around thresholds (default:
+#'   `0.05`).
+#' @param setting_pvalue Numeric. P-value significance cutoff (default: `0.1`).
+#' @param setting_diff Numeric. Diff-from-total threshold (default: `0.1`).
+#' @param setting_type Character. Significance method: `"diff"` or `"pvalue"`.
+#' @param setting_color Character. Color scheme: `"bw"` or `"color"`.
+#' @param where Character. Output directory. Defaults to the solution folder.
+#' @param verbose Logical. Print progress messages (default: `FALSE`).
+#'
+#' @return The seg object with the shell workbook path stored.
+#'
 #' @export
 seg_write_shell <- function(
     seg,
@@ -1612,6 +1656,9 @@ seg_write_shell <- function(
     df <- df_solutions
   }
 
+  # drop respondents with no segment assignment (filtered during clustering)
+  df <- df %>% dplyr::filter(!is.na(.data[[solution_var]]))
+
 
   if( !is.null(seg[["meta"]][["weight_variable"]]) && use_weight && is.null(var_weight)){
     var_weight <- seg[["meta"]][["weight_variable"]]
@@ -1634,30 +1681,30 @@ seg_write_shell <- function(
     spec_polars <- seg[["spec"]][["polars"]] %>% tidyr::unnest(vars)
 
     shell_tables[["segment_tables"]] <- shell_tables[["segment_tables"]] %>%
-      map(
+      purrr::map(
         function(x){
           temp <- x %>%
-            filter(type == "polar") %>%
+            dplyr::filter(type == "polar") %>%
             tidyr::unnest(by) %>%
-            left_join(
-              spec_polars %>% select(var, opposite_label),
-              by = join_by(var)
+            dplyr::left_join(
+              spec_polars %>% dplyr::select(var, opposite_label),
+              by = dplyr::join_by(var)
             ) %>%
-            mutate(
-              opposite_label = glue("{var} - {opposite_label}"),
+            dplyr::mutate(
+              opposite_label = glue::glue("{var} - {opposite_label}"),
               label = ifelse(Diff < 0, opposite_label, label),
               target = ifelse(Diff < 0, 1 - target, target),
               others = ifelse(Diff < 0, 1 - others, others),
               Diff = ifelse(Diff < 0, Diff * -1, Diff)
             ) %>%
-            select(-opposite_label) %>%
+            dplyr::select(-opposite_label) %>%
             tidyr::nest(by = -c(block_header, type))
 
-          temp[["by"]] <- temp[["by"]] %>% map(~{.x %>% arrange(-Diff)})
+          temp[["by"]] <- temp[["by"]] %>% purrr::map(~{.x %>% dplyr::arrange(-Diff)})
 
-          bind_rows(
+          dplyr::bind_rows(
             temp,
-            x %>% filter(type == "profile")
+            x %>% dplyr::filter(type == "profile")
           )
         })
 
@@ -1706,7 +1753,7 @@ seg_write_shell <- function(
 
 
 
-  walk(
+  purrr::walk(
     shell_tables[["segment_tables"]] %>% length() %>% seq(),
     ~.seg_append_sheet(
       wb = wb,
@@ -1728,9 +1775,9 @@ seg_write_shell <- function(
 
 
   if(truncate){
-    file_name <- glue("{where}/Solution - {solution_var} (Truncate).xlsx")
+    file_name <- glue::glue("{where}/Solution - {solution_var} (Truncate).xlsx")
   }else{
-    file_name <- glue("{where}/Solution - {solution_var}.xlsx")
+    file_name <- glue::glue("{where}/Solution - {solution_var}.xlsx")
   }
 
 
@@ -1738,6 +1785,6 @@ seg_write_shell <- function(
   openxlsx::saveWorkbook(wb, file_name, overwrite = TRUE)
 
 
-  if(verbose) message(glue("Written: {solution_var}"))
+  if(verbose) message(glue::glue("Written: {solution_var}"))
 
 }

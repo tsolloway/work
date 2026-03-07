@@ -88,7 +88,7 @@ turf_write <- function(
   # template = NULL
   # return_location = TRUE
 
-  require(openxlsx2)
+  rlang::check_installed("openxlsx2")
 
   if(is.null(where)) where <- getwd()
 
@@ -130,6 +130,7 @@ turf_write <- function(
   if(is.null(weight)) col_info$has_weights <- FALSE
 
   n_items <- length(vars)
+  vars_index <- setNames(seq_along(vars), vars)
 
   # ---- Build short subgroup keys (Excel 31-char sheet name limit) ----
   sg_keys <- setNames(paste0("s", seq_along(subgroup_names)), subgroup_names)
@@ -140,7 +141,7 @@ turf_write <- function(
 
 
   # ---- Create workbook (load from VBA template if available) ----
-  # Strategy: wb_load() preserves VBA project bindings correctly.
+  # Strategy: openxlsx2::wb_load() preserves VBA project bindings correctly.
   # Template must have "Dashboard" (Sheet1) and "Best Combos" (Sheet2)
   # with their respective Worksheet_Change event handlers.
   if(is.null(template)){
@@ -153,17 +154,17 @@ turf_write <- function(
   has_vba <- FALSE
   if(file.exists(template)){
     wb <- tryCatch({
-      loaded <- wb_load(template)
+      loaded <- openxlsx2::wb_load(template)
       has_vba <- TRUE
       cli::cli_alert_info("VBA template loaded: {template}")
       loaded
     }, error = function(e){
       cli::cli_alert_warning("Failed to load template: {e$message}. Creating without macros.")
-      wb_workbook()
+      openxlsx2::wb_workbook()
     })
   } else {
     cli::cli_alert_warning("VBA template not found at {template}. Saving without macros.")
-    wb <- wb_workbook()
+    wb <- openxlsx2::wb_workbook()
   }
 
 
@@ -172,19 +173,23 @@ turf_write <- function(
 
 
   # ---- Write hidden combo data sheets ----
+  # Single sheet per subgroup x combo size (sorted by reach).
+
+  # VBA re-sorts at display time when user selects "Freq".
+  # Items stored as 1-based integer indices into vars vector — VBA
+
+  # looks up variable names / labels from _config.
   if(has_combos){
     for(sg in subgroup_names){
       for(nk in n_keys){
         tbl <- normalized[[sg]][[nk]]
         n_val <- gsub("^n_", "", nk)
 
-        for(sort_by in c("reach", "freq")){
-          sheet_name <- paste0("d_", sg_keys[sg], "_", n_val, "_", sort_by)
-          prepared <- .turf_prepare_sheet(tbl, top, col_info, sort_by = sort_by)
+        sheet_name <- paste0("d_", sg_keys[sg], "_", n_val)
+        prepared <- .turf_prepare_sheet(tbl, top, col_info, vars_index = vars_index)
 
-          wb$add_worksheet(sheet_name)
-          wb$add_data(sheet_name, x = prepared)
-        }
+        wb$add_worksheet(sheet_name)
+        wb$add_data(sheet_name, x = prepared)
       }
     }
   }
@@ -372,40 +377,30 @@ turf_write <- function(
 # Data preparation
 # =============================================================================
 
-.turf_prepare_sheet <- function(tbl, top, col_info, sort_by = "reach"){
-
-  if(sort_by == "freq"){
-    tbl <- tbl %>% dplyr::arrange(-freq_avg, -reach_pct)
-  } else {
-    tbl <- tbl %>% dplyr::arrange(-reach_pct, -freq_avg)
-  }
+.turf_prepare_sheet <- function(tbl, top, col_info, vars_index = NULL){
+  # Always store sorted by reach — VBA re-sorts at display time if needed
+  tbl <- tbl %>% dplyr::arrange(-reach_pct, -freq_avg)
 
   tbl <- tbl %>%
     dplyr::slice_head(n = top) %>%
     dplyr::mutate(rank = dplyr::row_number())
 
-  if(col_info$has_labels){
-    label_cols <- grep("^label_\\d+$", names(tbl), value = TRUE)
-    tbl$item_label <- apply(tbl[, label_cols, drop = FALSE], 1, function(x){
-      paste(x[!is.na(x)], collapse = " + ")
-    })
-  } else {
-    item_cols <- grep("^item_\\d+$", names(tbl), value = TRUE)
-    tbl$item_label <- apply(tbl[, item_cols, drop = FALSE], 1, function(x){
-      paste(x[!is.na(x)], collapse = " + ")
-    })
-  }
-
-  out <- tbl %>% dplyr::select(rank, item_label, reach_pct, freq_avg)
+  # No item_label column — VBA concatenates from item indices at display time
+  out <- tbl %>% dplyr::select(rank, reach_pct, freq_avg)
 
   if(col_info$has_weights){
     out$w_reach_pct <- tbl$w_reach_pct
     out$w_freq_avg <- tbl$w_freq_avg
   }
 
+  # Store 1-based item indices (into vars vector) instead of variable names
   item_cols <- grep("^item_\\d+$", names(tbl), value = TRUE)
   for(ic in item_cols){
-    out[[ic]] <- tbl[[ic]]
+    if(!is.null(vars_index)){
+      out[[ic]] <- unname(vars_index[tbl[[ic]]])
+    } else {
+      out[[ic]] <- tbl[[ic]]
+    }
   }
 
   out
@@ -465,7 +460,7 @@ turf_write <- function(
   # ---- Key-value config pairs: title in A, value in B ----
   config_titles <- c("subgroup_names", "n_values", "has_weights", "has_labels",
                      "has_subgroups", "top", "n_items", "sig_threshold",
-                     "marginal_threshold")
+                     "marginal_threshold", "vba_version")
   config_values <- c(
     paste(subgroup_names, collapse = ","),
     paste(n_values, collapse = ","),
@@ -475,7 +470,8 @@ turf_write <- function(
     as.character(top),
     as.character(n_items),
     as.character(sig_threshold),
-    as.character(marginal_threshold)
+    as.character(marginal_threshold),
+    "2"
   )
   for (i in seq_along(config_titles)) {
     wb$add_data("_config", x = config_titles[i], dims = paste0("A", i))
@@ -486,12 +482,14 @@ turf_write <- function(
   wb$add_data("_config", x = n_items, dims = "B7")
   wb$add_data("_config", x = sig_threshold, dims = "B8")
   wb$add_data("_config", x = marginal_threshold, dims = "B9")
+  wb$add_data("_config", x = 2L, dims = "B10")  # vba_version — must match VBA_VERSION constant
 
-  # ---- Subgroups + base sizes + short keys: F/G/H starting row 1 ----
+  # ---- Subgroups + base sizes + short keys + display labels: F/G/H/I starting row 1 ----
   base_df <- data.frame(
     subgroup = names(base_sizes),
     base = unname(base_sizes),
     key = unname(sg_keys[names(base_sizes)]),
+    display = gsub("_", " ", names(base_sizes)),
     stringsAsFactors = FALSE
   )
   wb$add_data("_config", x = base_df, start_col = 6, start_row = 1)
@@ -511,9 +509,11 @@ turf_write <- function(
   # Layout: title in A, value in B
   wb$add_worksheet("_controls")
 
-  # Row 1-5: dropdown state defaults
+  # Row 1-5: dropdown state defaults (display labels: _ → space)
+  sg_display <- gsub("_", " ", subgroup_names)
+
   wb$add_data("_controls", x = "subgroup", dims = "A1")
-  wb$add_data("_controls", x = subgroup_names[1], dims = "B1")
+  wb$add_data("_controls", x = sg_display[1], dims = "B1")
 
   wb$add_data("_controls", x = "combo", dims = "A2")
   combo_default <- if(length(n_values) > 0) (if(2L %in% n_values) 2L else n_values[1]) else 2L
@@ -530,10 +530,10 @@ turf_write <- function(
   wb$add_data("_controls", x = "chart_label", dims = "A5")
   wb$add_data("_controls", x = "Label", dims = "B5")
 
-  # Row 6: base count formula (references new _config subgroup layout in F/G)
+  # Row 6: base count formula (matches display label in _config col I)
   n_sg <- length(subgroup_names)
   base_f <- paste0(
-    'INDEX(_config!G2:G', 1 + n_sg, ',MATCH(B1,_config!F2:F', 1 + n_sg, ',0))'
+    'INDEX(_config!G2:G', 1 + n_sg, ',MATCH(B1,_config!I2:I', 1 + n_sg, ',0))'
   )
   wb$add_data("_controls", x = "base", dims = "A6")
   wb$add_formula("_controls", x = base_f, dims = "B6")
@@ -542,11 +542,11 @@ turf_write <- function(
   wb$add_data("_controls", x = "sort_key", dims = "A7")
   wb$add_formula("_controls", x = 'IF(B3="Reach","reach","freq")', dims = "B7")
 
-  # Row 8: data sheet name (uses short subgroup key from _config col H)
+  # Row 8: data sheet name (matches display label in _config col I → short key col H)
   wb$add_data("_controls", x = "data_sheet", dims = "A8")
   n_sg <- length(subgroup_names)
-  sg_key_f <- paste0('INDEX(_config!H2:H', 1 + n_sg, ',MATCH(B1,_config!F2:F', 1 + n_sg, ',0))')
-  wb$add_formula("_controls", x = paste0('"d_"&', sg_key_f, '&"_"&B2&"_"&B7'), dims = "B8")
+  sg_key_f <- paste0('INDEX(_config!H2:H', 1 + n_sg, ',MATCH(B1,_config!I2:I', 1 + n_sg, ',0))')
+  wb$add_formula("_controls", x = paste0('"d_"&', sg_key_f, '&"_"&B2'), dims = "B8")
 
   # Row 9: invalidate best combos flag (1 = needs rebuild, 0 = current)
   wb$add_data("_controls", x = "invalidate_bc", dims = "A9")
@@ -568,8 +568,8 @@ turf_write <- function(
   for(i in seq_along(headers)){
     dims <- paste0(cols[i], "2")
     wb$add_data("Greedy", x = headers[i], dims = dims)
-    wb$add_font("Greedy", dims = dims, bold = "true", color = wb_color("white"))
-    wb$add_fill("Greedy", dims = dims, color = wb_color("4472C4"))
+    wb$add_font("Greedy", dims = dims, bold = "true", color = openxlsx2::wb_color("white"))
+    wb$add_fill("Greedy", dims = dims, color = openxlsx2::wb_color("4472C4"))
     wb$add_cell_style("Greedy", dims = dims, horizontal = "center")
   }
 
@@ -603,7 +603,7 @@ turf_write <- function(
   sheet <- "Dashboard"
 
   # Light grey fill for headers/dropdowns (≈ D9D9D9)
-  grey_fill <- wb_color("D9D9D9")
+  grey_fill <- openxlsx2::wb_color("D9D9D9")
 
   # ---- Row 2: Title ----
   wb$add_data(sheet, x = "TURF Analysis", dims = "B2")
@@ -612,7 +612,7 @@ turf_write <- function(
 
   # ---- Row 3: Project name placeholder ----
   wb$add_data(sheet, x = project_name, dims = "B3")
-  wb$add_font(sheet, dims = "B3", bold = "true", size = 14)
+  wb$add_font(sheet, dims = "B3", bold = "true", italic = "true", size = 14)
   wb$set_row_heights(sheet, rows = 3, heights = 19)
 
   # ---- Row 4: thin separator ----
@@ -774,7 +774,7 @@ turf_write <- function(
     wb$add_data(sheet, x = footer_lines[fi], dims = dims_cell)
     wb$merge_cells(sheet, dims = dims_merge)
     wb$add_font(sheet, dims = dims_cell, size = 9, italic = "true",
-                color = wb_color("595959"))
+                color = openxlsx2::wb_color("595959"))
     wb$add_cell_style(sheet, dims = dims_cell, horizontal = "left")
   }
 
@@ -794,7 +794,7 @@ turf_write <- function(
                                     project_name = "Project Name - (#xxxxxxx)"){
 
   sheet <- "Best Combos"
-  grey_fill <- wb_color("D9D9D9")
+  grey_fill <- openxlsx2::wb_color("D9D9D9")
   max_n <- if(length(n_values) > 0) max(n_values) else 2L
 
   # Last item column letter (E, F, G, ... depending on max combo size)
@@ -807,7 +807,7 @@ turf_write <- function(
 
   # ---- Row 3: Project name placeholder ----
   wb$add_data(sheet, x = project_name, dims = "B3")
-  wb$add_font(sheet, dims = "B3", bold = "true", size = 14)
+  wb$add_font(sheet, dims = "B3", bold = "true", italic = "true", size = 14)
   wb$set_row_heights(sheet, rows = 3, heights = 19)
 
   # ---- Row 4: thin separator ----
@@ -877,7 +877,7 @@ turf_write <- function(
 .turf_write_bc_controls <- function(wb, sheet, subgroup_names, n_values,
                                      col_info, base_sizes){
 
-  grey_fill <- wb_color("D9D9D9")
+  grey_fill <- openxlsx2::wb_color("D9D9D9")
 
   # Helper: style a stacked control row (label in B, value in C)
   .style_bc_control <- function(row){
@@ -897,13 +897,14 @@ turf_write <- function(
                   left_border = NULL, right_border = "medium")
   }
 
-  # Row 5: Subgroup
+  # Row 5: Subgroup (display labels: _ → space)
+  sg_display <- gsub("_", " ", subgroup_names)
   wb$add_data(sheet, x = "Subgroup:", dims = "B5")
   wb$add_font(sheet, dims = "B5", bold = "true", size = 11)
-  wb$add_data(sheet, x = subgroup_names[1], dims = "C5")
+  wb$add_data(sheet, x = sg_display[1], dims = "C5")
   wb$add_data_validation(
     sheet, dims = "C5", type = "list",
-    value = paste0('"', paste(subgroup_names, collapse = ","), '"')
+    value = paste0('"', paste(sg_display, collapse = ","), '"')
   )
   wb$add_font(sheet, dims = "C5", size = 11)
   .style_bc_control(5)
@@ -988,12 +989,12 @@ turf_write <- function(
   wb$add_font(sheet, dims = "C12", size = 11)
   .style_bc_control(12)
 
-  # Row 13: Base
+  # Row 13: Base (matches display label in _config col I)
   wb$add_data(sheet, x = "Base:", dims = "B13")
   wb$add_font(sheet, dims = "B13", bold = "true", size = 11)
   n_sg <- length(subgroup_names)
   base_f <- paste0(
-    'INDEX(_config!G2:G', 1 + n_sg, ',MATCH(C5,_config!F2:F', 1 + n_sg, ',0))'
+    'INDEX(_config!G2:G', 1 + n_sg, ',MATCH(C5,_config!I2:I', 1 + n_sg, ',0))'
   )
   wb$add_formula(sheet, x = base_f, dims = "C13")
   wb$add_font(sheet, dims = "C13", bold = "true", size = 11)
@@ -1015,7 +1016,7 @@ turf_write <- function(
   # K5:L5 — Weighted (both sheets, hidden if no weights)
   # N5:O5 — Base (both sheets)
 
-  grey_fill <- wb_color("D9D9D9")
+  grey_fill <- openxlsx2::wb_color("D9D9D9")
 
   # Helper: style a control pair (label_dims + value_dims)
   .style_control_pair <- function(label_dims, value_dims, pair_dims){
@@ -1032,13 +1033,14 @@ turf_write <- function(
                   left_border = NULL, right_border = "medium")
   }
 
-  # Subgroup (same on both sheets)
+  # Subgroup (display labels: _ → space)
+  sg_display <- gsub("_", " ", subgroup_names)
   wb$add_data(sheet, x = "Subgroup:", dims = "B5")
   wb$add_font(sheet, dims = "B5", bold = "true", size = 12)
-  wb$add_data(sheet, x = subgroup_names[1], dims = "C5")
+  wb$add_data(sheet, x = sg_display[1], dims = "C5")
   wb$add_data_validation(
     sheet, dims = "C5", type = "list",
-    value = paste0('"', paste(subgroup_names, collapse = ","), '"')
+    value = paste0('"', paste(sg_display, collapse = ","), '"')
   )
   wb$add_font(sheet, dims = "C5", size = 12)
   .style_control_pair("B5", "C5", "B5:C5")
@@ -1102,12 +1104,12 @@ turf_write <- function(
     .style_control_pair("K5", "L5", "K5:L5")
   }
 
-  # Base count (same on both sheets)
+  # Base count (matches display label in _config col I)
   wb$add_data(sheet, x = "Base:", dims = "N5")
   wb$add_font(sheet, dims = "N5", bold = "true", size = 12)
   n_sg <- length(subgroup_names)
   base_f <- paste0(
-    'INDEX(_config!G2:G', 1 + n_sg, ',MATCH(C5,_config!F2:F', 1 + n_sg, ',0))'
+    'INDEX(_config!G2:G', 1 + n_sg, ',MATCH(C5,_config!I2:I', 1 + n_sg, ',0))'
   )
   wb$add_formula(sheet, x = base_f, dims = "O5")
   wb$add_font(sheet, dims = "O5", bold = "true", size = 12)
@@ -1124,7 +1126,7 @@ turf_write <- function(
       value = '"-,All,None"'
     )
     wb$add_font(sheet, dims = "AB5", size = 12)
-    grey_fill <- wb_color("D9D9D9")
+    grey_fill <- openxlsx2::wb_color("D9D9D9")
     wb$add_fill(sheet, dims = "AB5", color = grey_fill)
     wb$add_cell_style(sheet, dims = "AB5", horizontal = "center", vertical = "center")
     wb$add_border(sheet, dims = "AB5",
