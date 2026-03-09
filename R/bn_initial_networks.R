@@ -2,17 +2,17 @@
 #'
 #' @description
 #' Constructs one or more Bayesian network configurations based on combinations
-#' of cross-battery and path structure types. When a DV is provided, generates
-#' supervised networks:
+#' of cross-battery and path structure types.
+#'
+#' **Unsupervised networks** are always generated (cross-battery and/or
+#' natural-fallout, per `cb_type`) using [work::bn_engine_unsupervised()].
+#'
+#' When a DV is provided, **supervised networks** are also generated based on
+#' `path_type`:
 #' - Cross-battery direct
 #' - Cross-battery hierarchical
 #' - Natural-fallout direct
 #' - Natural-fallout hierarchical
-#'
-#' When `dv = NULL`, generates unsupervised networks using
-#' [work::bn_engine_unsupervised()]. In this mode, `path_type` does not apply
-#' (there is no DV to create direct/hierarchical paths to), and only cross-battery
-#' vs natural-fallout configurations are generated.
 #'
 #' Each configuration calls [work::bn_engine()] or [work::bn_engine_unsupervised()]
 #' internally with parameterized control over connection strength, direction, and
@@ -20,8 +20,9 @@
 #' with a combined summary table appended under `$summary`.
 #'
 #' @param df A data frame containing the variables used for the network(s).
-#' @param dv Character or NULL; dependent variable(s). When `NULL`, builds
-#'   unsupervised networks via [work::bn_engine_unsupervised()].
+#' @param dv Character vector or NULL; dependent variable(s). When `NULL`, only
+#'   unsupervised networks are built. When provided, both supervised and
+#'   unsupervised networks are generated.
 #' @param ivs Character vector or named list of independent variables. If not
 #'   a list, the function automatically switches to `"natural_fallout"` mode.
 #' @param dictionary Optional variable dictionary or named vector, passed to
@@ -33,10 +34,10 @@
 #'   One of `"both"`, `"cross_battery"`, or `"natural_fallout"`.
 #' @param path_type Character; type of path structure (supervised only).
 #'   One of `"both"`, `"direct"`, or `"hierarchical"`. Ignored when `dv = NULL`.
-#' @param algorithm Character; structure learning algorithm for unsupervised mode.
-#'   One of `"tabu"` or `"hc"`. Ignored when `dv` is provided.
-#' @param score Character; scoring function for unsupervised mode.
-#'   One of `"bic"` or `"aic"`. Ignored when `dv` is provided.
+#' @param algorithm Character; structure learning algorithm for unsupervised
+#'   networks. One of `"tabu"` or `"hc"`.
+#' @param score Character; scoring function for unsupervised networks.
+#'   One of `"bic"` or `"aic"`.
 #' @param connections_max Integer; maximum parent connections per node.
 #' @param connections_multiple_boot_threshold,connections_multiple_boot_ratio
 #'   Control multiple-connection bootstrap behavior (see [work::bn_engine()]).
@@ -53,9 +54,8 @@
 #' @param reachability_max_iter Integer; max iterations for reachability check.
 #'   Ignored when `dv = NULL`.
 #' @param ensure_connectivity Logical; if `TRUE` (default), ensures unsupervised
-#'   networks are fully connected. Ignored when `dv` is provided.
+#'   networks are fully connected.
 #' @param connectivity_boot_n Integer; bootstrap replicates for connectivity bridging.
-#'   Ignored when `dv` is provided.
 #' @param complexity_boot_n Integer; number of bootstrap replicates for complexity.
 #' @param complexity_boot_strength_min Numeric; minimum strength for complexity retention.
 #' @param suppress_bn_warning Logical; suppress bnlearn warnings.
@@ -65,13 +65,20 @@
 #'
 #' @return
 #' A named list of Bayesian network objects, potentially containing:
-#' - Supervised: `$cb_direct`, `$cb_hierarchy`, `$ncb_direct`, `$ncb_hierarchy`
-#' - Unsupervised: `$cb`, `$ncb`
-#' - `$summary`: a combined data frame summarizing all models.
+#' - Unsupervised (always): `$cb_unsupervised`, `$ncb_unsupervised`
+#' - Supervised (when DV provided): `$cb_direct`, `$cb_hierarchy`,
+#'   `$ncb_direct`, `$ncb_hierarchy`
+#' - `$summary`: a combined data frame summarizing all models, sorted by
+#'   accuracy (supervised rows first, unsupervised rows at bottom).
+#'
+#'
+#' Supervised entries are named lists of engine results keyed by DV name,
+#' with an inner `$summary` tibble. Unsupervised entries are bare engine
+#' results (access directly, e.g. `results$cb_unsupervised`).
 #'
 #' @examples
 #' \dontrun{
-#' # --- Supervised (with DV) ---
+#' # --- Supervised + Unsupervised (with DV) ---
 #' bn_initial_networks(
 #'   df = iris,
 #'   dv = "Species",
@@ -83,7 +90,7 @@
 #'   path_type = "both"
 #' )
 #'
-#' # --- Unsupervised (no DV) ---
+#' # --- Unsupervised only (no DV) ---
 #' bn_initial_networks(
 #'   df = iris,
 #'   dv = NULL,
@@ -129,10 +136,6 @@ bn_initial_networks <- function(
     seed = 1
 ){
 
-  # cb_type = "both"
-  # path_type = "both"
-
-
   # --- Setup ---
   cb_type <- match.arg(cb_type)
   path_type <- match.arg(path_type)
@@ -142,110 +145,72 @@ bn_initial_networks <- function(
 
   dictionary <- work::dictionary_from_named_object(dictionary)
   df <- df %>% as.data.frame()
-  ivs <- ivs %>% purrr::map(as.character)
 
   unsupervised <- is.null(dv)
 
-  if (!unsupervised) {
-    dv <- dv %>% unlist() %>% as.character() %>% setNames(NULL)
-    work::assert_cols_exist(df, dv)
-  }
-
-  # --- Validation ---
-  work::assert_cols_exist(df, unlist(ivs) %>% as.character() %>% setNames(NULL))
-  work::assert_positive_integer(connections_max)
-
-  # --- Adjust IV structure ---
-  if (!is.list(ivs)) {
-    ivs <- ivs %>% unlist() %>% as.character() %>% setNames(NULL)
+  # --- Normalize IVs ---
+  if (is.list(ivs)) {
+    ivs <- purrr::map(ivs, as.character)
+  } else {
+    ivs <- as.character(ivs)
     if (cb_type != "natural_fallout") {
       cb_type <- "natural_fallout"
       warning("ivs is not a multiple-slot list. Switching to natural_fallout mode.")
     }
   }
 
+  # --- Validate ---
+  work::assert_cols_exist(df, unlist(ivs) %>% as.character() %>% setNames(NULL))
+  work::assert_positive_integer(connections_max)
 
-  # --- Warn if path_type set in unsupervised mode ---
+  if (!unsupervised) {
+    dv <- dv %>% unlist() %>% as.character() %>% setNames(NULL)
+    work::assert_cols_exist(df, dv)
+  }
+
+  # --- Warn if path_type set in unsupervised-only mode ---
   if (unsupervised && path_type != "both") {
-    message("path_type is ignored in unsupervised mode (no DV). Running cross-battery configurations only.")
+    cli::cli_warn("path_type is ignored in unsupervised mode (no DV).")
   }
 
 
+  # --- Internal helpers (closures) ---
 
-  ##############################
-  # Unsupervised path
-  ##############################
-
-  if (unsupervised) {
-
-    build_unsupervised <- function(cross_battery) {
-      work::bn_engine_unsupervised(
-        df = df,
-        ivs = ivs,
-        dictionary = dictionary,
-        manual_groups = manual_groups,
-        white_list = white_list,
-        black_list = black_list,
-        algorithm = algorithm,
-        score = score,
-        connections_max = connections_max,
-        connections_multiple_boot_threshold = connections_multiple_boot_threshold,
-        connections_multiple_boot_ratio = connections_multiple_boot_ratio,
-        cross_battery_priority = cross_battery,
-        only_white_list = only_white_list,
-        node_label_type = node_label_type,
-        n_groups = n_groups,
-        node_size = node_size,
-        ensure_connectivity = ensure_connectivity,
-        connectivity_boot_n = connectivity_boot_n,
-        complexity_boot_n = complexity_boot_n,
-        complexity_boot_strength_min = complexity_boot_strength_min,
-        suppress_bn_warning = TRUE,
-        on_exit_detach_igraph = FALSE,
-        tool_tip_edge_prefix = tool_tip_edge_prefix,
-        seed = seed
-      )
-    }
-
-    results <- list()
-
-    if (cb_type != "natural_fallout")
-      results[["cb"]] <- build_unsupervised(TRUE)
-
-    if (cb_type != "cross_battery")
-      results[["ncb"]] <- build_unsupervised(FALSE)
-
-
-    # --- Summarize ---
-    results[["summary"]] <- results %>%
-      purrr::imap(
-        ~.x[["summary"]][["model"]] %>%
-          dplyr::mutate(model_type = .y, .before = 1)
-      ) %>%
-      dplyr::bind_rows() %>%
-      dplyr::arrange(dplyr::desc(bic))
-
-
-    # --- cleanup ---
-    if (on_exit_detach_igraph) work::detach_igraph()
-    if (!suppress_bn_warning) work::warning_bnlearn_bic()
-
-    return(results)
+  build_unsupervised <- function(cross_battery) {
+    work::bn_engine_unsupervised(
+      df = df,
+      ivs = ivs,
+      dictionary = dictionary,
+      manual_groups = manual_groups,
+      white_list = white_list,
+      black_list = black_list,
+      algorithm = algorithm,
+      score = score,
+      connections_max = connections_max,
+      connections_multiple_boot_threshold = connections_multiple_boot_threshold,
+      connections_multiple_boot_ratio = connections_multiple_boot_ratio,
+      cross_battery_priority = cross_battery,
+      only_white_list = only_white_list,
+      node_label_type = node_label_type,
+      n_groups = n_groups,
+      node_size = node_size,
+      ensure_connectivity = ensure_connectivity,
+      connectivity_boot_n = connectivity_boot_n,
+      complexity_boot_n = complexity_boot_n,
+      complexity_boot_strength_min = complexity_boot_strength_min,
+      suppress_bn_warning = TRUE,
+      on_exit_detach_igraph = FALSE,
+      tool_tip_edge_prefix = tool_tip_edge_prefix,
+      seed = seed
+    )
   }
 
-
-
-  ##############################
-  # Supervised path
-  ##############################
-
-  # --- Internal helper for network construction ---
-  build_networks <- function(cross_battery, direct) {
-    purrr::map(
-      dv,
-      ~work::bn_engine(
+  build_supervised <- function(cross_battery, direct) {
+    purrr::map(dv, function(dv_var) {
+      if (length(dv) > 1) cli::cli_alert_info("Building network for DV: {dv_var}")
+      work::bn_engine(
         df = df,
-        dv = .x,
+        dv = dv_var,
         ivs = ivs,
         dictionary = dictionary,
         cross_battery_priority = cross_battery,
@@ -271,55 +236,92 @@ bn_initial_networks <- function(
         tool_tip_edge_prefix = tool_tip_edge_prefix,
         seed = seed
       )
-    ) %>% setNames(dv)
+    }) %>% setNames(dv)
   }
 
 
-  # --- Network generation ---
+  # --- Build networks ---
+  # supervised entries: named list of engines keyed by DV  e.g. list(ltr = <engine>)
+  # unsupervised entries: bare engine result directly      e.g. <engine>
   results <- list()
 
-  if (cb_type != "natural_fallout" && path_type != "hierarchical")
-    results[["cb_direct"]] <- build_networks(TRUE, TRUE)
+  # supervised (when DV present)
+  if (!unsupervised) {
 
-  if (cb_type != "natural_fallout" && path_type != "direct")
-    results[["cb_hierarchy"]] <- build_networks(TRUE, FALSE)
+    if (cb_type != "natural_fallout" && path_type != "hierarchical")
+      results[["cb_direct"]] <- build_supervised(TRUE, TRUE)
 
-  if (cb_type != "cross_battery" && path_type != "hierarchical")
-    results[["ncb_direct"]] <- build_networks(FALSE, TRUE)
+    if (cb_type != "natural_fallout" && path_type != "direct")
+      results[["cb_hierarchy"]] <- build_supervised(TRUE, FALSE)
 
-  if (cb_type != "cross_battery" && path_type != "direct")
-    results[["ncb_hierarchy"]] <- build_networks(FALSE, FALSE)
+    if (cb_type != "cross_battery" && path_type != "hierarchical")
+      results[["ncb_direct"]] <- build_supervised(FALSE, TRUE)
 
+    if (cb_type != "cross_battery" && path_type != "direct")
+      results[["ncb_hierarchy"]] <- build_supervised(FALSE, FALSE)
+  }
 
+  # unsupervised (always) — stored as bare engine results
+  if (cb_type != "natural_fallout")
+    results[["cb_unsupervised"]] <- build_unsupervised(TRUE)
 
-  # --- Summarize ---
+  if (cb_type != "cross_battery")
+    results[["ncb_unsupervised"]] <- build_unsupervised(FALSE)
+
+  # add inner summary per supervised model type (binds $summary$model across DVs)
+  # bare engines (unsupervised) are skipped — their summary lives at $summary$model
   results <- results %>%
     purrr::compact() %>%
     purrr::map(~{
-
+      if (!is.null(.x[["meta"]])) return(.x)
       .x[["summary"]] <- purrr::map(.x, ~.x[["summary"]][["model"]]) %>%
         dplyr::bind_rows()
-
       .x
     })
 
-
-  results[["summary"]] <- results %>%
-    purrr::imap(
-      ~.x[["summary"]] %>%
-        dplyr::mutate(model_type = .y, .before = 1)
-    ) %>%
-    dplyr::bind_rows() %>%
-    dplyr::arrange(-accuracy)
+  # --- Unified summary ---
+  results[["summary"]] <- .bn_initial_summarize(results)
 
 
-
-
-  # --- cleanup ---
-  if(on_exit_detach_igraph) work::detach_igraph()
-  if(!suppress_bn_warning) work::warning_bnlearn_bic()
-
+  # --- Cleanup ---
+  if (on_exit_detach_igraph) work::detach_igraph()
+  if (!suppress_bn_warning) work::warning_bnlearn_bic()
 
   return(results)
 }
 
+
+
+# --- internal: unified summary across supervised + unsupervised results ---
+#' @noRd
+.bn_initial_summarize <- function(results) {
+  result_names <- setdiff(names(results), "summary")
+
+  if (length(result_names) == 0) {
+    cli::cli_warn("No network configurations were generated.")
+    return(tibble::tibble())
+  }
+
+  summaries <- purrr::imap(results[result_names], function(x, nm) {
+    if (!is.null(x[["meta"]])) {
+      # bare engine (unsupervised)
+      x[["summary"]][["model"]] %>%
+        dplyr::mutate(model_type = nm, .before = 1)
+    } else if (is.data.frame(x[["summary"]])) {
+      # supervised model type with pre-built inner summary
+      x[["summary"]] %>%
+        dplyr::mutate(model_type = nm, .before = 1)
+    } else {
+      NULL
+    }
+  })
+
+  combined <- dplyr::bind_rows(purrr::compact(summaries))
+
+  # sort by accuracy (supervised rows first; unsupervised NA rows fall to bottom)
+  if ("accuracy" %in% names(combined)) {
+    combined <- dplyr::arrange(combined, dplyr::desc(accuracy))
+  }
+
+  combined
+}

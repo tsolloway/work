@@ -70,11 +70,22 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       network.setOptions({ physics: { enabled: physicsEnabled } });"
       , "
 
-      // Load Font Awesome
-      var link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
-      document.head.appendChild(link);
+      // Inline SVG icons (no CDN dependency)
+      var icons = {
+        pencil: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 512 512\" fill=\"currentColor\"><path d=\"M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1v32c0 8.8 7.2 16 16 16h32zM362.7 18.7L348.3 33.2 325.7 55.8 314.3 67.1l33.9 33.9 62.1 62.1 33.9 33.9 11.3-11.3 22.6-22.6 14.5-14.5c25-25 25-65.5 0-90.5L453.3 18.7c-25-25-65.5-25-90.5 0z\"/></svg>',
+        atom: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 512 512\" fill=\"currentColor\"><path d=\"M256 398c-8.8 0-16 7.2-16 16v48c0 8.8 7.2 16 16 16s16-7.2 16-16v-48c0-8.8-7.2-16-16-16zm0-284c8.8 0 16-7.2 16-16V50c0-8.8-7.2-16-16-16s-16 7.2-16 16v48c0 8.8 7.2 16 16 16zm0 30c-61.9 0-112 50.1-112 112s50.1 112 112 112 112-50.1 112-112-50.1-112-112-112zm0 176c-35.3 0-64-28.7-64-64s28.7-64 64-64 64 28.7 64-64-28.7 64-64 64zM398 256c0-8.8 7.2-16 16-16h48c8.8 0 16 7.2 16 16s-7.2 16-16 16h-48c-8.8 0-16-7.2-16-16zM114 256c0 8.8-7.2 16-16 16H50c-8.8 0-16-7.2-16-16s7.2-16 16-16h48c8.8 0 16 7.2 16 16z\"/></svg>',
+        fileCode: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 384 512\" fill=\"currentColor\"><path d=\"M64 0C28.7 0 0 28.7 0 64v384c0 35.3 28.7 64 64 64h256c35.3 0 64-28.7 64-64V160H256c-17.7 0-32-14.3-32-32V0H64zm192 0v128h128L256 0zM153 289l-31 31 31 31c6.2 6.2 6.2 16.4 0 22.6s-16.4 6.2-22.6 0l-42-42c-6.2-6.2-6.2-16.4 0-22.6l42-42c6.2-6.2 16.4-6.2 22.6 0s6.2 16.4 0 22.6zm76-45l42 42c6.2 6.2 6.2 16.4 0 22.6l-42 42c-6.2 6.2-16.4 6.2-22.6 0s-6.2-16.4 0-22.6l31-31-31-31c-6.2-6.2-6.2-16.4 0-22.6s16.4-6.2 22.6 0z\"/></svg>',
+        image: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 512 512\" fill=\"currentColor\"><path d=\"M0 96c0-35.3 28.7-64 64-64h384c35.3 0 64 28.7 64 64v320c0-35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6h96 32H424c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z\"/></svg>',
+        save: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M64 32C28.7 32 0 60.7 0 96v320c0 35.3 28.7 64 64 64h320c35.3 0 64-28.7 64-64V173.3c0-17-6.7-33.3-18.7-45.3L352 50.7C340 38.7 323.7 32 306.7 32H64zm0 96c0-17.7 14.3-32 32-32h192c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H96c-17.7 0-32-14.3-32-32v-64zm128 256a64 64 0 1 0 0-128 64 64 0 1 0 0 128z\"/></svg>',
+        folderOpen: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 576 512\" fill=\"currentColor\"><path d=\"M88.7 223.8L0 375.8V96c0-35.3 28.7-64 64-64h117.5c16.2 0 31.8 6.5 43.3 17.9l7.4 7.4C241.3 66.4 253.4 72 266 72H400c35.3 0 64 28.7 64 64v32H128c-16 0-30.7 9.2-37.3 23.8zM512 196.4L476.4 420.3c-4 22.4-23.3 38.6-46 38.6H88.9c-22.7 0-42-16.2-46-38.6L7 196.4C5.6 188.4 11.5 181 19.7 181H492.3c8.2 0 14.1 7.4 12.7 15.4z\"/></svg>',
+        chevronUp: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z\"/></svg>',
+        chevronDown: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z\"/></svg>',
+        chevronLeft: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 320 512\" fill=\"currentColor\"><path d=\"M9.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L77.3 256 214.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z\"/></svg>',
+        chevronRight: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 320 512\" fill=\"currentColor\"><path d=\"M310.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L242.7 256 105.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z\"/></svg>',
+        minus: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M432 256c0 17.7-14.3 32-32 32H48c-17.7 0-32-14.3-32-32s14.3-32 32-32h352c17.7 0 32 14.3 32 32z\"/></svg>',
+        plus: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32v144H48c-17.7 0-32 14.3-32 32s14.3 32 32 32h144v144c0 17.7 14.3 32 32 32s32-14.3 32-32V288h144c17.7 0 32-14.3 32-32s-14.3-32-32-32H256V80z\"/></svg>',
+        expand: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M32 32C14.3 32 0 46.3 0 64v96c0 17.7 14.3 32 32 32s32-14.3 32-32V96h64c17.7 0 32-14.3 32-32s-14.3-32-32-32H32zM64 416H32V352c0-17.7-14.3-32-32-32s-32 14.3-32 32v96c0 17.7 14.3 32 32 32h96c17.7 0 32-14.3 32-32s-14.3-32-32-32zm320-320h-64c-17.7 0-32 14.3-32 32s14.3 32 32 32h64v64c0 17.7 14.3 32 32 32s32-14.3 32-32V64c0-17.7-14.3-32-32-32zm32 320V352c0-17.7-14.3-32-32-32s-32 14.3-32 32v64h-64c-17.7 0-32 14.3-32 32s14.3 32 32 32h96c17.7 0 32-14.3 32-32z\"/></svg>'
+      };
 
       // shared button dimensions
       var btnW = 130;
@@ -97,10 +108,10 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       var navSize = 30;
       var navGap = 4;
       var navBtnStyle = 'width:' + navSize + 'px;height:' + navSize + 'px;border-radius:50%;border:1px solid #ccc;background:white;color:black;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;padding:0;';
-      function makeNavBtn(icon) {
+      function makeNavBtn(svgIcon) {
         var b = document.createElement('button');
         b.className = 'nav-ctrl';
-        b.innerHTML = '<i class=\"fa ' + icon + '\"></i>';
+        b.innerHTML = svgIcon;
         b.style.cssText = navBtnStyle;
         return b;
       }
@@ -118,16 +129,16 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       var navRow2 = document.createElement('div');
       navRow2.style.cssText = 'display:flex;gap:' + navGap + 'px;';
 
-      var upBtn = makeNavBtn('fa-chevron-up');
+      var upBtn = makeNavBtn(icons.chevronUp);
       upBtn.addEventListener('click', function() { panView(0, -120); });
       navRow1.appendChild(upBtn);
-      var leftBtn = makeNavBtn('fa-chevron-left');
+      var leftBtn = makeNavBtn(icons.chevronLeft);
       leftBtn.addEventListener('click', function() { panView(-120, 0); });
       navRow2.appendChild(leftBtn);
-      var downBtn = makeNavBtn('fa-chevron-down');
+      var downBtn = makeNavBtn(icons.chevronDown);
       downBtn.addEventListener('click', function() { panView(0, 120); });
       navRow2.appendChild(downBtn);
-      var rightBtn = makeNavBtn('fa-chevron-right');
+      var rightBtn = makeNavBtn(icons.chevronRight);
       rightBtn.addEventListener('click', function() { panView(120, 0); });
       navRow2.appendChild(rightBtn);
 
@@ -138,17 +149,17 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       // zoom controls (bottom-right)
       var zoomPad = document.createElement('div');
       zoomPad.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;display:flex;gap:' + navGap + 'px;';
-      var zoomOutBtn = makeNavBtn('fa-minus');
+      var zoomOutBtn = makeNavBtn(icons.minus);
       zoomOutBtn.addEventListener('click', function() {
         network.moveTo({ scale: network.getScale() * 0.7, animation: { duration: 200 } });
       });
       zoomPad.appendChild(zoomOutBtn);
-      var zoomInBtn = makeNavBtn('fa-plus');
+      var zoomInBtn = makeNavBtn(icons.plus);
       zoomInBtn.addEventListener('click', function() {
         network.moveTo({ scale: network.getScale() * 1.4, animation: { duration: 200 } });
       });
       zoomPad.appendChild(zoomInBtn);
-      var fitBtn = makeNavBtn('fa-expand');
+      var fitBtn = makeNavBtn(icons.expand);
       fitBtn.addEventListener('click', function() { network.fit({ animation: { duration: 300 } }); });
       zoomPad.appendChild(fitBtn);
       document.body.appendChild(zoomPad);
@@ -228,7 +239,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       var btn = document.createElement('button');
       btn.id = 'fontButton';
       btn.className = 'vis-button';
-      btn.innerHTML = '<i class=\"fa fa-pencil-alt\"></i> Font Size';
+      btn.innerHTML = '' + icons.pencil + ' Font Size';
       btn.style.cssText = btnStyle;
       rightBar.appendChild(btn);
 
@@ -254,7 +265,8 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       slider.type = 'range';
       slider.min = 10;
       slider.max = 60;
-      slider.value = 20;
+      var defaultFontSize = (layoutType === 'gravity') ? 30 : 20;
+      slider.value = defaultFontSize;
       slider.style.marginRight = '6px';
       sliderContainer.appendChild(slider);
 
@@ -292,7 +304,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
 
       // Initialize node fonts
       var nodesData = network.body.data.nodes.get();
-      nodesData.forEach(function(n){ if(!n.font) n.font={size:20}; });
+      nodesData.forEach(function(n){ if(!n.font) n.font={size:defaultFontSize}; });
       network.body.data.nodes.update(nodesData);
 
       // Slider event: update all nodes
@@ -310,8 +322,8 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         physBtn.id = 'physicsButton';
         physBtn.className = 'vis-button';
         physBtn.innerHTML = physicsEnabled
-          ? '<i class=\"fa fa-atom\"></i> Physics: On'
-          : '<i class=\"fa fa-atom\"></i> Physics: Off';
+          ? '' + icons.atom + ' Physics: On'
+          : '' + icons.atom + ' Physics: Off';
         physBtn.style.cssText = btnStyle + (physicsEnabled ? 'background:rgba(200,230,255,0.3);' : '');
         rightBar.appendChild(physBtn);
 
@@ -319,10 +331,10 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
           physicsEnabled = !physicsEnabled;
           network.setOptions({ physics: { enabled: physicsEnabled } });
           if (physicsEnabled) {
-            physBtn.innerHTML = '<i class=\"fa fa-atom\"></i> Physics: On';
+            physBtn.innerHTML = '' + icons.atom + ' Physics: On';
             physBtn.style.background = 'rgba(200,230,255,0.3)';
           } else {
-            physBtn.innerHTML = '<i class=\"fa fa-atom\"></i> Physics: Off';
+            physBtn.innerHTML = '' + icons.atom + ' Physics: Off';
             physBtn.style.background = 'transparent';
           }
         });
@@ -332,57 +344,141 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       var svgBtn = document.createElement('button');
       svgBtn.id = 'svgButton';
       svgBtn.className = 'vis-button';
-      svgBtn.innerHTML = '<i class=\"fa fa-file-code\"></i> Download SVG';
+      svgBtn.innerHTML = '' + icons.fileCode + ' Download SVG';
       svgBtn.style.cssText = btnStyle;
       rightBar.appendChild(svgBtn);
 
       svgBtn.addEventListener('click', function() {
         var svgNS = 'http://www.w3.org/2000/svg';
-        var container = network.body.container;
-        var width = container.clientWidth;
-        var height = container.clientHeight;
-        var svg = document.createElementNS(svgNS, 'svg');
-        svg.setAttribute('width', width);
-        svg.setAttribute('height', height);
+        var positions = network.getPositions();
+        var bodyNodes = network.body.nodes;
+        var bodyEdges = network.body.edges;
 
-        // Edges
-        var edges = network.body.data.edges.get();
-        edges.forEach(function(e){
-          var from = network.getPositions([e.from])[e.from];
-          var to = network.getPositions([e.to])[e.to];
+        // --- collect rendered node properties from vis.js internals ---
+        var nodeData = [];
+        Object.keys(bodyNodes).forEach(function(id) {
+          var bn = bodyNodes[id];
+          if (!bn || !bn.options || !positions[id]) return;
+          var opts = bn.options;
+          var col = opts.color || {};
+          nodeData.push({
+            id: id,
+            x: positions[id].x,
+            y: positions[id].y,
+            size: opts.size || 25,
+            color: col.background || (typeof opts.color === 'string' ? opts.color : '#97C2FC'),
+            borderColor: col.border || '#2B7CE9',
+            borderWidth: opts.borderWidth || 1,
+            label: opts.label || '',
+            fontSize: (opts.font && opts.font.size) || 14,
+            fontColor: (opts.font && opts.font.color) || '#343434'
+          });
+        });
+
+        // --- build node color lookup for edge color inheritance ---
+        var nodeColorMap = {};
+        nodeData.forEach(function(n) { nodeColorMap[n.id] = n.color; });
+
+        // --- collect rendered edge properties from vis.js internals ---
+        var edgeData = [];
+        Object.keys(bodyEdges).forEach(function(id) {
+          var be = bodyEdges[id];
+          if (!be || !be.options) return;
+          var opts = be.options;
+          var fromPos = positions[opts.from];
+          var toPos = positions[opts.to];
+          if (!fromPos || !toPos) return;
+
+          // actual rendered width: vis.js stores it in options.width
+          var width = opts.width || 1;
+
+          // edge color: replicate vis.js color.inherit behavior
+          // vis.js defaults to inherit:'from' (edge takes source node color)
+          var color = '#848484';
+          var inherit = (opts.color && opts.color.inherit !== undefined) ? opts.color.inherit : 'from';
+          if (inherit === 'from' && nodeColorMap[opts.from]) {
+            color = nodeColorMap[opts.from];
+          } else if (inherit === 'to' && nodeColorMap[opts.to]) {
+            color = nodeColorMap[opts.to];
+          } else if (inherit === 'both' && nodeColorMap[opts.from]) {
+            color = nodeColorMap[opts.from];
+          } else if (opts.color) {
+            if (typeof opts.color === 'string') { color = opts.color; }
+            else if (opts.color.color) { color = opts.color.color; }
+          }
+
+          edgeData.push({
+            fromX: fromPos.x, fromY: fromPos.y,
+            toX: toPos.x, toY: toPos.y,
+            width: width,
+            color: color
+          });
+        });
+
+        // --- compute bounding box including node radii and label space ---
+        var pad = 80;
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodeData.forEach(function(n) {
+          var rx = n.size + 10;
+          var ry = n.size + n.fontSize + 10;
+          if (n.x - rx < minX) minX = n.x - rx;
+          if (n.y - ry < minY) minY = n.y - ry;
+          if (n.x + rx > maxX) maxX = n.x + rx;
+          if (n.y + ry > maxY) maxY = n.y + ry;
+        });
+        var vbX = minX - pad;
+        var vbY = minY - pad;
+        var vbW = (maxX - minX) + pad * 2;
+        var vbH = (maxY - minY) + pad * 2;
+
+        // SVG dimensions: maintain aspect ratio, target ~1200px wide
+        var targetW = 1200;
+        var scale = targetW / vbW;
+        var targetH = Math.round(vbH * scale);
+
+        var svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('xmlns', svgNS);
+        svg.setAttribute('width', targetW);
+        svg.setAttribute('height', targetH);
+        svg.setAttribute('viewBox', vbX + ' ' + vbY + ' ' + vbW + ' ' + vbH);
+        svg.setAttribute('style', 'background:white;');
+
+        // --- draw edges ---
+        edgeData.forEach(function(e) {
           var line = document.createElementNS(svgNS, 'line');
-          line.setAttribute('x1', from.x);
-          line.setAttribute('y1', from.y);
-          line.setAttribute('x2', to.x);
-          line.setAttribute('y2', to.y);
-          line.setAttribute('stroke', '#848484');
-          line.setAttribute('stroke-width', 2);
+          line.setAttribute('x1', e.fromX);
+          line.setAttribute('y1', e.fromY);
+          line.setAttribute('x2', e.toX);
+          line.setAttribute('y2', e.toY);
+          line.setAttribute('stroke', e.color);
+          line.setAttribute('stroke-width', Math.max(e.width, 0.5));
+          line.setAttribute('stroke-opacity', '0.6');
           svg.appendChild(line);
         });
 
-        // Nodes and labels
-        var nodes = network.body.data.nodes.get();
-        nodes.forEach(function(n){
-          var pos = network.getPositions([n.id])[n.id];
+        // --- draw nodes and labels ---
+        nodeData.forEach(function(n) {
           var circle = document.createElementNS(svgNS, 'circle');
-          circle.setAttribute('cx', pos.x);
-          circle.setAttribute('cy', pos.y);
-          circle.setAttribute('r', 20);
-          circle.setAttribute('fill', '#97C2FC');
-          circle.setAttribute('stroke', '#2B7CE9');
+          circle.setAttribute('cx', n.x);
+          circle.setAttribute('cy', n.y);
+          circle.setAttribute('r', n.size);
+          circle.setAttribute('fill', n.color);
+          circle.setAttribute('stroke', n.borderColor);
+          circle.setAttribute('stroke-width', n.borderWidth);
           svg.appendChild(circle);
 
           var text = document.createElementNS(svgNS, 'text');
-          text.setAttribute('x', pos.x);
-          text.setAttribute('y', pos.y + 5);
+          text.setAttribute('x', n.x);
+          text.setAttribute('y', n.y + n.size + n.fontSize + 2);
           text.setAttribute('text-anchor', 'middle');
-          text.setAttribute('font-size', n.font ? n.font.size : 20);
-          text.setAttribute('fill', 'black');
+          text.setAttribute('font-size', n.fontSize);
+          text.setAttribute('font-family', '-apple-system, BlinkMacSystemFont, sans-serif');
+          text.setAttribute('fill', n.fontColor);
           text.textContent = n.label;
           svg.appendChild(text);
         });
 
-        // Serialize and download
+        // --- serialize and download ---
         var serializer = new XMLSerializer();
         var source = serializer.serializeToString(svg);
         var blob = new Blob([source], {type:'image/svg+xml'});
@@ -396,7 +492,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       var pngBtn = document.createElement('button');
       pngBtn.id = 'pngButton';
       pngBtn.className = 'vis-button';
-      pngBtn.innerHTML = '<i class=\"fa fa-image\"></i> Download PNG';
+      pngBtn.innerHTML = '' + icons.image + ' Download PNG';
       pngBtn.style.cssText = btnStyle;
       rightBar.appendChild(pngBtn);
 
@@ -475,7 +571,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       var saveBtn = document.createElement('button');
       saveBtn.id = 'saveLayoutButton';
       saveBtn.className = 'vis-button';
-      saveBtn.innerHTML = '<i class=\"fa fa-floppy-disk\"></i> Save Layout';
+      saveBtn.innerHTML = '' + icons.save + ' Save Layout';
       saveBtn.style.position = 'fixed';
       saveBtn.style.top = '10px';
       saveBtn.style.right = '300px';
@@ -505,7 +601,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       var loadBtn = document.createElement('button');
       loadBtn.id = 'loadLayoutButton';
       loadBtn.className = 'vis-button';
-      loadBtn.innerHTML = '<i class=\"fa fa-folder-open\"></i> Load Layout';
+      loadBtn.innerHTML = '' + icons.folderOpen + ' Load Layout';
       loadBtn.style.position = 'fixed';
       loadBtn.style.top = '10px';
       loadBtn.style.right = '440px';
@@ -541,7 +637,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
             network.setOptions({ physics: { enabled: false }, edges: { smooth: false } });
             var physBtn = document.getElementById('physicsButton');
             if (physBtn) {
-              physBtn.innerHTML = '<i class=\"fa fa-atom\"></i> Physics: Off';
+              physBtn.innerHTML = '' + icons.atom + ' Physics: Off';
               physBtn.style.background = 'transparent';
             }
             // handle new format (object with nodes + keyLabels) and old format (plain array)
@@ -619,7 +715,20 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       }
 
       network.on('dragEnd', saveState);
-      network.on('stabilized', saveState);
+      network.on('stabilized', function() {
+        saveState();
+        // if parent report requested physics off after stabilization, disable now
+        if (window.__disablePhysicsAfterStabilize) {
+          window.__disablePhysicsAfterStabilize = false;
+          physicsEnabled = false;
+          network.setOptions({ physics: { enabled: false } });
+          var physBtn = document.getElementById('physicsButton');
+          if (physBtn) {
+            physBtn.innerHTML = '' + icons.atom + ' Physics: Off';
+            physBtn.style.background = 'transparent';
+          }
+        }
+      });
       network.body.data.nodes.on('update', saveState);
 
       // push initial state to parent (delayed to allow layout to settle)
@@ -867,7 +976,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         network.setOptions({ physics: { enabled: false }, edges: { smooth: false } });
         var physBtn = document.getElementById('physicsButton');
         if (physBtn) {
-          physBtn.innerHTML = '<i class=\"fa fa-atom\"></i> Physics: Off';
+          physBtn.innerHTML = '' + icons.atom + ' Physics: Off';
           physBtn.style.background = 'transparent';
         }
         var layout = d.nodes || d;
