@@ -1,4 +1,7 @@
-
+#' bn_finalize_network
+#' @description Finalize a Bayesian network by re-estimating with a fixed structure,
+#'   computing subgroup models, and running impact analysis.
+#' @export
 bn_finalize_network <- function(
     obj = NULL,
     df,
@@ -10,9 +13,10 @@ bn_finalize_network <- function(
     previous_dv = NULL,
     node_label_type = c("both", "variable", "label"),
     manual_groups = NULL,
-    impact_type = c("cp", "gr", "mi"),
-    impact_n_boot = 1000,
-    impact_n_querry = 1e5,
+    impact_type = c("gr", "cp", "mi"),
+    impact_n_boot = 1,
+    impact_n_querry = 1e4,
+    impact_lift = 0,
     tool_tip_edge_prefix = NULL,
     viz_size_node_by_impact = TRUE,
     viz_include_dv = FALSE,
@@ -164,6 +168,9 @@ bn_finalize_network <- function(
     seed = seed
   )
 
+  # Update edges from the main model so subgroups get the full structure
+  # (critical for unsupervised sources where x_edges has no DV connections)
+  x_edges <- results[["bn"]][["bn"]] %>% bnlearn::arcs() %>% as.data.frame()
 
   results[["bn_subgroups"]] <- map_progress(
     subgroups,
@@ -225,6 +232,7 @@ bn_finalize_network <- function(
     process_subgroups = TRUE,
     n_boot = impact_n_boot,
     n_querry = impact_n_querry,
+    lift = impact_lift,
     use_parallel = impact_parallel,
     seed = seed
   )
@@ -242,6 +250,7 @@ bn_finalize_network <- function(
     process_subgroups = TRUE,
     n_boot = impact_n_boot,
     n_querry = impact_n_querry,
+    lift = impact_lift,
     use_parallel = impact_parallel,
     seed = seed
   )
@@ -266,12 +275,16 @@ bn_finalize_network <- function(
 
   if(viz_size_node_by_impact){
 
+    # bn_impact() prefixes index as {subgroup}_index, then gsub strips _index
+    # so the index column is just the subgroup name (e.g., "Total")
+    index_col <- subgroups[1]
+
     join_impact <- function(nodes, impacts, id_col) {
-      impact_vals <- impacts %>% dplyr::select(dplyr::all_of(c(id_col, "Total_Total")))
+      impact_vals <- impacts %>% dplyr::select(dplyr::all_of(c(id_col, index_col)))
       nodes %>%
         dplyr::left_join(impact_vals, by = stats::setNames(id_col, "id")) %>%
-        dplyr::mutate(value = Total_Total) %>%
-        dplyr::select(-Total_Total)
+        dplyr::mutate(value = .data[[index_col]]) %>%
+        dplyr::select(-dplyr::all_of(index_col))
     }
 
     results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]] <-

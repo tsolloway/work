@@ -76,6 +76,8 @@
 #' @param n_boot Integer. Number of bootstrap replicates (passed through to the engine).
 #' @param n_querry Integer. Number of Monte Carlo queries/samples used by the engine.
 #'   (Note: argument name is spelled \code{n_querry} here.)
+#' @param lift Numeric. Target percentage lift for the \code{reality} metric.
+#'   Passed through to \code{bn_impact_engine()}. Default \code{0.10}.
 #' @param seed Integer. Random seed passed through to the engine.
 #'
 #' @return A \code{data.frame} (tibble-compatible) with one row per variable and one or more impact
@@ -141,12 +143,13 @@ bn_impact <- function(
     ivs = NULL,
     do_community = FALSE,
     community_assignment = NULL,
-    type = c("cp", "gr", "mi"),
+    type = c("gr", "cp", "mi"),
     add_index = TRUE,
     process_subgroups = TRUE,
     dictionary = NULL,
     n_boot = 1,
-    n_querry = 1e5,
+    n_querry = 1e4,
+    lift = 0,
     use_parallel = TRUE,
     seed = 1
 ){
@@ -175,6 +178,7 @@ bn_impact <- function(
           add_index = add_index,
           n_boot = n_boot,
           n_querry = n_querry,
+          lift = lift,
           seed = seed
         ) %>%
           setNames(glue::glue("{.y}_{names(.)}"))
@@ -200,6 +204,7 @@ bn_impact <- function(
       add_index = add_index,
       n_boot = n_boot,
       n_querry = n_querry,
+      lift = lift,
       seed = seed
     ) %>%
       dplyr::rename(Variable = variable)

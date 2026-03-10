@@ -11,12 +11,12 @@ bn_impact(
   ivs = NULL,
   do_community = FALSE,
   community_assignment = NULL,
-  type = c("cp", "gr", "mi"),
+  type = c("gr", "cp", "mi"),
   add_index = TRUE,
   process_subgroups = TRUE,
   dictionary = NULL,
   n_boot = 1,
-  n_querry = 1e+05,
+  n_querry = 10000,
   use_parallel = TRUE,
   seed = 1
 )

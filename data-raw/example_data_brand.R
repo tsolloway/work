@@ -174,9 +174,21 @@ for (j in seq_len(p)) {
   likert_mat[, j] <- as.integer(cut(x, breaks = breaks, labels = 1:5, include.lowest = TRUE))
 }
 
+# --- Brand assignment ---
+brand_names <- c("Apex", "Vero", "Kinetic", "Solace", "Drift", "Ember")
+brand_probs <- c(0.30, 0.10, 0.17, 0.15, 0.13, 0.15)
+brand_ids <- sample(
+  seq_along(brand_names),
+  size = n,
+  replace = TRUE,
+  prob = brand_probs
+)
+
 # --- Assemble final tibble ---
 example_data_brand <- tibble::tibble(
   resp_id = vapply(seq_len(n), function(i) uuid::UUIDgenerate(), character(1)),
+  Brand = brand_names[brand_ids],
+  Brand_id = brand_ids,
   Total = 1L,
   Gen_Z = as.integer(gen_labels == "Gen_Z"),
   Millennials = as.integer(gen_labels == "Millennials"),

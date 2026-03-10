@@ -2,7 +2,7 @@
 % Please edit documentation in R/bn_impact_engine.r
 \name{bn_impact_engine}
 \alias{bn_impact_engine}
-\title{Estimate Variable Impact in a Bayesian Network using gRain Inference}
+\title{Estimate Variable Impact in a Bayesian Network}
 \usage{
 bn_impact_engine(
   obj,
@@ -11,93 +11,116 @@ bn_impact_engine(
   ivs = NULL,
   do_community = FALSE,
   community_assignment = NULL,
-  type = c("cp", "gr", "mi"),
+  type = c("gr", "cp", "mi"),
   add_index = TRUE,
   n_boot = 1,
-  n_querry = 1e+05,
+  n_querry = 10000,
   seed = 1
 )
 }
 \arguments{
-\item{obj}{A fitted Bayesian network object or a list returned from
-\code{bn_engine()}. If a list from \code{bn_engine()} is supplied and includes metadata
-(\code{meta = "bn_model_single"}), the function will automatically extract the
-DV, IVs, and fitted model.}
+\item{obj}{A fitted Bayesian network object. Accepts:
+\itemize{
+\item A list from \code{bn_engine()} (auto-extracts DV, IVs, fitted model)
+\item A \code{bnlearn::bn.fit} object
+\item A \code{bnlearn::bn} structure (will be fitted with \code{method = "bayes"})
+}}
 
-\item{df}{A data frame used to fit or query the Bayesian network. Must contain
-the DV and IV columns.}
+\item{df}{A data frame containing the DV and IV columns.}
 
-\item{dv}{Character scalar. Dependent variable to query within the network.}
+\item{dv}{Character scalar. Dependent variable name. Optional if \code{obj}
+is a \code{bn_engine()} result with metadata.}
 
-\item{ivs}{Optional character vector. Full list of IVs in the network; used if
-\code{bn} is a list from \code{bn_engine()}.}
+\item{ivs}{Character vector. Independent variable names. Optional if \code{obj}
+is a \code{bn_engine()} result with metadata.}
 
-\item{n_boot}{Integer. Number of bootstrap replicates to perform.
-If \code{n_boot = 1}, the function computes a single estimate without bootstrapping.}
+\item{do_community}{Logical. If \code{TRUE}, computes impact at the community
+level by jointly setting all IVs within each community.}
 
-\item{seed}{Optional integer. Random seed for reproducibility.}
+\item{community_assignment}{Optional data frame with \code{id} and
+\code{community_name} columns mapping IVs to communities.}
 
-\item{iv}{Character scalar or vector. Independent variable(s) to evaluate.}
+\item{type}{Character. Estimation method:
+\itemize{
+\item \code{"gr"} (default): exact junction-tree inference via \code{gRain}.
+Deterministic, fast, no Monte Carlo noise.
+\item \code{"cp"}: Monte Carlo conditional probability via
+\code{bnlearn::cpquery()} with likelihood weighting.
+\item \code{"mi"}: mutual information test only (no probability lift).
+}}
 
-\item{return_dv_estimate}{Logical. If \code{TRUE}, includes the estimated probability
-of the DV at the upper level of IV(s) in the output.}
+\item{add_index}{Logical. If \code{TRUE} (default), appends an \code{index}
+column: each variable's absolute effect relative to the mean absolute effect,
+scaled to 100.}
+
+\item{n_boot}{Integer. Number of bootstrap replicates. If \code{n_boot = 1},
+computes a single point estimate without bootstrapping.}
+
+\item{n_querry}{Integer. Number of Monte Carlo samples per \code{cpquery()} call.
+Only used when \code{type = "cp"}. Default \code{1e4}.}
+
+\item{seed}{Integer. Random seed for reproducibility.}
 }
 \value{
-A tibble or data frame containing:
+A tibble with one row per variable (or community) containing:
 \itemize{
-\item \code{dv} — Dependent variable name.
-\item \code{iv} — Independent variable(s) tested.
-\item \code{estimate} — Mean difference in conditional probability.
-\item \code{std_error}, \code{t_statistic}, \code{p_value} — Available when \code{n_boot > 1}.
-\item \code{ci_lower}, \code{ci_upper} — Bootstrap percentile confidence interval bounds.
-\item \code{dv_estimate} — (Optional) Estimated DV probability at maximum IV value.
+\item \code{variable}: IV or community name
+\item \code{dv_estimate}: P(DV_max | IV_max) (types \code{"gr"} and \code{"cp"})
+\item \code{effect}: probability lift (types \code{"gr"} and \code{"cp"})
+\item \code{mi}: normalized mutual information (all types)
+\item \code{p_val}: MI chi-squared p-value (all types)
+\item \code{index}: relative impact index (when \code{add_index = TRUE})
 }
+
+When \code{n_boot > 1}, effect and MI columns are expanded with bootstrap
+summary statistics: \code{_mean}, \code{_sd}, \code{_se}, \code{_t},
+\code{_ci_low}, \code{_ci_high}, \code{_p_value}.
 }
 \description{
-Computes the estimated impact of an independent variable (IV) on a dependent
-variable (DV) in a fitted Bayesian network by comparing conditional
-probabilities using \code{gRain} inference. Optionally applies bootstrapping for
-uncertainty estimation and parallel execution.
+Computes the estimated impact of independent variables (IVs) on a dependent
+variable (DV) in a Bayesian network. Supports three estimation methods:
+exact inference via \code{gRain} (\code{"gr"}), Monte Carlo conditional
+probability queries (\code{"cp"}), and mutual information (\code{"mi"}).
+Optionally applies bootstrapping for uncertainty estimation.
 }
 \details{
-For each independent variable, this function:
+For each IV (or community of IVs when \code{do_community = TRUE}), the function:
 \enumerate{
-\item Fits (or reuses) a Bayesian network using \code{bnlearn::bn.fit()}.
-\item Converts the network to a compiled \code{gRain} object for inference.
-\item Estimates the difference in conditional probabilities of the DV when the IV
-is set to its observed minimum versus maximum values.
-\item Optionally bootstraps this difference to derive standard errors,
-confidence intervals, and approximate p-values.
+\item Fits (or reuses) a Bayesian network via \code{bnlearn::bn.fit()}.
+\item Estimates the probability of the DV at its maximum level when the IV is
+set to its observed maximum vs minimum.
+\item Computes the probability lift: P(DV_max | IV_max) - P(DV_max | IV_min).
+\item Computes mutual information between each IV and the DV.
+\item Optionally bootstraps steps 1-4 to produce standard errors, confidence
+intervals, and p-values.
 }
 
-Bootstrapping is performed using \code{boot::boot()}, where each replicate resamples
-rows from the data and refits the conditional probabilities to the fixed
-network structure. The effect size is defined as:
-\deqn{P(DV | IV_{max}) - P(DV | IV_{min})}
-
-Parallelization is supported on Unix-like systems via the \code{"multicore"} method.
+Bootstrap replicates resample rows and refit parameters to the fixed network
+structure, capturing parameter uncertainty without conflating it with
+structural uncertainty.
 }
 \examples{
 \dontrun{
-library(bnlearn)
-library(gRain)
+# --- From a bn_engine() result ---
+bn_obj <- work::bn_engine(df = my_data, dv = "satisfaction", ivs = iv_names)
+bn_impact_engine(obj = bn_obj, df = my_data, type = "gr", n_boot = 500)
 
-# Fit a simple Bayesian network
-bn <- hc(learning.test)
-fit <- bn.fit(bn, learning.test)
-
-# Estimate impact of variable "A" on "B"
-bn_impact_grain_engine(
-  obj = fit,
-  df = learning.test,
-  dv = "B",
-  iv = "A",
-  n_boot = 50,
-  use_parallel = FALSE
+# --- From a bare bnlearn object ---
+bn_struct <- bnlearn::hc(my_data)
+bn_impact_engine(
+  obj = bn_struct,
+  df = my_data,
+  dv = "satisfaction",
+  ivs = c("quality", "price", "service"),
+  type = "gr",
+  n_boot = 1
 )
+
+# --- MI only (no probability lift) ---
+bn_impact_engine(obj = bn_obj, df = my_data, type = "mi", n_boot = 200)
 }
 
 }
 \seealso{
-\code{\link[bnlearn:bn.fit]{bnlearn::bn.fit()}}, \code{\link[gRain:querygrain]{gRain::querygrain()}}, \code{\link[boot:boot]{boot::boot()}}
+\code{\link[=bn_impact]{bn_impact()}}, \code{\link[bnlearn:bn.fit]{bnlearn::bn.fit()}}, \code{\link[gRain:querygrain]{gRain::querygrain()}}
 }

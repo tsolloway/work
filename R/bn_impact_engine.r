@@ -1,75 +1,136 @@
-#' Estimate Variable Impact in a Bayesian Network using gRain Inference
+#' Estimate Variable Impact in a Bayesian Network
 #'
 #' @description
-#' Computes the estimated impact of an independent variable (IV) on a dependent
-#' variable (DV) in a fitted Bayesian network by comparing conditional
-#' probabilities using `gRain` inference. Optionally applies bootstrapping for
-#' uncertainty estimation and parallel execution.
+#' Computes the estimated impact of independent variables (IVs) on a dependent
+#' variable (DV) in a Bayesian network. Supports three estimation methods:
+#' exact inference via \code{gRain} (\code{"gr"}), Monte Carlo conditional
+#' probability queries (\code{"cp"}), and mutual information (\code{"mi"}).
+#' Optionally applies bootstrapping for uncertainty estimation.
 #'
-#' @param obj A fitted Bayesian network object or a list returned from
-#'   `bn_engine()`. If a list from `bn_engine()` is supplied and includes metadata
-#'   (`meta = "bn_model_single"`), the function will automatically extract the
-#'   DV, IVs, and fitted model.
-#' @param df A data frame used to fit or query the Bayesian network. Must contain
-#'   the DV and IV columns.
-#' @param iv Character scalar or vector. Independent variable(s) to evaluate.
-#' @param dv Character scalar. Dependent variable to query within the network.
-#' @param ivs Optional character vector. Full list of IVs in the network; used if
-#'   `bn` is a list from `bn_engine()`.
-#' @param n_boot Integer. Number of bootstrap replicates to perform.
-#'   If `n_boot = 1`, the function computes a single estimate without bootstrapping.
-#' @param return_dv_estimate Logical. If `TRUE`, includes the estimated probability
-#'   of the DV at the upper level of IV(s) in the output.
-#' @param seed Optional integer. Random seed for reproducibility.
+#' @param obj A fitted Bayesian network object. Accepts:
+#'   \itemize{
+#'     \item A list from \code{bn_engine()} (auto-extracts DV, IVs, fitted model)
+#'     \item A \code{bnlearn::bn.fit} object
+#'     \item A \code{bnlearn::bn} structure (will be fitted with \code{method = "bayes"})
+#'   }
+#' @param df A data frame containing the DV and IV columns.
+#' @param dv Character scalar. Dependent variable name. Optional if \code{obj}
+#'   is a \code{bn_engine()} result with metadata.
+#' @param ivs Character vector. Independent variable names. Optional if \code{obj}
+#'   is a \code{bn_engine()} result with metadata.
+#' @param do_community Logical. If \code{TRUE}, computes impact at the community
+#'   level by jointly setting all IVs within each community.
+#' @param community_assignment Optional data frame with \code{id} and
+#'   \code{community_name} columns mapping IVs to communities.
+#' @param type Character. Estimation method:
+#'   \itemize{
+#'     \item \code{"gr"} (default): exact junction-tree inference via \code{gRain}.
+#'       Deterministic, fast, no Monte Carlo noise.
+#'     \item \code{"cp"}: Monte Carlo conditional probability via
+#'       \code{bnlearn::cpquery()} with likelihood weighting.
+#'     \item \code{"mi"}: mutual information test only (no probability lift).
+#'   }
+#' @param add_index Logical. If \code{TRUE} (default), appends an \code{index}
+#'   column scaled to 100 relative to the mean. Based on \code{index_by}.
+#' @param index_by Character. Which metric to use for the index column:
+#'   \code{"maxVmin"} (default), \code{"lift"}, or \code{"mi"}.
+#' @param n_boot Integer. Number of bootstrap replicates. If \code{n_boot = 1}
+#'   (recommended default), computes a single point estimate without bootstrapping.
+#'   See \strong{When to bootstrap} below.
+#' @param n_querry Integer. Number of Monte Carlo samples per \code{cpquery()} call.
+#'   Only used when \code{type = "cp"}. Default \code{1e4}.
+#' @param lift Numeric. Target percentage lift for distribution-aware impact
+#'   (\code{lift} column). Uses \code{bn_freq_prob_shift()} to shift each IV's
+#'   observed distribution by this fraction (e.g., 0.10 = 10 percent), then
+#'   computes the resulting DV probability change. Only computed when
+#'   \code{type = "gr"}. When \code{lift = 0} (default), computes the symmetric
+#'   sensitivity: E_(+5 percent) - E_(-5 percent).
+#' @param seed Integer. Random seed for reproducibility.
 #'
 #' @details
-#' For each independent variable, this function:
-#' 1. Fits (or reuses) a Bayesian network using `bnlearn::bn.fit()`.
-#' 2. Converts the network to a compiled `gRain` object for inference.
-#' 3. Estimates the difference in conditional probabilities of the DV when the IV
-#'    is set to its observed minimum versus maximum values.
-#' 4. Optionally bootstraps this difference to derive standard errors,
-#'    confidence intervals, and approximate p-values.
+#' For each IV (or community of IVs when \code{do_community = TRUE}), the function:
+#' \enumerate{
+#'   \item Fits (or reuses) a Bayesian network via \code{bnlearn::bn.fit()}.
+#'   \item \strong{maxVmin}: estimates the probability of the DV at its maximum
+#'     level when the IV is set to its observed max vs min.
+#'     \code{maxVmin = P(DV_max | IV_max) - P(DV_max | IV_min)}.
+#'     This is the theoretical maximum effect of the IV on the DV.
+#'   \item \strong{lift} (type \code{"gr"} only): shifts the IV's observed
+#'     frequency distribution by \code{lift} percent using
+#'     \code{bn_freq_prob_shift()}, then computes
+#'     \code{lift = sum(P(DV_max | IV=v) * p_shifted(v)) - sum(P(DV_max | IV=v) * p_observed(v))}.
+#'     This is the distribution-aware impact: it accounts for where respondents
+#'     currently sit on the IV, so IVs with little headroom produce small lift
+#'     values even if maxVmin is large.
+#'   \item Computes mutual information between each IV and the DV.
+#'   \item Optionally bootstraps steps 1-4 to produce standard errors, confidence
+#'     intervals, and p-values.
+#' }
 #'
-#' Bootstrapping is performed using `boot::boot()`, where each replicate resamples
-#' rows from the data and refits the conditional probabilities to the fixed
-#' network structure. The effect size is defined as:
-#' \deqn{P(DV | IV_{max}) - P(DV | IV_{min})}
+#' Bootstrap replicates resample rows and refit parameters to the fixed network
+#' structure, capturing parameter uncertainty without conflating it with
+#' structural uncertainty.
 #'
-#' Parallelization is supported on Unix-like systems via the `"multicore"` method.
+#' \strong{When to bootstrap}
+#'
+#' For most use cases (driver ranking, executive dashboards), \code{n_boot = 1}
+#' with \code{type = "gr"} is sufficient. The MI p-value already provides
+#' evidence strength (whether the IV-DV relationship is statistically real),
+#' and the \code{"gr"} probability lift is deterministic with no Monte Carlo
+#' noise, so the point estimate is stable without averaging across replicates.
+#' Together, the lift and MI p-value deliver both dimensions of the
+#' Impact x Evidence framework without any bootstrapping.
+#'
+#' Use \code{n_boot > 1} when you need:
+#' \itemize{
+#'   \item Confidence intervals on the probability lift itself (e.g., for
+#'     technical reports or publications).
+#'   \item A formal test of whether the \emph{lift} is distinguishable from
+#'     zero (conceptually different from MI's test of \emph{association}).
+#'   \item To assess whether two drivers' effects significantly differ
+#'     (via overlapping confidence intervals).
+#' }
 #'
 #' @return
-#' A tibble or data frame containing:
+#' A tibble with one row per variable (or community) containing:
 #' \itemize{
-#'   \item `dv` — Dependent variable name.
-#'   \item `iv` — Independent variable(s) tested.
-#'   \item `estimate` — Mean difference in conditional probability.
-#'   \item `std_error`, `t_statistic`, `p_value` — Available when `n_boot > 1`.
-#'   \item `ci_lower`, `ci_upper` — Bootstrap percentile confidence interval bounds.
-#'   \item `dv_estimate` — (Optional) Estimated DV probability at maximum IV value.
+#'   \item \code{variable}: IV or community name
+#'   \item \code{dv_estimate}: P(DV_max | IV_max) (types \code{"gr"} and \code{"cp"})
+#'   \item \code{maxVmin}: max-vs-min probability lift (types \code{"gr"} and \code{"cp"})
+#'   \item \code{lift}: distribution-aware DV change from a \code{lift} percent
+#'     shift in the IV (type \code{"gr"} only)
+#'   \item \code{mi}: normalized mutual information (all types)
+#'   \item \code{p_val}: MI chi-squared p-value (all types)
+#'   \item \code{index}: relative impact index based on maxVmin
+#'     (when \code{add_index = TRUE})
 #' }
+#'
+#' When \code{n_boot > 1}, maxVmin, lift, and MI columns are expanded with
+#' bootstrap summary statistics: \code{_mean}, \code{_sd}, \code{_se},
+#' \code{_t}, \code{_ci_low}, \code{_ci_high}, \code{_p_value}.
 #'
 #' @examples
 #' \dontrun{
-#' library(bnlearn)
-#' library(gRain)
+#' # --- From a bn_engine() result ---
+#' bn_obj <- work::bn_engine(df = my_data, dv = "satisfaction", ivs = iv_names)
+#' bn_impact_engine(obj = bn_obj, df = my_data, type = "gr", n_boot = 500)
 #'
-#' # Fit a simple Bayesian network
-#' bn <- hc(learning.test)
-#' fit <- bn.fit(bn, learning.test)
-#'
-#' # Estimate impact of variable "A" on "B"
-#' bn_impact_grain_engine(
-#'   obj = fit,
-#'   df = learning.test,
-#'   dv = "B",
-#'   iv = "A",
-#'   n_boot = 50,
-#'   use_parallel = FALSE
+#' # --- From a bare bnlearn object ---
+#' bn_struct <- bnlearn::hc(my_data)
+#' bn_impact_engine(
+#'   obj = bn_struct,
+#'   df = my_data,
+#'   dv = "satisfaction",
+#'   ivs = c("quality", "price", "service"),
+#'   type = "gr",
+#'   n_boot = 1
 #' )
+#'
+#' # --- MI only (no probability lift) ---
+#' bn_impact_engine(obj = bn_obj, df = my_data, type = "mi", n_boot = 200)
 #' }
 #'
-#' @seealso [bnlearn::bn.fit()], [gRain::querygrain()], [boot::boot()]
+#' @seealso [bn_impact()], [bnlearn::bn.fit()], [gRain::querygrain()]
 #'
 #' @export
 bn_impact_engine <- function(
@@ -79,14 +140,17 @@ bn_impact_engine <- function(
     ivs = NULL,
     do_community = FALSE,
     community_assignment = NULL,
-    type = c("cp", "gr", "mi"),
+    type = c("gr", "cp", "mi"),
     add_index = TRUE,
+    index_by = c("maxVmin", "lift", "mi"),
     n_boot = 1,
-    n_querry = 1e5,
+    n_querry = 1e4,
+    lift = 0,
     seed = 1
 ){
 
   type <- match.arg(type)
+  index_by <- match.arg(index_by)
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
   # ---------------------------
@@ -102,11 +166,11 @@ bn_impact_engine <- function(
   }
 
   # Column existence checks
-  work::assert_cols_exist(df, dv, "data frame for bn_impact_grain_engine()")
+  work::assert_cols_exist(df, dv, "data frame for bn_impact_engine()")
 
 
   if (!is.null(ivs)) {
-    work::assert_cols_exist(df, ivs %>% unlist(), "data frame for bn_impact_grain_engine() [ivs]")
+    work::assert_cols_exist(df, ivs %>% unlist(), "data frame for bn_impact_engine() [ivs]")
   }
 
 
@@ -232,7 +296,7 @@ bn_impact_engine <- function(
       )))
     }
 
-    data.frame(variable = iv, dv_estimate = p1, effect = p1 - p0)
+    data.frame(variable = iv, dv_estimate = p1, maxVmin = p1 - p0)
   }
 
 
@@ -245,7 +309,7 @@ bn_impact_engine <- function(
     data, indices = NULL, bn, ivs, ivs_max, ivs_min, dv_max = NULL,
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
-    n_querry = 1e5, fit = NULL, seed = 1
+    n_querry = 1e5, lift = 0, fit = NULL, seed = 1
   ){
     type <- match.arg(type)
 
@@ -320,6 +384,49 @@ bn_impact_engine <- function(
     }
 
 
+    # ---------------------------
+    # Lift: distribution-aware impact via bn_freq_prob_shift
+    # When lift != 0: E_shifted - E_observed
+    # When lift == 0: E_(+5%) - E_(-5%)
+    # ---------------------------
+    if(type == "gr" && !is.null(lift)){
+
+      if(!is.null(community_assignment)) temp_ivs_r <- community_assignment else temp_ivs_r <- ivs %>% setNames(ivs)
+
+      use_symmetric <- (lift == 0)
+      lift_up   <- if (use_symmetric) 0.05 else lift
+      lift_down <- if (use_symmetric) -0.05 else NULL
+
+      lift_results <- temp_ivs_r %>%
+        purrr::imap(function(iv_vars, iv_name) {
+          per_iv <- purrr::map_dbl(iv_vars, function(single_iv) {
+            freq <- table(dat_boot[[single_iv]])
+            p_observed <- as.numeric(freq) / sum(freq)
+
+            levels_v <- names(freq)
+            dv_probs <- purrr::map_dbl(levels_v, function(v) {
+              ev <- stats::setNames(list(v), single_iv)
+              gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE) %>%
+                dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+            })
+
+            if (use_symmetric) {
+              p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = lift_up)
+              p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = lift_down)
+              sum(dv_probs * p_up) - sum(dv_probs * p_down)
+            } else {
+              p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = lift_up)
+              sum(dv_probs * p_shifted) - sum(dv_probs * p_observed)
+            }
+          })
+          data.frame(variable = iv_name, lift = mean(per_iv))
+        }) %>%
+        dplyr::bind_rows()
+
+      results <- results %>%
+        dplyr::left_join(lift_results, by = "variable")
+    }
+
 
     if(type == "mi" || add_mi){
 
@@ -369,8 +476,8 @@ bn_impact_engine <- function(
           indices = .x, data = df,
           bn = bn,
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
-          add_mi = TRUE, type = type, n_querry = n_querry, fit = NULL,
-          community_assignment = community_assignment
+          add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
+          fit = NULL, community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
       ) %>%
@@ -401,7 +508,8 @@ bn_impact_engine <- function(
         variable,
         tidyselect::matches("^dv_estimate"),
         tidyselect::matches("^mi"),
-        tidyselect::matches("^effect")
+        tidyselect::matches("^maxVmin"),
+        tidyselect::matches("^lift")
       )
 
 
@@ -411,8 +519,8 @@ bn_impact_engine <- function(
       indices = NULL, data = df,
       bn = bn,
       ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
-      add_mi = TRUE, type = type, n_querry = n_querry, fit = fit,
-      community_assignment = community_assignment
+      add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
+      fit = fit, community_assignment = community_assignment
     )
 
   }
@@ -420,18 +528,16 @@ bn_impact_engine <- function(
 
   if(add_index){
 
-    if(type != "mi"){
+    # Bootstrap pivot appends _mean suffix; single run uses bare name
+    index_col <- if (index_by %in% names(result)) index_by else paste0(index_by, "_mean")
+
+    if (!index_col %in% names(result)) {
+      warning("index_by = '", index_by, "' not found in results. Skipping index.")
+    } else {
       result <- result %>%
         dplyr::mutate(
-          index = (abs(effect) / mean(abs(effect))) * 100
+          index = (abs(.data[[index_col]]) / mean(abs(.data[[index_col]]))) * 100
         )
-    }else if(type == "mi"){
-      result <- result %>%
-        dplyr::mutate(
-          index = (abs(mi) / mean(abs(mi))) * 100
-        )
-    }else{
-      stop("Unknown type for index: ", type)
     }
 
   }
