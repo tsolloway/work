@@ -11,7 +11,8 @@ map_progress(
   .label = NULL,
   .handlers = progressr::handler_cli,
   .parallel = FALSE,
-  .furrr_packages = NULL
+  .furrr_packages = NULL,
+  .furrr_globals = TRUE
 )
 }
 \arguments{
@@ -33,6 +34,10 @@ and the message on the right.}
 \code{purrr::map()}. Requires an active \code{future::plan()}.}
 
 \item{.furrr_packages}{Optional character vector of packages to load in each worker.}
+
+\item{.furrr_globals}{Named list of globals to export to workers, or \code{TRUE}
+(default) for automatic detection. Use an explicit list to prevent
+\code{future} from recursively scanning the closure environment.}
 }
 \value{
 A list of mapped results, identical in structure to \code{purrr::map()}.

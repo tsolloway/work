@@ -213,14 +213,12 @@ driver <- function(
 
 
 
-#' driver
-#' @description driver
+#' drivers
+#' @description drivers
 #' @export
 drivers <- function(
     df, dv, ivs, subgroups = NULL, labels = NULL, engine, shift_percentage = .05, label_width = "auto", write = TRUE
 ){
-
-  require(openxlsx)
 
 
   if(is.null(names(dv))){
@@ -263,7 +261,7 @@ drivers <- function(
 
   output <- analysis %>% imap(function(dvx, dvn){
 
-    wb <- createWorkbook()
+    wb <- oxl_create_workbook()
 
     for( i in names(dvx) ){
 
@@ -299,7 +297,7 @@ drivers <- function(
 
   if( write ){
     output %>% iwalk(~{
-      saveWorkbook(.x, glue("Drivers - {.y}.xlsx"), overwrite = TRUE)
+      openxlsx::saveWorkbook(.x, glue("Drivers - {.y}.xlsx"), overwrite = TRUE)
     })
   }
 
@@ -311,4 +309,3 @@ drivers <- function(
     )
   )
 }
-

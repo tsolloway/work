@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld("launcherAPI", {
   removeApp: (id) => ipcRenderer.invoke("remove-app", id),
   launchApp: (id) => ipcRenderer.invoke("launch-app", id),
   stopApp: (appId) => ipcRenderer.invoke("stop-app", appId),
+  showSaveDialog: (options) => ipcRenderer.invoke("show-save-dialog", options),
+  showOpenDialog: (options) => ipcRenderer.invoke("show-open-dialog", options),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   onFileOpened: (callback) => ipcRenderer.on("file-opened", (event, result) => callback(result)),
 });

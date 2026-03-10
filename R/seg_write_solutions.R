@@ -3,8 +3,17 @@
 #' @export
 seg_write_solutions <- function(
     seg, solution = NULL, where = NULL,
+    only_opt = FALSE,
+    do_kmeans = TRUE,
+    do_medoid = TRUE,
+    do_gaus_mix = TRUE,
+    do_hierarchical = TRUE,
+    do_spectral = TRUE,
+    do_iterative = TRUE,
+    do_consensus = TRUE,
+    do_optimized = TRUE,
     strategy = c("multisession", "multicore", "sequential", 'cluster'),
-    workers = availableCores(omit = 1),
+    workers = future::availableCores(omit = 1),
     add_key = TRUE,
     label_width = 75,
     hide_pvalue = FALSE,
@@ -45,34 +54,57 @@ seg_write_solutions <- function(
 
 
   if(!is.null(solution)){
-    solution_summary_table <- solution_summary_table %>% filter(solution_name == solution)
+    solution_summary_table <- solution_summary_table %>% dplyr::filter(solution_name == solution)
+  }
+
+  if(only_opt){
+    solution_summary_table <- solution_summary_table %>% dplyr::filter(grepl("^LDA_opt_", lda_name))
+  }
+
+  # filter out methods set to FALSE
+  exclude_patterns <- character(0)
+  if (!do_kmeans)       exclude_patterns <- c(exclude_patterns, "kmeans_")
+  if (!do_medoid)       exclude_patterns <- c(exclude_patterns, "medoid_")
+  if (!do_gaus_mix)     exclude_patterns <- c(exclude_patterns, "gaus_mix_")
+  if (!do_hierarchical) exclude_patterns <- c(exclude_patterns, "hierarchical_")
+  if (!do_spectral)     exclude_patterns <- c(exclude_patterns, "spectral_")
+  if (!do_iterative)    exclude_patterns <- c(exclude_patterns, "iter_")
+  if (!do_consensus)    exclude_patterns <- c(exclude_patterns, "consensus_")
+
+  if (length(exclude_patterns) > 0) {
+    pat <- paste(exclude_patterns, collapse = "|")
+    solution_summary_table <- solution_summary_table %>% dplyr::filter(!grepl(pat, lda_name))
+  }
+
+  if (!do_optimized) {
+    solution_summary_table <- solution_summary_table %>% dplyr::filter(!grepl("^clust_optimized", solution_name))
   }
 
 
   solution_summary_table <- solution_summary_table %>%
-    mutate(
-      location = glue("{where}/{solution_name}")
+    dplyr::mutate(
+      location = glue::glue("{where}/{solution_name}")
     )
 
 
   solution_vars <- solution_summary_table %>%
-    select(lda_name) %>%
+    dplyr::select(lda_name) %>%
     unlist() %>%
     setNames(NULL)
 
   solution_locations <- solution_summary_table %>%
-    select(location) %>%
+    dplyr::select(location) %>%
     unlist() %>%
     setNames(NULL)
 
 
-  walk(
+  purrr::walk(
     solution_locations %>% unique(),
     ~dir.create(.x, showWarnings = FALSE)
   )
 
 
-  seg_write_shell_parallel(
+  invisible(seg_write_shell_parallel(
     seg = seg,
     solution_var = solution_vars,
     where = solution_locations,
@@ -96,7 +128,7 @@ seg_write_solutions <- function(
     setting_type = setting_type,
     setting_color = setting_color,
     verbose = verbose
-  )
+  ))
 
 }
 

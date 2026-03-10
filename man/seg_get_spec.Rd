@@ -6,6 +6,26 @@
 \usage{
 seg_get_spec(seg, spec_path = NULL, execute = TRUE, execute_debug = FALSE)
 }
+\arguments{
+\item{seg}{A seg object with data already loaded via \code{\link[=seg_get_data]{seg_get_data()}}.}
+
+\item{spec_path}{Character. Path to the spec Excel file. If \code{NULL}, uses the
+path stored in \code{seg[["paths"]][["files"]][["spec"]]} or searches the
+working directory.}
+
+\item{execute}{Logical. If \code{TRUE} (default), runs \code{\link[=seg_do_spec]{seg_do_spec()}} to create
+shell variables from the spec syntax.}
+
+\item{execute_debug}{Logical. If \code{TRUE}, prints debug info during spec
+execution (default: \code{FALSE}).}
+}
+\value{
+The seg object with \code{seg[["spec"]]} populated (polars table, profiles
+table, shell definitions) and, if \code{execute = TRUE},
+\code{seg[["data"]][["with_shell"]]} containing the recoded variables.
+}
 \description{
-seg_get_spec
+Reads a segmentation spec Excel workbook (Polars + Profiles
+sheets), parses the variable definitions, and optionally executes the spec
+syntax to create shell variables in the data.
 }

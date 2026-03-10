@@ -1,5 +1,80 @@
 #' cluster_gaus_mix
-#' @description cluster_gaus_mix
+#'
+#' @description Gaussian mixture model clustering wrapper for the segmentation
+#'   pipeline. Runs `mclust::Mclust()` across a range of cluster counts (k),
+#'   reduces inputs via discriminant analysis, and pipes results through
+#'   [cluster_add_lda()] to produce a standardized output.
+#'
+#'   **What Gaussian mixture models do.** A GMM models the data as a mixture
+#'   of k multivariate Gaussian (normal) distributions, each with its own
+#'   mean vector and covariance matrix. The EM (Expectation-Maximization)
+#'   algorithm iterates between (1) computing the posterior probability that
+#'   each respondent belongs to each component (E-step) and (2) updating the
+#'   Gaussian parameters to maximize the data likelihood (M-step). Final
+#'   assignments use hard classification — each respondent is assigned to
+#'   their most probable component.
+#'
+#'   **Strengths.** The most flexible geometric model of the four distance-
+#'   based methods. Clusters can be ellipsoidal (not just spherical), with
+#'   different sizes, shapes, and orientations. mclust automatically selects
+#'   the best covariance structure (e.g. VVV = variable volume, shape, and
+#'   orientation) via BIC. Produces soft probabilities — useful for
+#'   identifying respondents who sit between segments.
+#'
+#'   **Limitations.** Slowest of the four methods, especially with many
+#'   variables (covariance estimation is O(p^2) per component). Can fail
+#'   to converge or produce degenerate solutions when components collapse
+#'   (singular covariance). Like all distance-based methods, optimizes
+#'   likelihood rather than segment differentiation. mclust masks `map()`
+#'   from purrr, so the function loads and unloads the package explicitly.
+#'
+#'   **Pipeline integration.** This is a method wrapper called by
+#'   [cluster_solution_family()] (and indirectly by [seg_cluster_input_sheet()]).
+#'   All method wrappers share the same signature and return shape so they
+#'   can be dispatched interchangeably. Note: mclust is loaded via
+#'   `require()` and unloaded after fitting to avoid namespace conflicts
+#'   with purrr.
+#'
+#' @param df A data frame containing shell data (the full dataset including
+#'   all respondents, not just filtered ones).
+#' @param vars Character vector of input variable names to cluster on.
+#' @param vars_profiles Character vector of profile variable names
+#'   corresponding to `vars` (binary polar indicators).
+#' @param solution_name Character. Solution family identifier (e.g. `"A"`).
+#' @param solution_name_prefix Character. Prefix for cluster names
+#'   (default: `"gaus_mix"`). Combined with `solution_name` and k to form
+#'   names like `"gaus_mix_A4"`, `"gaus_mix_A5"`.
+#' @param resp_id_name Character or `NULL`. Respondent ID column name.
+#' @param filter_name Character or `NULL`. Column name containing a logical
+#'   filter vector. `NULL` uses all rows.
+#' @param n_min Integer. Minimum number of clusters (default: `4`).
+#' @param n_max Integer. Maximum number of clusters (default: `7`).
+#' @param reduced_inputs_max Integer or `NULL`. Cap on the number of reduced
+#'   input variables. `NULL` uses all selected variables.
+#' @param priors Character. Prior probability method for LDA: `"equal"` or
+#'   `"size"` (default: `"equal"`).
+#' @param iter_max Integer. Not used by Mclust but kept for signature
+#'   compatibility with other method wrappers.
+#' @param nstart Integer. Not used by Mclust but kept for signature
+#'   compatibility with other method wrappers.
+#' @param lda_vars Character vector or `NULL`. Override which input variables
+#'   are used for LDA. `NULL` uses all `vars`.
+#' @param lda_vars_profiles Character vector or `NULL`. Override which profile
+#'   variables are used for LDA. `NULL` uses all `vars_profiles`.
+#' @param seed Integer or `NULL`. Random seed for reproducibility
+#'   (default: `1`).
+#'
+#' @return A list with two elements:
+#' \describe{
+#'   \item{all_inputs}{Tibble with one row per k (`n_min:n_max`). Contains
+#'     clustering results and LDA fit using all input variables. Columns
+#'     include `cluster_name`, `cluster_fit` (Mclust object), `cluster_seed`
+#'     (assignment tibble), `lda_fit`, `accuracy`, `df_append`, etc.
+#'     Note: no `cluster_glance` column (broom does not support Mclust).}
+#'   \item{reduced_inputs}{Same structure but LDA uses only the reduced
+#'     variable set selected by [cluster_reduce_vars()].}
+#' }
+#'
 #' @export
 cluster_gaus_mix <- function(
     df, vars, vars_profiles, solution_name,
@@ -70,7 +145,7 @@ cluster_gaus_mix <- function(
           suppressMessages()
       }, otherwise = NA)),
       "priors_equal" = purrr::map(n, ~rep(1/.x, .x)),
-      "priors_size" = purrr::map2(cluster_seed, cluster_name, ~.x[[.y]] %>% table_percent()),
+      "priors_size" = purrr::map2(cluster_seed, cluster_name, purrr::possibly(~.x[[.y]] %>% table_percent(), otherwise = NA)),
       "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, possibly(~{
         if(!is.null(seed)) set.seed(seed)
         cluster_reduce_vars(df_temp, reduced_vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE, seed = seed) %>%

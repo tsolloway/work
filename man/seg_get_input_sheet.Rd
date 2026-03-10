@@ -6,6 +6,21 @@
 \usage{
 seg_get_input_sheet(seg, file_location = NULL, row_start = 6)
 }
+\arguments{
+\item{seg}{A seg object with path information.}
+
+\item{file_location}{Character. Path to the input sheet Excel file. Defaults
+to \code{seg[["paths"]][["files"]][["input"]]}.}
+
+\item{row_start}{Integer. Row where the data table begins in the Inputs sheet
+(default: \code{6}).}
+}
+\value{
+The seg object with \code{seg[["solutions"]][["names"]]} (solution
+letters) and \code{seg[["solutions"]][["inputs"]]} (list of Source/Profile/RS
+variable vectors per solution) populated.
+}
 \description{
-seg_get_input_sheet
+Reads a completed segmentation input sheet Excel file and
+extracts the variable selections for each solution (Source, Profile, RS).
 }

@@ -12,6 +12,47 @@ impute_data(
   un_make_factor = FALSE
 )
 }
+\arguments{
+\item{df}{Data frame to impute.}
+
+\item{vars}{Character vector (or named list of character vectors) specifying
+the columns to impute. Lists are flattened and names are stripped.}
+
+\item{threshold_impute}{Numeric 0-1. Minimum proportion of non-missing
+values a row must have to be kept. Rows below this threshold are dropped
+before imputation. Default \code{0.8}.}
+
+\item{make_factor}{Logical. If \code{TRUE} (default), columns in \code{vars} are
+converted to factors before structure learning and imputation (required
+by \code{bnlearn} for discrete networks).}
+
+\item{un_make_factor}{Logical. If \code{TRUE}, converts imputed columns back to
+numeric after imputation. Default \code{FALSE}.}
+}
+\value{
+A tibble with:
+\itemize{
+\item Rows that met the \code{threshold_impute} completeness requirement
+\item All \code{vars} columns with missing values filled via BN imputation
+\item Non-\code{vars} columns unchanged
+}
+}
 \description{
-impute_data
+Impute missing values using a Bayesian Network learned from
+complete cases. Rows below a completeness threshold are dropped, a tabu
+structure is learned on the remaining complete cases, and the fitted model
+is used to impute any remaining missing values via \code{bnlearn::impute()}.
+}
+\details{
+The imputation workflow:
+\enumerate{
+\item Drop rows where the proportion of non-missing values is below
+\code{threshold_impute} (warns with count of dropped rows).
+\item Optionally convert \code{vars} to factors (\code{make_factor}).
+\item Subset to \code{vars} columns, isolate fully complete rows.
+\item Learn a tabu BN structure on complete cases, fit with MLE.
+\item Impute missing values in the full (filtered) subset.
+\item Re-attach non-\code{vars} columns.
+\item Optionally convert back to numeric (\code{un_make_factor}).
+}
 }

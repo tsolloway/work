@@ -13,20 +13,210 @@ seg_cluster_input_sheet(
   filter_logical_vector = NULL,
   vary_percent = 0.1,
   side_bias_percent = 0.1,
-  priors = c("equal", "size"),
+  priors = c("both", "equal", "size"),
+  polar_type = c("both", "rs", "source"),
   resp_id_name = NULL,
-  iter_max = 1e+05,
+  iter_max = 1000,
   nstart = 10,
   ok_filter = TRUE,
   do_kmeans = TRUE,
   do_medoid = TRUE,
-  do_gaus_mix = TRUE,
-  do_hierarchical = TRUE,
+  do_gaus_mix = FALSE,
+  do_hierarchical = FALSE,
+  do_spectral = FALSE,
+  do_iterative = FALSE,
+  do_consensus = FALSE,
+  do_optimized = FALSE,
+  iterative_config = list(),
   strategy = c("multisession", "multicore", "sequential", "cluster"),
   workers = NULL,
   seed = 1
 )
 }
+\arguments{
+\item{seg}{A seg object with data, spec, and solution inputs populated.}
+
+\item{solution_family}{Character. A single solution letter (e.g. \code{"A"}) to
+re-run. If \code{NULL} (default), runs all solution families in parallel.}
+
+\item{n_min}{Integer. Minimum number of clusters to evaluate (default: \code{4}).}
+
+\item{n_max}{Integer. Maximum number of clusters to evaluate (default: \code{7}).}
+
+\item{reduced_inputs_max}{Integer. Maximum number of reduced input variables
+for discriminant analysis (default: \code{14}).}
+
+\item{filter_logical_vector}{Logical vector or column name to subset
+respondents before clustering. \code{NULL} uses all rows.}
+
+\item{vary_percent}{Numeric (0–1). Fraction of respondents to flag at each
+tail of the variability distribution (default: \code{0.1}).}
+
+\item{side_bias_percent}{Numeric (0–1). Fraction of respondents to flag at
+each tail of the side-bias distribution (default: \code{0.1}).}
+
+\item{priors}{Character. Prior probability method for LDA: \code{"both"} (default,
+runs both equal and size-proportional priors), \code{"equal"} (each segment
+equally likely), or \code{"size"} (priors proportional to segment sizes).}
+
+\item{polar_type}{Character. Which polar variables to cluster on:
+\code{"both"} (default, runs RS and source separately), \code{"rs"} (rescaled
+only), or \code{"source"} (source only). Does not affect iterative method.}
+
+\item{resp_id_name}{Character. Respondent ID column name. Auto-detected if
+\code{NULL}.}
+
+\item{iter_max}{Integer. Maximum iterations for k-means (default: \code{1000}).}
+
+\item{nstart}{Integer. Number of random starts for k-means (default: \code{10}).}
+
+\item{ok_filter}{Logical. If \code{TRUE} (default), applies variability and
+side-bias filtering before clustering.}
+
+\item{do_kmeans}{Logical. Run k-means clustering (default: \code{TRUE}).}
+
+\item{do_medoid}{Logical. Run medoid / PAM clustering (default: \code{TRUE}).}
+
+\item{do_gaus_mix}{Logical. Run Gaussian mixture clustering
+(default: \code{TRUE}).}
+
+\item{do_hierarchical}{Logical. Run hierarchical clustering
+(default: \code{TRUE}).}
+
+\item{do_spectral}{Logical. Run spectral clustering (default: \code{FALSE}).
+Uses \code{kernlab::specc()} with automatic kernel bandwidth estimation.}
+
+\item{do_iterative}{Logical. Run iterative greedy swap optimization
+(default: \code{FALSE}). Uses source vars only. Configure via
+\code{iterative_config}.}
+
+\item{do_consensus}{Logical. Run consensus clustering (default: \code{FALSE}).
+Combines assignments from all other enabled methods via a co-association
+matrix. Requires ≥ 2 methods to have run. Runs after all other methods.
+See \code{\link[=cluster_consensus]{cluster_consensus()}}.}
+
+\item{do_optimized}{Logical. Run three \verb{clust_optimized_*} strategies
+(default: \code{FALSE}). Requires \code{do_iterative = TRUE}. These run the
+iterative optimizer independently of input-sheet families, using all
+spec variables with different eval matrix compositions:
+\itemize{
+\item \code{clust_optimized_polar} — optimizer evaluates all polar pvs only
+\item \code{clust_optimized_profile} — optimizer evaluates shell profiles only
+\item \code{clust_optimized_all} — optimizer evaluates both polar pvs + profiles
+All three seed k-means with all source vars and end with LDA respecting
+\code{reduced_inputs_max}.
+}}
+
+\item{iterative_config}{List. Optional overrides for iterative optimization.
+All have sensible defaults derived from \code{seg}. Available keys:
+\describe{
+\item{polar_groups}{Named list of prefix vectors. Each element maps a
+group name to one or more battery prefixes
+(e.g. \code{list(kg = "KG", pr_tt = c("PR", "TT"))}). Default: one group
+per polars block in the spec.}
+\item{target}{Character. Which \code{target_defs} entry to use as the
+optimization objective (default: \code{"total"}). Controls which polar
+batteries the optimizer tries to differentiate. The optimizer only
+counts hits from groups listed in \code{target_defs[[target]]}. Profile
+hits always count regardless. Independent of \code{strategy}, which
+controls the k-means seed. You can seed with KG vars but optimize
+on all polars, or vice versa.}
+\item{target_defs}{Named list. Each entry is a character vector of
+group names whose polar hits count toward that target. The \code{target}
+key selects which entry to use. Default:
+\code{list(total = names(polar_groups))}.}
+\item{strategy}{Character. Which \code{strategy_defs} entry to use for
+k-means seeding. Default: first strategy.}
+\item{strategy_defs}{Named list. Each entry specifies which groups'
+source vars seed the initial k-means. Default:
+\code{list(all = names(polar_groups))}.}
+\item{polar_threshold}{Numeric. Hit threshold for polar vars
+(default: \code{0.20}).}
+\item{profile_threshold}{Numeric. Hit threshold for profile vars
+(default: \code{0.15}).}
+\item{min_seg_pct}{Numeric (0-1). Minimum segment size as fraction
+of n (default: \code{0.05}).}
+\item{swap_max_iter}{Integer. Maximum optimizer iterations
+(default: \code{500}).}
+}}
+
+\item{strategy}{Character. Parallelization strategy passed to
+\code{\link[=future_plan]{future_plan()}} (default: \code{"multisession"}).}
+
+\item{workers}{Integer. Number of parallel workers. \code{NULL} auto-detects.}
+
+\item{seed}{Integer. Random seed for reproducibility (default: \code{1}).}
+}
+\value{
+The seg object with clustering results populated:
+\code{seg[["solutions"]][["analysis"]]} (raw results per family),
+\code{seg[["solutions"]][["summary_table"]]} (one row per solution with
+accuracy, LDA info), \code{seg[["solutions"]][["df_segment_append"]]}
+(segment assignments), and \code{seg[["data"]][["with_solutions"]]} (full
+data frame with segment columns appended).
+}
 \description{
-seg_cluster_input_sheet
+Runs clustering across all solution families (or a single
+family) defined in the input sheet. For each family, calls
+\code{\link[=cluster_solution_family]{cluster_solution_family()}} with the selected variables, applying one or
+more clustering methods across a range of cluster counts.
+\subsection{Clustering methods}{
+
+Seven methods are available, each toggled by a \verb{do_*} flag:
+
+\strong{K-means} (\code{do_kmeans}, default \code{TRUE}). Partitions respondents by
+minimizing within-cluster variance. Fast, scalable, the standard
+workhorse. Uses \code{stats::kmeans()} with \code{nstart} random initializations.
+
+\strong{Medoid / PAM} (\code{do_medoid}, default \code{TRUE}). Partitioning Around
+Medoids. Like k-means but uses actual data points as cluster centers.
+More robust to outliers. Uses \code{cluster::pam()}.
+
+\strong{Gaussian mixture} (\code{do_gaus_mix}, default \code{TRUE}). Fits a mixture of
+k multivariate Gaussians via EM. Soft assignment (probabilities), then
+hard-assigned to most probable cluster. Can capture elliptical clusters.
+Uses \code{mclust::Mclust()}.
+
+\strong{Hierarchical} (\code{do_hierarchical}, default \code{TRUE}). Agglomerative
+bottom-up clustering using Ward's method. Produces a dendrogram; cutting
+at different heights gives different k values without re-running.
+Deterministic. Uses \code{stats::hclust()} + \code{stats::cutree()}.
+
+\strong{Spectral} (\code{do_spectral}, default \code{FALSE}). Embeds respondents into
+eigenvector space of an RBF similarity matrix, then clusters in that
+space. Can find non-convex cluster shapes that distance-based methods
+miss. Uses \code{kernlab::specc()}.
+
+\strong{Iterative} (\code{do_iterative}, default \code{FALSE}). Greedy swap optimizer
+that directly maximizes threshold hits — the number of variables where a
+segment's mean differs from everyone else's mean by more than a threshold.
+Seeds from k-means, then iteratively moves respondents to maximize
+differentiation. Unlike the other methods which optimize generic
+statistical criteria, this one optimizes the metric that determines
+whether a solution is practically useful. Only uses source vars (no RS
+variant). Configured via \code{iterative_config}. See \code{\link[=iterative_optimize]{iterative_optimize()}}
+for the engine details.
+
+\strong{Consensus} (\code{do_consensus}, default \code{FALSE}). Combines assignments from
+all other enabled methods via a co-association matrix. For each pair of
+respondents, counts the fraction of methods that placed them together,
+then runs hierarchical clustering on the dissimilarity matrix. Stabilizes
+results across methods. Requires ≥ 2 methods. No external dependency.
+See \code{\link[=cluster_consensus]{cluster_consensus()}}.
+}
+
+\subsection{How methods are crossed}{
+
+K-means, medoid, Gaussian mixture, and hierarchical are each crossed
+with \code{polar_type} (RS vs source vs both) and \code{priors} (equal vs size vs
+both). Iterative only varies by priors (it always uses source vars).
+}
+
+\subsection{Post-processing}{
+
+All methods share the same post-processing: variable reduction
+(\code{klaR::greedy.wilks} + \code{klaR::stepclass}), then LDA via
+\code{\link[=cluster_add_lda]{cluster_add_lda()}} which trains a linear discriminant typing tool and
+computes confusion matrix accuracy.
+}
 }

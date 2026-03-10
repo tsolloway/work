@@ -1,5 +1,18 @@
 #' seg_get_input_sheet
-#' @description seg_get_input_sheet
+#'
+#' @description Reads a completed segmentation input sheet Excel file and
+#'   extracts the variable selections for each solution (Source, Profile, RS).
+#'
+#' @param seg A seg object with path information.
+#' @param file_location Character. Path to the input sheet Excel file. Defaults
+#'   to `seg[["paths"]][["files"]][["input"]]`.
+#' @param row_start Integer. Row where the data table begins in the Inputs sheet
+#'   (default: `6`).
+#'
+#' @return The seg object with `seg[["solutions"]][["names"]]` (solution
+#'   letters) and `seg[["solutions"]][["inputs"]]` (list of Source/Profile/RS
+#'   variable vectors per solution) populated.
+#'
 #' @export
 seg_get_input_sheet <- function(seg, file_location = NULL, row_start = 6){
 
@@ -19,17 +32,17 @@ seg_get_input_sheet <- function(seg, file_location = NULL, row_start = 6){
   solutions_letters <- LETTERS[LETTERS %in% colnames(input_table)]
 
   input_table <- input_table %>%
-    mutate_at(.vars = solutions_letters, ~!is.na(.x))
+    mutate(across(all_of(solutions_letters), ~!is.na(.x)))
 
 
   solution_inputs <- map(
     c("Source", "Profile", "RS") %>% setNames(., .),
     function(y){
       input_table %>%
-        mutate_at(
-          .vars = solutions_letters,
-          function(x)ifelse(x, input_table[[y]], NA)
-        ) %>%
+        mutate(across(
+          all_of(solutions_letters),
+          function(x) ifelse(x, input_table[[y]], NA)
+        )) %>%
         select(any_of(solutions_letters)) %>%
         as.list() %>%
         map(remove_na)

@@ -23,6 +23,96 @@ cluster_gaus_mix(
   seed = 1
 )
 }
+\arguments{
+\item{df}{A data frame containing shell data (the full dataset including
+all respondents, not just filtered ones).}
+
+\item{vars}{Character vector of input variable names to cluster on.}
+
+\item{vars_profiles}{Character vector of profile variable names
+corresponding to \code{vars} (binary polar indicators).}
+
+\item{solution_name}{Character. Solution family identifier (e.g. \code{"A"}).}
+
+\item{solution_name_prefix}{Character. Prefix for cluster names
+(default: \code{"gaus_mix"}). Combined with \code{solution_name} and k to form
+names like \code{"gaus_mix_A4"}, \code{"gaus_mix_A5"}.}
+
+\item{resp_id_name}{Character or \code{NULL}. Respondent ID column name.}
+
+\item{filter_name}{Character or \code{NULL}. Column name containing a logical
+filter vector. \code{NULL} uses all rows.}
+
+\item{n_min}{Integer. Minimum number of clusters (default: \code{4}).}
+
+\item{n_max}{Integer. Maximum number of clusters (default: \code{7}).}
+
+\item{reduced_inputs_max}{Integer or \code{NULL}. Cap on the number of reduced
+input variables. \code{NULL} uses all selected variables.}
+
+\item{priors}{Character. Prior probability method for LDA: \code{"equal"} or
+\code{"size"} (default: \code{"equal"}).}
+
+\item{iter_max}{Integer. Not used by Mclust but kept for signature
+compatibility with other method wrappers.}
+
+\item{nstart}{Integer. Not used by Mclust but kept for signature
+compatibility with other method wrappers.}
+
+\item{lda_vars}{Character vector or \code{NULL}. Override which input variables
+are used for LDA. \code{NULL} uses all \code{vars}.}
+
+\item{lda_vars_profiles}{Character vector or \code{NULL}. Override which profile
+variables are used for LDA. \code{NULL} uses all \code{vars_profiles}.}
+
+\item{seed}{Integer or \code{NULL}. Random seed for reproducibility
+(default: \code{1}).}
+}
+\value{
+A list with two elements:
+\describe{
+\item{all_inputs}{Tibble with one row per k (\code{n_min:n_max}). Contains
+clustering results and LDA fit using all input variables. Columns
+include \code{cluster_name}, \code{cluster_fit} (Mclust object), \code{cluster_seed}
+(assignment tibble), \code{lda_fit}, \code{accuracy}, \code{df_append}, etc.
+Note: no \code{cluster_glance} column (broom does not support Mclust).}
+\item{reduced_inputs}{Same structure but LDA uses only the reduced
+variable set selected by \code{\link[=cluster_reduce_vars]{cluster_reduce_vars()}}.}
+}
+}
 \description{
-cluster_gaus_mix
+Gaussian mixture model clustering wrapper for the segmentation
+pipeline. Runs \code{mclust::Mclust()} across a range of cluster counts (k),
+reduces inputs via discriminant analysis, and pipes results through
+\code{\link[=cluster_add_lda]{cluster_add_lda()}} to produce a standardized output.
+
+\strong{What Gaussian mixture models do.} A GMM models the data as a mixture
+of k multivariate Gaussian (normal) distributions, each with its own
+mean vector and covariance matrix. The EM (Expectation-Maximization)
+algorithm iterates between (1) computing the posterior probability that
+each respondent belongs to each component (E-step) and (2) updating the
+Gaussian parameters to maximize the data likelihood (M-step). Final
+assignments use hard classification — each respondent is assigned to
+their most probable component.
+
+\strong{Strengths.} The most flexible geometric model of the four distance-
+based methods. Clusters can be ellipsoidal (not just spherical), with
+different sizes, shapes, and orientations. mclust automatically selects
+the best covariance structure (e.g. VVV = variable volume, shape, and
+orientation) via BIC. Produces soft probabilities — useful for
+identifying respondents who sit between segments.
+
+\strong{Limitations.} Slowest of the four methods, especially with many
+variables (covariance estimation is O(p^2) per component). Can fail
+to converge or produce degenerate solutions when components collapse
+(singular covariance). Like all distance-based methods, optimizes
+likelihood rather than segment differentiation. mclust masks \code{map()}
+from purrr, so the function loads and unloads the package explicitly.
+
+\strong{Pipeline integration.} This is a method wrapper called by
+\code{\link[=cluster_solution_family]{cluster_solution_family()}} (and indirectly by \code{\link[=seg_cluster_input_sheet]{seg_cluster_input_sheet()}}).
+All method wrappers share the same signature and return shape so they
+can be dispatched interchangeably. Note: mclust is loaded via
+\code{require()} and unloaded after fitting to avoid namespace conflicts
+with purrr.
 }

@@ -1,5 +1,22 @@
 #' seg_get_spec
-#' @description seg_get_spec
+#'
+#' @description Reads a segmentation spec Excel workbook (Polars + Profiles
+#'   sheets), parses the variable definitions, and optionally executes the spec
+#'   syntax to create shell variables in the data.
+#'
+#' @param seg A seg object with data already loaded via [seg_get_data()].
+#' @param spec_path Character. Path to the spec Excel file. If `NULL`, uses the
+#'   path stored in `seg[["paths"]][["files"]][["spec"]]` or searches the
+#'   working directory.
+#' @param execute Logical. If `TRUE` (default), runs [seg_do_spec()] to create
+#'   shell variables from the spec syntax.
+#' @param execute_debug Logical. If `TRUE`, prints debug info during spec
+#'   execution (default: `FALSE`).
+#'
+#' @return The seg object with `seg[["spec"]]` populated (polars table, profiles
+#'   table, shell definitions) and, if `execute = TRUE`,
+#'   `seg[["data"]][["with_shell"]]` containing the recoded variables.
+#'
 #' @export
 seg_get_spec <- function(seg, spec_path = NULL, execute = TRUE, execute_debug = FALSE){
 

@@ -16,13 +16,98 @@ cluster_medoid(
   n_max = 7,
   reduced_inputs_max = NULL,
   priors = c("equal", "size"),
-  iter_max = 1e+05,
+  iter_max = 1000,
   nstart = 10,
   lda_vars = NULL,
   lda_vars_profiles = NULL,
   seed = 1
 )
 }
+\arguments{
+\item{df}{A data frame containing shell data (the full dataset including
+all respondents, not just filtered ones).}
+
+\item{vars}{Character vector of input variable names to cluster on.}
+
+\item{vars_profiles}{Character vector of profile variable names
+corresponding to \code{vars} (binary polar indicators).}
+
+\item{solution_name}{Character. Solution family identifier (e.g. \code{"A"}).}
+
+\item{solution_name_prefix}{Character. Prefix for cluster names
+(default: \code{"medoid"}). Combined with \code{solution_name} and k to form
+names like \code{"medoid_A4"}, \code{"medoid_A5"}.}
+
+\item{resp_id_name}{Character or \code{NULL}. Respondent ID column name.}
+
+\item{filter_name}{Character or \code{NULL}. Column name containing a logical
+filter vector. \code{NULL} uses all rows.}
+
+\item{n_min}{Integer. Minimum number of clusters (default: \code{4}).}
+
+\item{n_max}{Integer. Maximum number of clusters (default: \code{7}).}
+
+\item{reduced_inputs_max}{Integer or \code{NULL}. Cap on the number of reduced
+input variables. \code{NULL} uses all selected variables.}
+
+\item{priors}{Character. Prior probability method for LDA: \code{"equal"} or
+\code{"size"} (default: \code{"equal"}).}
+
+\item{iter_max}{Integer. Not used by PAM but kept for signature
+compatibility with other method wrappers.}
+
+\item{nstart}{Integer. Not used by PAM but kept for signature
+compatibility with other method wrappers.}
+
+\item{lda_vars}{Character vector or \code{NULL}. Override which input variables
+are used for LDA. \code{NULL} uses all \code{vars}.}
+
+\item{lda_vars_profiles}{Character vector or \code{NULL}. Override which profile
+variables are used for LDA. \code{NULL} uses all \code{vars_profiles}.}
+
+\item{seed}{Integer or \code{NULL}. Random seed for reproducibility
+(default: \code{1}).}
+}
+\value{
+A list with two elements:
+\describe{
+\item{all_inputs}{Tibble with one row per k (\code{n_min:n_max}). Contains
+clustering results and LDA fit using all input variables. Columns
+include \code{cluster_name}, \code{cluster_fit} (pam object), \code{cluster_seed}
+(assignment tibble), \code{cluster_glance}, \code{lda_fit}, \code{accuracy},
+\code{df_append}, etc.}
+\item{reduced_inputs}{Same structure but LDA uses only the reduced
+variable set selected by \code{\link[=cluster_reduce_vars]{cluster_reduce_vars()}}.}
+}
+}
 \description{
-cluster_medoid
+PAM (Partitioning Around Medoids) clustering wrapper for the
+segmentation pipeline. Runs \code{cluster::pam()} across a range of cluster
+counts (k), reduces inputs via discriminant analysis, and pipes results
+through \code{\link[=cluster_add_lda]{cluster_add_lda()}} to produce a standardized output.
+
+\strong{What PAM does.} Like k-means, PAM partitions n respondents into k
+groups — but instead of using centroids (computed means), it selects k
+actual respondents as "medoids" (representative exemplars). Each
+remaining respondent is assigned to the nearest medoid. The algorithm
+iteratively swaps medoids with non-medoids to minimize the total
+dissimilarity (sum of distances from each point to its medoid).
+
+\strong{Strengths.} More robust to outliers than k-means because medoids are
+real data points, not means that can be pulled by extreme values. The
+medoids themselves are interpretable — they are the most "typical"
+respondent in each segment. Works with any distance metric (not just
+Euclidean). The \code{variant = "faster"} option uses the O(n) Reynolds
+algorithm for improved performance on large datasets.
+
+\strong{Limitations.} Slower than k-means (O(n^2) for distance computation
+even with the faster variant). Constrained to choose actual respondents
+as centers, which can be suboptimal when the true center lies between
+data points. Like k-means, optimizes distance rather than segment
+differentiation directly.
+
+\strong{Pipeline integration.} This is a method wrapper called by
+\code{\link[=cluster_solution_family]{cluster_solution_family()}} (and indirectly by \code{\link[=seg_cluster_input_sheet]{seg_cluster_input_sheet()}}).
+All method wrappers share the same signature and return shape so they
+can be dispatched interchangeably.
 }

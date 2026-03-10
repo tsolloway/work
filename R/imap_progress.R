@@ -9,6 +9,10 @@
 #' @param .handlers Progressr handlers (default = `handler_cli`).
 #' @param .parallel Logical; if TRUE, use `furrr::future_imap()`.
 #' @param .furrr_packages Character vector of packages to load in parallel workers.
+#' @param .furrr_globals Named list of globals to export to workers, or `TRUE`
+#'   (default) for automatic detection. Use an explicit list to prevent
+#'   `future` from recursively scanning the closure environment, which can
+#'   inflate serialization size (e.g. when using `devtools::load_all()`).
 #' @param ... Additional arguments passed to `.f`.
 #'
 #' @return A list identical to `purrr::imap()` output.
@@ -20,11 +24,18 @@ imap_progress <- function(
     .label = NULL,
     .handlers = progressr::handler_cli,
     .parallel = FALSE,
-    .furrr_packages = NULL
+    .furrr_packages = NULL,
+    .furrr_globals = TRUE
 ) {
+  # Tear down any lingering global handler before setting up a new one
+  tryCatch(progressr::handlers(global = FALSE), error = function(e) NULL)
+
   # Preserve handler state
   old_handlers <- getOption("progressr.handlers", NULL)
-  on.exit(options(progressr.handlers = old_handlers), add = TRUE)
+  on.exit({
+    tryCatch(progressr::handlers(global = FALSE), error = function(e) NULL)
+    options(progressr.handlers = old_handlers)
+  }, add = TRUE)
 
   # Activate handlers
   options(progressr.handlers = .handlers)
@@ -55,13 +66,19 @@ imap_progress <- function(
       .f(.xi, .name, ...)
     }
 
+    # When explicit globals are provided, merge in the internal variables
+    # that map_fun references (.f, p, .label) so workers can find them
+    if (is.list(.furrr_globals)) {
+      .furrr_globals <- c(.furrr_globals, list(.f = .f, p = p, .label = .label))
+    }
+
     # Branch explicitly: sequential vs. parallel
     if (.parallel) {
       res <- furrr::future_imap(
         .x,
         map_fun,
         ...,
-        .options = furrr::furrr_options(packages = .furrr_packages, seed = TRUE)
+        .options = furrr::furrr_options(packages = .furrr_packages, seed = TRUE, globals = .furrr_globals)
       )
     } else {
       res <- purrr::imap(.x, map_fun, ...)

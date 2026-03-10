@@ -2,7 +2,7 @@
 % Please edit documentation in R/driver.R
 \name{drivers}
 \alias{drivers}
-\title{driver}
+\title{drivers}
 \usage{
 drivers(
   df,
@@ -17,5 +17,5 @@ drivers(
 )
 }
 \description{
-driver
+drivers
 }

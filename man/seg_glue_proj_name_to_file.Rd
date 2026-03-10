@@ -6,6 +6,15 @@
 \usage{
 seg_glue_proj_name_to_file(seg, file_name)
 }
+\arguments{
+\item{seg}{A seg object with \code{meta$project_name} and/or \code{meta$project_number}.}
+
+\item{file_name}{Character. The base file name to prepend to.}
+}
+\value{
+Character. The formatted file name string.
+}
 \description{
-seg_glue_proj_name_to_file
+Prepends the project name and/or number from the seg object
+metadata to a base file name, e.g. \code{"ProjectName (123) - Shell"}.
 }

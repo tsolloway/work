@@ -5,10 +5,11 @@
 \title{cluster_solution_family}
 \usage{
 cluster_solution_family(
-  seg,
+  df,
+  source_vars,
   inputs,
   solution_name,
-  resp_id_name = NULL,
+  resp_id_name,
   filter_logical_vector = NULL,
   n_min = 4,
   n_max = 7,
@@ -16,17 +17,235 @@ cluster_solution_family(
   vary_percent = 0.1,
   side_bias_percent = 0.1,
   priors = c("both", "equal", "size"),
-  iter_max = 1e+05,
+  iter_max = 1000,
   nstart = 10,
   ok_filter = TRUE,
   do_kmeans = TRUE,
   do_medoid = TRUE,
   do_hierarchical = TRUE,
   do_gaus_mix = FALSE,
+  do_spectral = FALSE,
+  do_iterative = FALSE,
+  do_consensus = FALSE,
   polar_type = c("both", "rs", "source"),
-  seed = 1
+  seed = 1,
+  vars_shell = NULL,
+  group_source_vars = NULL,
+  group_polar_pvs = NULL,
+  iterative_target = "total",
+  target_defs = NULL,
+  iterative_strategy = NULL,
+  strategy_defs = NULL,
+  polar_threshold = 0.2,
+  profile_threshold = 0.15,
+  min_seg_pct = 0.05,
+  swap_max_iter = 1000,
+  weight_var = NULL
 )
 }
+\arguments{
+\item{df}{A data frame containing the shell data and any pre-computed filter
+columns (e.g. \code{okay_filter}).}
+
+\item{source_vars}{Character vector of source polar variable names, used by
+\code{\link[=seg_cluster_variability]{seg_cluster_variability()}} when \code{ok_filter = TRUE} and no prior filter
+exists on \code{df}.}
+
+\item{inputs}{Named list with \code{Source}, \code{Profile}, and \code{RS} variable vectors
+for this solution family. \code{Source} = raw polar source vars, \code{RS} =
+rescaled polar vars, \code{Profile} = polar profile (binary indicator) vars.}
+
+\item{solution_name}{Character. Solution identifier (e.g. \code{"A"}).}
+
+\item{resp_id_name}{Character. Respondent ID column.}
+
+\item{filter_logical_vector}{Logical vector or column name to subset rows.}
+
+\item{n_min}{Integer. Minimum clusters (default: \code{4}).}
+
+\item{n_max}{Integer. Maximum clusters (default: \code{7}).}
+
+\item{reduced_inputs_max}{Integer. Max reduced inputs for discriminant
+analysis. \code{NULL} uses all.}
+
+\item{vary_percent}{Numeric (0–1). Variability filter tail fraction
+(default: \code{0.1}).}
+
+\item{side_bias_percent}{Numeric (0–1). Side-bias filter tail fraction
+(default: \code{0.1}).}
+
+\item{priors}{Character. Prior method for LDA: \code{"both"} (runs both equal
+and size), \code{"equal"} (equal priors — each segment equally likely), or
+\code{"size"} (size-proportional priors — larger segments get higher prior
+probability).}
+
+\item{iter_max}{Integer. Max k-means iterations (default: \code{1000}).}
+
+\item{nstart}{Integer. K-means random starts (default: \code{10}).}
+
+\item{ok_filter}{Logical. Apply variability/side-bias filter (default: \code{TRUE}).}
+
+\item{do_kmeans}{Logical. Run k-means clustering (default: \code{TRUE}).}
+
+\item{do_medoid}{Logical. Run PAM clustering (default: \code{TRUE}).}
+
+\item{do_hierarchical}{Logical. Run hierarchical clustering (default: \code{TRUE}).}
+
+\item{do_gaus_mix}{Logical. Run Gaussian mixture clustering
+(default: \code{FALSE}).}
+
+\item{do_spectral}{Logical. Run spectral clustering (default: \code{FALSE}).
+Uses \code{kernlab::specc()} with automatic kernel bandwidth estimation.}
+
+\item{do_iterative}{Logical. Run iterative greedy swap optimization
+(default: \code{FALSE}). Uses source vars only (no RS/polar_type branching).}
+
+\item{do_consensus}{Logical. Run consensus clustering (default: \code{FALSE}).
+Combines assignments from all other enabled methods via a co-association
+matrix. Requires ≥ 2 methods to have run successfully. Runs AFTER all
+other methods. Crossed with \code{polar_type} and \code{priors} like the standard
+methods. See \code{\link[=cluster_consensus]{cluster_consensus()}} for algorithm details.}
+
+\item{polar_type}{Character. Which polar variables to use for clustering:
+\code{"both"} (runs RS and source separately), \code{"rs"} (rescaled only), or
+\code{"source"} (source only). Does not apply to iterative method.}
+
+\item{seed}{Integer. Random seed (default: \code{1}).}
+
+\item{vars_shell}{Character vector. Shell profile variable names for the
+iterative evaluation matrix. Required when \code{do_iterative = TRUE}.}
+
+\item{group_source_vars}{Named list. Source vars per polar group for
+iterative. Required when \code{do_iterative = TRUE}.}
+
+\item{group_polar_pvs}{Named list. Polar profile vars per group for
+iterative. Required when \code{do_iterative = TRUE}.}
+
+\item{iterative_target}{Character. Which entry in \code{target_defs} the
+iterative optimizer uses as its objective (default: \code{"total"}). Controls
+which polar groups' hits count when the optimizer evaluates swaps.
+Profile hits always count regardless. For example, \code{"total"} counts all
+polar groups, while \code{"kg_only"} would count only KG polar hits — making
+the optimizer focus on KG differentiation at the expense of other
+batteries. See \code{\link[=iterative_optimize]{iterative_optimize()}} for details.}
+
+\item{target_defs}{Named list. Maps target names to character vectors of
+group names. The \code{iterative_target} parameter selects which entry to
+use. For example, \code{list(total = c("kg", "pr_tt"), kg_only = "kg")}.
+\code{NULL} auto-derives as \code{list(total = names(group_source_vars))}.}
+
+\item{iterative_strategy}{Character. Strategy definition key for iterative
+k-means seeding. \code{NULL} uses first strategy.}
+
+\item{strategy_defs}{Named list. Strategy definitions for iterative. \code{NULL}
+auto-derives.}
+
+\item{polar_threshold}{Numeric. Polar hit threshold for iterative
+(default: \code{0.20}).}
+
+\item{profile_threshold}{Numeric. Profile hit threshold for iterative
+(default: \code{0.15}).}
+
+\item{min_seg_pct}{Numeric (0–1). Minimum segment size fraction for
+iterative (default: \code{0.05}).}
+
+\item{swap_max_iter}{Integer. Max optimizer iterations for iterative
+(default: \code{1000}).}
+
+\item{weight_var}{Character. Weight variable for iterative. \code{NULL} for
+unweighted.}
+}
+\value{
+A list with \code{result} (raw clustering output keyed by method/polar/
+priors combination), \code{solution_table} (summary tibble of all solutions
+with accuracy, LDA info), and \code{df_segment_append} (segment assignments
+for all solutions joined by respondent ID).
+}
 \description{
-cluster_solution_family
+Runs all enabled clustering methods for a single solution
+family across a range of cluster counts (\code{n_min} to \code{n_max}), polar types,
+and prior settings. Returns solution tables and segment assignments.
+
+Each method is crossed with \code{polar_type} (RS vs source variables) and
+\code{priors} (equal vs size-proportional) to produce multiple solutions per
+method. The iterative method is an exception — it only uses source
+variables (no RS variant) but still varies by priors.
+\subsection{Clustering methods}{
+
+\strong{K-means} (\code{do_kmeans}). Partitions respondents into k clusters by
+minimizing total within-cluster variance. Each respondent is assigned to
+the cluster whose centroid is nearest. Fast and scalable; the default
+workhorse. Sensitive to initialization — \code{nstart} random starts mitigate
+this. Assumes spherical, equal-sized clusters.
+Calls \code{\link[=cluster_kmeans]{cluster_kmeans()}} → \code{stats::kmeans()}.
+
+\strong{Medoid / PAM} (\code{do_medoid}). Partitioning Around Medoids. Like k-means
+but uses actual data points (medoids) as cluster centers instead of
+centroids. More robust to outliers. Minimizes sum of dissimilarities
+rather than squared distances. Slower than k-means for large n.
+Calls \code{\link[=cluster_medoid]{cluster_medoid()}} → \code{cluster::pam()}.
+
+\strong{Gaussian mixture} (\code{do_gaus_mix}). Fits a mixture of k multivariate
+Gaussian distributions via expectation-maximization (EM). Each respondent
+gets a probability of belonging to each cluster (soft assignment), then is
+assigned to the most probable one. Can capture elliptical and unequal-size
+clusters that k-means misses. More computationally expensive; can fail
+with high-dimensional or collinear data.
+Calls \code{\link[=cluster_gaus_mix]{cluster_gaus_mix()}} → \code{mclust::Mclust()}.
+
+\strong{Hierarchical} (\code{do_hierarchical}). Agglomerative (bottom-up)
+clustering. Starts with each respondent as its own cluster and
+iteratively merges the two closest clusters until k remain. Produces a
+dendrogram; cutting at different heights gives different k values without
+re-running. Uses Ward's method by default (minimizes increase in total
+within-cluster variance at each merge). Deterministic — no random
+initialization. Also returns the hierarchical fit object for dendrogram
+inspection.
+Calls \code{\link[=cluster_hierarchical]{cluster_hierarchical()}} → \code{stats::hclust()} + \code{stats::cutree()}.
+
+\strong{Spectral} (\code{do_spectral}). Embeds respondents into a low-dimensional
+space derived from eigenvectors of an RBF similarity matrix, then clusters
+in that space. Can find non-convex cluster shapes (spirals, rings,
+crescents) that distance-based methods miss. O(n^2) memory for the
+similarity matrix and O(n^3) for eigendecomposition — significantly slower
+than k-means on large datasets. Kernel bandwidth estimated automatically.
+Calls \code{\link[=cluster_spectral]{cluster_spectral()}} → \code{kernlab::specc()}.
+
+\strong{Iterative} (\code{do_iterative}). Greedy swap optimizer that directly
+maximizes threshold hits — the count of variables where
+\code{abs(seg_mean - others_mean)} exceeds a threshold. Starts from a k-means
+seed and iteratively moves individual respondents between segments,
+picking the swap that most increases the hit count. Unlike the other
+methods which optimize a generic statistical criterion (variance,
+dissimilarity, likelihood), this one optimizes the metric that actually
+determines whether a segmentation solution is useful in practice. Only
+uses source variables (no RS variant). Uses source vars only (no
+RS/polar_type branching).
+Calls \code{\link[=cluster_iterative]{cluster_iterative()}} → \code{\link[=iterative_optimize]{iterative_optimize()}}.
+
+\strong{Consensus} (\code{do_consensus}). Combines assignments from all other enabled
+methods via a co-association matrix. For each pair of respondents, counts
+the fraction of methods that placed them in the same cluster, then runs
+hierarchical clustering on the resulting dissimilarity matrix. Stabilizes
+results — if most methods agree, the consensus follows the majority. Runs
+after all other methods and requires ≥ 2 to have succeeded. No external
+dependency.
+Calls \code{\link[=cluster_consensus]{cluster_consensus()}}.
+}
+
+\subsection{Shared post-processing}{
+
+All methods follow the same post-processing pipeline:
+\enumerate{
+\item \strong{Variable reduction} via \code{klaR::greedy.wilks()} + \code{klaR::stepclass()}
+— identifies the most discriminating subset of input variables.
+\item \strong{LDA} via \code{\link[=cluster_add_lda]{cluster_add_lda()}} — trains a linear discriminant
+function on the cluster assignments, producing a typing tool that can
+classify new respondents. Run twice: once with all inputs, once with
+the reduced variable set.
+\item \strong{Accuracy} — confusion matrix + overall accuracy from
+\code{caret::confusionMatrix()}, comparing LDA-predicted segments to
+original cluster assignments.
+}
+}
 }

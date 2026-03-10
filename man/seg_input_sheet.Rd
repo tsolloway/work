@@ -8,11 +8,35 @@ seg_input_sheet(
   seg,
   fa_winner,
   range_predictors,
+  polar_type = c("rs", "source"),
   where = NULL,
   file_name = "Input Sheet",
   add_proj_name_to_file = TRUE
 )
 }
+\arguments{
+\item{seg}{A seg object containing spec, data, and path information.}
+
+\item{fa_winner}{Integer. The winning PCA/factor solution number to use.}
+
+\item{range_predictors}{Numeric vector of length 2. The min and max number of
+predictor variables to evaluate.}
+
+\item{where}{Character. Output directory path. Defaults to the process folder
+in the seg object, or the working directory if not set.}
+
+\item{file_name}{Character. Base file name for the output Excel file
+(default: \code{"Input Sheet"}).}
+
+\item{add_proj_name_to_file}{Logical. If \code{TRUE} (default), prepends the
+project name from the seg object to the file name.}
+}
+\value{
+The seg object with \code{seg[["paths"]][["files"]][["input"]]} set to the
+saved file path.
+}
 \description{
-seg_input_sheet
+Generates the segmentation input sheet Excel workbook with three
+tabs: Inputs (variable selection matrix), Rational (solution rationale), and
+Prototype (segment prototypes with formula-driven recoding).
 }

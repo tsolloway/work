@@ -18,10 +18,6 @@ oxl_create_workbook <- function(
     window_height = 16105
 ) {
 
-  # Load required libraries
-  start(lib_oxl = TRUE)
-
-
   # Create workbook
   wb <- openxlsx::createWorkbook()
 

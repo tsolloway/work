@@ -8,6 +8,8 @@ app_deliverable(
   title = "Project Name (#XXXXXXX)",
   modules = list(),
   nested = FALSE,
+  save_restore = TRUE,
+  state_extension = "proj",
   theme = NULL
 )
 }
@@ -32,6 +34,14 @@ flattened into the top-level navbar. If \code{TRUE}, each module gets
 its own top-level nav panel (title derived from the list name, with
 underscores replaced by spaces), and the module's tabs become nested
 card tabs inside that panel.}
+
+\item{save_restore}{Logical. If \code{TRUE} (default), adds state
+persistence: auto-save on input changes, auto-restore on launch,
+plus Save As / Load / Reset buttons in the navbar. Modules must return
+state handler functions to participate.}
+
+\item{state_extension}{Character. File extension (without dot) for saved
+state files. Defaults to \code{"proj"}.}
 
 \item{theme}{Character (Bootswatch theme name) or a \code{bslib::bs_theme}
 object. Default \code{NULL} uses \code{"flatly"}. See
@@ -66,6 +76,14 @@ app_deliverable(
   title   = "Multi-Study (#1234567)",
   modules = list(Brand_Health = mod1, Ad_Tracker = mod2),
   nested  = TRUE
+)
+
+# With state persistence using custom extension
+app_deliverable(
+  title   = "My Project (#1234567)",
+  modules = list(mod_turf),
+  save_restore    = TRUE,
+  state_extension = "kadra-state"
 )
 }
 

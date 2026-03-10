@@ -26,3 +26,36 @@
 #'   \item{label}{Human-readable flavor label}
 #' }
 "example_data_ice_cream_dictionary"
+
+#' example_data_brand
+#'
+#' @description Simulated consumer brand perception survey data for 2000
+#'   respondents rating 30 brand attributes on a 5-point Likert scale. Attributes
+#'   are organized into 6 thematic clusters (quality, innovation, trust, value,
+#'   emotional connection, social responsibility) plus 2 outcome variables.
+#'   Includes demographic subgroup columns. Designed for testing Bayesian Network
+#'   analysis workflows.
+#'
+#' @format A tibble with 2000 rows and 37 columns:
+#' \describe{
+#'   \item{resp_id}{UUID respondent identifier}
+#'   \item{Total}{Always 1 (total sample flag)}
+#'   \item{Gen_Z, Millennials, Gen_X}{Binary subgroup membership}
+#'   \item{bp_high_quality, bp_reliable, ...}{Brand perception attributes (30 items, 1-5 scale)}
+#'   \item{ltr}{Likelihood to Recommend (1-5 scale)}
+#'   \item{overall_satisfaction}{Overall Brand Satisfaction (1-5 scale)}
+#' }
+"example_data_brand"
+
+#' example_data_brand_dictionary
+#'
+#' @description Variable dictionary for [example_data_brand]. Maps variable
+#'   names to human-readable labels for the 30 brand perception attributes
+#'   and 2 outcome variables.
+#'
+#' @format A tibble with 32 rows and 2 columns:
+#' \describe{
+#'   \item{var}{Variable name matching column in `example_data_brand`}
+#'   \item{label}{Human-readable display label}
+#' }
+"example_data_brand_dictionary"

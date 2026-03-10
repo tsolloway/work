@@ -6,6 +6,21 @@
 \usage{
 seg_get_data(seg, data_path, weight = NULL, id_name = "seg_uuid")
 }
+\arguments{
+\item{seg}{A seg object (from \code{\link[=seg_init]{seg_init()}}).}
+
+\item{data_path}{Character. Path to the data file (\code{.sav}, \code{.csv}, \code{.xlsx}).}
+
+\item{weight}{Character. Name of the weight variable column, or \code{NULL} for
+unweighted (default).}
+
+\item{id_name}{Character. Name of the auto-generated respondent ID column
+(default: \code{"seg_uuid"}).}
+}
+\value{
+The seg object with \code{seg[["data"]][["original"]]} populated.
+}
 \description{
-seg_get_data
+Reads a data file into the seg object, generates a unique
+respondent ID column, and optionally stores dictionary metadata.
 }

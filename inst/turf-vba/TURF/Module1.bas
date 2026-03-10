@@ -1,6 +1,10 @@
 Attribute VB_Name = "Module1"
 Option Explicit
 
+' VBA code version — bump whenever Module1.bas changes.
+' R writes this same value to _config!B10 so BuildTURF can detect mismatches.
+Private Const VBA_VERSION As Long = 2
+
 ' =============================================================================
 ' TURF Dashboard — Main VBA Module (Multi-Sheet Architecture)
 '
@@ -245,11 +249,34 @@ Public Sub BuildTURF()
     Dim cfgWs As Worksheet
     Set cfgWs = Sheets(CFG_SHEET)
 
+    ' ---- Version check: detect stale template ----
+    Dim dataVersion As Long
+    On Error Resume Next
+    dataVersion = CLng(cfgWs.Range("B10").Value)
+    On Error GoTo CleanUp
+    If dataVersion <> VBA_VERSION Then
+        Application.EnableEvents = True
+        Application.Calculation = xlCalculationAutomatic
+        Application.ScreenUpdating = True
+        MsgBox "VBA template is out of date (template v" & VBA_VERSION & _
+               ", data v" & dataVersion & ")." & vbNewLine & vbNewLine & _
+               "Please rebuild the template by importing the updated" & vbNewLine & _
+               "Module1.bas from inst/turf-vba/TURF/ into the VBA editor.", _
+               vbExclamation, "TURF Template Mismatch"
+        Exit Sub
+    End If
+
     Dim nItems As Long
     nItems = CLng(cfgWs.Range(CFG_N_ITEMS).Value)
 
     Dim hasWeights As Boolean
     hasWeights = (UCase(CStr(cfgWs.Range(CFG_HAS_WEIGHTS).Value)) = "TRUE")
+
+    ' ---- Clear ALL output areas upfront ----
+    ' This ensures no stale/partial data remains if a write sub errors partway.
+    Call ClearGreedyArea(grWs, nItems)
+    Call ClearDashboardGreedy(dashWs, nItems)
+    Call ClearChart(dashWs)
 
     ' ---- Read control states from _controls ----
     Dim selSubgroup As String
@@ -290,10 +317,8 @@ Public Sub BuildTURF()
 
     ' Build included vars array
     If nIncluded = 0 Then
-        Call ClearGreedyArea(grWs, nItems)
-        Call ClearDashboardGreedy(dashWs, nItems)
+        ' Greedy + Dashboard already cleared upfront; just clear combos too
         Call ClearComboArea(bcWs)
-        Call ClearChart(dashWs)
         GoTo CleanUp
     End If
 
@@ -311,8 +336,13 @@ Public Sub BuildTURF()
     Dim rawWs As Worksheet
     Set rawWs = Sheets(RAW_SHEET)
 
+    ' selSubgroup is a display label (spaces). Map back to raw name (underscores)
+    ' via _config col I (display) → col F (raw).
+    Dim rawSubgroup As String
+    rawSubgroup = GetRawSubgroup(cfgWs, selSubgroup)
+
     Dim sgColName As String
-    sgColName = "sg_" & selSubgroup
+    sgColName = "sg_" & rawSubgroup
 
     Dim sgColIdx As Long
     sgColIdx = FindColumnIndex(rawWs, sgColName)
@@ -419,7 +449,7 @@ Public Sub BuildTURF()
     mBCLastCombo = 0
     If ActiveSheet.Name = COMBOS_SHEET Then
         Call WriteComboResults(bcWs, selSubgroup, selCombo, selOptimize, useWeighted, _
-                              includedVars, nIncluded, cfgWs, nItems)
+                              includedVars, nIncluded, includedFlags, cfgWs, nItems)
         Sheets(CTRL_SHEET).Range(CC_INVALIDATE_BC).Value = 0
     Else
         Sheets(CTRL_SHEET).Range(CC_INVALIDATE_BC).Value = 1
@@ -687,7 +717,7 @@ Private Sub WriteGreedyResults( _
     ByRef greedyAbs() As Double, _
     ByRef greedyAvgFrq() As Double _
 )
-    Call ClearGreedyArea(grWs, nItems)
+    ' NOTE: ClearGreedyArea already called upfront in BuildTURF
 
     Dim i As Long
     For i = 1 To nIncluded
@@ -731,7 +761,7 @@ Private Sub WriteDashboardGreedy( _
     ByRef greedyAvgFrq() As Double, _
     ByRef greedyPval() As Double _
 )
-    Call ClearDashboardGreedy(dashWs, nItems)
+    ' NOTE: ClearDashboardGreedy already called upfront in BuildTURF
 
     Dim i As Long
     For i = 1 To nIncluded
@@ -827,14 +857,14 @@ Private Sub ClearDashboardGreedy(ByVal dashWs As Worksheet, ByVal nItems As Long
 
     Dim clearRng As Range
     Set clearRng = dashWs.Range(dashWs.Cells(DG_DATA_ROW, DG_STEP_COL), dashWs.Cells(clearEnd, DG_PVAL_COL))
-    clearRng.ClearContents
-    clearRng.Borders.LineStyle = xlNone  ' clear all borders in the area
 
-    ' Unmerge any footer merged cells
+    ' Unmerge the ENTIRE range first — footer merges live at
+    ' DG_DATA_ROW + nIncluded (variable), not DG_DATA_ROW + nItems (fixed).
     On Error Resume Next
-    dashWs.Range(dashWs.Cells(DG_DATA_ROW + nItems + 1, DG_STEP_COL), _
-                 dashWs.Cells(clearEnd, DG_PVAL_COL)).UnMerge
+    clearRng.UnMerge
     On Error GoTo 0
+
+    clearRng.Clear  ' ClearContents + formatting (font, fill, borders, number format)
 End Sub
 
 
@@ -1043,12 +1073,16 @@ Public Sub UpdateChart(ByVal chartWs As Worksheet, ByVal dataWs As Worksheet, By
     Dim lastDataRow As Long
     lastDataRow = DG_DATA_ROW + nItems  ' one row past last data row
 
+    Dim chartHeight As Double
+    chartHeight = chartWs.Cells(lastDataRow, 2).Top - chartWs.Cells(9, 2).Top
+    If chartHeight < 144 Then chartHeight = 144  ' min ~2 inches
+
     Dim cht As ChartObject
     Set cht = chartWs.ChartObjects.Add( _
         Left:=chartWs.Cells(9, 2).Left, _
         Top:=chartWs.Cells(9, 2).Top, _
         Width:=chartWs.Cells(9, 16).Left - chartWs.Cells(9, 2).Left, _
-        Height:=chartWs.Cells(lastDataRow, 2).Top - chartWs.Cells(9, 2).Top _
+        Height:=chartHeight _
     )
     cht.Name = chartName
 
@@ -1117,6 +1151,7 @@ Private Sub WriteComboResults( _
     ByVal useWeighted As Boolean, _
     ByRef includedVars() As String, _
     ByVal nIncluded As Long, _
+    ByRef includedFlags() As Boolean, _
     ByVal cfgWs As Worksheet, _
     ByVal nItems As Long _
 )
@@ -1168,21 +1203,19 @@ Private Sub WriteComboResults( _
     hdrBorderRng.Borders(10).LineStyle = xlContinuous  ' xlEdgeRight
     hdrBorderRng.Borders(10).Weight = 3
 
-    Dim sortKey As String
-    sortKey = selOptimize
-
-    ' Look up short subgroup key from _config col H (keyed by col F)
+    ' Look up short subgroup key from _config col H (keyed by display label in col I)
     Dim sgKey As String
     Dim sgMatch As Variant
-    sgMatch = Application.Match(selSubgroup, cfgWs.Range("F2:F100"), 0)
+    sgMatch = Application.Match(selSubgroup, cfgWs.Range("I2:I100"), 0)
     If IsError(sgMatch) Then
         sgKey = selSubgroup  ' fallback to full name
     Else
         sgKey = CStr(cfgWs.Cells(1 + CLng(sgMatch), 8).Value)  ' col H
     End If
 
+    ' Single sheet per subgroup x combo size (no sort suffix)
     Dim dataSheetName As String
-    dataSheetName = "d_" & sgKey & "_" & CStr(selCombo) & "_" & sortKey
+    dataSheetName = "d_" & sgKey & "_" & CStr(selCombo)
 
     Dim dataWs As Worksheet
     On Error Resume Next
@@ -1244,10 +1277,9 @@ Private Sub WriteComboResults( _
     Dim nOutCols As Long
     nOutCols = 3 + selCombo
 
-    ' Size output array to max possible rows (will trim later)
+    ' Size output array to max possible rows (filter all, sort + trim later)
     Dim maxRows As Long
     maxRows = lastDataRow - 1
-    If maxRows > maxComboRows Then maxRows = maxComboRows
 
     Dim outArr() As Variant
     ReDim outArr(1 To maxRows, 1 To nOutCols)
@@ -1255,20 +1287,27 @@ Private Sub WriteComboResults( _
     Dim rank As Long
     rank = 0
 
+    ' Filter all rows (no display limit during filtering).
+    ' If freq sort needed, we sort + trim after writing.
     Dim dr As Long
     For dr = 2 To lastDataRow
         Dim allIncluded As Boolean
         allIncluded = True
 
+        ' Item columns now contain 1-based integer indices into _config items
         Dim ic As Long
         For ic = firstItemCol To firstItemCol + selCombo - 1
             If ic > lastDataCol Then
                 allIncluded = False
                 Exit For
             End If
-            Dim itemVarName As String
-            itemVarName = CStr(comboData(dr, ic))
-            If Not IsInArray(itemVarName, includedVars, nIncluded) Then
+            Dim itemIdx As Long
+            itemIdx = CLng(comboData(dr, ic))
+            If itemIdx < 1 Or itemIdx > nItems Then
+                allIncluded = False
+                Exit For
+            End If
+            If Not includedFlags(itemIdx) Then
                 allIncluded = False
                 Exit For
             End If
@@ -1281,23 +1320,53 @@ Private Sub WriteComboResults( _
             outArr(rank, 2) = CDbl(comboData(dr, reachCol)) / 100#              ' Reach
             outArr(rank, 3) = Round(CDbl(comboData(dr, freqCol)), 2)            ' Freq
 
-            ' Item labels
+            ' Look up item labels from _config using integer index
             For ic = 0 To selCombo - 1
-                Dim iVar As String
-                iVar = CStr(comboData(dr, firstItemCol + ic))
-                outArr(rank, 4 + ic) = GetItemLabel(cfgWs, nItems, iVar)
+                Dim iIdx As Long
+                iIdx = CLng(comboData(dr, firstItemCol + ic))
+                outArr(rank, 4 + ic) = GetItemLabelByIndex(cfgWs, iIdx)
             Next ic
-
-            If rank >= maxComboRows Then Exit For
         End If
     Next dr
 
     ' Write array to sheet in one shot
     If rank > 0 Then
+        ' Trim to display limit
+        Dim writeRows As Long
+        writeRows = rank
+        If writeRows > maxComboRows Then writeRows = maxComboRows
+
+        ' Write all rows needed (writeRows for reach, rank for freq pre-sort)
+        Dim rowsToWrite As Long
+        If selOptimize = "freq" Then
+            rowsToWrite = rank  ' write all, then sort + trim
+        Else
+            rowsToWrite = writeRows  ' already sorted by reach
+        End If
+
         Dim destRng As Range
         Set destRng = bcWs.Range(bcWs.Cells(BC_DATA_ROW, 2), _
-                                  bcWs.Cells(BC_DATA_ROW + rank - 1, 1 + nOutCols))
+                                  bcWs.Cells(BC_DATA_ROW + rowsToWrite - 1, 1 + nOutCols))
         destRng.Value = outArr
+
+        ' Sort by freq if needed (data is stored sorted by reach from R)
+        If selOptimize = "freq" And rowsToWrite > 1 Then
+            destRng.Sort Key1:=bcWs.Cells(BC_DATA_ROW, 4), Order1:=xlDescending, Header:=xlNo
+
+            ' Clear excess rows beyond display limit
+            If rowsToWrite > writeRows Then
+                bcWs.Range(bcWs.Cells(BC_DATA_ROW + writeRows, 2), _
+                           bcWs.Cells(BC_DATA_ROW + rowsToWrite - 1, 1 + nOutCols)).ClearContents
+            End If
+        End If
+
+        ' Re-number ranks (always, since sort may have reordered)
+        Dim ri As Long
+        For ri = 1 To writeRows
+            bcWs.Cells(BC_DATA_ROW + ri - 1, 2).Value = ri
+        Next ri
+
+        rank = writeRows
 
         ' Number formats (bulk)
         bcWs.Range(bcWs.Cells(BC_DATA_ROW, 3), bcWs.Cells(BC_DATA_ROW + rank - 1, 3)).NumberFormat = "0.0%"
@@ -1778,6 +1847,30 @@ Private Function GetItemLabel(ByVal cfgWs As Worksheet, ByVal nItems As Long, By
         End If
     Next i
     GetItemLabel = varName
+End Function
+
+
+' Direct O(1) lookup by 1-based item index (used for combo data sheets)
+Private Function GetItemLabelByIndex(ByVal cfgWs As Worksheet, ByVal itemIdx As Long) As String
+    GetItemLabelByIndex = CStr(cfgWs.Cells(CFG_ITEMS_START_ROW + itemIdx - 1, CFG_ITEMS_LABEL_COL).Value)
+End Function
+
+
+Private Function GetItemVarByIndex(ByVal cfgWs As Worksheet, ByVal itemIdx As Long) As String
+    GetItemVarByIndex = CStr(cfgWs.Cells(CFG_ITEMS_START_ROW + itemIdx - 1, CFG_ITEMS_VAR_COL).Value)
+End Function
+
+
+' Map display label (spaces) back to raw subgroup name (underscores)
+' _config col I = display labels, col F = raw names
+Private Function GetRawSubgroup(ByVal cfgWs As Worksheet, ByVal displayLabel As String) As String
+    Dim sgMatch As Variant
+    sgMatch = Application.Match(displayLabel, cfgWs.Range("I2:I100"), 0)
+    If IsError(sgMatch) Then
+        GetRawSubgroup = displayLabel  ' fallback
+    Else
+        GetRawSubgroup = CStr(cfgWs.Cells(1 + CLng(sgMatch), 6).Value)  ' col F
+    End If
 End Function
 
 

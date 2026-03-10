@@ -1,5 +1,22 @@
 #' seg_init
-#' @description seg_init
+#'
+#' @description Initializes a new segmentation project. Creates the standard
+#'   folder structure, generates a blank spec template, and returns a seg object
+#'   with paths and metadata ready for downstream pipeline functions.
+#'
+#' @param folder_path Character. Root directory for the project (default:
+#'   current working directory). Three subfolders are created beneath it:
+#'   `1. Data and Syntax`, `2. Specs, Input and FA`, `3. Solutions`.
+#' @param project_name Character. Project name used in file naming and metadata.
+#' @param project_number Character. Project number used in file naming and
+#'   metadata.
+#' @param force Logical. If `TRUE`, deletes existing project subfolders before
+#'   recreating them. Errors if folders exist and `force = FALSE` (default).
+#'
+#' @return A seg object (list with class `"analytic_segmentation"`) containing
+#'   `paths`, `meta`, and `data` slots, with a blank spec template saved to the
+#'   process folder.
+#'
 #' @export
 seg_init <- function(
     folder_path = getwd(),
@@ -46,7 +63,7 @@ seg_init <- function(
       "data" = NA,
       "spec" = NA,
       "input" = NA,
-      "fa" = NA
+      "pca" = NA
     )
   )
 

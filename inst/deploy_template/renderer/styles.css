@@ -407,10 +407,17 @@ main {
   animation: spin 0.8s linear infinite;
 }
 
+.loading-app-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-top: 4px;
+}
+
 .loading-text {
   font-size: 14px;
   font-weight: 600;
-  color: #666;
+  color: #888;
 }
 
 @keyframes spin {

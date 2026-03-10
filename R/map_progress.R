@@ -16,6 +16,9 @@
 #' @param .parallel Logical; if TRUE, use `furrr::future_map()` instead of
 #'   `purrr::map()`. Requires an active `future::plan()`.
 #' @param .furrr_packages Optional character vector of packages to load in each worker.
+#' @param .furrr_globals Named list of globals to export to workers, or `TRUE`
+#'   (default) for automatic detection. Use an explicit list to prevent
+#'   `future` from recursively scanning the closure environment.
 #' @param ... Additional arguments passed to `.f`.
 #'
 #' @return A list of mapped results, identical in structure to `purrr::map()`.
@@ -27,11 +30,18 @@ map_progress <- function(
     .label = NULL,
     .handlers = progressr::handler_cli,
     .parallel = FALSE,
-    .furrr_packages = NULL
+    .furrr_packages = NULL,
+    .furrr_globals = TRUE
 ) {
+  # Tear down any lingering global handler before setting up a new one
+  tryCatch(progressr::handlers(global = FALSE), error = function(e) NULL)
+
   # Save current handlers, restore on exit
   old_handlers <- getOption("progressr.handlers", NULL)
-  on.exit(options(progressr.handlers = old_handlers), add = TRUE)
+  on.exit({
+    tryCatch(progressr::handlers(global = FALSE), error = function(e) NULL)
+    options(progressr.handlers = old_handlers)
+  }, add = TRUE)
 
   # Set up handlers temporarily
   options(progressr.handlers = .handlers)
@@ -62,13 +72,17 @@ map_progress <- function(
       .f(.xi, ...)
     }
 
+    if (is.list(.furrr_globals)) {
+      .furrr_globals <- c(.furrr_globals, list(.f = .f, p = p, .label = .label))
+    }
+
     # Branch: sequential or parallel execution
     if (.parallel) {
       res <- furrr::future_map(
         .x,
         map_fun,
         ...,
-        .options = furrr::furrr_options(packages = .furrr_packages, seed = TRUE)
+        .options = furrr::furrr_options(packages = .furrr_packages, seed = TRUE, globals = .furrr_globals)
       )
     } else {
       res <- purrr::map(.x, map_fun, ...)

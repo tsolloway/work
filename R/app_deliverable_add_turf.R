@@ -23,6 +23,10 @@
 #'   via \code{turf_write()}. Default \code{"Project Name - (#xxxxxxx)"}.
 #' @param sig_threshold Numeric. P-value threshold for green significance.
 #' @param marginal_threshold Numeric. P-value threshold for orange marginal.
+#' @param top Integer or \code{NULL}. Maximum number of combo rows to keep per
+#'   subgroup per combo size. Combos are pre-sorted by reach descending, so
+#'   truncation drops only the worst-performing combos. Set to \code{NULL} to
+#'   keep all. Default \code{5000}.
 #'
 #' @return A module definition list with elements \code{id}, \code{tabs},
 #'   \code{server}, \code{css}, and \code{head_tags}. Pass to
@@ -51,13 +55,13 @@ app_deliverable_add_turf <- function(
     subgroups = NULL, weight = NULL, labels = NULL,
     project_name = "Project Name - (#xxxxxxx)",
     sig_threshold = 0.10, marginal_threshold = 0.20,
+    top = 5000,
     id = NULL
 ) {
 
   # ---- Generate unique module ID ----
   if (is.null(id)) {
-    # Count existing turf modules to auto-increment
-    id <- "turf"
+    id <- paste0("turf_", substr(uuid::UUIDgenerate(), 1, 8))
   }
   ns <- shiny::NS(id)
 
@@ -68,6 +72,13 @@ app_deliverable_add_turf <- function(
 
   if (has_combos) {
     normalized <- .turf_normalize(best_combo_results)
+    if (!is.null(top)) {
+      for (sg in names(normalized)) {
+        for (nk in names(normalized[[sg]])) {
+          normalized[[sg]][[nk]] <- utils::head(normalized[[sg]][[nk]], top)
+        }
+      }
+    }
     subgroup_names <- names(normalized)
     n_keys <- names(normalized[[1]])
     n_values <- as.integer(gsub("^n_", "", n_keys))
@@ -95,6 +106,15 @@ app_deliverable_add_turf <- function(
 
   base_sizes <- .turf_compute_bases(raw, subgroups, subgroup_names)
 
+  # ---- Trim raw to only the columns the module needs at runtime ----
+  keep_cols <- unique(c("uuid", vars, subgroup_names))
+  if (!is.null(weight)) keep_cols <- c(keep_cols, weight)
+  raw <- raw[, keep_cols, drop = FALSE]
+
+  # ---- Coerce binary columns to integer (8 bytes -> 4 bytes per value) ----
+  binary_cols <- intersect(c(vars, subgroup_names), names(raw))
+  raw[binary_cols] <- lapply(raw[binary_cols], as.integer)
+
   has_weights <- col_info$has_weights
 
   # ---- Build UI tabs ----
@@ -113,21 +133,60 @@ app_deliverable_add_turf <- function(
     "  pointer-events: none;\n",
     "  background-color: var(--bs-secondary-bg);\n",
     "}\n",
-    "#", ns_prefix, "dl_greedy_csv, #", ns_prefix, "dl_combo_csv,\n",
-    "#", ns_prefix, "dl_greedy_xlsx, #", ns_prefix, "dl_combo_xlsx { display: none; }\n",
     "#", ns_prefix, "items_table input[type='checkbox'] {\n",
     "  width: 1.1em; height: 1.1em; cursor: pointer;\n",
     "  accent-color: var(--bs-primary);\n",
-    "}\n",
-    ".turf-dl-btn { font-size: 0.75rem; padding: 0.15rem 0.4rem; }"
+    "}"
   )
 
-  # ---- Head tags (hidden download links) ----
   head_tags <- list(
-    shiny::downloadLink(ns("dl_greedy_csv"), ""),
-    shiny::downloadLink(ns("dl_combo_csv"), ""),
-    shiny::downloadLink(ns("dl_greedy_xlsx"), ""),
-    shiny::downloadLink(ns("dl_combo_xlsx"), "")
+    shiny::tags$style(shiny::HTML(
+      ".turf-dl-overlay {",
+      "  position: fixed; top: 0; left: 0; width: 100%; height: 100%;",
+      "  background: rgba(0,0,0,0.35); z-index: 9999;",
+      "  display: flex; align-items: center; justify-content: center;",
+      "}",
+      ".turf-dl-overlay .turf-dl-box {",
+      "  background: var(--bs-body-bg, #fff); border-radius: 8px;",
+      "  padding: 2rem 2.5rem; text-align: center;",
+      "  box-shadow: 0 4px 24px rgba(0,0,0,0.2);",
+      "}",
+      ".turf-dl-spinner {",
+      "  width: 36px; height: 36px; margin: 0 auto 0.75rem;",
+      "  border: 4px solid var(--bs-border-color, #dee2e6);",
+      "  border-top-color: var(--bs-primary, #0d6efd);",
+      "  border-radius: 50%; animation: turf-spin 0.8s linear infinite;",
+      "}",
+      "@keyframes turf-spin { to { transform: rotate(360deg); } }"
+    )),
+    shiny::tags$script(shiny::HTML(paste0(
+      "(function() {",
+      "  var dlIds = {'", ns_prefix, "dl_workbook': true,",
+      "               '", ns_prefix, "dl_workbook_light': true,",
+      "               '", ns_prefix, "bc_dl_workbook': true,",
+      "               '", ns_prefix, "bc_dl_workbook_light': true};",
+      "  function showOverlay() {",
+      "    if ($('.turf-dl-overlay').length) return;",
+      "    $('<div class=\"turf-dl-overlay\">' +",
+      "      '<div class=\"turf-dl-box\">' +",
+      "        '<div class=\"turf-dl-spinner\"></div>' +",
+      "        '<div>Generating Workbook\\u2026</div>' +",
+      "      '</div></div>').appendTo('body');",
+      "  }",
+      "  function removeOverlay() {",
+      "    setTimeout(function() { $('.turf-dl-overlay').remove(); }, 200);",
+      "  }",
+      "  $(document).on('shiny:filedownload', function(e) {",
+      "    if (!dlIds[e.name]) return;",
+      "    showOverlay();",
+      "    var xhr = new XMLHttpRequest();",
+      "    xhr.open('GET', e.href, true);",
+      "    xhr.responseType = 'blob';",
+      "    xhr.onloadend = function() { removeOverlay(); };",
+      "    xhr.send();",
+      "  });",
+      "})();"
+    )))
   )
 
   # ---- Server function ----
@@ -166,11 +225,14 @@ app_deliverable_add_turf <- function(
 
 .turf_module_ui <- function(ns, has_combos, has_weights, subgroup_names, n_values) {
 
+  # Display labels: replace underscores with spaces
+  subgroup_choices <- stats::setNames(subgroup_names, gsub("_", " ", subgroup_names))
+
   # ---- Dashboard tab ----
   dashboard_sidebar <- bslib::sidebar(
     width = 220,
     shiny::selectInput(ns("subgroup"), "Subgroup:",
-                        choices = subgroup_names,
+                        choices = subgroup_choices,
                         selected = subgroup_names[1]),
     shiny::selectInput(ns("optimize"), "Optimize:",
                         choices = c("Reach", "Freq")),
@@ -188,7 +250,9 @@ app_deliverable_add_turf <- function(
     shiny::textInput(ns("base_display"), "Base:", value = ""),
     shiny::tags$hr(),
     shiny::downloadButton(ns("dl_workbook"), "Download Workbook",
-                          class = "btn-primary btn-sm w-100")
+                          class = "btn-primary btn-sm w-100"),
+    shiny::downloadButton(ns("dl_workbook_light"), "Download Workbook Light",
+                          class = "btn-outline-primary btn-sm w-100 mt-1")
   )
 
   dashboard_tab <- bslib::nav_panel(
@@ -224,16 +288,10 @@ app_deliverable_add_turf <- function(
           class = "d-flex justify-content-between align-items-center",
           shiny::span("TURF Results"),
           shiny::div(
-            shiny::tags$button(
-              class = "btn btn-sm btn-outline-secondary turf-dl-btn",
-              onclick = sprintf("document.getElementById('%s').click();", ns("dl_greedy_csv")),
-              "CSV"
-            ),
-            shiny::tags$button(
-              class = "btn btn-sm btn-outline-secondary turf-dl-btn",
-              onclick = sprintf("document.getElementById('%s').click();", ns("dl_greedy_xlsx")),
-              "Excel"
-            )
+            shiny::downloadLink(ns("dl_greedy_csv"), "CSV",
+                                class = "btn btn-sm btn-outline-secondary"),
+            shiny::downloadLink(ns("dl_greedy_xlsx"), "Excel",
+                                class = "btn btn-sm btn-outline-secondary")
           )
         ),
         bslib::card_body(
@@ -253,7 +311,7 @@ app_deliverable_add_turf <- function(
     combos_sidebar <- bslib::sidebar(
       width = 220,
       shiny::selectInput(ns("bc_subgroup"), "Subgroup:",
-                          choices = subgroup_names,
+                          choices = subgroup_choices,
                           selected = subgroup_names[1]),
       shiny::selectInput(ns("bc_combo_size"), "Combo Size:",
                           choices = n_values,
@@ -279,7 +337,9 @@ app_deliverable_add_turf <- function(
       shiny::textInput(ns("bc_base_display"), "Base:", value = ""),
       shiny::tags$hr(),
       shiny::downloadButton(ns("bc_dl_workbook"), "Download Workbook",
-                            class = "btn-primary btn-sm w-100")
+                            class = "btn-primary btn-sm w-100"),
+      shiny::downloadButton(ns("bc_dl_workbook_light"), "Download Workbook Light",
+                            class = "btn-outline-primary btn-sm w-100 mt-1")
     )
 
     combos_tab <- bslib::nav_panel(
@@ -292,16 +352,10 @@ app_deliverable_add_turf <- function(
             class = "d-flex justify-content-between align-items-center",
             shiny::span("Combo Results"),
             shiny::div(
-              shiny::tags$button(
-                class = "btn btn-sm btn-outline-secondary turf-dl-btn",
-                onclick = sprintf("document.getElementById('%s').click();", ns("dl_combo_csv")),
-                "CSV"
-              ),
-              shiny::tags$button(
-                class = "btn btn-sm btn-outline-secondary turf-dl-btn",
-                onclick = sprintf("document.getElementById('%s').click();", ns("dl_combo_xlsx")),
-                "Excel"
-              )
+              shiny::downloadLink(ns("dl_combo_csv"), "CSV",
+                                  class = "btn btn-sm btn-outline-secondary"),
+              shiny::downloadLink(ns("dl_combo_xlsx"), "Excel",
+                                  class = "btn btn-sm btn-outline-secondary")
             )
           ),
           bslib::card_body(
@@ -548,69 +602,97 @@ app_deliverable_add_turf <- function(
   })
 
 
-  # ---- Download handlers (CSV + Excel) ----
+  # ---- Table download handlers (CSV + Excel) ----
   output$dl_greedy_csv <- shiny::downloadHandler(
-    filename = function() paste0("turf_greedy_", Sys.Date(), ".csv"),
+    filename = function() paste0("TURF Results_", Sys.Date(), ".csv"),
     content = function(file) {
       df <- greedy_results()
-      if (!is.null(df)) utils::write.csv(df, file, row.names = FALSE)
+      if (!is.null(df)) {
+        display <- df %>%
+          dplyr::select(step, variable, label,
+                        cumul_pct, incr_pct, avg_freq, abs_pct, p_value)
+        utils::write.csv(display, file, row.names = FALSE)
+      }
     }
   )
 
   output$dl_greedy_xlsx <- shiny::downloadHandler(
-    filename = function() paste0("turf_greedy_", Sys.Date(), ".xlsx"),
+    filename = function() paste0("TURF Results_", Sys.Date(), ".xlsx"),
     content = function(file) {
       df <- greedy_results()
-      if (!is.null(df)) openxlsx::write.xlsx(df, file, rowNames = FALSE)
+      if (!is.null(df)) {
+        display <- df %>%
+          dplyr::select(step, variable, label,
+                        cumul_pct, incr_pct, avg_freq, abs_pct, p_value)
+        openxlsx2::write_xlsx(display, file)
+      }
     }
   )
 
   output$dl_combo_csv <- shiny::downloadHandler(
-    filename = function() paste0("turf_combos_", Sys.Date(), ".csv"),
+    filename = function() paste0("TURF Combo Results_", Sys.Date(), ".csv"),
     content = function(file) {
       df <- filtered_combos()
-      if (!is.null(df)) utils::write.csv(df, file, row.names = FALSE)
+      if (!is.null(df)) {
+        display_cols <- grep("^display_\\d+$", names(df), value = TRUE)
+        out <- df %>%
+          dplyr::select(rank, reach_display, freq_display,
+                        dplyr::all_of(display_cols))
+        utils::write.csv(out, file, row.names = FALSE)
+      }
     }
   )
 
   output$dl_combo_xlsx <- shiny::downloadHandler(
-    filename = function() paste0("turf_combos_", Sys.Date(), ".xlsx"),
+    filename = function() paste0("TURF Combo Results_", Sys.Date(), ".xlsx"),
     content = function(file) {
       df <- filtered_combos()
-      if (!is.null(df)) openxlsx::write.xlsx(df, file, rowNames = FALSE)
+      if (!is.null(df)) {
+        display_cols <- grep("^display_\\d+$", names(df), value = TRUE)
+        out <- df %>%
+          dplyr::select(rank, reach_display, freq_display,
+                        dplyr::all_of(display_cols))
+        openxlsx2::write_xlsx(out, file)
+      }
     }
   )
 
   # ---- Download workbook (turf_write) ----
-  .turf_workbook_handler <- shiny::downloadHandler(
-    filename = function() paste0("TURF_Analysis_", Sys.Date(), ".xlsm"),
-    content = function(file) {
-      tmp_dir <- tempdir()
-      turf_write(
-        best_combo_results = best_combo_results,
-        raw                = raw,
-        vars               = vars,
-        subgroups          = subgroups,
-        weight             = weight,
-        labels             = label_lookup,
-        file_name          = "TURF_Analysis",
-        project_name       = project_name,
-        where              = tmp_dir,
-        sig_threshold      = sig_threshold,
-        marginal_threshold = marginal_threshold
-      )
-      # turf_write saves as .xlsm (if template found) or .xlsx
-      out_xlsm <- file.path(tmp_dir, "TURF_Analysis.xlsm")
-      out_xlsx <- file.path(tmp_dir, "TURF_Analysis.xlsx")
-      if (file.exists(out_xlsm)) {
-        file.copy(out_xlsm, file, overwrite = TRUE)
-      } else if (file.exists(out_xlsx)) {
-        file.copy(out_xlsx, file, overwrite = TRUE)
+  .make_workbook_handler <- function(top = NULL) {
+    shiny::downloadHandler(
+      filename = function() paste0("TURF_Analysis_", Sys.Date(), ".xlsm"),
+      content = function(file) {
+        tmp_dir <- tempdir()
+        args <- list(
+          best_combo_results = best_combo_results,
+          raw                = raw,
+          vars               = vars,
+          subgroups          = subgroups,
+          weight             = weight,
+          labels             = label_lookup,
+          file_name          = "TURF_Analysis",
+          project_name       = project_name,
+          where              = tmp_dir,
+          sig_threshold      = sig_threshold,
+          marginal_threshold = marginal_threshold
+        )
+        if (!is.null(top)) args$top <- top
+        do.call(turf_write, args)
+        # turf_write saves as .xlsm (if template found) or .xlsx
+        out_xlsm <- file.path(tmp_dir, "TURF_Analysis.xlsm")
+        out_xlsx <- file.path(tmp_dir, "TURF_Analysis.xlsx")
+        if (file.exists(out_xlsm)) {
+          file.copy(out_xlsm, file, overwrite = TRUE)
+        } else if (file.exists(out_xlsx)) {
+          file.copy(out_xlsx, file, overwrite = TRUE)
+        }
       }
-    }
-  )
-  output$dl_workbook <- .turf_workbook_handler
-  output$bc_dl_workbook <- .turf_workbook_handler
+    )
+  }
+  output$dl_workbook       <- .make_workbook_handler()
+  output$bc_dl_workbook    <- .make_workbook_handler()
+  output$dl_workbook_light    <- .make_workbook_handler(top = 1000)
+  output$bc_dl_workbook_light <- .make_workbook_handler(top = 1000)
 
 
   # ---- Outputs: Dashboard ----
@@ -766,7 +848,7 @@ app_deliverable_add_turf <- function(
     p %>%
       plotly::config(
         displaylogo = FALSE,
-        modeBarButtons = plotly_modebar("turf_greedy", csv_id = ns("dl_greedy_csv"))
+        modeBarButtons = plotly_modebar("TURF Chart")
       )
   })
 
@@ -925,6 +1007,7 @@ app_deliverable_add_turf <- function(
         selection = "none",
         options = list(
           pageLength = 50,
+          dom = "t",
           scrollY = "100%",
           scrollCollapse = FALSE,
           initComplete = combo_tooltip_init,
@@ -979,10 +1062,106 @@ app_deliverable_add_turf <- function(
       p %>%
         plotly::config(
           displaylogo = FALSE,
-          modeBarButtons = plotly_modebar("turf_combo", csv_id = ns("dl_combo_csv"))
+          modeBarButtons = plotly_modebar(
+            paste0("TURF Best Combo - ", rv$chart_type)
+          )
         )
     })
   }
+
+  # ---- State management ----
+  defaults <- list(
+    subgroup     = subgroups[1],
+    optimize     = "Reach",
+    weighted     = "Yes",
+    chart_label  = "Label",
+    chart_theme  = "Default",
+    combo_size   = if (has_combos) (if (2L %in% n_values) 2L else n_values[1]) else 2L,
+    display_n    = 1000L,
+    chart_type   = "Top Reach",
+    item_include = rep(TRUE, length(vars))
+  )
+
+  get_state <- function() {
+    list(
+      subgroup     = rv$subgroup,
+      optimize     = rv$optimize,
+      weighted     = rv$weighted,
+      chart_label  = rv$chart_label,
+      chart_theme  = rv$chart_theme,
+      combo_size   = rv$combo_size,
+      display_n    = rv$display_n,
+      chart_type   = rv$chart_type,
+      item_include = rv$item_include
+    )
+  }
+
+  set_state <- function(state) {
+    rv$syncing <- TRUE
+    on.exit(rv$syncing <- FALSE)
+
+    if (!is.null(state$subgroup) && state$subgroup %in% subgroups) {
+      rv$subgroup <- state$subgroup
+      shiny::updateSelectInput(session, "subgroup", selected = state$subgroup)
+      if (has_combos) shiny::updateSelectInput(session, "bc_subgroup", selected = state$subgroup)
+    }
+    if (!is.null(state$optimize)) {
+      rv$optimize <- state$optimize
+      shiny::updateSelectInput(session, "optimize", selected = state$optimize)
+      if (has_combos) shiny::updateSelectInput(session, "bc_optimize", selected = state$optimize)
+    }
+    if (!is.null(state$weighted) && has_weights) {
+      rv$weighted <- state$weighted
+      shiny::updateSelectInput(session, "weighted", selected = state$weighted)
+      if (has_combos) shiny::updateSelectInput(session, "bc_weighted", selected = state$weighted)
+    }
+    if (!is.null(state$chart_label)) {
+      rv$chart_label <- state$chart_label
+      shiny::updateSelectInput(session, "chart_label", selected = state$chart_label)
+      if (has_combos) shiny::updateSelectInput(session, "bc_chart_label", selected = state$chart_label)
+    }
+    if (!is.null(state$chart_theme)) {
+      rv$chart_theme <- state$chart_theme
+      shiny::updateSelectInput(session, "chart_theme", selected = state$chart_theme)
+      if (has_combos) shiny::updateSelectInput(session, "bc_chart_theme", selected = state$chart_theme)
+    }
+    if (!is.null(state$combo_size) && has_combos) {
+      rv$combo_size <- as.integer(state$combo_size)
+      shiny::updateSelectInput(session, "bc_combo_size", selected = as.character(state$combo_size))
+    }
+    if (!is.null(state$display_n) && has_combos) {
+      rv$display_n <- as.integer(state$display_n)
+      shiny::updateNumericInput(session, "bc_display", value = state$display_n)
+    }
+    if (!is.null(state$chart_type) && has_combos) {
+      rv$chart_type <- state$chart_type
+      shiny::updateSelectInput(session, "bc_chart_type", selected = state$chart_type)
+    }
+    if (!is.null(state$item_include) && length(state$item_include) == length(vars)) {
+      rv$item_include <- state$item_include
+      DT::replaceData(
+        items_proxy,
+        data.frame(
+          Variable = vars,
+          Label    = unname(label_lookup[vars]),
+          Include  = .items_chk(rv$item_include),
+          stringsAsFactors = FALSE
+        ),
+        resetPaging = FALSE, rownames = FALSE
+      )
+    }
+  }
+
+  get_fingerprint <- function() {
+    list(vars = vars, subgroups = subgroups, n_values = n_values)
+  }
+
+  list(
+    get_state       = get_state,
+    set_state       = set_state,
+    reset           = function() set_state(defaults),
+    get_fingerprint = get_fingerprint
+  )
 }
 
 
@@ -1005,20 +1184,17 @@ app_deliverable_add_turf <- function(
     ))
   }
 
-  # Pre-compute standalone weighted reach and unweighted count per item
-  abs_weighted <- numeric(n_items)
-  abs_count <- integer(n_items)
-  for (j in seq_len(n_items)) {
-    hit <- mat[, j] == 1
-    abs_weighted[j] <- sum(weights[hit]) / total_weight * 100
-    abs_count[j] <- sum(hit)
-  }
+  # Pre-compute per-item weighted sums (constant across iterations)
+  item_wt_sums <- as.numeric(crossprod(mat, weights))
+  abs_weighted <- item_wt_sums / total_weight * 100
+  abs_count <- as.integer(colSums(mat))
 
   # State vectors
   selected <- logical(n_items)
   reached <- logical(n_resp)
   resp_count <- integer(n_resp)
   cur_reach_wt <- 0
+  base_freq_sum <- 0
 
   # Output accumulators
   out_order <- integer(n_items)
@@ -1028,65 +1204,35 @@ app_deliverable_add_turf <- function(
   out_pval <- numeric(n_items)
 
   for (k in seq_len(n_items)) {
-    best_item <- 0L
-    best_score <- -1
-
-    # Evaluate each unselected item
-    for (j in seq_len(n_items)) {
-      if (selected[j]) next
-
-      candidate_reach_wt <- cur_reach_wt
-      candidate_freq_sum <- 0
-
-      for (i in seq_len(n_resp)) {
-        if (mat[i, j] == 1 && !reached[i]) {
-          candidate_reach_wt <- candidate_reach_wt + weights[i]
-        }
-        resp_total <- resp_count[i] + mat[i, j]
-        if (resp_total > 0) {
-          candidate_freq_sum <- candidate_freq_sum + resp_total * weights[i]
-        }
-      }
-
-      score <- if (optimize_by == "freq") {
-        candidate_freq_sum / total_weight
-      } else {
-        candidate_reach_wt
-      }
-
-      if (score > best_score) {
-        best_score <- score
-        best_item <- j
-      }
+    # ---- Vectorized candidate evaluation (replaces inner respondent loop) ----
+    if (optimize_by == "freq") {
+      scores <- base_freq_sum + item_wt_sums
+    } else {
+      unreached_wt <- weights * (!reached)
+      scores <- cur_reach_wt + as.numeric(crossprod(mat, unreached_wt))
     }
+    scores[selected] <- -Inf
 
-    if (best_item == 0L) break
+    best_item <- which.max(scores)
+    if (length(best_item) == 0 || scores[best_item] == -Inf) break
 
     selected[best_item] <- TRUE
     out_order[k] <- best_item
 
-    # --- P-value: count unreached and newly reached BEFORE updating reached ---
-    n_unreached <- 0L
-    n_new <- 0L
-    for (i in seq_len(n_resp)) {
-      if (!reached[i]) {
-        n_unreached <- n_unreached + 1L
-        if (mat[i, best_item] == 1) {
-          n_new <- n_new + 1L
-        }
-      }
-    }
+    # ---- P-value (vectorized) ----
+    unreached_mask <- !reached
+    n_unreached <- sum(unreached_mask)
+    n_new <- sum(mat[unreached_mask, best_item])
 
     if (n_unreached > 0 && n_new > 0) {
-      # Mean standalone rate of remaining unselected items (excluding best_item)
-      remaining_mask <- !selected  # best_item already marked TRUE
-      if (any(remaining_mask)) {
-        p0 <- mean(abs_count[remaining_mask]) / n_resp
+      remaining_mask <- !selected
+      p0 <- if (any(remaining_mask)) {
+        mean(abs_count[remaining_mask]) / n_resp
       } else {
-        p0 <- abs_count[best_item] / n_resp
+        abs_count[best_item] / n_resp
       }
 
-      if (p0 > 0 && p0 < 1 && n_new >= 1 && n_unreached >= 1) {
+      if (p0 > 0 && p0 < 1) {
         out_pval[k] <- 1 - stats::pbinom(n_new - 1, n_unreached, p0)
       } else {
         out_pval[k] <- 0
@@ -1095,33 +1241,17 @@ app_deliverable_add_turf <- function(
       out_pval[k] <- 1
     }
 
-    # --- Update reached and cur_reach_wt ---
-    for (i in seq_len(n_resp)) {
-      resp_count[i] <- resp_count[i] + mat[i, best_item]
-      if (mat[i, best_item] == 1 && !reached[i]) {
-        reached[i] <- TRUE
-        cur_reach_wt <- cur_reach_wt + weights[i]
-      }
-    }
+    # ---- Update state (vectorized) ----
+    item_col <- mat[, best_item]
+    newly_reached <- (item_col == 1L) & (!reached)
+    reached <- reached | (item_col == 1L)
+    cur_reach_wt <- cur_reach_wt + sum(weights[newly_reached])
+    resp_count <- resp_count + item_col
+    base_freq_sum <- base_freq_sum + item_wt_sums[best_item]
 
     out_cumul[k] <- cur_reach_wt / total_weight * 100
-
-    if (k == 1) {
-      out_incr[k] <- out_cumul[k]
-    } else {
-      out_incr[k] <- out_cumul[k] - out_cumul[k - 1]
-    }
-
-    # Average frequency among reached respondents
-    freq_sum <- 0
-    reached_wt <- 0
-    for (i in seq_len(n_resp)) {
-      if (resp_count[i] > 0) {
-        freq_sum <- freq_sum + resp_count[i] * weights[i]
-        reached_wt <- reached_wt + weights[i]
-      }
-    }
-    out_avg_freq[k] <- if (reached_wt > 0) freq_sum / reached_wt else 0
+    out_incr[k] <- if (k == 1) out_cumul[k] else out_cumul[k] - out_cumul[k - 1]
+    out_avg_freq[k] <- if (cur_reach_wt > 0) base_freq_sum / cur_reach_wt else 0
   }
 
   # Build output tibble

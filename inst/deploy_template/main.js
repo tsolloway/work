@@ -460,6 +460,16 @@ ipcMain.handle("launch-app", async (event, id) => {
   }
 });
 
+ipcMain.handle("show-save-dialog", async (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return dialog.showSaveDialog(win, options);
+});
+
+ipcMain.handle("show-open-dialog", async (event, options) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return dialog.showOpenDialog(win, options);
+});
+
 ipcMain.handle("stop-app", (event, appId) => {
   if (appId) {
     stopRProcess(appId);

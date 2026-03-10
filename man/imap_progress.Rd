@@ -11,7 +11,8 @@ imap_progress(
   .label = NULL,
   .handlers = progressr::handler_cli,
   .parallel = FALSE,
-  .furrr_packages = NULL
+  .furrr_packages = NULL,
+  .furrr_globals = TRUE
 )
 }
 \arguments{
@@ -28,6 +29,11 @@ imap_progress(
 \item{.parallel}{Logical; if TRUE, use \code{furrr::future_imap()}.}
 
 \item{.furrr_packages}{Character vector of packages to load in parallel workers.}
+
+\item{.furrr_globals}{Named list of globals to export to workers, or \code{TRUE}
+(default) for automatic detection. Use an explicit list to prevent
+\code{future} from recursively scanning the closure environment, which can
+inflate serialization size (e.g. when using \code{devtools::load_all()}).}
 }
 \value{
 A list identical to \code{purrr::imap()} output.

@@ -44,6 +44,7 @@ Imports:
     jsonlite,
     klaR,
     lubridate,
+    matrixStats,
     openxlsx,
     openxlsx2,
     parallelly,
@@ -70,6 +71,7 @@ Imports:
     xfun,
     zip
 Suggests:
+    kernlab,
     knitr,
     mclust,
     pak,

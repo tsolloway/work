@@ -16,13 +16,109 @@ cluster_kmeans(
   n_max = 7,
   reduced_inputs_max = NULL,
   priors = c("equal", "size"),
-  iter_max = 1e+05,
+  iter_max = 1000,
   nstart = 10,
   lda_vars = NULL,
   lda_vars_profiles = NULL,
   seed = 1
 )
 }
+\arguments{
+\item{df}{A data frame containing shell data (the full dataset including
+all respondents, not just filtered ones).}
+
+\item{vars}{Character vector of input variable names to cluster on.
+Typically source variables (rescaled survey items) or RS variables
+(row-standardized polar scores).}
+
+\item{vars_profiles}{Character vector of profile variable names
+corresponding to \code{vars} (binary polar indicators). Used for LDA
+evaluation — these map 1:1 with \code{vars}.}
+
+\item{solution_name}{Character. Solution family identifier (e.g. \code{"A"},
+\code{"B"}). Used in cluster naming.}
+
+\item{solution_name_prefix}{Character. Prefix for cluster names
+(default: \code{"kmeans"}). Combined with \code{solution_name} and k to form
+names like \code{"kmeans_A4"}, \code{"kmeans_A5"}.}
+
+\item{resp_id_name}{Character. Respondent ID column name
+(default: \code{"seg_uuid"}).}
+
+\item{filter_name}{Character or \code{NULL}. Column name containing a logical
+filter vector. When non-NULL, only rows where this column is \code{TRUE} are
+used for clustering. \code{NULL} uses all rows.}
+
+\item{n_min}{Integer. Minimum number of clusters (default: \code{4}).}
+
+\item{n_max}{Integer. Maximum number of clusters (default: \code{7}).}
+
+\item{reduced_inputs_max}{Integer or \code{NULL}. Cap on the number of reduced
+input variables. When non-NULL, the greedy variable selection is
+truncated to this many variables. \code{NULL} uses all selected variables.}
+
+\item{priors}{Character. Prior probability method for LDA: \code{"equal"}
+(uniform priors) or \code{"size"} (proportional to segment sizes)
+(default: \code{"equal"}).}
+
+\item{iter_max}{Integer. Maximum iterations per k-means run
+(default: \code{1000}). Passed to \code{stats::kmeans(iter.max)}.}
+
+\item{nstart}{Integer. Number of random starts — k-means is run this many
+times with different random centroids and the best result is kept
+(default: \code{10}). Passed to \code{stats::kmeans(nstart)}.}
+
+\item{lda_vars}{Character vector or \code{NULL}. Override which input variables
+are used for LDA. When non-NULL, only variables in both \code{vars} and
+\code{lda_vars} are used. \code{NULL} uses all \code{vars}.}
+
+\item{lda_vars_profiles}{Character vector or \code{NULL}. Override which profile
+variables are used for LDA. Paired with \code{lda_vars}. \code{NULL} uses all
+\code{vars_profiles}.}
+
+\item{seed}{Integer or \code{NULL}. Random seed for reproducibility
+(default: \code{1}). \code{NULL} skips seeding.}
+}
+\value{
+A list with two elements:
+\describe{
+\item{all_inputs}{Tibble with one row per k (\code{n_min:n_max}). Contains
+clustering results and LDA fit using all (or \code{lda_vars}) input
+variables. Columns include \code{cluster_name}, \code{cluster_fit} (kmeans
+object), \code{cluster_seed} (assignment tibble), \code{cluster_glance}
+(broom summary), \code{lda_fit}, \code{accuracy}, \code{df_append}, etc.}
+\item{reduced_inputs}{Same structure as \code{all_inputs} but LDA uses only
+the reduced variable set selected by \code{\link[=cluster_reduce_vars]{cluster_reduce_vars()}}.}
+}
+}
 \description{
-cluster_kmeans
+K-means clustering wrapper for the segmentation pipeline.
+Runs \code{stats::kmeans()} across a range of cluster counts (k), reduces
+inputs via discriminant analysis, and pipes results through
+\code{\link[=cluster_add_lda]{cluster_add_lda()}} to produce a standardized output.
+
+\strong{What k-means does.} K-means partitions n respondents into k groups by
+minimizing total within-cluster variance (sum of squared Euclidean
+distances from each point to its cluster centroid). The algorithm
+alternates between (1) assigning each respondent to the nearest centroid
+and (2) recomputing centroids as the mean of their assigned respondents,
+until assignments stabilize. Because the result depends on the initial
+random centroids, \code{nstart} independent runs are performed and the best
+(lowest total within-SS) is kept.
+
+\strong{Strengths.} Fast, scalable, well-understood. Works well when clusters
+are roughly spherical and similarly sized. The \code{nstart} parameter helps
+avoid poor local optima.
+
+\strong{Limitations.} Optimizes variance, not segment differentiation — a
+low-variance solution may still show poor separation on the variables
+that matter for the segmentation. Sensitive to outliers (centroids get
+pulled toward extreme values). Assumes equal-variance spherical clusters.
+
+\strong{Pipeline integration.} This is a method wrapper called by
+\code{\link[=cluster_solution_family]{cluster_solution_family()}} (and indirectly by \code{\link[=seg_cluster_input_sheet]{seg_cluster_input_sheet()}}).
+All method wrappers share the same signature and return shape so they
+can be dispatched interchangeably. The return value is a list with two
+tibbles (\code{all_inputs} and \code{reduced_inputs}), each containing one row per
+k with clustering results, LDA fit, predictions, and accuracy.
 }

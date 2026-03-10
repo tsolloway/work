@@ -9,11 +9,10 @@ bn_report(
   types = c("none", "gravity", "charge"),
   do_community = c(TRUE, FALSE),
   title = "Network Analysis",
-  subtitle = NULL,
-  section_height = "800px",
+  subtitle = "Project Name (123456789)",
   interactive = TRUE,
-  physics = TRUE,
-  default_type = NULL,
+  physics = FALSE,
+  default_type = "gravity",
   gravity_constant = -9000,
   central_gravity = 0.2,
   charge_layout = "layout_with_fr",
@@ -44,11 +43,13 @@ Default \code{"Network Analysis"}.}
 \item{subtitle}{Character or \code{NULL}. Optional subtitle displayed below the
 title, above the border line. Default \code{NULL} (no subtitle).}
 
-\item{section_height}{Character. CSS height per network panel.
-Default \code{"800px"}.}
-
 \item{interactive}{Logical. Passed through to \code{bn_visual()}.
 Default \code{TRUE}.}
+
+\item{physics}{Logical. If \code{TRUE} (default), networks render with physics
+enabled (nodes repel/attract in real time). If \code{FALSE}, networks render
+with physics to compute layout, then physics is disabled after
+stabilization so nodes stay fixed.}
 
 \item{default_type}{Character or \code{NULL}. Which layout type to show by
 default in the dropdown selector. Must be one of \code{types}. If \code{NULL}

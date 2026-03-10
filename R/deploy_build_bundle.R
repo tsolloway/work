@@ -50,7 +50,7 @@ deploy_write_app <- function(app, app_dir) {
 
   # Save the entire app object as RDS
   rds_path <- fs::path(app_dir, "app_object.rds")
-  saveRDS(app, rds_path)
+  saveRDS(app, rds_path, compress = "gzip")
 
   # Write a minimal app.R that loads the app object.
 
@@ -223,7 +223,7 @@ deploy_build_bundle <- function(
   # Copy all app files to the staging directory
   app_entries <- fs::dir_ls(app_dir, all = FALSE)
   skip_patterns <- c("site", "dist", "node_modules", ".git", "rsconnect",
-                     "packrat", "renv")
+                     "packrat", "renv", "state.rds")
   for (entry in app_entries) {
     entry_name <- fs::path_file(entry)
     if (entry_name %in% skip_patterns) next

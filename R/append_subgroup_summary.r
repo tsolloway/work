@@ -12,7 +12,6 @@ append_subgroup_summary <- function(
 ){
 
   work::start()
-  require(openxlsx)
 
   if( is.null(wb) ) wb <- oxl_create_workbook()
   if( is.null(sheet_name) ) sheet_name <- "subgroup_count"
@@ -40,17 +39,17 @@ append_subgroup_summary <- function(
   row_title <- row_data_start - 4
   row_subtitle <- row_title + 1
 
-  addWorksheet(wb, sheet_name)
+  openxlsx::addWorksheet(wb, sheet_name)
 
 
   #############################
   # add data
   #############################
 
-  writeData(wb, sheet_name, title, startRow = row_title, startCol = col_var)
-  writeData(wb, sheet_name, sub_title, startRow = row_subtitle, startCol = col_var)
+  openxlsx::writeData(wb, sheet_name, title, startRow = row_title, startCol = col_var)
+  openxlsx::writeData(wb, sheet_name, sub_title, startRow = row_subtitle, startCol = col_var)
 
-  writeData(wb, sheet_name, df_subgroup, startRow = row_header, startCol = col_var)
+  openxlsx::writeData(wb, sheet_name, df_subgroup, startRow = row_header, startCol = col_var)
 
 
 
@@ -58,17 +57,17 @@ append_subgroup_summary <- function(
   # format data
   #############################
 
-  addStyle(wb, sheet_name, style = createStyle(halign = "center", textDecoration = "bold"), rows = row_header, cols = col_all, gridExpand = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(halign = "center", textDecoration = "bold"), rows = row_header, cols = col_all, gridExpand = TRUE)
 
-  addStyle(wb, sheet_name, style = createStyle(numFmt = "0", halign = "center"), rows = row_data_all, cols = col_count, gridExpand = TRUE)
-  addStyle(wb, sheet_name, style = createStyle(halign = "left"), rows = row_data_all, cols = col_var, gridExpand = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(numFmt = "0", halign = "center"), rows = row_data_all, cols = col_count, gridExpand = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(halign = "left"), rows = row_data_all, cols = col_var, gridExpand = TRUE)
 
-  conditionalFormatting(wb, sheet_name, cols = col_count, rows = row_data_all, style = c("#f66a6e","#feea8a","#66bd7d"), type = "colourScale", stack = TRUE)
+  openxlsx::conditionalFormatting(wb, sheet_name, cols = col_count, rows = row_data_all, style = c("#f66a6e","#feea8a","#66bd7d"), type = "colourScale", stack = TRUE)
 
-  addStyle(wb, sheet_name, style = createStyle(fontSize = 16, textDecoration = "bold"), rows = row_title, cols = col_var, gridExpand = TRUE, stack = TRUE)
-  addStyle(wb, sheet_name, style = createStyle(fontSize = 14, textDecoration = c("bold", "italic")), rows = row_subtitle, cols = col_var, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(fontSize = 16, textDecoration = "bold"), rows = row_title, cols = col_var, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(fontSize = 14, textDecoration = c("bold", "italic")), rows = row_subtitle, cols = col_var, gridExpand = TRUE, stack = TRUE)
 
-  setColWidths(wb, sheet_name, cols = col_var, widths = label_width)
+  openxlsx::setColWidths(wb, sheet_name, cols = col_var, widths = label_width)
 
   oxl_outer_box(
     wb, sheet_name,
@@ -85,7 +84,7 @@ append_subgroup_summary <- function(
   )
 
 
-  freezePane(
+  openxlsx::freezePane(
     wb,
     sheet_name,
     firstActiveRow = row_data_start,
@@ -93,11 +92,11 @@ append_subgroup_summary <- function(
   )
 
 
-  addFilter(wb, sheet_name, row = row_header, col_all)
+  openxlsx::addFilter(wb, sheet_name, row = row_header, col_all)
 
 
   if(write_file){
-    saveWorkbook(wb, glue("{title} - Subgroup Count.xlsx"), overwrite = TRUE)
+    openxlsx::saveWorkbook(wb, glue("{title} - Subgroup Count.xlsx"), overwrite = TRUE)
   }
 
 

@@ -12,7 +12,6 @@ means_check_deliverable <- function(
     write_file = TRUE
 ){
   work::start()
-  require(openxlsx)
 
   if( is.null(wb) ) wb <- oxl_create_workbook()
 
@@ -100,7 +99,7 @@ means_check_deliverable <- function(
 
 
   if(write_file){
-    saveWorkbook(wb, glue("{title} - Means Check.xlsx"), overwrite = TRUE)
+    openxlsx::saveWorkbook(wb, glue("{title} - Means Check.xlsx"), overwrite = TRUE)
   }
 
 

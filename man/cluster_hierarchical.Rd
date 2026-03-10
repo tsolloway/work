@@ -23,6 +23,99 @@ cluster_hierarchical(
   seed = 1
 )
 }
+\arguments{
+\item{df}{A data frame containing shell data (the full dataset including
+all respondents, not just filtered ones).}
+
+\item{vars}{Character vector of input variable names to cluster on.}
+
+\item{vars_profiles}{Character vector of profile variable names
+corresponding to \code{vars} (binary polar indicators).}
+
+\item{solution_name}{Character. Solution family identifier (e.g. \code{"A"}).}
+
+\item{solution_name_prefix}{Character. Prefix for cluster names
+(default: \code{"hierarchical"}). Combined with \code{solution_name} and k to form
+names like \code{"hierarchical_A4"}, \code{"hierarchical_A5"}.}
+
+\item{resp_id_name}{Character or \code{NULL}. Respondent ID column name.}
+
+\item{filter_name}{Character or \code{NULL}. Column name containing a logical
+filter vector. \code{NULL} uses all rows.}
+
+\item{n_min}{Integer. Minimum number of clusters (default: \code{4}).}
+
+\item{n_max}{Integer. Maximum number of clusters (default: \code{7}).}
+
+\item{reduced_inputs_max}{Integer or \code{NULL}. Cap on the number of reduced
+input variables. \code{NULL} uses all selected variables.}
+
+\item{priors}{Character. Prior probability method for LDA: \code{"equal"} or
+\code{"size"} (default: \code{"equal"}).}
+
+\item{iter_max}{Integer. Not used by hclust but kept for signature
+compatibility with other method wrappers.}
+
+\item{nstart}{Integer. Not used by hclust but kept for signature
+compatibility with other method wrappers.}
+
+\item{lda_vars}{Character vector or \code{NULL}. Override which input variables
+are used for LDA. \code{NULL} uses all \code{vars}.}
+
+\item{lda_vars_profiles}{Character vector or \code{NULL}. Override which profile
+variables are used for LDA. \code{NULL} uses all \code{vars_profiles}.}
+
+\item{seed}{Integer or \code{NULL}. Random seed for reproducibility
+(default: \code{1}).}
+}
+\value{
+A list with three elements:
+\describe{
+\item{all_inputs}{Tibble with one row per k (\code{n_min:n_max}). Contains
+clustering results and LDA fit using all input variables. Note: no
+\code{cluster_fit} column — assignments come directly from \code{cutree()}.}
+\item{reduced_inputs}{Same structure but LDA uses only the reduced
+variable set selected by \code{\link[=cluster_reduce_vars]{cluster_reduce_vars()}}.}
+\item{hierarchical_fit}{The raw \code{hclust} object (the dendrogram). Can
+be passed to \code{plot()} or \code{stats::as.dendrogram()} for visualization.}
+}
+}
 \description{
-cluster_hierarchical
+Agglomerative hierarchical clustering wrapper for the
+segmentation pipeline. Builds a single dendrogram via \code{stats::hclust()},
+then cuts it at each k in the requested range using \code{stats::cutree()}.
+Reduces inputs via discriminant analysis and pipes results through
+\code{\link[=cluster_add_lda]{cluster_add_lda()}} to produce a standardized output.
+
+\strong{What hierarchical clustering does.} Agglomerative (bottom-up)
+hierarchical clustering starts with every respondent as its own cluster,
+then iteratively merges the two closest clusters until only one remains.
+The result is a dendrogram (tree) that encodes the full merge history.
+To get k clusters, the tree is "cut" at the height that produces k
+branches. The default linkage is "complete" (furthest-neighbor), which
+tends to produce compact, roughly equal-sized clusters.
+
+\strong{Key difference from other methods.} The dendrogram is built once and
+then sliced at different heights for each k. This means all k-solutions
+are nested — a respondent's k=4 assignment is always a merge of two
+k=5 groups. K-means, PAM, and iterative re-partition from scratch for
+each k, so their solutions across k values are independent.
+
+\strong{Strengths.} Deterministic (no random initialization). The dendrogram
+gives a visual summary of cluster structure at all levels. Nested
+solutions provide a natural hierarchy — useful when you need to explain
+"these two segments merge into one at a higher level." No need to
+specify k upfront; the tree contains all possible k-solutions.
+
+\strong{Limitations.} O(n^2) memory for the distance matrix and O(n^2 log n)
+time for the merge algorithm — does not scale to very large datasets.
+Merge decisions are irrevocable (once two clusters merge, they can never
+split), so early bad merges propagate. Sensitive to the choice of
+linkage and distance metric.
+
+\strong{Pipeline integration.} This is a method wrapper called by
+\code{\link[=cluster_solution_family]{cluster_solution_family()}} (and indirectly by \code{\link[=seg_cluster_input_sheet]{seg_cluster_input_sheet()}}).
+Unlike other wrappers, the return value includes a third element
+(\code{hierarchical_fit}) containing the raw hclust object for downstream
+dendrogram plotting.
 }

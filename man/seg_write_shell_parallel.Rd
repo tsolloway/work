@@ -31,5 +31,8 @@ seg_write_shell_parallel(
 )
 }
 \description{
-seg_write_shell_parallel
+Writes solution shell workbooks in parallel. Trims the seg
+object to only the components needed by \code{\link[=seg_write_shell]{seg_write_shell()}} before
+dispatching to workers — drops redundant data copies and clustering
+analysis results to stay under the \code{future.globals.maxSize} limit.
 }

@@ -4,8 +4,54 @@
 \alias{seg_cluster_variability}
 \title{seg_cluster_variability}
 \usage{
-seg_cluster_variability(df, vars, vary_percent = 0.1, side_bias_percent = 0.1)
+seg_cluster_variability(
+  df,
+  vars,
+  vary_percent = 0.1,
+  side_bias_percent = 0.1,
+  filter_logical_vector = NULL,
+  var_id = NULL
+)
+}
+\arguments{
+\item{df}{A data frame containing the polar variables.}
+
+\item{vars}{Character vector of polar variable names to evaluate.}
+
+\item{vary_percent}{Numeric (0–1). Fraction of respondents to flag at each
+tail of the row-wise SD distribution. \code{NULL} skips the variability filter.}
+
+\item{side_bias_percent}{Numeric (0–1). Fraction of respondents to flag at
+each tail of the side-bias sum distribution. \code{NULL} skips the side-bias
+filter.}
+
+\item{filter_logical_vector}{Character name of a logical column in \code{df} used
+to subset rows before computing cutoffs. The resulting filter columns are
+joined back onto the full data frame. \code{NULL} (default) uses all rows.}
+
+\item{var_id}{Character name of the ID column used to join filtered results
+back to the full data frame. Required when \code{filter_logical_vector} is set.}
+}
+\value{
+A list with two elements:
+\describe{
+\item{df}{The input data frame with added filter columns
+(\code{variability}, \code{ok_variability}, \code{side_bias_sum}, \code{ok_side_bias},
+\code{okay_filter}).}
+\item{ok_filter_exists}{Logical indicating whether any filter was applied.}
+}
 }
 \description{
-seg_cluster_variability
+Flags respondents with extreme variability or side bias across
+polar variables, producing an \code{okay_filter} column that can be used to
+exclude outliers before clustering.
+
+Variability is measured as the row-wise standard deviation across polar
+variables. Side bias is measured as the count of polar variables falling
+below the midpoint of the scale. Respondents in the tails of either
+distribution are flagged.
+
+When \code{filter_logical_vector} is supplied, cutoffs are computed on the
+filtered subset only, and the resulting columns are joined back onto the
+full data frame via \code{var_id}.
 }

@@ -11,6 +11,26 @@ seg_init(
   force = FALSE
 )
 }
+\arguments{
+\item{folder_path}{Character. Root directory for the project (default:
+current working directory). Three subfolders are created beneath it:
+\verb{1. Data and Syntax}, \verb{2. Specs, Input and FA}, \verb{3. Solutions}.}
+
+\item{project_name}{Character. Project name used in file naming and metadata.}
+
+\item{project_number}{Character. Project number used in file naming and
+metadata.}
+
+\item{force}{Logical. If \code{TRUE}, deletes existing project subfolders before
+recreating them. Errors if folders exist and \code{force = FALSE} (default).}
+}
+\value{
+A seg object (list with class \code{"analytic_segmentation"}) containing
+\code{paths}, \code{meta}, and \code{data} slots, with a blank spec template saved to the
+process folder.
+}
 \description{
-seg_init
+Initializes a new segmentation project. Creates the standard
+folder structure, generates a blank spec template, and returns a seg object
+with paths and metadata ready for downstream pipeline functions.
 }

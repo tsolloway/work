@@ -8,6 +8,8 @@ const backBtn = document.getElementById("back-btn");
 const appBarTitle = document.getElementById("app-bar-title");
 const appFrame = document.getElementById("app-frame");
 const loadingOverlay = document.getElementById("loading-overlay");
+const loadingAppName = document.getElementById("loading-app-name");
+const loadingStatus = document.getElementById("loading-status");
 const renameModal = document.getElementById("rename-modal");
 const renameInput = document.getElementById("rename-input");
 const renameCancel = document.getElementById("rename-cancel");
@@ -36,15 +38,24 @@ function showApp(port, name, appId) {
   appBarTitle.textContent = name;
   currentAppId = appId;
 
-  // Hide loading overlay and show the app
-  loadingOverlay.style.display = "none";
+  // Keep overlay visible while iframe loads — update status text
+  loadingStatus.textContent = "Rendering...";
+
+  // Hide overlay once the Shiny app finishes loading in the iframe
+  appFrame.onload = () => {
+    loadingOverlay.style.display = "none";
+    appFrame.onload = null;
+  };
+
   appFrame.src = `http://127.0.0.1:${port}`;
 }
 
-function showLoading() {
+function showLoading(name) {
   libraryView.style.display = "none";
   appView.style.display = "flex";
   loadingOverlay.style.display = "flex";
+  loadingAppName.textContent = name || "";
+  loadingStatus.textContent = "Starting...";
   appFrame.src = "about:blank";
 }
 
@@ -99,15 +110,16 @@ async function renderApps() {
     card.addEventListener("click", async (e) => {
       if (e.target.closest(".app-actions")) return;
 
-      // Show loading screen immediately
+      // Show loading screen immediately with app name
       appBarTitle.textContent = app.name;
-      showLoading();
+      showLoading(app.name);
 
       const result = await window.launcherAPI.launchApp(app.id);
       if (result.error) {
         showLibrary();
         alert("Failed to launch: " + result.error);
       } else {
+        // R is up — now waiting for iframe to render
         showApp(result.port, result.name, result.appId);
       }
     });
@@ -258,6 +270,51 @@ async function applyConfig() {
     emptyHint.textContent = `Drag a .${appFileExtension} file here or click the button below`;
   }
 }
+
+// ---- Relay postMessage from Shiny iframe to Electron APIs -------------------
+window.addEventListener("message", async (event) => {
+  if (!event.data || !event.data.type) return;
+  // Only accept messages from the app iframe (http://127.0.0.1:*)
+  if (!event.origin || !event.origin.startsWith("http://127.0.0.1")) return;
+
+  console.log("[relay] Received postMessage:", event.data.type, "from", event.origin);
+
+  if (event.data.type === "request-save-path") {
+    try {
+      const result = await window.launcherAPI.showSaveDialog({
+        title: "Save state file",
+        defaultPath: event.data.defaultPath || undefined,
+        filters: event.data.filters || [],
+      });
+      console.log("[relay] Save dialog result:", result);
+      appFrame.contentWindow.postMessage({
+        type: "save-path-result",
+        canceled: result.canceled,
+        filePath: result.filePath || null,
+      }, event.origin);
+    } catch (err) {
+      console.error("[relay] Save dialog error:", err);
+    }
+  }
+
+  if (event.data.type === "request-load-path") {
+    try {
+      const result = await window.launcherAPI.showOpenDialog({
+        title: "Load state file",
+        filters: event.data.filters || [],
+        properties: ["openFile"],
+      });
+      console.log("[relay] Open dialog result:", result);
+      appFrame.contentWindow.postMessage({
+        type: "load-path-result",
+        canceled: result.canceled,
+        filePath: result.filePaths && result.filePaths[0] ? result.filePaths[0] : null,
+      }, event.origin);
+    } catch (err) {
+      console.error("[relay] Open dialog error:", err);
+    }
+  }
+});
 
 // ---- Init -------------------------------------------------------------------
 applyConfig();

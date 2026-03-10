@@ -1,5 +1,17 @@
 #' seg_get_data
-#' @description seg_get_data
+#'
+#' @description Reads a data file into the seg object, generates a unique
+#'   respondent ID column, and optionally stores dictionary metadata.
+#'
+#' @param seg A seg object (from [seg_init()]).
+#' @param data_path Character. Path to the data file (`.sav`, `.csv`, `.xlsx`).
+#' @param weight Character. Name of the weight variable column, or `NULL` for
+#'   unweighted (default).
+#' @param id_name Character. Name of the auto-generated respondent ID column
+#'   (default: `"seg_uuid"`).
+#'
+#' @return The seg object with `seg[["data"]][["original"]]` populated.
+#'
 #' @export
 seg_get_data <- function(seg, data_path, weight = NULL, id_name = "seg_uuid"){
 

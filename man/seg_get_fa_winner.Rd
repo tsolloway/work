@@ -4,8 +4,32 @@
 \alias{seg_get_fa_winner}
 \title{seg_get_fa_winner}
 \usage{
-seg_get_fa_winner(seg, winner, row_header = 4, file_location = NULL)
+seg_get_fa_winner(
+  seg,
+  winner,
+  row_header = 4,
+  file_location = NULL,
+  polar_type = c("rs", "source")
+)
+}
+\arguments{
+\item{seg}{A seg object with spec and PCA file path populated.}
+
+\item{winner}{Integer. The winning factor solution number (sheet name in the
+PCA workbook).}
+
+\item{row_header}{Integer. Row where the data header starts in the PCA sheet
+(default: \code{4}).}
+
+\item{file_location}{Character. Path to the PCA Excel file. Defaults to
+\code{seg[["paths"]][["files"]][["pca"]]}.}
+}
+\value{
+The seg object with \code{seg[["input_sheet"]][["input_fa_table"]]}
+populated.
 }
 \description{
-seg_get_fa_winner
+Reads the winning PCA factor solution from the PCA Excel
+workbook, extracts variable-to-factor assignments and loadings, and stores
+the result in the seg object for input sheet generation.
 }

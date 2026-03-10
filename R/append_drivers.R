@@ -7,8 +7,6 @@ append_drivers <- function(
     engine = c("linear", "logistic")
 ){
 
-  require(openxlsx)
-
   if( is.null(wb) ) wb <- oxl_create_workbook()
   if( is.null(sheet_name) ) sheet_name <- "drivers"
 
@@ -25,23 +23,23 @@ append_drivers <- function(
   header_rows <- row_data_start
 
 
-  addWorksheet(wb, sheet_name)
+  openxlsx::addWorksheet(wb, sheet_name)
 
-  writeData(wb, sheet_name, title, startRow = row_data_start - 1, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, title, startRow = row_data_start - 1, startCol = col_data_start)
 
-  addStyle(wb, sheet_name, style = createStyle(fontSize = 20, textDecoration = "bold"), rows = row_data_start - 1, cols = col_data_start)
+  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(fontSize = 20, textDecoration = "bold"), rows = row_data_start - 1, cols = col_data_start)
 
-  writeData(wb, sheet_name, footer, startRow = total_impact_row + 1, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, footer, startRow = total_impact_row + 1, startCol = col_data_start)
 
-  writeData(wb, sheet_name, analysis_table, startRow = row_data_start, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, analysis_table, startRow = row_data_start, startCol = col_data_start)
 
-  setColWidths(wb, sheet_name, cols = cols_to_hide, hidden = rep(T, length(cols_to_hide)))
+  openxlsx::setColWidths(wb, sheet_name, cols = cols_to_hide, hidden = rep(T, length(cols_to_hide)))
 
-  addStyle(wb, sheet_name, style = createStyle(numFmt = "0.0", halign = "center"), rows = driver_rows, cols = cols_to_format, gridExpand = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(numFmt = "0.0", halign = "center"), rows = driver_rows, cols = cols_to_format, gridExpand = TRUE)
 
-  addStyle(wb, sheet_name, style = createStyle(halign = "left"), rows = driver_rows, cols = col_data_start + 1, gridExpand = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(halign = "left"), rows = driver_rows, cols = col_data_start + 1, gridExpand = TRUE)
 
-  setColWidths(wb, sheet_name, cols = col_data_start + 1, widths = label_width)
+  openxlsx::setColWidths(wb, sheet_name, cols = col_data_start + 1, widths = label_width)
 
 
 
@@ -55,26 +53,26 @@ append_drivers <- function(
       p_formula <- paste0(num2let(i-2), driver_rows[1], " > .1")
     }
 
-    conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows, style = c("#f66a6e","#feea8a","#66bd7d"), type = "colourScale")
-    conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows, style = createStyle(textDecoration = c("bold","italic")), rule = neg_formula)
-    conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows, style = createStyle(bgFill = "black"), rule = p_formula)
+    openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows, style = c("#f66a6e","#feea8a","#66bd7d"), type = "colourScale")
+    openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows, style = openxlsx::createStyle(textDecoration = c("bold","italic")), rule = neg_formula)
+    openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows, style = openxlsx::createStyle(bgFill = "black"), rule = p_formula)
 
   }
 
 
 
-  addStyle(
+  openxlsx::addStyle(
     wb, sheet_name,
-    style = createStyle(
+    style = openxlsx::createStyle(
       border = "left" , borderStyle = "thick", borderColour = "black"
     ),
     rows = seq(row_data_start, total_impact_row), cols = cols_all %>% head(1), gridExpand = TRUE
   )
 
 
-  addStyle(
+  openxlsx::addStyle(
     wb, sheet_name,
-    style = createStyle(
+    style = openxlsx::createStyle(
       numFmt = "0.0", halign = "center",
       border = "right", borderStyle = "thick", borderColour = "black"
     ),
@@ -82,9 +80,9 @@ append_drivers <- function(
   )
 
 
-  addStyle(
+  openxlsx::addStyle(
     wb, sheet_name,
-    style = createStyle(
+    style = openxlsx::createStyle(
       textDecoration = "bold", halign = "center", wrapText = TRUE,
       border = "TopBottom", borderStyle = "thick", borderColour = "black"
     ),
@@ -92,9 +90,9 @@ append_drivers <- function(
   )
 
 
-  addStyle(
+  openxlsx::addStyle(
     wb, sheet_name,
-    style = createStyle(
+    style = openxlsx::createStyle(
       numFmt = "0.0%", halign = "center",
       border = "TopBottom", borderStyle = "thick", borderColour = "black"
     ),
@@ -102,9 +100,9 @@ append_drivers <- function(
   )
 
 
-  addStyle(
+  openxlsx::addStyle(
     wb, sheet_name,
-    style = createStyle(
+    style = openxlsx::createStyle(
       textDecoration = "bold", halign = "center", wrapText = TRUE,
       border = c("left", "top", "bottom") , borderStyle = "thick", borderColour = "black"
     ),
@@ -112,34 +110,34 @@ append_drivers <- function(
   )
 
 
-  addStyle(
+  openxlsx::addStyle(
     wb, sheet_name,
-    style = createStyle(
+    style = openxlsx::createStyle(
       border = c("left", "top", "bottom") , borderStyle = "thick", borderColour = "black"
     ),
     rows = total_impact_row, cols = cols_all %>% head(1)
   )
 
 
-  addStyle(
+  openxlsx::addStyle(
     wb, sheet_name,
-    style = createStyle(
+    style = openxlsx::createStyle(
       textDecoration = "bold", halign = "center", wrapText = TRUE, border = c("right", "top", "bottom") , borderStyle = "thick", borderColour = "black"
     ),
     rows = row_data_start, cols = cols_all %>% tail(1)
   )
 
 
-  addStyle(
+  openxlsx::addStyle(
     wb, sheet_name,
-    style = createStyle(
+    style = openxlsx::createStyle(
       numFmt = "0.0%", halign = "center", border = c("right", "top", "bottom") , borderStyle = "thick", borderColour = "black"
     ),
     rows = total_impact_row, cols = cols_all %>% tail(1)
   )
 
 
-  freezePane(
+  openxlsx::freezePane(
     wb,
     sheet_name,
     firstActiveRow = row_data_start + 1,
@@ -149,5 +147,3 @@ append_drivers <- function(
 
   return(wb)
 }
-
-
