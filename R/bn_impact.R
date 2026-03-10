@@ -144,26 +144,19 @@ bn_impact <- function(
     type = c("cp", "gr", "mi"),
     add_index = TRUE,
     process_subgroups = TRUE,
+    dictionary = NULL,
     n_boot = 1,
     n_querry = 1e5,
     use_parallel = TRUE,
     seed = 1
 ){
 
-  # dv = NULL
-  # ivs = NULL
-  # do_community = FALSE
-  # community_assignment = NULL
-  # type = "cp"
-  # n_boot = 1
-  # n_querry = 1e5
-  # seed = 1
-
-
   type <- match.arg(type)
 
 
   if(process_subgroups){
+
+    first_subgroup <- names(obj)[[1]]
 
     output <- imap_progress(
       obj,
@@ -189,14 +182,12 @@ bn_impact <- function(
       .parallel = use_parallel
     ) %>%
       dplyr::bind_cols() %>%
-      dplyr::rename(Variable = Total_variable) %>%
+      dplyr::rename(Variable = !!paste0(first_subgroup, "_variable")) %>%
       dplyr::select(-dplyr::ends_with("_variable"))
 
+    names(output) <- names(output) %>% gsub("_index$", "", .)
 
-    names(output) <- names(output) %>% gsub("_index", "", .)
-
-
-  }else if(!process_subgroups){
+  }else{
 
     output <- bn_impact_engine(
       obj = obj,
@@ -238,7 +229,13 @@ bn_impact <- function(
         community_assignment %>% dplyr::select(id, community_name),
         by = dplyr::join_by(Variable == id)
       ) %>%
-      dplyr::relocate(Community = community_name, .before = Label)
+      dplyr::rename(Community = community_name)
+
+    if("Label" %in% names(output)){
+      output <- output %>% dplyr::relocate(Community, .before = Label)
+    } else {
+      output <- output %>% dplyr::relocate(Community, .after = Variable)
+    }
   }
 
 

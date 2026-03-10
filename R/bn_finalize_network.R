@@ -8,52 +8,32 @@ bn_finalize_network <- function(
     viz_prep = NULL,
     bn = NULL,
     previous_dv = NULL,
-    # traditional_driver_engine = c("linear", "logistic"),
     node_label_type = c("both", "variable", "label"),
     manual_groups = NULL,
     impact_type = c("cp", "gr", "mi"),
     impact_n_boot = 1000,
     impact_n_querry = 1e5,
-
+    tool_tip_edge_prefix = NULL,
     viz_size_node_by_impact = TRUE,
     viz_include_dv = FALSE,
-    viz_store = FALSE,
     model_parallel = FALSE,
     impact_parallel = TRUE,
     seed = 1
 ){
 
-  # traditional_driver_engine = c("linear", "logistic"),
-
-  viz_size_node_by_impact = TRUE
-  viz_include_dv = FALSE
-  viz_prep = NULL
-  bn = NULL
-  dv = NULL
-  previous_dv = NULL
-  node_label_type = "both"
-  manual_groups = NULL
-  impact_n_boot = 1
-  impact_n_querry = 1e5
-  impact_type = "cp"
-  seed = 1
-  model_parallel = FALSE
-  impact_parallel = TRUE
-
-
   node_label_type <- match.arg(node_label_type)
   impact_type <- match.arg(impact_type)
-
-  # traditional_driver_engine <- match.arg(traditional_driver_engine)
-
 
   results <- list()
   dictionary <- work::dictionary_from_named_object(dictionary)
   df <- df %>% as.data.frame()
+  source_unsupervised <- FALSE
+  x_ivs <- NULL
 
 
   if(impact_parallel || model_parallel){
     original_future_plan <- future::plan()
+    on.exit(future::plan(original_future_plan), add = TRUE)
     future::plan(future::multisession)
   }
 
@@ -64,8 +44,9 @@ bn_finalize_network <- function(
 
   if("meta" %in% names(obj)){
 
-    #logic for bn_engine return objects
-    if(obj[["meta"]][["analysis"]] == "bn_model_single"){
+    analysis_type <- obj[["meta"]][["analysis"]]
+
+    if(analysis_type == "bn_model_single"){
 
       if(is.null(bn)) bn <- obj[["bn"]]
       if(is.null(viz_prep)) viz_prep <- obj[["viz_prep"]]
@@ -74,8 +55,17 @@ bn_finalize_network <- function(
       if(is.null(previous_dv)) previous_dv <- obj[["meta"]][["dv"]]
       x_ivs <- obj[["meta"]][["ivs"]] %>% unlist() %>% setNames(NULL)
 
+    }else if(analysis_type == "bn_model_unsupervised"){
+
+      if(is.null(dv)) stop("dv is required when finalizing an unsupervised network.")
+      source_unsupervised <- TRUE
+
+      if(is.null(bn)) bn <- obj[["bn"]]
+      if(is.null(viz_prep)) viz_prep <- obj[["viz_prep"]]
+      x_ivs <- obj[["meta"]][["ivs"]] %>% unlist() %>% setNames(NULL)
+
     }else{
-      stop("Unknown situation being passed to the obj parameter.")
+      stop("Unknown analysis type: ", analysis_type)
     }
 
   }else if(inherits(obj, "bn")){
@@ -104,9 +94,8 @@ bn_finalize_network <- function(
   }
 
 
-  if(is.null(bn)){
-    stop("Cannot find a bn object.")
-  }
+  if(is.null(bn)) stop("Cannot find a bn object.")
+  if(is.null(dv)) stop("dv is required. Supply it directly or pass an obj with meta$dv.")
 
 
   ###############################
@@ -122,34 +111,42 @@ bn_finalize_network <- function(
   x_edges <- bn %>% bnlearn::arcs() %>% as.data.frame()
 
 
-  if(is.null(previous_dv) && !is.null(viz_prep)){
-    if(viz_prep[["nodes"]][["id"]][[1]] != dv){
-      previous_dv <- viz_prep[["nodes"]][["id"]][[1]]
+  if(!source_unsupervised){
+    if(is.null(previous_dv) && !is.null(viz_prep)){
+      if(viz_prep[["nodes"]][["id"]][[1]] != dv){
+        previous_dv <- viz_prep[["nodes"]][["id"]][[1]]
+      }
     }
-  }
 
-
-  if(!is.null(previous_dv)){
-    if(dv != previous_dv){
-      if((previous_dv %in% x_nodes) && !dv %in% x_nodes){
-        x_nodes <- x_nodes %>% gsub(previous_dv, dv, .)
-        x_edges[["from"]] <- x_edges[["from"]] %>% gsub(previous_dv, dv, .)
-        x_edges[["to"]] <- x_edges[["to"]] %>% gsub(previous_dv, dv, .)
-      }else{
-        stop("It's not programatically clear how to insert the new DV.  Please do it outside of this wrapper")
+    if(!is.null(previous_dv)){
+      if(dv != previous_dv){
+        if((previous_dv %in% x_nodes) && !dv %in% x_nodes){
+          x_nodes <- x_nodes %>% gsub(previous_dv, dv, ., fixed = TRUE)
+          x_edges[["from"]] <- x_edges[["from"]] %>% gsub(previous_dv, dv, ., fixed = TRUE)
+          x_edges[["to"]] <- x_edges[["to"]] %>% gsub(previous_dv, dv, ., fixed = TRUE)
+        }else{
+          stop("It's not programatically clear how to insert the new DV.  Please do it outside of this wrapper")
+        }
       }
     }
   }
 
 
-  if(!exists("x_ivs")) x_ivs <- x_nodes %>% setdiff(dv)
+  if(is.null(x_ivs)) x_ivs <- x_nodes %>% setdiff(dv)
+
+
+  # --- subgroups default ---
+  if(is.null(subgroups)){
+    subgroups <- "Total"
+    if(!"Total" %in% names(df)) df[["Total"]] <- 1L
+  }
 
 
   ###############################
   # final model
   ###############################
 
-  message("Beginning model estimation")
+  cli::cli_alert_info("Beginning model estimation")
 
   results[["bn"]] <- work::bn_engine(
     df = df,
@@ -159,8 +156,8 @@ bn_finalize_network <- function(
     white_list = x_edges,
     node_label_type = node_label_type,
     manual_groups = manual_groups,
-    only_white_list = TRUE,
-    tool_tip_edge_prefix = viz_tool_tip_edge_prefix,
+    only_white_list = !source_unsupervised,
+    tool_tip_edge_prefix = tool_tip_edge_prefix,
     remove_dv_from_viz_prep = if(viz_include_dv) NULL else dv,
     suppress_bn_warning = TRUE,
     on_exit_detach_igraph = FALSE,
@@ -193,7 +190,6 @@ bn_finalize_network <- function(
   ) %>%
     setNames(subgroups)
 
-
   results[["bn_subgroups_summary"]] <- results[["bn_subgroups"]] %>%
     purrr::imap(
       ~.x[["summary"]][["model"]] %>%
@@ -201,10 +197,9 @@ bn_finalize_network <- function(
         dplyr::relocate(subgroup, .before = 1)
     ) %>%
     dplyr::bind_rows() %>%
-    dplyr::arrange(-accuracy)
+    dplyr::arrange(dplyr::desc(accuracy))
 
-
-  message("Completed model estimation")
+  cli::cli_alert_info("Completed model estimation")
 
 
 
@@ -212,8 +207,10 @@ bn_finalize_network <- function(
   # Impacts attributes
   ###############################
 
-  message("Beginning impact estimation")
-  message("attribute estimation...")
+  attribute_nodes <- results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]]
+  community_nodes <- results[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]]
+
+  cli::cli_alert_info("Beginning impact estimation — attributes")
 
   results[["impact"]] <- list()
 
@@ -223,7 +220,7 @@ bn_finalize_network <- function(
     dv = dv,
     ivs = x_ivs,
     do_community = FALSE,
-    community_assignment = results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]],
+    community_assignment = attribute_nodes,
     type = impact_type,
     process_subgroups = TRUE,
     n_boot = impact_n_boot,
@@ -232,7 +229,7 @@ bn_finalize_network <- function(
     seed = seed
   )
 
-  message("community estimation...")
+  cli::cli_alert_info("Beginning impact estimation — communities")
 
   results[["impact"]][["community"]] <- work::bn_impact(
     obj = results[["bn_subgroups"]],
@@ -240,7 +237,7 @@ bn_finalize_network <- function(
     dv = dv,
     ivs = x_ivs,
     do_community = TRUE,
-    community_assignment = results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]],
+    community_assignment = attribute_nodes,
     type = impact_type,
     process_subgroups = TRUE,
     n_boot = impact_n_boot,
@@ -249,7 +246,7 @@ bn_finalize_network <- function(
     seed = seed
   )
 
-  message("Completed impact estimation")
+  cli::cli_alert_info("Completed impact estimation")
 
 
 
@@ -269,70 +266,21 @@ bn_finalize_network <- function(
 
   if(viz_size_node_by_impact){
 
-    attribute_nodes <- results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]]
-    community_nodes <- results[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]]
+    join_impact <- function(nodes, impacts, id_col) {
+      impact_vals <- impacts %>% dplyr::select(dplyr::all_of(c(id_col, "Total_Total")))
+      nodes %>%
+        dplyr::left_join(impact_vals, by = stats::setNames(id_col, "id")) %>%
+        dplyr::mutate(value = Total_Total) %>%
+        dplyr::select(-Total_Total)
+    }
 
-    attribute_node_impacts <- results[["impact"]][["attribute"]] %>%
-      dplyr::select(Variable, Total)
-      # dplyr::mutate(Total = Total / 100)
+    results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]] <-
+      join_impact(attribute_nodes, results[["impact"]][["attribute"]], "Variable")
 
-    community_node_impacts <- results[["impact"]][["community"]] %>%
-      dplyr::select(Community, Total)
-      # dplyr::mutate(Total = Total / 100)
-
-    attribute_nodes <- attribute_nodes %>%
-      dplyr::left_join(attribute_node_impacts, by = dplyr::join_by(id == Variable)) %>%
-      dplyr::mutate(value = Total) %>%
-      dplyr::select(-Total)
-
-    community_nodes <- community_nodes %>%
-      dplyr::left_join(community_node_impacts, by = dplyr::join_by(id == Community)) %>%
-      dplyr::mutate(value = Total) %>%
-      dplyr::select(-Total)
-
-
-    results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]] <- attribute_nodes
-    results[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]] <- community_nodes
-
+    results[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]] <-
+      join_impact(community_nodes, results[["impact"]][["community"]], "Community")
 
   }
-
-
-
-  results[["viz_prep"]] <- list()
-
-  results[["viz_prep"]][["attribute_viz_prep"]] <- results[["bn"]][["viz_prep"]][["attribute_viz_prep"]]
-
-  results[["viz_prep"]][["community_viz_prep"]] <- results[["bn"]][["viz_prep"]][["community_viz_prep"]]
-
-
-
-  ###############################
-  # Visuals
-  ###############################
-
-  if(viz_store){
-
-    results[["visuals"]] <- list()
-
-    results[["visuals"]][["attribute"]][["none"]] <- results %>% work::bn_visual(type = "none")
-    results[["visuals"]][["attribute"]][["gravity"]] <- results %>% work::bn_visual(type = "gravity")
-    results[["visuals"]][["attribute"]][["charge"]] <- results %>% work::bn_visual(type = "charge")
-    results[["visuals"]][["attribute"]][["hierarchy"]] <- results %>% work::bn_visual(type = "hierarchy")
-
-    results[["visuals"]][["community"]][["none"]] <- results %>% work::bn_visual(type = "none", do_community = TRUE)
-    results[["visuals"]][["community"]][["gravity"]] <- results %>% work::bn_visual(type = "gravity", do_community = TRUE)
-    results[["visuals"]][["community"]][["charge"]] <- results %>% work::bn_visual(type = "charge", do_community = TRUE)
-    results[["visuals"]][["community"]][["hierarchy"]] <- results %>% work::bn_visual(type = "hierarchy", do_community = TRUE)
-
-  }
-
-
-
-  if(impact_parallel || model_parallel){
-    future::plan(original_future_plan)
-  }
-
 
 
   return(results)
