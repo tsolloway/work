@@ -2,7 +2,7 @@
 % Please edit documentation in R/bn_freq_prob_shift.R
 \name{bn_freq_prob_shift}
 \alias{bn_freq_prob_shift}
-\title{bn_freq_prob_shift}
+\title{Shift a Frequency Distribution to Achieve a Target Mean Lift}
 \usage{
 bn_freq_prob_shift(
   freq = NULL,
@@ -14,8 +14,69 @@ bn_freq_prob_shift(
 )
 }
 \arguments{
-\item{freq}{named count table}
+\item{freq}{A named numeric vector of counts (e.g., from \code{table()}).
+Names are interpreted as numeric scale values. Either \code{freq} or both
+\code{p_orig} and \code{values} must be provided.}
+
+\item{type}{Character. Shift method: \code{"exponential"} (default),
+\code{"linear"}, or \code{"quadratic"}.}
+
+\item{lift}{Numeric. Target percentage lift for the mean (e.g., 0.1 = 10 percent increase).}
+
+\item{return_actual_lift}{Logical. If \code{TRUE}, returns a list with the shifted
+probabilities plus diagnostic info (original/new/target means, actual lift).
+If \code{FALSE} (default), returns just the shifted probability vector.}
+
+\item{p_orig}{Numeric vector. Original probabilities (alternative to \code{freq}).
+Must sum to 1. Requires \code{values} to also be provided.}
+
+\item{values}{Numeric vector. Scale values corresponding to each probability in
+\code{p_orig}. Required when using \code{p_orig} instead of \code{freq}.}
+}
+\value{
+If \code{return_actual_lift = FALSE}: a named numeric vector of shifted probabilities.
+
+If \code{return_actual_lift = TRUE}: a list containing:
+\itemize{
+\item \code{p_new_val}: shifted probabilities
+\item \code{p_orig_val}: original probabilities
+\item \code{mean_orig}: original weighted mean
+\item \code{mean_new}: achieved weighted mean
+\item \code{mean_target}: target weighted mean
+\item \code{mean_shift}: absolute mean change
+\item \code{lift_target}: requested lift
+\item \code{lift_actual}: achieved lift
+}
 }
 \description{
-bn_freq_prob_shift
+Given a named frequency table (or raw probabilities + values), computes a new
+probability distribution whose mean is shifted by a specified percentage lift.
+Three shift methods are available, each making different assumptions about how
+probability mass redistributes:
+
+\itemize{
+\item \strong{Exponential} (default): Maximum-entropy tilting. The most neutral
+redistribution that achieves the target mean, minimizing KL-divergence from
+the original distribution.
+\item \strong{Quadratic}: Minimizes the sum of squared differences from the
+original probabilities (L2 distance) subject to the mean constraint. Uses
+\code{CVXR} for convex optimization.
+\item \strong{Linear}: Fastest but can produce negative probabilities for large
+shifts. Best suited for small perturbations.
+}
+}
+\examples{
+\dontrun{
+freq <- c("1" = 50, "2" = 120, "3" = 200, "4" = 100, "5" = 30)
+
+# Exponential tilting (default, most principled)
+bn_freq_prob_shift(freq, lift = 0.1)
+
+# With diagnostics
+bn_freq_prob_shift(freq, lift = 0.1, return_actual_lift = TRUE)
+
+# Using raw probabilities instead of counts
+bn_freq_prob_shift(p_orig = c(0.1, 0.24, 0.4, 0.2, 0.06), values = 1:5, lift = 0.1)
+}
+
 }

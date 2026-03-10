@@ -14,6 +14,7 @@ bn_impact(
   type = c("cp", "gr", "mi"),
   add_index = TRUE,
   process_subgroups = TRUE,
+  dictionary = NULL,
   n_boot = 1,
   n_querry = 1e+05,
   use_parallel = TRUE,

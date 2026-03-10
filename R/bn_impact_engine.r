@@ -86,16 +86,6 @@ bn_impact_engine <- function(
     seed = 1
 ){
 
-  # do_community = T
-  # community_assignment = NULL
-  # type = "cp"
-  # type = "gr"
-  # type = "mi"
-  # n_boot = 10
-  # n_querry = 1e5
-  # seed = 1
-
-
   type <- match.arg(type)
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
@@ -162,9 +152,11 @@ bn_impact_engine <- function(
 
   if(type == "cp") dv_max <- df[[dv]] %>% as.character() %>% as.numeric() %>% max(na.rm = TRUE) else dv_max <- NULL
 
+  ivs_max <- NULL
+  ivs_min <- NULL
   if(type != "mi"){
-    ivs_max <- df %>% dplyr::summarise_at(ivs, ~as.character(.x) %>% as.numeric() %>% max(na.rm = TRUE)) %>% as.list()
-    ivs_min <- df %>% dplyr::summarise_at(ivs, ~as.character(.x) %>% as.numeric() %>% min(na.rm = TRUE)) %>% as.list()
+    ivs_max <- df %>% dplyr::summarise(dplyr::across(dplyr::all_of(ivs), ~as.character(.x) %>% as.numeric() %>% max(na.rm = TRUE))) %>% as.list()
+    ivs_min <- df %>% dplyr::summarise(dplyr::across(dplyr::all_of(ivs), ~as.character(.x) %>% as.numeric() %>% min(na.rm = TRUE))) %>% as.list()
   }
 
 
@@ -181,6 +173,8 @@ bn_impact_engine <- function(
 
   }else if(!do_community){
     community_assignment <- NULL
+  }else{
+    stop("Unknown do_community value.")
   }
 
 
@@ -217,7 +211,7 @@ bn_impact_engine <- function(
   # ---------------------------
   engine_diff_single_attribute <- function(
     fit_boot, grain_bn = NULL, dv = NULL, iv, attr_iv_boot_max, attr_iv_boot_min, attr_dv_boot_max = NULL,
-    type = c("cp", "gr"), n_querry = 1e5, seed = 1
+    type = c("cp", "gr"), n_querry = 1e5, seed = NULL
   ){
 
     if(type == "gr"){
@@ -262,13 +256,13 @@ bn_impact_engine <- function(
       if(is.null(fit)) fit_boot <- bnlearn::bn.fit(bn, dat_boot, method = "bayes") else fit_boot <- fit
 
       if(!all(purrr::map_lgl(ivs, ~ ivs_max[[.x]] %in% dat_boot[[.x]]))){
-        iv_boot_max <- dat_boot %>% dplyr::summarise_at(ivs, ~as.character(.x) %>% as.numeric() %>% max(na.rm = TRUE)) %>% as.list()
+        iv_boot_max <- dat_boot %>% dplyr::summarise(dplyr::across(dplyr::all_of(ivs), ~as.character(.x) %>% as.numeric() %>% max(na.rm = TRUE))) %>% as.list()
       }else{
         iv_boot_max <- ivs_max
       }
 
       if(!all(purrr::map_lgl(ivs, ~ ivs_min[[.x]] %in% dat_boot[[.x]]))){
-        iv_boot_min <- dat_boot %>% dplyr::summarise_at(ivs, ~as.character(.x) %>% as.numeric() %>% min(na.rm = TRUE)) %>% as.list()
+        iv_boot_min <- dat_boot %>% dplyr::summarise(dplyr::across(dplyr::all_of(ivs), ~as.character(.x) %>% as.numeric() %>% min(na.rm = TRUE))) %>% as.list()
       }else{
         iv_boot_min <- ivs_min
       }
@@ -316,10 +310,11 @@ bn_impact_engine <- function(
             attr_iv_boot_min = iv_boot_min[.x],
             attr_dv_boot_max = dv_boot_max,
             type = type,
-            n_querry = n_querry
+            n_querry = n_querry,
+            seed = seed
           )
         ) %>%
-        dplyr:::bind_rows() %>%
+        dplyr::bind_rows() %>%
         dplyr::as_tibble()
 
     }
@@ -350,6 +345,8 @@ bn_impact_engine <- function(
           dplyr::left_join(results_mi, by = dplyr::join_by(variable))
       }else if(type == "mi"){
         results <- results_mi
+      }else{
+        stop("Unknown type: ", type)
       }
 
     }
@@ -433,6 +430,8 @@ bn_impact_engine <- function(
         dplyr::mutate(
           index = (abs(mi) / mean(abs(mi))) * 100
         )
+    }else{
+      stop("Unknown type for index: ", type)
     }
 
   }
