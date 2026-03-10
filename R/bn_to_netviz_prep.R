@@ -140,6 +140,11 @@ bn_to_netviz_prep <- function(
     group_assignment <- x_clusters %>% igraph::membership()
   }
 
+  # fully connected networks return unnamed membership — use graph node names
+  if (is.null(names(group_assignment)) || length(names(group_assignment)) == 0) {
+    names(group_assignment) <- igraph::V(x_graph)$name
+  }
+
   group_assignment <- data.frame(
     id = group_assignment %>% names(),
     group = group_assignment %>% as.numeric()
