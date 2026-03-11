@@ -26,6 +26,74 @@ seg_cluster_with_profiles(
   nstart = 10
 )
 }
+\arguments{
+\item{seg}{A seg object with data and spec loaded.}
+
+\item{solution_previous}{Character. Letter of an existing solution family
+(e.g., \code{"A"}) whose polar inputs should be reused. If provided, overrides
+\code{inputs_polars} with the RS variables from that family.}
+
+\item{solution_name}{Character. Name for this solution (e.g., \code{"H"}). Used as
+the key in \code{seg$solutions$analysis}.}
+
+\item{inputs_polars}{Character vector. Specific polar variables (RS or source)
+to cluster on. If \code{NULL} and \code{use_greedy = TRUE}, greedy LDA selects them
+automatically. If \code{NULL} and \code{use_greedy = FALSE}, all RS polars are used.}
+
+\item{inputs_profiles}{Character vector. Profile shell variables to include
+as clustering inputs (e.g., \code{c("BT14", "BT15")}).}
+
+\item{include_polars_lda}{Logical. Include polar variables in the LDA
+discriminant analysis (default: \code{TRUE}).}
+
+\item{include_profiles_lda}{Logical. Include profile variables in the LDA
+discriminant analysis (default: \code{TRUE}).}
+
+\item{resp_id_name}{Character. Respondent ID column name. If \code{NULL}, auto-
+detected via \code{\link[=get_resp_id_name]{get_resp_id_name()}}.}
+
+\item{filter_logical_vector}{Logical vector or character column name used to
+subset respondents before clustering.}
+
+\item{ok_filter}{Logical. If \code{TRUE} (default), applies the variability filter
+(\code{\link[=seg_cluster_variability]{seg_cluster_variability()}}) to exclude flat-liners.}
+
+\item{use_greedy}{Logical. If \code{TRUE} (default), uses greedy LDA
+(\code{\link[=get_greedy_vars]{get_greedy_vars()}}) to select the best polar inputs when
+\code{inputs_polars = NULL} and \code{solution_previous = NULL}.}
+
+\item{n_min}{Integer. Minimum number of clusters (default: 4).}
+
+\item{n_max}{Integer. Maximum number of clusters (default: 7).}
+
+\item{reduced_inputs_max}{Integer. Maximum variables for greedy LDA reduced
+input set (default: 16).}
+
+\item{vary_percent}{Numeric. Minimum proportion of non-modal responses for
+the variability filter (default: 0.1).}
+
+\item{side_bias_percent}{Numeric. Maximum allowable side-bias proportion for
+the variability filter (default: 0.1).}
+
+\item{priors}{Character. LDA prior method: \code{"size"} (default) or \code{"equal"}.}
+
+\item{iter_max}{Integer. Maximum k-means iterations (default: 100000).}
+
+\item{nstart}{Integer. Number of random starts for k-means (default: 10).}
+}
+\value{
+The seg object with updated \code{seg$solutions$analysis[[solution_name]]},
+\code{seg$solutions$summary_table}, \code{seg$solutions$df_segment_append}, and
+\code{seg$data$with_solutions}.
+}
 \description{
-seg_cluster_with_profiles
+Runs k-means clustering using a mix of polar and profile
+variables as inputs. Unlike \code{\link[=seg_cluster_input_sheet]{seg_cluster_input_sheet()}} which clusters on
+polar variables only and evaluates profiles post-hoc, this function feeds
+profile variables directly into the clustering algorithm so they influence
+segment formation.
+
+Typical use case: you have a set of polar batteries plus behavioural or
+attitudinal profile items (e.g., usage, territory, demographics) that you
+want to actively shape the segments — not just describe them after the fact.
 }

@@ -58,19 +58,26 @@ seg_describe_solutions <- function(
     where <- getwd()
   }
 
-  # find the file — solution name is embedded in filename
-  sol_file <- list.files(
-    where, pattern = paste0("Solution - ", solution, "\\.xlsx$"),
-    recursive = TRUE, full.names = TRUE
-  )
-  sol_file <- sol_file[!grepl("~\\$", sol_file)]
+  # find the file — look in the expected subfolder first, then fall back to recursive search
+  sol_filename <- paste0("Solution - ", solution, ".xlsx")
+  sol_file <- file.path(where, solution, sol_filename)
 
-  if (length(sol_file) == 0) {
-    cli::cli_abort("No solution file found for {.val {solution}} in {.path {where}}")
+  if (!file.exists(sol_file)) {
+    # fall back to recursive search, excluding archive/previous folders
+    candidates <- list.files(
+      where, pattern = paste0("Solution - ", solution, "\\.xlsx$"),
+      recursive = TRUE, full.names = TRUE
+    )
+    candidates <- candidates[!grepl("~\\$", candidates)]
+    candidates <- candidates[!grepl("previous|archive|old|backup", candidates, ignore.case = TRUE)]
+
+    if (length(candidates) == 0) {
+      cli::cli_abort("No solution file found for {.val {solution}} in {.path {where}}")
+    }
+    sol_file <- candidates[1]
   }
-  sol_file <- sol_file[1]
 
-  if (verbose) cli::cli_alert_info("Reading {.file {basename(sol_file)}}")
+  if (verbose) cli::cli_alert_info("Reading {.file {sol_file}}")
 
   # ---- build battery legend from spec ----
   polar_blocks <- seg[["spec"]][["polars"]] %>%
@@ -308,7 +315,7 @@ seg_describe_solutions <- function(
 
   # ---- add to workbook ----
   if (add_to_wb) {
-    if (verbose) cli::cli_alert_info("Adding Descriptions sheet to {.file {basename(sol_file)}}")
+    if (verbose) cli::cli_alert_info("Adding Descriptions sheet to {.file {sol_file}}")
 
     wb <- openxlsx::loadWorkbook(sol_file)
 
@@ -357,8 +364,11 @@ seg_describe_solutions <- function(
     # set column width
     openxlsx::setColWidths(wb, "Descriptions", cols = 1, widths = 120)
 
-    openxlsx::saveWorkbook(wb, sol_file, overwrite = TRUE)
-    if (verbose) cli::cli_alert_success("Saved")
+    tryCatch(
+      openxlsx::saveWorkbook(wb, sol_file, overwrite = TRUE),
+      error = function(e) stop(sprintf("Failed to save workbook to %s: %s", sol_file, e$message), call. = FALSE)
+    )
+    if (verbose) cli::cli_alert_success("Saved to {.path {sol_file}}")
   }
 
   invisible(result)

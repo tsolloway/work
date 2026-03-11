@@ -42,8 +42,9 @@
 #' @param lift Numeric. Target percentage lift for distribution-aware impact
 #'   (\code{lift} column). Uses \code{bn_freq_prob_shift()} to shift each IV's
 #'   observed distribution by this fraction (e.g., 0.10 = 10 percent), then
-#'   computes the resulting DV probability change. Only computed when
-#'   \code{type = "gr"}. When \code{lift = 0} (default), computes the symmetric
+#'   computes the resulting DV probability change. Computed when
+#'   \code{type = "gr"} (exact) or \code{type = "cp"} (Monte Carlo).
+#'   When \code{lift = 0} (default), computes the symmetric
 #'   sensitivity: E_(+5 percent) - E_(-5 percent).
 #' @param seed Integer. Random seed for reproducibility.
 #'
@@ -55,7 +56,7 @@
 #'     level when the IV is set to its observed max vs min.
 #'     \code{maxVmin = P(DV_max | IV_max) - P(DV_max | IV_min)}.
 #'     This is the theoretical maximum effect of the IV on the DV.
-#'   \item \strong{lift} (type \code{"gr"} only): shifts the IV's observed
+#'   \item \strong{lift} (types \code{"gr"} and \code{"cp"}): shifts the IV's observed
 #'     frequency distribution by \code{lift} percent using
 #'     \code{bn_freq_prob_shift()}, then computes
 #'     \code{lift = sum(P(DV_max | IV=v) * p_shifted(v)) - sum(P(DV_max | IV=v) * p_observed(v))}.
@@ -98,7 +99,7 @@
 #'   \item \code{dv_estimate}: P(DV_max | IV_max) (types \code{"gr"} and \code{"cp"})
 #'   \item \code{maxVmin}: max-vs-min probability lift (types \code{"gr"} and \code{"cp"})
 #'   \item \code{lift}: distribution-aware DV change from a \code{lift} percent
-#'     shift in the IV (type \code{"gr"} only)
+#'     shift in the IV (types \code{"gr"} and \code{"cp"})
 #'   \item \code{mi}: normalized mutual information (all types)
 #'   \item \code{p_val}: MI chi-squared p-value (all types)
 #'   \item \code{index}: relative impact index based on maxVmin
@@ -388,8 +389,9 @@ bn_impact_engine <- function(
     # Lift: distribution-aware impact via bn_freq_prob_shift
     # When lift != 0: E_shifted - E_observed
     # When lift == 0: E_(+5%) - E_(-5%)
+    # Supports both gr (exact gRain) and cp (Monte Carlo cpquery)
     # ---------------------------
-    if(type == "gr" && !is.null(lift)){
+    if(type %in% c("gr", "cp") && !is.null(lift)){
 
       if(!is.null(community_assignment)) temp_ivs_r <- community_assignment else temp_ivs_r <- ivs %>% setNames(ivs)
 
@@ -404,11 +406,21 @@ bn_impact_engine <- function(
             p_observed <- as.numeric(freq) / sum(freq)
 
             levels_v <- names(freq)
-            dv_probs <- purrr::map_dbl(levels_v, function(v) {
-              ev <- stats::setNames(list(v), single_iv)
-              gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE) %>%
-                dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
-            })
+
+            if (type == "gr") {
+              dv_probs <- purrr::map_dbl(levels_v, function(v) {
+                ev <- stats::setNames(list(v), single_iv)
+                gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE) %>%
+                  dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+              })
+            } else if (type == "cp") {
+              dv_probs <- purrr::map_dbl(levels_v, function(v) {
+                if (!is.null(seed)) set.seed(seed)
+                eval(parse(text = glue::glue(
+                  "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{dv_boot_max}'), evidence = list({single_iv} = '{v}'), n = {n_querry}, method = 'lw')"
+                )))
+              })
+            }
 
             if (use_symmetric) {
               p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = lift_up)

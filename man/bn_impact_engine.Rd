@@ -67,8 +67,9 @@ Only used when \code{type = "cp"}. Default \code{1e4}.}
 \item{lift}{Numeric. Target percentage lift for distribution-aware impact
 (\code{lift} column). Uses \code{bn_freq_prob_shift()} to shift each IV's
 observed distribution by this fraction (e.g., 0.10 = 10 percent), then
-computes the resulting DV probability change. Only computed when
-\code{type = "gr"}. When \code{lift = 0} (default), computes the symmetric
+computes the resulting DV probability change. Computed when
+\code{type = "gr"} (exact) or \code{type = "cp"} (Monte Carlo).
+When \code{lift = 0} (default), computes the symmetric
 sensitivity: E_(+5 percent) - E_(-5 percent).}
 
 \item{seed}{Integer. Random seed for reproducibility.}
@@ -80,7 +81,7 @@ A tibble with one row per variable (or community) containing:
 \item \code{dv_estimate}: P(DV_max | IV_max) (types \code{"gr"} and \code{"cp"})
 \item \code{maxVmin}: max-vs-min probability lift (types \code{"gr"} and \code{"cp"})
 \item \code{lift}: distribution-aware DV change from a \code{lift} percent
-shift in the IV (type \code{"gr"} only)
+shift in the IV (types \code{"gr"} and \code{"cp"})
 \item \code{mi}: normalized mutual information (all types)
 \item \code{p_val}: MI chi-squared p-value (all types)
 \item \code{index}: relative impact index based on maxVmin
@@ -106,7 +107,7 @@ For each IV (or community of IVs when \code{do_community = TRUE}), the function:
 level when the IV is set to its observed max vs min.
 \code{maxVmin = P(DV_max | IV_max) - P(DV_max | IV_min)}.
 This is the theoretical maximum effect of the IV on the DV.
-\item \strong{lift} (type \code{"gr"} only): shifts the IV's observed
+\item \strong{lift} (types \code{"gr"} and \code{"cp"}): shifts the IV's observed
 frequency distribution by \code{lift} percent using
 \code{bn_freq_prob_shift()}, then computes
 \code{lift = sum(P(DV_max | IV=v) * p_shifted(v)) - sum(P(DV_max | IV=v) * p_observed(v))}.
