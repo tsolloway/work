@@ -17,6 +17,7 @@ bn_impact(
   dictionary = NULL,
   n_boot = 1,
   n_querry = 10000,
+  lift = 0,
   use_parallel = TRUE,
   seed = 1
 )
@@ -49,6 +50,9 @@ to rows where \code{df[[subgroup_name]] == 1}. If \code{FALSE}, compute once on 
 
 \item{n_querry}{Integer. Number of Monte Carlo queries/samples used by the engine.
 (Note: argument name is spelled \code{n_querry} here.)}
+
+\item{lift}{Numeric. Target percentage lift for the \code{reality} metric.
+Passed through to \code{bn_impact_engine()}. Default \code{0.10}.}
 
 \item{seed}{Integer. Random seed passed through to the engine.}
 }

@@ -13,8 +13,10 @@ bn_impact_engine(
   community_assignment = NULL,
   type = c("gr", "cp", "mi"),
   add_index = TRUE,
+  index_by = c("maxVmin", "lift", "mi"),
   n_boot = 1,
   n_querry = 10000,
+  lift = 0,
   seed = 1
 )
 }
@@ -50,14 +52,24 @@ Deterministic, fast, no Monte Carlo noise.
 }}
 
 \item{add_index}{Logical. If \code{TRUE} (default), appends an \code{index}
-column: each variable's absolute effect relative to the mean absolute effect,
-scaled to 100.}
+column scaled to 100 relative to the mean. Based on \code{index_by}.}
 
-\item{n_boot}{Integer. Number of bootstrap replicates. If \code{n_boot = 1},
-computes a single point estimate without bootstrapping.}
+\item{index_by}{Character. Which metric to use for the index column:
+\code{"maxVmin"} (default), \code{"lift"}, or \code{"mi"}.}
+
+\item{n_boot}{Integer. Number of bootstrap replicates. If \code{n_boot = 1}
+(recommended default), computes a single point estimate without bootstrapping.
+See \strong{When to bootstrap} below.}
 
 \item{n_querry}{Integer. Number of Monte Carlo samples per \code{cpquery()} call.
 Only used when \code{type = "cp"}. Default \code{1e4}.}
+
+\item{lift}{Numeric. Target percentage lift for distribution-aware impact
+(\code{lift} column). Uses \code{bn_freq_prob_shift()} to shift each IV's
+observed distribution by this fraction (e.g., 0.10 = 10 percent), then
+computes the resulting DV probability change. Only computed when
+\code{type = "gr"}. When \code{lift = 0} (default), computes the symmetric
+sensitivity: E_(+5 percent) - E_(-5 percent).}
 
 \item{seed}{Integer. Random seed for reproducibility.}
 }
@@ -66,15 +78,18 @@ A tibble with one row per variable (or community) containing:
 \itemize{
 \item \code{variable}: IV or community name
 \item \code{dv_estimate}: P(DV_max | IV_max) (types \code{"gr"} and \code{"cp"})
-\item \code{effect}: probability lift (types \code{"gr"} and \code{"cp"})
+\item \code{maxVmin}: max-vs-min probability lift (types \code{"gr"} and \code{"cp"})
+\item \code{lift}: distribution-aware DV change from a \code{lift} percent
+shift in the IV (type \code{"gr"} only)
 \item \code{mi}: normalized mutual information (all types)
 \item \code{p_val}: MI chi-squared p-value (all types)
-\item \code{index}: relative impact index (when \code{add_index = TRUE})
+\item \code{index}: relative impact index based on maxVmin
+(when \code{add_index = TRUE})
 }
 
-When \code{n_boot > 1}, effect and MI columns are expanded with bootstrap
-summary statistics: \code{_mean}, \code{_sd}, \code{_se}, \code{_t},
-\code{_ci_low}, \code{_ci_high}, \code{_p_value}.
+When \code{n_boot > 1}, maxVmin, lift, and MI columns are expanded with
+bootstrap summary statistics: \code{_mean}, \code{_sd}, \code{_se},
+\code{_t}, \code{_ci_low}, \code{_ci_high}, \code{_p_value}.
 }
 \description{
 Computes the estimated impact of independent variables (IVs) on a dependent
@@ -87,9 +102,17 @@ Optionally applies bootstrapping for uncertainty estimation.
 For each IV (or community of IVs when \code{do_community = TRUE}), the function:
 \enumerate{
 \item Fits (or reuses) a Bayesian network via \code{bnlearn::bn.fit()}.
-\item Estimates the probability of the DV at its maximum level when the IV is
-set to its observed maximum vs minimum.
-\item Computes the probability lift: P(DV_max | IV_max) - P(DV_max | IV_min).
+\item \strong{maxVmin}: estimates the probability of the DV at its maximum
+level when the IV is set to its observed max vs min.
+\code{maxVmin = P(DV_max | IV_max) - P(DV_max | IV_min)}.
+This is the theoretical maximum effect of the IV on the DV.
+\item \strong{lift} (type \code{"gr"} only): shifts the IV's observed
+frequency distribution by \code{lift} percent using
+\code{bn_freq_prob_shift()}, then computes
+\code{lift = sum(P(DV_max | IV=v) * p_shifted(v)) - sum(P(DV_max | IV=v) * p_observed(v))}.
+This is the distribution-aware impact: it accounts for where respondents
+currently sit on the IV, so IVs with little headroom produce small lift
+values even if maxVmin is large.
 \item Computes mutual information between each IV and the DV.
 \item Optionally bootstraps steps 1-4 to produce standard errors, confidence
 intervals, and p-values.
@@ -98,6 +121,26 @@ intervals, and p-values.
 Bootstrap replicates resample rows and refit parameters to the fixed network
 structure, capturing parameter uncertainty without conflating it with
 structural uncertainty.
+
+\strong{When to bootstrap}
+
+For most use cases (driver ranking, executive dashboards), \code{n_boot = 1}
+with \code{type = "gr"} is sufficient. The MI p-value already provides
+evidence strength (whether the IV-DV relationship is statistically real),
+and the \code{"gr"} probability lift is deterministic with no Monte Carlo
+noise, so the point estimate is stable without averaging across replicates.
+Together, the lift and MI p-value deliver both dimensions of the
+Impact x Evidence framework without any bootstrapping.
+
+Use \code{n_boot > 1} when you need:
+\itemize{
+\item Confidence intervals on the probability lift itself (e.g., for
+technical reports or publications).
+\item A formal test of whether the \emph{lift} is distinguishable from
+zero (conceptually different from MI's test of \emph{association}).
+\item To assess whether two drivers' effects significantly differ
+(via overlapping confidence intervals).
+}
 }
 \examples{
 \dontrun{

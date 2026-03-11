@@ -5,9 +5,12 @@
 \alias{example_data_brand}
 \title{example_data_brand}
 \format{
-A tibble with 2000 rows and 37 columns:
+A tibble with 2000 rows and 40 columns:
 \describe{
 \item{resp_id}{UUID respondent identifier}
+\item{Brand}{Brand name (6 brands: Apex, Vero, Kinetic, Solace, Drift, Ember)}
+\item{Brand_id}{Numeric brand identifier (1-6)}
+\item{weight}{Survey weight (0.3-3.0)}
 \item{Total}{Always 1 (total sample flag)}
 \item{Gen_Z, Millennials, Gen_X}{Binary subgroup membership}
 \item{bp_high_quality, bp_reliable, ...}{Brand perception attributes (30 items, 1-5 scale)}

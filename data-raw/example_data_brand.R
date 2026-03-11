@@ -189,6 +189,7 @@ example_data_brand <- tibble::tibble(
   resp_id = vapply(seq_len(n), function(i) uuid::UUIDgenerate(), character(1)),
   Brand = brand_names[brand_ids],
   Brand_id = brand_ids,
+  weight = round(runif(n, min = 0.3, max = 3.0), 2),
   Total = 1L,
   Gen_Z = as.integer(gen_labels == "Gen_Z"),
   Millennials = as.integer(gen_labels == "Millennials"),
