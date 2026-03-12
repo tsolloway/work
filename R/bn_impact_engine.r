@@ -57,6 +57,10 @@
 #'   to compute a lift value. If the distribution has fewer than this many
 #'   observations, the lift cell returns \code{NA}. Applied per-brand when
 #'   \code{brand} is set. Default \code{60}.
+#' @param dv_metric Character. What to compute from the DV distribution per IV level:
+#'   \code{"top_box"} (default) uses \code{P(DV_max | IV=v)} — probability of the
+#'   highest DV level. \code{"mean"} uses \code{E[DV | IV=v]} — the expected value
+#'   across all DV levels (works with any scale: 3-point, 5-point, 7-point, etc.).
 #' @param brand Character scalar or \code{NULL}. Column name in \code{df}
 #'   containing brand (or segment) labels. When provided, the lift metric is
 #'   computed using brand-specific frequency distributions rather than the
@@ -168,12 +172,14 @@ bn_impact_engine <- function(
     brand = NULL,
     min_base_for_lift = 60,
     include_base = TRUE,
+    dv_metric = c("top_box", "mean"),
     seed = 1
 ){
 
   type <- match.arg(type)
   index_by <- match.arg(index_by)
   lift_type <- match.arg(lift_type)
+  dv_metric <- match.arg(dv_metric)
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
   # ---------------------------
@@ -337,7 +343,7 @@ bn_impact_engine <- function(
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
     n_querry = 1e5, lift = 0, lift_type = "proportional", brand = NULL,
-    min_base_for_lift = 60, include_base = TRUE, fit = NULL, seed = 1
+    min_base_for_lift = 60, include_base = TRUE, dv_metric = "top_box", fit = NULL, seed = 1
   ){
     type <- match.arg(type)
 
@@ -470,20 +476,41 @@ bn_impact_engine <- function(
             freq_full <- table(dat_boot[[single_iv]])
             levels_v <- names(freq_full)
 
-            # Query P(DV_max | IV=v) once per level (shared across brands)
+            # Query DV distribution per IV level (shared across brands)
+            # dv_metric = "top_box": P(DV_max | IV=v)
+            # dv_metric = "mean":    E[DV | IV=v] = Σ d × P(DV=d | IV=v)
             if (type == "gr") {
               dv_probs <- purrr::map_dbl(levels_v, function(v) {
                 ev <- stats::setNames(list(v), single_iv)
-                gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE) %>%
-                  dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+                dist <- gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE)
+                if (dv_metric == "top_box") {
+                  dist %>% dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+                } else {
+                  dv_levels <- as.numeric(names(dist))
+                  dv_vals <- as.numeric(dist)
+                  sum(dv_levels * dv_vals)
+                }
               })
             } else if (type == "cp") {
-              dv_probs <- purrr::map_dbl(levels_v, function(v) {
-                if (!is.null(seed)) set.seed(seed)
-                eval(parse(text = glue::glue(
-                  "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{dv_boot_max}'), evidence = list({single_iv} = '{v}'), n = {n_querry}, method = 'lw')"
-                )))
-              })
+              if (dv_metric == "top_box") {
+                dv_probs <- purrr::map_dbl(levels_v, function(v) {
+                  if (!is.null(seed)) set.seed(seed)
+                  eval(parse(text = glue::glue(
+                    "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{dv_boot_max}'), evidence = list({single_iv} = '{v}'), n = {n_querry}, method = 'lw')"
+                  )))
+                })
+              } else {
+                dv_scale <- fit_boot[[dv]] %>% dimnames() %>% .[[1]] %>% as.numeric()
+                dv_probs <- purrr::map_dbl(levels_v, function(v) {
+                  if (!is.null(seed)) set.seed(seed)
+                  purrr::map_dbl(dv_scale, function(d) {
+                    eval(parse(text = glue::glue(
+                      "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{d}'), evidence = list({single_iv} = '{v}'), n = {n_querry}, method = 'lw')"
+                    )))
+                  }) -> level_probs
+                  sum(dv_scale * level_probs)
+                })
+              }
             }
 
             if (is.null(brand_levels)) {
@@ -586,7 +613,7 @@ bn_impact_engine <- function(
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
           add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
           lift_type = lift_type, brand = brand, min_base_for_lift = min_base_for_lift,
-          include_base = include_base, fit = NULL, community_assignment = community_assignment
+          include_base = include_base, dv_metric = dv_metric, fit = NULL, community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
       ) %>%
@@ -630,7 +657,7 @@ bn_impact_engine <- function(
       ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
       add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
       lift_type = lift_type, brand = brand, min_base_for_lift = min_base_for_lift,
-      include_base = include_base, fit = fit, community_assignment = community_assignment
+      include_base = include_base, dv_metric = dv_metric, fit = fit, community_assignment = community_assignment
     )
 
   }

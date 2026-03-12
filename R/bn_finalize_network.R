@@ -21,6 +21,7 @@ bn_finalize_network <- function(
     impact_brand = NULL,
     impact_min_base_for_lift = 60,
     impact_include_base = TRUE,
+    impact_dv_metric = c("top_box", "mean"),
     tool_tip_edge_prefix = NULL,
     viz_size_node_by_impact = TRUE,
     viz_include_dv = FALSE,
@@ -32,6 +33,7 @@ bn_finalize_network <- function(
   node_label_type <- match.arg(node_label_type)
   impact_type <- match.arg(impact_type)
   impact_lift_type <- match.arg(impact_lift_type)
+  impact_dv_metric <- match.arg(impact_dv_metric)
 
   results <- list()
   dictionary <- work::dictionary_from_named_object(dictionary)
@@ -242,6 +244,7 @@ bn_finalize_network <- function(
     brand = impact_brand,
     min_base_for_lift = impact_min_base_for_lift,
     include_base = impact_include_base,
+    dv_metric = impact_dv_metric,
     use_parallel = impact_parallel,
     seed = seed
   )
@@ -264,6 +267,7 @@ bn_finalize_network <- function(
     brand = impact_brand,
     min_base_for_lift = impact_min_base_for_lift,
     include_base = impact_include_base,
+    dv_metric = impact_dv_metric,
     use_parallel = impact_parallel,
     seed = seed
   )

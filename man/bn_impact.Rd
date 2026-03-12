@@ -22,6 +22,7 @@ bn_impact(
   brand = NULL,
   min_base_for_lift = 60,
   include_base = TRUE,
+  dv_metric = c("top_box", "mean"),
   use_parallel = TRUE,
   seed = 1
 )

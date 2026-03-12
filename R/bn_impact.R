@@ -154,12 +154,14 @@ bn_impact <- function(
     brand = NULL,
     min_base_for_lift = 60,
     include_base = TRUE,
+    dv_metric = c("top_box", "mean"),
     use_parallel = TRUE,
     seed = 1
 ){
 
   type <- match.arg(type)
   lift_type <- match.arg(lift_type)
+  dv_metric <- match.arg(dv_metric)
 
 
   if(process_subgroups){
@@ -188,6 +190,7 @@ bn_impact <- function(
           brand = brand,
           min_base_for_lift = min_base_for_lift,
           include_base = include_base,
+          dv_metric = dv_metric,
           seed = seed
         ) %>%
           setNames(glue::glue("{.y}_{names(.)}"))
@@ -216,6 +219,9 @@ bn_impact <- function(
       lift = lift,
       lift_type = lift_type,
       brand = brand,
+      min_base_for_lift = min_base_for_lift,
+      include_base = include_base,
+      dv_metric = dv_metric,
       seed = seed
     ) %>%
       dplyr::rename(Variable = variable)

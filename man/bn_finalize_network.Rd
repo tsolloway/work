@@ -23,6 +23,7 @@ bn_finalize_network(
   impact_brand = NULL,
   impact_min_base_for_lift = 60,
   impact_include_base = TRUE,
+  impact_dv_metric = c("top_box", "mean"),
   tool_tip_edge_prefix = NULL,
   viz_size_node_by_impact = TRUE,
   viz_include_dv = FALSE,

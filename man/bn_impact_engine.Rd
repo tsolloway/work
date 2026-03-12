@@ -21,6 +21,7 @@ bn_impact_engine(
   brand = NULL,
   min_base_for_lift = 60,
   include_base = TRUE,
+  dv_metric = c("top_box", "mean"),
   seed = 1
 )
 }
@@ -95,6 +96,11 @@ across brands; only the observed distribution changes. Default \code{NULL}.}
 to compute a lift value. If the distribution has fewer than this many
 observations, the lift cell returns \code{NA}. Applied per-brand when
 \code{brand} is set. Default \code{60}.}
+
+\item{dv_metric}{Character. What to compute from the DV distribution per IV level:
+\code{"top_box"} (default) uses \code{P(DV_max | IV=v)} — probability of the
+highest DV level. \code{"mean"} uses \code{E[DV | IV=v]} — the expected value
+across all DV levels (works with any scale: 3-point, 5-point, 7-point, etc.).}
 
 \item{seed}{Integer. Random seed for reproducibility.}
 }
