@@ -137,9 +137,26 @@ bn_freq_prob_shift <- function(
       sum(values * w)
     }
 
+    # Adaptive interval: widen until endpoints bracket the root
+    lo <- -10; hi <- 10
+    f_lo <- tilted_mean(lo) - target_mean
+    f_hi <- tilted_mean(hi) - target_mean
+
+    for (i in 1:10) {
+      if (sign(f_lo) != sign(f_hi)) break
+      lo <- lo * 2; hi <- hi * 2
+      f_lo <- tilted_mean(lo) - target_mean
+      f_hi <- tilted_mean(hi) - target_mean
+    }
+
+    if (sign(f_lo) == sign(f_hi)) {
+      warning("bn_freq_prob_shift: could not bracket root; returning original distribution.")
+      return(p_orig)
+    }
+
     lambda <- uniroot(
       function(l) tilted_mean(l) - target_mean,
-      interval = c(-10, 10)
+      interval = c(lo, hi)
     )$root
 
     p_new <- p_orig * exp(lambda * values)
