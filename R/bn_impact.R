@@ -153,6 +153,7 @@ bn_impact <- function(
     lift_type = c("proportional", "absolute"),
     brand = NULL,
     min_base_for_lift = 60,
+    include_base = TRUE,
     use_parallel = TRUE,
     seed = 1
 ){
@@ -186,6 +187,7 @@ bn_impact <- function(
           lift_type = lift_type,
           brand = brand,
           min_base_for_lift = min_base_for_lift,
+          include_base = include_base,
           seed = seed
         ) %>%
           setNames(glue::glue("{.y}_{names(.)}"))

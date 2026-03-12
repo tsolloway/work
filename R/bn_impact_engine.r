@@ -167,6 +167,7 @@ bn_impact_engine <- function(
     lift_type = c("proportional", "absolute"),
     brand = NULL,
     min_base_for_lift = 60,
+    include_base = TRUE,
     seed = 1
 ){
 
@@ -336,7 +337,7 @@ bn_impact_engine <- function(
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
     n_querry = 1e5, lift = 0, lift_type = "proportional", brand = NULL,
-    min_base_for_lift = 60, fit = NULL, seed = 1
+    min_base_for_lift = 60, include_base = TRUE, fit = NULL, seed = 1
   ){
     type <- match.arg(type)
 
@@ -508,6 +509,30 @@ bn_impact_engine <- function(
 
       results <- results %>%
         dplyr::left_join(lift_results, by = "variable")
+
+      # Base sizes per cell
+      if (include_base) {
+        base_results <- temp_ivs_r %>%
+          purrr::imap(function(iv_vars, iv_name) {
+            per_iv_bases <- purrr::map(iv_vars, function(single_iv) {
+              if (is.null(brand_levels)) {
+                c(base = sum(table(dat_boot[[single_iv]])))
+              } else {
+                purrr::map_dbl(brand_levels, function(b) {
+                  sum(dat_boot[[brand]] == b, na.rm = TRUE)
+                }) %>%
+                  setNames(paste0("base_", brand_levels))
+              }
+            }) %>%
+              do.call(rbind, .)
+            avg_base <- colMeans(per_iv_bases)
+            dplyr::bind_cols(data.frame(variable = iv_name), as.data.frame(t(avg_base)))
+          }) %>%
+          dplyr::bind_rows()
+
+        results <- results %>%
+          dplyr::left_join(base_results, by = "variable")
+      }
     }
 
 
@@ -561,7 +586,7 @@ bn_impact_engine <- function(
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
           add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
           lift_type = lift_type, brand = brand, min_base_for_lift = min_base_for_lift,
-          fit = NULL, community_assignment = community_assignment
+          include_base = include_base, fit = NULL, community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
       ) %>%
@@ -605,7 +630,7 @@ bn_impact_engine <- function(
       ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
       add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
       lift_type = lift_type, brand = brand, min_base_for_lift = min_base_for_lift,
-      fit = fit, community_assignment = community_assignment
+      include_base = include_base, fit = fit, community_assignment = community_assignment
     )
 
   }

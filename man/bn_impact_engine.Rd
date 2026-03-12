@@ -20,6 +20,7 @@ bn_impact_engine(
   lift_type = c("proportional", "absolute"),
   brand = NULL,
   min_base_for_lift = 60,
+  include_base = TRUE,
   seed = 1
 )
 }
