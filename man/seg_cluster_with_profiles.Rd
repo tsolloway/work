@@ -22,7 +22,7 @@ seg_cluster_with_profiles(
   vary_percent = 0.1,
   side_bias_percent = 0.1,
   priors = c("size", "equal"),
-  iter_max = 1e+05,
+  iter_max = 1000,
   nstart = 10
 )
 }
@@ -77,7 +77,7 @@ the variability filter (default: 0.1).}
 
 \item{priors}{Character. LDA prior method: \code{"size"} (default) or \code{"equal"}.}
 
-\item{iter_max}{Integer. Maximum k-means iterations (default: 100000).}
+\item{iter_max}{Integer. Maximum k-means iterations (default: 1000).}
 
 \item{nstart}{Integer. Number of random starts for k-means (default: 10).}
 }

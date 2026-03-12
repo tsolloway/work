@@ -39,13 +39,26 @@
 #'   See \strong{When to bootstrap} below.
 #' @param n_querry Integer. Number of Monte Carlo samples per \code{cpquery()} call.
 #'   Only used when \code{type = "cp"}. Default \code{1e4}.
-#' @param lift Numeric. Target percentage lift for distribution-aware impact
-#'   (\code{lift} column). Uses \code{bn_freq_prob_shift()} to shift each IV's
-#'   observed distribution by this fraction (e.g., 0.10 = 10 percent), then
-#'   computes the resulting DV probability change. Computed when
+#' @param lift Numeric scalar or vector. Target percentage lift(s) for
+#'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
+#'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
+#'   then computes the resulting DV probability change. Computed when
 #'   \code{type = "gr"} (exact) or \code{type = "cp"} (Monte Carlo).
-#'   When \code{lift = 0} (default), computes the symmetric
-#'   sensitivity: E_(+5 percent) - E_(-5 percent).
+#'   When a lift value is 0, computes symmetric sensitivity: E_(+5 percent) -
+#'   E_(-5 percent). A scalar produces a single \code{lift} column; a vector
+#'   (e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
+#'   \code{lift_10}. Default \code{0}.
+#' @param lift_type Character. How \code{lift} values are interpreted:
+#'   \code{"proportional"} (default) shifts the mean by a fraction of its
+#'   current value (e.g., 0.10 = 10 percent of current mean);
+#'   \code{"absolute"} shifts the mean by a fixed number of scale points
+#'   (e.g., 0.10 = add 0.10 to the mean regardless of starting value).
+#' @param brand Character scalar or \code{NULL}. Column name in \code{df}
+#'   containing brand (or segment) labels. When provided, the lift metric is
+#'   computed using brand-specific frequency distributions rather than the
+#'   overall distribution. Produces separate lift columns per brand (e.g.,
+#'   \code{lift_Apex}, \code{lift_Vero}). The DV probability queries are shared
+#'   across brands; only the observed distribution changes. Default \code{NULL}.
 #' @param seed Integer. Random seed for reproducibility.
 #'
 #' @details
@@ -147,11 +160,14 @@ bn_impact_engine <- function(
     n_boot = 1,
     n_querry = 1e4,
     lift = 0,
+    lift_type = c("proportional", "absolute"),
+    brand = NULL,
     seed = 1
 ){
 
   type <- match.arg(type)
   index_by <- match.arg(index_by)
+  lift_type <- match.arg(lift_type)
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
   # ---------------------------
@@ -160,6 +176,10 @@ bn_impact_engine <- function(
   if (!is.data.frame(df)) stop("'df' must be a data frame.")
   work::assert_positive_integer(n_boot, "n_boot")
   if (!is.null(seed)) work::assert_numeric_scalar(seed, "seed")
+  if (!is.null(brand) && !brand %in% names(df)) {
+    stop("'brand' column '", brand, "' not found in df. Available columns: ",
+         paste(head(names(df), 20), collapse = ", "))
+  }
 
   # Ensure DV and IV(s) are provided
   if (is.null(dv) && !"meta" %in% names(obj)) {
@@ -210,7 +230,7 @@ bn_impact_engine <- function(
 
   df <- df %>%
     dplyr::select(dplyr::all_of(
-      c(dv, ivs) %>% unlist() %>% setNames(NULL)
+      c(dv, ivs, brand) %>% unlist() %>% setNames(NULL)
     )) %>%
     as.data.frame()
 
@@ -310,15 +330,18 @@ bn_impact_engine <- function(
     data, indices = NULL, bn, ivs, ivs_max, ivs_min, dv_max = NULL,
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
-    n_querry = 1e5, lift = 0, fit = NULL, seed = 1
+    n_querry = 1e5, lift = 0, lift_type = "proportional", brand = NULL, fit = NULL, seed = 1
   ){
     type <- match.arg(type)
 
     if(!is.null(indices)) dat_boot <- data[indices, , drop = FALSE] else dat_boot <- data
 
+    # Exclude brand column from model fitting data
+    fit_data <- if (!is.null(brand)) dat_boot[, setdiff(names(dat_boot), brand), drop = FALSE] else dat_boot
+
     if(type != "mi"){
 
-      if(is.null(fit)) fit_boot <- bnlearn::bn.fit(bn, dat_boot, method = "bayes") else fit_boot <- fit
+      if(is.null(fit)) fit_boot <- bnlearn::bn.fit(bn, fit_data, method = "bayes") else fit_boot <- fit
 
       if(!all(purrr::map_lgl(ivs, ~ ivs_max[[.x]] %in% dat_boot[[.x]]))){
         iv_boot_max <- dat_boot %>% dplyr::summarise(dplyr::across(dplyr::all_of(ivs), ~as.character(.x) %>% as.numeric() %>% max(na.rm = TRUE))) %>% as.list()
@@ -387,26 +410,59 @@ bn_impact_engine <- function(
 
     # ---------------------------
     # Lift: distribution-aware impact via bn_freq_prob_shift
-    # When lift != 0: E_shifted - E_observed
-    # When lift == 0: E_(+5%) - E_(-5%)
+    # When lift value != 0: E_shifted - E_observed
+    # When lift value == 0: E_(+5%) - E_(-5%)
     # Supports both gr (exact gRain) and cp (Monte Carlo cpquery)
+    # Accepts scalar or vector of lift values
+    # When brand != NULL, computes lift per brand using brand-specific frequencies
     # ---------------------------
     if(type %in% c("gr", "cp") && !is.null(lift)){
 
       if(!is.null(community_assignment)) temp_ivs_r <- community_assignment else temp_ivs_r <- ivs %>% setNames(ivs)
 
-      use_symmetric <- (lift == 0)
-      lift_up   <- if (use_symmetric) 0.05 else lift
-      lift_down <- if (use_symmetric) -0.05 else NULL
+      multi_lift <- length(lift) > 1
+      lift_labels <- if (multi_lift) paste0("lift_", round(lift * 100)) else "lift"
+      brand_levels <- if (!is.null(brand)) sort(unique(as.character(dat_boot[[brand]]))) else NULL
+
+      # Build column names
+      if (is.null(brand_levels)) {
+        lift_col_names <- lift_labels
+      } else if (!multi_lift) {
+        lift_col_names <- paste0("lift_", brand_levels)
+      } else {
+        lift_col_names <- expand.grid(
+          lift_label = lift_labels,
+          brand = brand_levels,
+          stringsAsFactors = FALSE
+        ) %>%
+          with(paste(lift_label, brand, sep = "_"))
+      }
+
+      # Helper: compute lift values for a single freq distribution
+      compute_lift_vals <- function(freq, dv_probs) {
+        p_observed <- as.numeric(freq) / sum(freq)
+        purrr::map_dbl(lift, function(l) {
+          use_sym <- (l == 0)
+          if (use_sym) {
+            p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05, lift_type = lift_type)
+            p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05, lift_type = lift_type)
+            sum(dv_probs * p_up) - sum(dv_probs * p_down)
+          } else {
+            p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l, lift_type = lift_type)
+            sum(dv_probs * p_shifted) - sum(dv_probs * p_observed)
+          }
+        })
+      }
 
       lift_results <- temp_ivs_r %>%
         purrr::imap(function(iv_vars, iv_name) {
-          per_iv <- purrr::map_dbl(iv_vars, function(single_iv) {
-            freq <- table(dat_boot[[single_iv]])
-            p_observed <- as.numeric(freq) / sum(freq)
 
-            levels_v <- names(freq)
+          # Matrix: rows = iv_vars, cols = lift_col_names
+          per_iv_mat <- purrr::map(iv_vars, function(single_iv) {
+            freq_full <- table(dat_boot[[single_iv]])
+            levels_v <- names(freq_full)
 
+            # Query P(DV_max | IV=v) once per level (shared across brands)
             if (type == "gr") {
               dv_probs <- purrr::map_dbl(levels_v, function(v) {
                 ev <- stats::setNames(list(v), single_iv)
@@ -422,16 +478,24 @@ bn_impact_engine <- function(
               })
             }
 
-            if (use_symmetric) {
-              p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = lift_up)
-              p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = lift_down)
-              sum(dv_probs * p_up) - sum(dv_probs * p_down)
+            if (is.null(brand_levels)) {
+              # No brand: compute lift on full distribution
+              compute_lift_vals(freq_full, dv_probs)
             } else {
-              p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = lift_up)
-              sum(dv_probs * p_shifted) - sum(dv_probs * p_observed)
+              # Per-brand: compute lift on brand-specific distribution
+              purrr::map(brand_levels, function(b) {
+                brand_mask <- dat_boot[[brand]] == b
+                freq_b <- table(factor(dat_boot[[single_iv]][brand_mask], levels = levels_v))
+                compute_lift_vals(freq_b, dv_probs)
+              }) %>%
+                unlist()
             }
-          })
-          data.frame(variable = iv_name, lift = mean(per_iv))
+          }) %>%
+            do.call(rbind, .)
+
+          # Average across IVs (for communities), produce named vector
+          avg_vals <- colMeans(per_iv_mat) %>% setNames(lift_col_names)
+          dplyr::bind_cols(data.frame(variable = iv_name), as.data.frame(t(avg_vals)))
         }) %>%
         dplyr::bind_rows()
 
@@ -489,7 +553,7 @@ bn_impact_engine <- function(
           bn = bn,
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
           add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
-          fit = NULL, community_assignment = community_assignment
+          lift_type = lift_type, brand = brand, fit = NULL, community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
       ) %>%
@@ -532,7 +596,7 @@ bn_impact_engine <- function(
       bn = bn,
       ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
       add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
-      fit = fit, community_assignment = community_assignment
+      lift_type = lift_type, brand = brand, fit = fit, community_assignment = community_assignment
     )
 
   }

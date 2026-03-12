@@ -150,11 +150,14 @@ bn_impact <- function(
     n_boot = 1,
     n_querry = 1e4,
     lift = 0,
+    lift_type = c("proportional", "absolute"),
+    brand = NULL,
     use_parallel = TRUE,
     seed = 1
 ){
 
   type <- match.arg(type)
+  lift_type <- match.arg(lift_type)
 
 
   if(process_subgroups){
@@ -179,6 +182,8 @@ bn_impact <- function(
           n_boot = n_boot,
           n_querry = n_querry,
           lift = lift,
+          lift_type = lift_type,
+          brand = brand,
           seed = seed
         ) %>%
           setNames(glue::glue("{.y}_{names(.)}"))
@@ -205,6 +210,8 @@ bn_impact <- function(
       n_boot = n_boot,
       n_querry = n_querry,
       lift = lift,
+      lift_type = lift_type,
+      brand = brand,
       seed = seed
     ) %>%
       dplyr::rename(Variable = variable)

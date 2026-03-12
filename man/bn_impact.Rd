@@ -18,6 +18,8 @@ bn_impact(
   n_boot = 1,
   n_querry = 10000,
   lift = 0,
+  lift_type = c("proportional", "absolute"),
+  brand = NULL,
   use_parallel = TRUE,
   seed = 1
 )

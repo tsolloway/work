@@ -8,6 +8,7 @@ bn_freq_prob_shift(
   freq = NULL,
   type = c("exponential", "linear", "quadratic"),
   lift = 0.1,
+  lift_type = c("proportional", "absolute"),
   return_actual_lift = FALSE,
   p_orig = NULL,
   values = NULL
@@ -21,7 +22,13 @@ Names are interpreted as numeric scale values. Either \code{freq} or both
 \item{type}{Character. Shift method: \code{"exponential"} (default),
 \code{"linear"}, or \code{"quadratic"}.}
 
-\item{lift}{Numeric. Target percentage lift for the mean (e.g., 0.1 = 10 percent increase).}
+\item{lift}{Numeric. Target lift for the mean. Interpretation depends on
+\code{lift_type}: proportional (0.1 = 10 percent of current mean) or
+absolute (0.1 = add 0.1 scale points to mean).}
+
+\item{lift_type}{Character. How \code{lift} is interpreted:
+\code{"proportional"} (default) shifts by a fraction of the current mean;
+\code{"absolute"} shifts by a fixed number of scale points.}
 
 \item{return_actual_lift}{Logical. If \code{TRUE}, returns a list with the shifted
 probabilities plus diagnostic info (original/new/target means, actual lift).

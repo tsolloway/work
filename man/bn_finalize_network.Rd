@@ -19,6 +19,8 @@ bn_finalize_network(
   impact_n_boot = 1,
   impact_n_querry = 10000,
   impact_lift = 0,
+  impact_lift_type = c("proportional", "absolute"),
+  impact_brand = NULL,
   tool_tip_edge_prefix = NULL,
   viz_size_node_by_impact = TRUE,
   viz_include_dv = FALSE,

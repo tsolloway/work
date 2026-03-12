@@ -17,6 +17,8 @@ bn_impact_engine(
   n_boot = 1,
   n_querry = 10000,
   lift = 0,
+  lift_type = c("proportional", "absolute"),
+  brand = NULL,
   seed = 1
 )
 }
@@ -64,13 +66,28 @@ See \strong{When to bootstrap} below.}
 \item{n_querry}{Integer. Number of Monte Carlo samples per \code{cpquery()} call.
 Only used when \code{type = "cp"}. Default \code{1e4}.}
 
-\item{lift}{Numeric. Target percentage lift for distribution-aware impact
-(\code{lift} column). Uses \code{bn_freq_prob_shift()} to shift each IV's
-observed distribution by this fraction (e.g., 0.10 = 10 percent), then
-computes the resulting DV probability change. Computed when
+\item{lift}{Numeric scalar or vector. Target percentage lift(s) for
+distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
+IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
+then computes the resulting DV probability change. Computed when
 \code{type = "gr"} (exact) or \code{type = "cp"} (Monte Carlo).
-When \code{lift = 0} (default), computes the symmetric
-sensitivity: E_(+5 percent) - E_(-5 percent).}
+When a lift value is 0, computes symmetric sensitivity: E_(+5 percent) -
+E_(-5 percent). A scalar produces a single \code{lift} column; a vector
+(e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
+\code{lift_10}. Default \code{0}.}
+
+\item{lift_type}{Character. How \code{lift} values are interpreted:
+\code{"proportional"} (default) shifts the mean by a fraction of its
+current value (e.g., 0.10 = 10 percent of current mean);
+\code{"absolute"} shifts the mean by a fixed number of scale points
+(e.g., 0.10 = add 0.10 to the mean regardless of starting value).}
+
+\item{brand}{Character scalar or \code{NULL}. Column name in \code{df}
+containing brand (or segment) labels. When provided, the lift metric is
+computed using brand-specific frequency distributions rather than the
+overall distribution. Produces separate lift columns per brand (e.g.,
+\code{lift_Apex}, \code{lift_Vero}). The DV probability queries are shared
+across brands; only the observed distribution changes. Default \code{NULL}.}
 
 \item{seed}{Integer. Random seed for reproducibility.}
 }
