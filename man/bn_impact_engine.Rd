@@ -19,6 +19,7 @@ bn_impact_engine(
   lift = 0,
   lift_type = c("proportional", "absolute"),
   brand = NULL,
+  min_base_for_lift = 60,
   seed = 1
 )
 }
@@ -88,6 +89,11 @@ computed using brand-specific frequency distributions rather than the
 overall distribution. Produces separate lift columns per brand (e.g.,
 \code{lift_Apex}, \code{lift_Vero}). The DV probability queries are shared
 across brands; only the observed distribution changes. Default \code{NULL}.}
+
+\item{min_base_for_lift}{Integer. Minimum sample size (frequency count) required
+to compute a lift value. If the distribution has fewer than this many
+observations, the lift cell returns \code{NA}. Applied per-brand when
+\code{brand} is set. Default \code{60}.}
 
 \item{seed}{Integer. Random seed for reproducibility.}
 }

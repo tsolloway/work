@@ -150,8 +150,9 @@ bn_freq_prob_shift <- function(
     }
 
     if (sign(f_lo) == sign(f_hi)) {
-      warning("bn_freq_prob_shift: could not bracket root; returning original distribution.")
-      return(p_orig)
+      warning("bn_freq_prob_shift: could not bracket root for target_mean = ",
+              round(target_mean, 4), " (orig = ", round(orig_mean, 4), "). Returning NA.")
+      return(NA_real_)
     }
 
     lambda <- uniroot(
@@ -187,6 +188,21 @@ bn_freq_prob_shift <- function(
     stop("Unknown shift type: ", type)
   }
 
+
+  # NA means the shift failed — propagate immediately
+
+  if (length(p_new_val) == 1 && is.na(p_new_val)) {
+    if (return_actual_lift) {
+      return(list(
+        p_new_val = NA_real_, p_orig_val = p_orig,
+        mean_orig = orig_mean, mean_new = NA_real_,
+        mean_target = target_mean, mean_shift = NA_real_,
+        lift_target = lift, lift_actual = NA_real_
+      ))
+    } else {
+      return(NA_real_)
+    }
+  }
 
   # Floor any near-zero or negative probabilities and re-normalize
   if (any(p_new_val < 1e-6)) {

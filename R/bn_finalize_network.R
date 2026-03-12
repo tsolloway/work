@@ -19,6 +19,7 @@ bn_finalize_network <- function(
     impact_lift = 0,
     impact_lift_type = c("proportional", "absolute"),
     impact_brand = NULL,
+    impact_min_base_for_lift = 60,
     tool_tip_edge_prefix = NULL,
     viz_size_node_by_impact = TRUE,
     viz_include_dv = FALSE,
@@ -238,6 +239,7 @@ bn_finalize_network <- function(
     lift = impact_lift,
     lift_type = impact_lift_type,
     brand = impact_brand,
+    min_base_for_lift = impact_min_base_for_lift,
     use_parallel = impact_parallel,
     seed = seed
   )
@@ -258,6 +260,7 @@ bn_finalize_network <- function(
     lift = impact_lift,
     lift_type = impact_lift_type,
     brand = impact_brand,
+    min_base_for_lift = impact_min_base_for_lift,
     use_parallel = impact_parallel,
     seed = seed
   )

@@ -53,6 +53,10 @@
 #'   current value (e.g., 0.10 = 10 percent of current mean);
 #'   \code{"absolute"} shifts the mean by a fixed number of scale points
 #'   (e.g., 0.10 = add 0.10 to the mean regardless of starting value).
+#' @param min_base_for_lift Integer. Minimum sample size (frequency count) required
+#'   to compute a lift value. If the distribution has fewer than this many
+#'   observations, the lift cell returns \code{NA}. Applied per-brand when
+#'   \code{brand} is set. Default \code{60}.
 #' @param brand Character scalar or \code{NULL}. Column name in \code{df}
 #'   containing brand (or segment) labels. When provided, the lift metric is
 #'   computed using brand-specific frequency distributions rather than the
@@ -162,6 +166,7 @@ bn_impact_engine <- function(
     lift = 0,
     lift_type = c("proportional", "absolute"),
     brand = NULL,
+    min_base_for_lift = 60,
     seed = 1
 ){
 
@@ -330,7 +335,8 @@ bn_impact_engine <- function(
     data, indices = NULL, bn, ivs, ivs_max, ivs_min, dv_max = NULL,
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
-    n_querry = 1e5, lift = 0, lift_type = "proportional", brand = NULL, fit = NULL, seed = 1
+    n_querry = 1e5, lift = 0, lift_type = "proportional", brand = NULL,
+    min_base_for_lift = 60, fit = NULL, seed = 1
   ){
     type <- match.arg(type)
 
@@ -440,6 +446,7 @@ bn_impact_engine <- function(
 
       # Helper: compute lift values for a single freq distribution
       compute_lift_vals <- function(freq, dv_probs) {
+        if (sum(freq) < min_base_for_lift) return(rep(NA_real_, length(lift)))
         p_observed <- as.numeric(freq) / sum(freq)
         purrr::map_dbl(lift, function(l) {
           use_sym <- (l == 0)
@@ -553,7 +560,8 @@ bn_impact_engine <- function(
           bn = bn,
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
           add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
-          lift_type = lift_type, brand = brand, fit = NULL, community_assignment = community_assignment
+          lift_type = lift_type, brand = brand, min_base_for_lift = min_base_for_lift,
+          fit = NULL, community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
       ) %>%
@@ -596,7 +604,8 @@ bn_impact_engine <- function(
       bn = bn,
       ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
       add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
-      lift_type = lift_type, brand = brand, fit = fit, community_assignment = community_assignment
+      lift_type = lift_type, brand = brand, min_base_for_lift = min_base_for_lift,
+      fit = fit, community_assignment = community_assignment
     )
 
   }
