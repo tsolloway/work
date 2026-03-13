@@ -22,6 +22,7 @@ bn_impact_engine(
   min_base_for_lift = 60,
   include_base = TRUE,
   dv_metric = c("top_box", "mean"),
+  weight = NULL,
   seed = 1
 )
 }

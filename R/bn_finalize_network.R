@@ -22,6 +22,7 @@ bn_finalize_network <- function(
     impact_min_base_for_lift = 60,
     impact_include_base = TRUE,
     impact_dv_metric = c("top_box", "mean"),
+    impact_weight = NULL,
     tool_tip_edge_prefix = NULL,
     viz_size_node_by_impact = TRUE,
     viz_include_dv = FALSE,
@@ -245,6 +246,7 @@ bn_finalize_network <- function(
     min_base_for_lift = impact_min_base_for_lift,
     include_base = impact_include_base,
     dv_metric = impact_dv_metric,
+    weight = impact_weight,
     use_parallel = impact_parallel,
     seed = seed
   )
@@ -268,6 +270,7 @@ bn_finalize_network <- function(
     min_base_for_lift = impact_min_base_for_lift,
     include_base = impact_include_base,
     dv_metric = impact_dv_metric,
+    weight = impact_weight,
     use_parallel = impact_parallel,
     seed = seed
   )

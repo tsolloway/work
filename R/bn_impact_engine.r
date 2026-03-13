@@ -173,6 +173,7 @@ bn_impact_engine <- function(
     min_base_for_lift = 60,
     include_base = TRUE,
     dv_metric = c("top_box", "mean"),
+    weight = NULL,
     seed = 1
 ){
 
@@ -190,6 +191,10 @@ bn_impact_engine <- function(
   if (!is.null(seed)) work::assert_numeric_scalar(seed, "seed")
   if (!is.null(brand) && !brand %in% names(df)) {
     stop("'brand' column '", brand, "' not found in df. Available columns: ",
+         paste(head(names(df), 20), collapse = ", "))
+  }
+  if (!is.null(weight) && !weight %in% names(df)) {
+    stop("'weight' column '", weight, "' not found in df. Available columns: ",
          paste(head(names(df), 20), collapse = ", "))
   }
 
@@ -242,7 +247,7 @@ bn_impact_engine <- function(
 
   df <- df %>%
     dplyr::select(dplyr::all_of(
-      c(dv, ivs, brand) %>% unlist() %>% setNames(NULL)
+      c(dv, ivs, brand, weight) %>% unlist() %>% setNames(NULL)
     )) %>%
     as.data.frame()
 
@@ -360,7 +365,7 @@ bn_impact_engine <- function(
       maxVmin_val <- p1 - p0
     }
 
-    data.frame(variable = iv, dv_max_value = p1, maxVmin = maxVmin_val)
+    data.frame(variable = iv, dv_max_value = p1, dv_min_value = p0, maxVmin = maxVmin_val)
   }
 
 
@@ -374,14 +379,15 @@ bn_impact_engine <- function(
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
     n_querry = 1e5, lift = 0, impact_metric_type = "proportional", brand = NULL,
-    min_base_for_lift = 60, include_base = TRUE, dv_metric = "top_box", fit = NULL, seed = 1
+    min_base_for_lift = 60, include_base = TRUE, dv_metric = "top_box", weight = NULL, fit = NULL, seed = 1
   ){
     type <- match.arg(type)
 
     if(!is.null(indices)) dat_boot <- data[indices, , drop = FALSE] else dat_boot <- data
 
     # Exclude brand column from model fitting data
-    fit_data <- if (!is.null(brand)) dat_boot[, setdiff(names(dat_boot), brand), drop = FALSE] else dat_boot
+    exclude_cols <- c(brand, weight)
+    fit_data <- if (length(exclude_cols) > 0) dat_boot[, setdiff(names(dat_boot), exclude_cols), drop = FALSE] else dat_boot
 
     if(type != "mi"){
 
@@ -484,6 +490,13 @@ bn_impact_engine <- function(
           with(paste(lift_label, brand, sep = "_"))
       }
 
+      # Helper: weighted frequency table (falls back to table() when weight is NULL)
+      wtd_table <- function(x, w = NULL, levels = NULL) {
+        if (!is.null(levels)) x <- factor(x, levels = levels)
+        if (is.null(w)) return(table(x))
+        tapply(w, x, sum) %>% { ifelse(is.na(.), 0, .) }
+      }
+
       # Helper: compute lift values for a single freq distribution
       compute_lift_vals <- function(freq, dv_probs) {
         if (sum(freq) < min_base_for_lift) return(rep(NA_real_, length(lift)))
@@ -506,7 +519,8 @@ bn_impact_engine <- function(
 
           # Matrix: rows = iv_vars, cols = lift_col_names
           per_iv_mat <- purrr::map(iv_vars, function(single_iv) {
-            freq_full <- table(dat_boot[[single_iv]])
+            w_vec <- if (!is.null(weight)) dat_boot[[weight]] else NULL
+            freq_full <- wtd_table(dat_boot[[single_iv]], w = w_vec)
             levels_v <- names(freq_full)
 
             # Query DV distribution per IV level (shared across brands)
@@ -553,7 +567,8 @@ bn_impact_engine <- function(
               # Per-brand: compute lift on brand-specific distribution
               purrr::map(brand_levels, function(b) {
                 brand_mask <- dat_boot[[brand]] == b
-                freq_b <- table(factor(dat_boot[[single_iv]][brand_mask], levels = levels_v))
+                w_b <- if (!is.null(weight)) dat_boot[[weight]][brand_mask] else NULL
+                freq_b <- wtd_table(dat_boot[[single_iv]][brand_mask], w = w_b, levels = levels_v)
                 compute_lift_vals(freq_b, dv_probs)
               }) %>%
                 unlist()
@@ -646,7 +661,7 @@ bn_impact_engine <- function(
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
           add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
           impact_metric_type = impact_metric_type, brand = brand, min_base_for_lift = min_base_for_lift,
-          include_base = include_base, dv_metric = dv_metric, fit = NULL, community_assignment = community_assignment
+          include_base = include_base, dv_metric = dv_metric, weight = weight, fit = NULL, community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
       ) %>%
@@ -676,6 +691,7 @@ bn_impact_engine <- function(
       dplyr::select(
         variable,
         tidyselect::matches("^dv_max_value"),
+        tidyselect::matches("^dv_min_value"),
         tidyselect::matches("^mi"),
         tidyselect::matches("^maxVmin"),
         tidyselect::matches("^lift")
@@ -690,7 +706,7 @@ bn_impact_engine <- function(
       ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
       add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
       impact_metric_type = impact_metric_type, brand = brand, min_base_for_lift = min_base_for_lift,
-      include_base = include_base, dv_metric = dv_metric, fit = fit, community_assignment = community_assignment
+      include_base = include_base, dv_metric = dv_metric, weight = weight, fit = fit, community_assignment = community_assignment
     )
 
   }

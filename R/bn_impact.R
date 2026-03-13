@@ -155,6 +155,7 @@ bn_impact <- function(
     min_base_for_lift = 60,
     include_base = TRUE,
     dv_metric = c("top_box", "mean"),
+    weight = NULL,
     use_parallel = TRUE,
     seed = 1
 ){
@@ -191,6 +192,7 @@ bn_impact <- function(
           min_base_for_lift = min_base_for_lift,
           include_base = include_base,
           dv_metric = dv_metric,
+          weight = weight,
           seed = seed
         ) %>%
           setNames(glue::glue("{.y}_{names(.)}"))
