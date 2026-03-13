@@ -308,25 +308,50 @@ bn_impact_engine <- function(
   # ---------------------------
   engine_diff_single_attribute <- function(
     fit_boot, grain_bn = NULL, dv = NULL, iv, attr_iv_boot_max, attr_iv_boot_min, attr_dv_boot_max = NULL,
-    type = c("cp", "gr"), n_querry = 1e5, seed = NULL
+    type = c("cp", "gr"), n_querry = 1e5, dv_metric = "top_box", seed = NULL
   ){
 
     if(type == "gr"){
-      p1 <- gRain::querygrain(grain_bn, nodes = dv, evidence = attr_iv_boot_max, simplify = TRUE) %>% dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
-      p0 <- gRain::querygrain(grain_bn, nodes = dv, evidence = attr_iv_boot_min, simplify = TRUE) %>% dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+
+      if (dv_metric == "top_box") {
+        p1 <- gRain::querygrain(grain_bn, nodes = dv, evidence = attr_iv_boot_max, simplify = TRUE) %>% dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+        p0 <- gRain::querygrain(grain_bn, nodes = dv, evidence = attr_iv_boot_min, simplify = TRUE) %>% dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+      } else {
+        dist1 <- gRain::querygrain(grain_bn, nodes = dv, evidence = attr_iv_boot_max, simplify = TRUE)
+        p1 <- sum(as.numeric(names(dist1)) * as.numeric(dist1))
+        dist0 <- gRain::querygrain(grain_bn, nodes = dv, evidence = attr_iv_boot_min, simplify = TRUE)
+        p0 <- sum(as.numeric(names(dist0)) * as.numeric(dist0))
+      }
 
     }else if(type == "cp"){
 
-      # Compute p1 and p0
-      if (!is.null(seed)) set.seed(seed)
-      p1 <- eval(parse(text = glue::glue(
-        "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{attr_dv_boot_max}'), evidence = {attr_iv_boot_max}, n = {n_querry}, method = 'lw')"
-      )))
+      if (dv_metric == "top_box") {
+        if (!is.null(seed)) set.seed(seed)
+        p1 <- eval(parse(text = glue::glue(
+          "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{attr_dv_boot_max}'), evidence = {attr_iv_boot_max}, n = {n_querry}, method = 'lw')"
+        )))
 
-      if (!is.null(seed)) set.seed(seed)
-      p0 <- eval(parse(text = glue::glue(
-        "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{attr_dv_boot_max}'), evidence = {attr_iv_boot_min}, n = {n_querry}, method = 'lw')"
-      )))
+        if (!is.null(seed)) set.seed(seed)
+        p0 <- eval(parse(text = glue::glue(
+          "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{attr_dv_boot_max}'), evidence = {attr_iv_boot_min}, n = {n_querry}, method = 'lw')"
+        )))
+      } else {
+        dv_scale <- fit_boot[[dv]] %>% dimnames() %>% .[[1]] %>% as.numeric()
+
+        if (!is.null(seed)) set.seed(seed)
+        p1 <- purrr::map_dbl(dv_scale, function(d) {
+          eval(parse(text = glue::glue(
+            "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{d}'), evidence = {attr_iv_boot_max}, n = {n_querry}, method = 'lw')"
+          )))
+        }) %>% { sum(dv_scale * .) }
+
+        if (!is.null(seed)) set.seed(seed)
+        p0 <- purrr::map_dbl(dv_scale, function(d) {
+          eval(parse(text = glue::glue(
+            "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{d}'), evidence = {attr_iv_boot_min}, n = {n_querry}, method = 'lw')"
+          )))
+        }) %>% { sum(dv_scale * .) }
+      }
     }
 
     data.frame(variable = iv, dv_estimate = p1, maxVmin = p1 - p0)
@@ -412,6 +437,7 @@ bn_impact_engine <- function(
             attr_dv_boot_max = dv_boot_max,
             type = type,
             n_querry = n_querry,
+            dv_metric = dv_metric,
             seed = seed
           )
         ) %>%
