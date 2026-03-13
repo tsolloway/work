@@ -48,7 +48,7 @@
 #'   E_(-5 percent). A scalar produces a single \code{lift} column; a vector
 #'   (e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
 #'   \code{lift_10}. Default \code{0}.
-#' @param lift_type Character. How \code{lift} values are interpreted:
+#' @param impact_metric_type Character. How \code{lift} values are interpreted:
 #'   \code{"proportional"} (default) shifts the mean by a fraction of its
 #'   current value (e.g., 0.10 = 10 percent of current mean);
 #'   \code{"absolute"} shifts the mean by a fixed number of scale points
@@ -168,7 +168,7 @@ bn_impact_engine <- function(
     n_boot = 1,
     n_querry = 1e4,
     lift = 0,
-    lift_type = c("proportional", "absolute"),
+    impact_metric_type = c("proportional", "absolute"),
     brand = NULL,
     min_base_for_lift = 60,
     include_base = TRUE,
@@ -178,7 +178,7 @@ bn_impact_engine <- function(
 
   type <- match.arg(type)
   index_by <- match.arg(index_by)
-  lift_type <- match.arg(lift_type)
+  impact_metric_type <- match.arg(impact_metric_type)
   dv_metric <- match.arg(dv_metric)
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
@@ -308,7 +308,7 @@ bn_impact_engine <- function(
   # ---------------------------
   engine_diff_single_attribute <- function(
     fit_boot, grain_bn = NULL, dv = NULL, iv, attr_iv_boot_max, attr_iv_boot_min, attr_dv_boot_max = NULL,
-    type = c("cp", "gr"), n_querry = 1e5, dv_metric = "top_box", seed = NULL
+    type = c("cp", "gr"), n_querry = 1e5, dv_metric = "top_box", impact_metric_type = "proportional", seed = NULL
   ){
 
     if(type == "gr"){
@@ -354,7 +354,13 @@ bn_impact_engine <- function(
       }
     }
 
-    data.frame(variable = iv, dv_max_value = p1, maxVmin = p1 - p0)
+    if (impact_metric_type == "proportional") {
+      maxVmin_val <- (p1 - p0) / p0
+    } else {
+      maxVmin_val <- p1 - p0
+    }
+
+    data.frame(variable = iv, dv_max_value = p1, maxVmin = maxVmin_val)
   }
 
 
@@ -367,7 +373,7 @@ bn_impact_engine <- function(
     data, indices = NULL, bn, ivs, ivs_max, ivs_min, dv_max = NULL,
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
-    n_querry = 1e5, lift = 0, lift_type = "proportional", brand = NULL,
+    n_querry = 1e5, lift = 0, impact_metric_type = "proportional", brand = NULL,
     min_base_for_lift = 60, include_base = TRUE, dv_metric = "top_box", fit = NULL, seed = 1
   ){
     type <- match.arg(type)
@@ -438,6 +444,7 @@ bn_impact_engine <- function(
             type = type,
             n_querry = n_querry,
             dv_metric = dv_metric,
+            impact_metric_type = impact_metric_type,
             seed = seed
           )
         ) %>%
@@ -484,11 +491,11 @@ bn_impact_engine <- function(
         purrr::map_dbl(lift, function(l) {
           use_sym <- (l == 0)
           if (use_sym) {
-            p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05, lift_type = lift_type)
-            p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05, lift_type = lift_type)
+            p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05, impact_metric_type = impact_metric_type)
+            p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05, impact_metric_type = impact_metric_type)
             sum(dv_probs * p_up) - sum(dv_probs * p_down)
           } else {
-            p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l, lift_type = lift_type)
+            p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l, impact_metric_type = impact_metric_type)
             sum(dv_probs * p_shifted) - sum(dv_probs * p_observed)
           }
         })
@@ -638,7 +645,7 @@ bn_impact_engine <- function(
           bn = bn,
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
           add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
-          lift_type = lift_type, brand = brand, min_base_for_lift = min_base_for_lift,
+          impact_metric_type = impact_metric_type, brand = brand, min_base_for_lift = min_base_for_lift,
           include_base = include_base, dv_metric = dv_metric, fit = NULL, community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
@@ -682,7 +689,7 @@ bn_impact_engine <- function(
       bn = bn,
       ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
       add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
-      lift_type = lift_type, brand = brand, min_base_for_lift = min_base_for_lift,
+      impact_metric_type = impact_metric_type, brand = brand, min_base_for_lift = min_base_for_lift,
       include_base = include_base, dv_metric = dv_metric, fit = fit, community_assignment = community_assignment
     )
 

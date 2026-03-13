@@ -17,7 +17,7 @@ bn_impact_engine(
   n_boot = 1,
   n_querry = 10000,
   lift = 0,
-  lift_type = c("proportional", "absolute"),
+  impact_metric_type = c("proportional", "absolute"),
   brand = NULL,
   min_base_for_lift = 60,
   include_base = TRUE,
@@ -79,7 +79,7 @@ E_(-5 percent). A scalar produces a single \code{lift} column; a vector
 (e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
 \code{lift_10}. Default \code{0}.}
 
-\item{lift_type}{Character. How \code{lift} values are interpreted:
+\item{impact_metric_type}{Character. How \code{lift} values are interpreted:
 \code{"proportional"} (default) shifts the mean by a fraction of its
 current value (e.g., 0.10 = 10 percent of current mean);
 \code{"absolute"} shifts the mean by a fixed number of scale points

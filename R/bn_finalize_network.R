@@ -17,7 +17,7 @@ bn_finalize_network <- function(
     impact_n_boot = 1,
     impact_n_querry = 1e4,
     impact_lift = 0,
-    impact_lift_type = c("proportional", "absolute"),
+    impact_metric_type = c("proportional", "absolute"),
     impact_brand = NULL,
     impact_min_base_for_lift = 60,
     impact_include_base = TRUE,
@@ -32,7 +32,7 @@ bn_finalize_network <- function(
 
   node_label_type <- match.arg(node_label_type)
   impact_type <- match.arg(impact_type)
-  impact_lift_type <- match.arg(impact_lift_type)
+  impact_metric_type <- match.arg(impact_metric_type)
   impact_dv_metric <- match.arg(impact_dv_metric)
 
   results <- list()
@@ -240,7 +240,7 @@ bn_finalize_network <- function(
     n_boot = impact_n_boot,
     n_querry = impact_n_querry,
     lift = impact_lift,
-    lift_type = impact_lift_type,
+    impact_metric_type = impact_metric_type,
     brand = impact_brand,
     min_base_for_lift = impact_min_base_for_lift,
     include_base = impact_include_base,
@@ -263,7 +263,7 @@ bn_finalize_network <- function(
     n_boot = impact_n_boot,
     n_querry = impact_n_querry,
     lift = impact_lift,
-    lift_type = impact_lift_type,
+    impact_metric_type = impact_metric_type,
     brand = impact_brand,
     min_base_for_lift = impact_min_base_for_lift,
     include_base = impact_include_base,

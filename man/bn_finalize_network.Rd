@@ -19,7 +19,7 @@ bn_finalize_network(
   impact_n_boot = 1,
   impact_n_querry = 10000,
   impact_lift = 0,
-  impact_lift_type = c("proportional", "absolute"),
+  impact_metric_type = c("proportional", "absolute"),
   impact_brand = NULL,
   impact_min_base_for_lift = 60,
   impact_include_base = TRUE,

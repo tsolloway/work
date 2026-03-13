@@ -18,7 +18,7 @@ bn_impact(
   n_boot = 1,
   n_querry = 10000,
   lift = 0,
-  lift_type = c("proportional", "absolute"),
+  impact_metric_type = c("proportional", "absolute"),
   brand = NULL,
   min_base_for_lift = 60,
   include_base = TRUE,

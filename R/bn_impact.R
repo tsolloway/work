@@ -150,7 +150,7 @@ bn_impact <- function(
     n_boot = 1,
     n_querry = 1e4,
     lift = 0,
-    lift_type = c("proportional", "absolute"),
+    impact_metric_type = c("proportional", "absolute"),
     brand = NULL,
     min_base_for_lift = 60,
     include_base = TRUE,
@@ -160,7 +160,7 @@ bn_impact <- function(
 ){
 
   type <- match.arg(type)
-  lift_type <- match.arg(lift_type)
+  impact_metric_type <- match.arg(impact_metric_type)
   dv_metric <- match.arg(dv_metric)
 
 
@@ -186,7 +186,7 @@ bn_impact <- function(
           n_boot = n_boot,
           n_querry = n_querry,
           lift = lift,
-          lift_type = lift_type,
+          impact_metric_type = impact_metric_type,
           brand = brand,
           min_base_for_lift = min_base_for_lift,
           include_base = include_base,
@@ -217,7 +217,7 @@ bn_impact <- function(
       n_boot = n_boot,
       n_querry = n_querry,
       lift = lift,
-      lift_type = lift_type,
+      impact_metric_type = impact_metric_type,
       brand = brand,
       min_base_for_lift = min_base_for_lift,
       include_base = include_base,

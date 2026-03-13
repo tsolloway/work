@@ -23,9 +23,9 @@
 #' @param type Character. Shift method: \code{"exponential"} (default),
 #'   \code{"linear"}, or \code{"quadratic"}.
 #' @param lift Numeric. Target lift for the mean. Interpretation depends on
-#'   \code{lift_type}: proportional (0.1 = 10 percent of current mean) or
+#'   \code{impact_metric_type}: proportional (0.1 = 10 percent of current mean) or
 #'   absolute (0.1 = add 0.1 scale points to mean).
-#' @param lift_type Character. How \code{lift} is interpreted:
+#' @param impact_metric_type Character. How \code{lift} is interpreted:
 #'   \code{"proportional"} (default) shifts by a fraction of the current mean;
 #'   \code{"absolute"} shifts by a fixed number of scale points.
 #' @param return_actual_lift Logical. If \code{TRUE}, returns a list with the shifted
@@ -70,14 +70,14 @@ bn_freq_prob_shift <- function(
     freq = NULL,
     type = c("exponential", "linear", "quadratic"),
     lift = 0.1,
-    lift_type = c("proportional", "absolute"),
+    impact_metric_type = c("proportional", "absolute"),
     return_actual_lift = FALSE,
     p_orig = NULL,
     values = NULL
 ){
 
   type <- match.arg(type)
-  lift_type <- match.arg(lift_type)
+  impact_metric_type <- match.arg(impact_metric_type)
   normalize <- function(x) x / sum(x)
 
 
@@ -98,7 +98,7 @@ bn_freq_prob_shift <- function(
 
   # Original and target means
   orig_mean <- sum(values * p_orig)
-  if (lift_type == "proportional") {
+  if (impact_metric_type == "proportional") {
     target_mean <- orig_mean * (1 + lift)
   } else {
     target_mean <- orig_mean + lift
