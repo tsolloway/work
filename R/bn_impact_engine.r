@@ -117,7 +117,7 @@
 #' A tibble with one row per variable (or community) containing:
 #' \itemize{
 #'   \item \code{variable}: IV or community name
-#'   \item \code{dv_estimate}: P(DV_max | IV_max) (types \code{"gr"} and \code{"cp"})
+#'   \item \code{dv_max_value}: P(DV_max | IV_max) (types \code{"gr"} and \code{"cp"})
 #'   \item \code{maxVmin}: max-vs-min probability lift (types \code{"gr"} and \code{"cp"})
 #'   \item \code{lift}: distribution-aware DV change from a \code{lift} percent
 #'     shift in the IV (types \code{"gr"} and \code{"cp"})
@@ -354,7 +354,7 @@ bn_impact_engine <- function(
       }
     }
 
-    data.frame(variable = iv, dv_estimate = p1, maxVmin = p1 - p0)
+    data.frame(variable = iv, dv_max_value = p1, maxVmin = p1 - p0)
   }
 
 
@@ -668,7 +668,7 @@ bn_impact_engine <- function(
       ) %>%
       dplyr::select(
         variable,
-        tidyselect::matches("^dv_estimate"),
+        tidyselect::matches("^dv_max_value"),
         tidyselect::matches("^mi"),
         tidyselect::matches("^maxVmin"),
         tidyselect::matches("^lift")

@@ -108,7 +108,7 @@ across all DV levels (works with any scale: 3-point, 5-point, 7-point, etc.).}
 A tibble with one row per variable (or community) containing:
 \itemize{
 \item \code{variable}: IV or community name
-\item \code{dv_estimate}: P(DV_max | IV_max) (types \code{"gr"} and \code{"cp"})
+\item \code{dv_max_value}: P(DV_max | IV_max) (types \code{"gr"} and \code{"cp"})
 \item \code{maxVmin}: max-vs-min probability lift (types \code{"gr"} and \code{"cp"})
 \item \code{lift}: distribution-aware DV change from a \code{lift} percent
 shift in the IV (types \code{"gr"} and \code{"cp"})
