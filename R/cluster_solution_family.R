@@ -622,7 +622,7 @@ cluster_solution_family <- function(
 
 
   solution_table <- result[!grepl("_fit$", names(result))] %>%
-    flatten() %>%
+    purrr::flatten() %>%
     purrr::map(
       ~dplyr::select(
         .x, solution_name, n, cluster_name,
@@ -631,18 +631,18 @@ cluster_solution_family <- function(
         confusion, accuracy, df_append
       )
     ) %>%
-    bind_rows() %>%
-    filter(!is.na(df_append))
+    dplyr::bind_rows() %>%
+    dplyr::filter(!is.na(df_append))
 
 
 
   df_segment_append <- solution_table %>%
     dplyr::select(df_append) %>%
     unlist(recursive = FALSE) %>%
-    reduce(function(x, y) {
+    purrr::reduce(function(x, y) {
       x %>%
-        dplyr::select(!any_of(setdiff(names(y), "id"))) %>%
-        left_join(y, by = "id")
+        dplyr::select(!dplyr::any_of(setdiff(names(y), "id"))) %>%
+        dplyr::left_join(y, by = "id")
     })
 
 

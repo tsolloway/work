@@ -1,5 +1,83 @@
 #' seg_write_solutions
-#' @description seg_write_solutions
+#'
+#' @description Writes solution workbooks (Excel files) for all or selected
+#'   segmentation solutions. Each solution gets its own `.xlsx` file containing
+#'   the shell table — segment means, significance flags, and hit highlighting
+#'   — produced by [seg_write_shell_parallel()].
+#'
+#'   This is the main "export" step after clustering: it takes the fitted
+#'   solutions stored in `seg$solutions$summary_table` and renders each one as
+#'   a formatted Excel workbook suitable for review. Solutions are organised
+#'   into sub-folders by `solution_name` inside the output directory.
+#'
+#'   By default all methods and solution families are written. Use the `do_*`
+#'   flags or `solution` / `only_opt` arguments to narrow the set — for
+#'   example, writing only the LDA-optimised solutions or only k-means results.
+#'
+#' @param seg A seg object with solutions already computed (via
+#'   [seg_cluster_input_sheet()], [seg_cluster_with_profiles()], etc.).
+#' @param solution Character or `NULL`. Solution family name (e.g. `"A"`) to
+#'   write. `NULL` writes all families.
+#' @param where Character or `NULL`. Output directory. `NULL` uses the path
+#'   stored in `seg$paths$folders$solution`; falls back to `getwd()` if that
+#'   is also `NULL`.
+#' @param only_opt Logical. If `TRUE`, write only the LDA-optimised solutions
+#'   (those whose `lda_name` starts with `"LDA_opt_"`). Default: `FALSE`.
+#' @param do_kmeans Logical. Include k-means solutions (default: `TRUE`).
+#' @param do_medoid Logical. Include PAM/medoid solutions (default: `TRUE`).
+#' @param do_gaus_mix Logical. Include Gaussian mixture solutions
+#'   (default: `TRUE`).
+#' @param do_hierarchical Logical. Include hierarchical solutions
+#'   (default: `TRUE`).
+#' @param do_spectral Logical. Include spectral solutions (default: `TRUE`).
+#' @param do_iterative Logical. Include iterative swap solutions
+#'   (default: `TRUE`).
+#' @param do_consensus Logical. Include consensus solutions (default: `TRUE`).
+#' @param do_optimized Logical. Include `clust_optimized` solutions
+#'   (default: `TRUE`).
+#' @param strategy Character. Parallelisation strategy passed to
+#'   [seg_write_shell_parallel()]: `"multisession"` (default), `"multicore"`,
+#'   `"sequential"`, or `"cluster"`.
+#' @param workers Integer. Number of parallel workers
+#'   (default: `future::availableCores(omit = 1)`).
+#' @param add_key Logical. Add a colour key sheet to each workbook
+#'   (default: `TRUE`).
+#' @param label_width Integer. Maximum character width for variable labels
+#'   before wrapping (default: `75`).
+#' @param hide_pvalue Logical. If `TRUE`, hide the p-value column in the
+#'   output (default: `FALSE`).
+#' @param truncate Character. Whether to truncate non-significant rows:
+#'   `"no"` (default), `"yes"`, or `"both"` (writes both versions).
+#' @param truncate_polar_threshold Numeric. Polar hit threshold for truncation
+#'   (default: `0.15`).
+#' @param truncate_profile_threshold Numeric. Profile hit threshold for
+#'   truncation (default: `0.10`).
+#' @param version Character. Output version: `"traditional"` (default) or
+#'   `"both"`.
+#' @param do_seg_bw Logical. Include a black-and-white formatted sheet
+#'   (default: `TRUE`).
+#' @param do_italic Logical. Italicise sub-threshold rows (default: `TRUE`).
+#' @param switched_polars Logical. If `TRUE`, flag reversed-polarity polars
+#'   (default: `FALSE`).
+#' @param setting_polar_threshold Numeric. Polar significance threshold
+#'   (default: `0.20`).
+#' @param setting_profile_threshold Numeric. Profile significance threshold
+#'   (default: `0.15`).
+#' @param setting_tolerance Numeric. Tolerance band around threshold
+#'   (default: `0.05`).
+#' @param setting_pvalue Numeric. P-value cut-off for significance
+#'   (default: `0.10`).
+#' @param setting_diff Numeric. Minimum mean-difference for significance
+#'   (default: `0.10`).
+#' @param setting_type Character. Significance method: `"diff"` (default) or
+#'   `"pvalue"`.
+#' @param setting_color Character. Output colour scheme: `"bw"` (default) or
+#'   `"color"`.
+#' @param verbose Logical. Print progress messages (default: `FALSE`).
+#'
+#' @return Invisibly returns the result of [seg_write_shell_parallel()].
+#'   Called for its side effect of writing Excel files to disk.
+#'
 #' @export
 seg_write_solutions <- function(
     seg, solution = NULL, where = NULL,

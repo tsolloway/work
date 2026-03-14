@@ -17,9 +17,98 @@ seg_split_segments(
   use_top_n_polars = 20,
   method = c("kmeans", "medoid"),
   priors = c("equal", "size"),
+  filter_logical_vector = NULL,
+  reduced_inputs_max = 14,
+  prototype_seed = TRUE,
   return_append_only = FALSE
 )
 }
+\arguments{
+\item{seg}{A seg object with \code{seg$data$with_solutions} populated.}
+
+\item{solution_name}{Character. Column name of the existing solution to
+split from (e.g. \code{"LDA_opt_kmeans_A7"}).}
+
+\item{seg_splits}{Integer vector. Which segment numbers to split
+(e.g. \code{c(3, 5)}).}
+
+\item{new_solution_name}{Character. Base name for the new solution column.
+The output column will be \verb{seed_\{new_solution_name\}}.}
+
+\item{vars}{Character vector or \code{NULL}. Polar input variables for the
+sub-clustering. If \code{NULL} and \code{use_greedy = TRUE}, selected via
+\code{\link[=get_greedy_vars]{get_greedy_vars()}}. If \code{NULL} and \code{use_greedy = FALSE}, uses all RS
+polars.}
+
+\item{vars_profiles}{Character vector or \code{NULL}. Profile variables
+corresponding to \code{vars}. If \code{NULL}, derived from the spec.}
+
+\item{split_into}{Integer. Number of sub-segments to create from each
+split segment (default: \code{2}).}
+
+\item{resp_id_name}{Character or \code{NULL}. Respondent ID column. If \code{NULL},
+auto-detected via \code{\link[=get_resp_id_name]{get_resp_id_name()}}.}
+
+\item{use_greedy}{Logical. If \code{TRUE} (default), select polar inputs via
+greedy Wilks' Lambda when \code{vars = NULL}.}
+
+\item{use_top_n_polars}{Integer. Number of top polars for greedy selection
+(default: \code{20}).}
+
+\item{method}{Character. Clustering method for the split: \code{"kmeans"}
+(default) or \code{"medoid"} (PAM).}
+
+\item{priors}{Character. LDA prior method: \code{"equal"} (default) or \code{"size"}.}
+
+\item{filter_logical_vector}{Logical vector or character column name used to
+subset respondents before clustering. When character, the named column is
+evaluated as a logical filter (e.g. \code{"missing_polars"}). Filtered-out
+respondents receive \code{NA} in the output seed column.}
+
+\item{reduced_inputs_max}{Integer, character vector, or \code{NULL}. Cap on the
+number of reduced input variables passed to
+\code{\link[=seg_cluster_prototype_seed]{seg_cluster_prototype_seed()}}. If numeric, truncates the greedy-selected
+variables to this many. If character, uses the supplied variable names
+directly. If \code{NULL}, no cap is applied (default: \code{14}).}
+
+\item{prototype_seed}{Logical. If \code{TRUE} (default), automatically calls
+\code{\link[=seg_cluster_prototype_seed]{seg_cluster_prototype_seed()}} after sub-clustering to fit a unified LDA
+typing tool across the new seed. If \code{FALSE}, only the seed column is
+written and LDA must be run separately.}
+
+\item{return_append_only}{Logical. If \code{TRUE}, returns just the append
+data frame instead of the full seg object. Useful when chaining into
+\code{\link[=seg_prototype_split_segments]{seg_prototype_split_segments()}} (default: \code{FALSE}).}
+}
+\value{
+The seg object with \code{seg$data$with_solutions} updated to include
+the new \verb{seed_\{new_solution_name\}} column. If \code{prototype_seed = TRUE},
+also includes the full LDA solution in \code{seg$solutions$analysis},
+updated summary table, and segment append columns. If
+\code{return_append_only = TRUE}, returns the append data frame directly
+(skips prototype seed).
+}
 \description{
-seg_split_segments
+Splits one or more segments from an existing solution into
+sub-segments via k-means or PAM, then renumbers the combined result into
+a new solution column. This is the primary tool for refining a prototype
+solution — e.g., splitting a large, heterogeneous segment into two more
+homogeneous ones.
+
+\strong{Workflow:}
+\enumerate{
+\item For each segment in \code{seg_splits}, subsets the data to that segment's
+respondents and runs \code{\link[=cluster_kmeans]{cluster_kmeans()}} or \code{\link[=cluster_medoid]{cluster_medoid()}} to
+partition them into \code{split_into} sub-groups.
+\item Reassembles the full solution by keeping unsplit segments as-is and
+inserting the new sub-segments, renumbered sequentially.
+\item Stores the result as a \verb{seed_\{new_solution_name\}} column on
+\code{seg$data$with_solutions}.
+\item If \code{prototype_seed = TRUE} (default), calls
+\code{\link[=seg_cluster_prototype_seed]{seg_cluster_prototype_seed()}} to fit the LDA typing tool across
+all segments in the new seed.
+}
+
+For example, splitting segments 3 and 5 from a 7-segment solution each
+into 2 produces a 9-segment seed (5 original + 2 + 2).
 }

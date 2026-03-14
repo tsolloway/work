@@ -59,7 +59,7 @@ seg_prototype_split_segments <- function(
   )
 
 
-  seg <- cluster_prototype_seed(
+  seg <- seg_cluster_prototype_seed(
     seg = seg, solution_family_name = new_solution_family_name,
     seed_name = glue("seed_{new_solution_family_name}"),
     seed = created_seed %>% select(-2),

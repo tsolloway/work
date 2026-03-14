@@ -94,7 +94,7 @@ seg_get_spec <- function(seg, spec_path = NULL, execute = TRUE, execute_debug = 
           grep(glue("^{.x}0|^{.x}1|^{.x}2|^{.x}3|^{.x}4|^{.x}5"), sheet$var) %>%
             slice(sheet, .) %>%
             mutate(
-              var = var %>% replace_values(.x ~ NA)
+              var = var %>% dplyr::replace_values(.x ~ NA)
             )
         })
       )

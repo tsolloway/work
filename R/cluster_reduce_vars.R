@@ -9,11 +9,11 @@ cluster_reduce_vars <- function(df, vars, grp, type = c("greedy_step", "greedy",
 
 
   if(is.character(grp)){
-    grp <- df %>% dplyr::select(all_of(grp))
+    grp <- df %>% dplyr::select(dplyr::all_of(grp))
   }
 
 
-  df <- df %>% dplyr::select(all_of(vars))
+  df <- df %>% dplyr::select(dplyr::all_of(vars))
 
 
   if(type == "greedy_step" || type == "greedy"){
@@ -23,8 +23,8 @@ cluster_reduce_vars <- function(df, vars, grp, type = c("greedy_step", "greedy",
     greedy <- klaR::greedy.wilks(
       df[!is.na(grp), ], grp[!is.na(grp)]
     ) %>%
-      pluck("results") %>% mutate(
-        across(where(is.numeric), ~round(.x, 20))
+      purrr::pluck("results") %>% dplyr::mutate(
+        dplyr::across(dplyr::where(is.numeric), ~round(.x, 20))
       )
 
 
@@ -34,7 +34,7 @@ cluster_reduce_vars <- function(df, vars, grp, type = c("greedy_step", "greedy",
 
     }else if(type == "greedy_step"){
 
-      df <- df %>% dplyr::select(all_of(greedy[["vars"]]))
+      df <- df %>% dplyr::select(dplyr::all_of(greedy[["vars"]]))
 
     }
   }
@@ -73,6 +73,5 @@ cluster_reduce_vars <- function(df, vars, grp, type = c("greedy_step", "greedy",
   }
 
 }
-
 
 

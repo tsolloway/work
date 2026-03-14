@@ -109,7 +109,7 @@ cluster_consensus <- function(
 
 
   df_temp <- df_temp %>%
-    dplyr::select(all_of(c(resp_id_name, vars))) %>%
+    dplyr::select(dplyr::all_of(c(resp_id_name, vars))) %>%
     na.exclude()
 
 
@@ -117,7 +117,7 @@ cluster_consensus <- function(
   id_temp <- df_temp[[resp_id_name]]
 
 
-  df_temp <- df_temp %>% dplyr::select(-all_of(resp_id_name))
+  df_temp <- df_temp %>% dplyr::select(-dplyr::all_of(resp_id_name))
 
 
   if(!is.null(lda_vars)){
@@ -133,9 +133,9 @@ cluster_consensus <- function(
   n_vals <- n_min:n_max
 
   result <- tibble::tibble("n" = n_vals) %>%
-    mutate(
+    dplyr::mutate(
       "solution_name" = solution_name,
-      "cluster_name" = glue("{solution_name_prefix}_{solution_name}{n}"),
+      "cluster_name" = glue::glue("{solution_name_prefix}_{solution_name}{n}"),
       "inputs" = list(vars),
       "profiles" = list(vars_profiles),
       "cluster_seed" = purrr::map2(
@@ -214,7 +214,7 @@ cluster_consensus <- function(
 
   if(!is.null(reduced_inputs_max)){
     result <- result %>%
-      mutate(
+      dplyr::mutate(
         "reduced_inputs" = purrr::map(reduced_inputs, ~.x %>% head(reduced_inputs_max)),
         "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
       )

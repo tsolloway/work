@@ -110,7 +110,7 @@ cluster_hierarchical <- function(
 
 
   df_temp <- df_temp %>%
-    dplyr::select(all_of(c(resp_id_name, vars))) %>%
+    dplyr::select(dplyr::all_of(c(resp_id_name, vars))) %>%
     na.exclude()
 
 
@@ -118,7 +118,7 @@ cluster_hierarchical <- function(
   id_temp <- df_temp[[resp_id_name]]
 
 
-  df_temp <- df_temp %>% dplyr::select(-all_of(resp_id_name))
+  df_temp <- df_temp %>% dplyr::select(-dplyr::all_of(resp_id_name))
 
 
   if(!is.null(lda_vars)){
@@ -135,22 +135,22 @@ cluster_hierarchical <- function(
 
 
   result <- tibble::tibble("n" = n_min : n_max) %>%
-    mutate(
+    dplyr::mutate(
       "solution_name" = solution_name,
-      "cluster_name" = glue("{solution_name_prefix}_{solution_name}{n}"),
+      "cluster_name" = glue::glue("{solution_name_prefix}_{solution_name}{n}"),
       "inputs" = list(vars),
       "profiles" = list(vars_profiles),
       "cluster_seed" = purrr::map2(
         n, cluster_name,
-        function(x,y)possibly(
+        function(x,y)purrr::possibly(
           ~{stats::cutree(hierarchical_fit, k = x) %>%
-            bind_cols(id_temp, .) %>%
-              set_names(c("id", y)) %>%
+            dplyr::bind_cols(id_temp, .) %>%
+              rlang::set_names(c("id", y)) %>%
               suppressMessages()}
           , otherwise = NA)()),
       "priors_equal" = purrr::map(n, ~rep(1/.x, .x)),
       "priors_size" = purrr::map2(cluster_seed, cluster_name, purrr::possibly(~.x[[.y]] %>% table_percent(), otherwise = NA)),
-      "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, possibly(~{
+      "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, purrr::possibly(~{
         if(!is.null(seed)) set.seed(seed)
         cluster_reduce_vars(df_temp, reduced_vars, .x[[.y]], type = "greedy_step", return_only_var = TRUE, seed = seed)
         }, otherwise = NA)),
@@ -160,7 +160,7 @@ cluster_hierarchical <- function(
 
   if(!is.null(reduced_inputs_max)){
     result <- result %>%
-      mutate(
+      dplyr::mutate(
         "reduced_inputs" = purrr::map(reduced_inputs, ~.x %>% head(reduced_inputs_max)),
         "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
       )

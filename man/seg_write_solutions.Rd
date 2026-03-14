@@ -39,6 +39,115 @@ seg_write_solutions(
   verbose = FALSE
 )
 }
+\arguments{
+\item{seg}{A seg object with solutions already computed (via
+\code{\link[=seg_cluster_input_sheet]{seg_cluster_input_sheet()}}, \code{\link[=seg_cluster_with_profiles]{seg_cluster_with_profiles()}}, etc.).}
+
+\item{solution}{Character or \code{NULL}. Solution family name (e.g. \code{"A"}) to
+write. \code{NULL} writes all families.}
+
+\item{where}{Character or \code{NULL}. Output directory. \code{NULL} uses the path
+stored in \code{seg$paths$folders$solution}; falls back to \code{getwd()} if that
+is also \code{NULL}.}
+
+\item{only_opt}{Logical. If \code{TRUE}, write only the LDA-optimised solutions
+(those whose \code{lda_name} starts with \code{"LDA_opt_"}). Default: \code{FALSE}.}
+
+\item{do_kmeans}{Logical. Include k-means solutions (default: \code{TRUE}).}
+
+\item{do_medoid}{Logical. Include PAM/medoid solutions (default: \code{TRUE}).}
+
+\item{do_gaus_mix}{Logical. Include Gaussian mixture solutions
+(default: \code{TRUE}).}
+
+\item{do_hierarchical}{Logical. Include hierarchical solutions
+(default: \code{TRUE}).}
+
+\item{do_spectral}{Logical. Include spectral solutions (default: \code{TRUE}).}
+
+\item{do_iterative}{Logical. Include iterative swap solutions
+(default: \code{TRUE}).}
+
+\item{do_consensus}{Logical. Include consensus solutions (default: \code{TRUE}).}
+
+\item{do_optimized}{Logical. Include \code{clust_optimized} solutions
+(default: \code{TRUE}).}
+
+\item{strategy}{Character. Parallelisation strategy passed to
+\code{\link[=seg_write_shell_parallel]{seg_write_shell_parallel()}}: \code{"multisession"} (default), \code{"multicore"},
+\code{"sequential"}, or \code{"cluster"}.}
+
+\item{workers}{Integer. Number of parallel workers
+(default: \code{future::availableCores(omit = 1)}).}
+
+\item{add_key}{Logical. Add a colour key sheet to each workbook
+(default: \code{TRUE}).}
+
+\item{label_width}{Integer. Maximum character width for variable labels
+before wrapping (default: \code{75}).}
+
+\item{hide_pvalue}{Logical. If \code{TRUE}, hide the p-value column in the
+output (default: \code{FALSE}).}
+
+\item{truncate}{Character. Whether to truncate non-significant rows:
+\code{"no"} (default), \code{"yes"}, or \code{"both"} (writes both versions).}
+
+\item{truncate_polar_threshold}{Numeric. Polar hit threshold for truncation
+(default: \code{0.15}).}
+
+\item{truncate_profile_threshold}{Numeric. Profile hit threshold for
+truncation (default: \code{0.10}).}
+
+\item{version}{Character. Output version: \code{"traditional"} (default) or
+\code{"both"}.}
+
+\item{do_seg_bw}{Logical. Include a black-and-white formatted sheet
+(default: \code{TRUE}).}
+
+\item{do_italic}{Logical. Italicise sub-threshold rows (default: \code{TRUE}).}
+
+\item{switched_polars}{Logical. If \code{TRUE}, flag reversed-polarity polars
+(default: \code{FALSE}).}
+
+\item{setting_polar_threshold}{Numeric. Polar significance threshold
+(default: \code{0.20}).}
+
+\item{setting_profile_threshold}{Numeric. Profile significance threshold
+(default: \code{0.15}).}
+
+\item{setting_tolerance}{Numeric. Tolerance band around threshold
+(default: \code{0.05}).}
+
+\item{setting_pvalue}{Numeric. P-value cut-off for significance
+(default: \code{0.10}).}
+
+\item{setting_diff}{Numeric. Minimum mean-difference for significance
+(default: \code{0.10}).}
+
+\item{setting_type}{Character. Significance method: \code{"diff"} (default) or
+\code{"pvalue"}.}
+
+\item{setting_color}{Character. Output colour scheme: \code{"bw"} (default) or
+\code{"color"}.}
+
+\item{verbose}{Logical. Print progress messages (default: \code{FALSE}).}
+}
+\value{
+Invisibly returns the result of \code{\link[=seg_write_shell_parallel]{seg_write_shell_parallel()}}.
+Called for its side effect of writing Excel files to disk.
+}
 \description{
-seg_write_solutions
+Writes solution workbooks (Excel files) for all or selected
+segmentation solutions. Each solution gets its own \code{.xlsx} file containing
+the shell table — segment means, significance flags, and hit highlighting
+— produced by \code{\link[=seg_write_shell_parallel]{seg_write_shell_parallel()}}.
+
+This is the main "export" step after clustering: it takes the fitted
+solutions stored in \code{seg$solutions$summary_table} and renders each one as
+a formatted Excel workbook suitable for review. Solutions are organised
+into sub-folders by \code{solution_name} inside the output directory.
+
+By default all methods and solution families are written. Use the \verb{do_*}
+flags or \code{solution} / \code{only_opt} arguments to narrow the set — for
+example, writing only the LDA-optimised solutions or only k-means results.
 }

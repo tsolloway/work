@@ -39,7 +39,7 @@ cluster_add_lda <- function(
 
 
   if(!is.null(filter_name)){
-    df_temp <- df %>% filter(.data[[filter_name]])
+    df_temp <- df %>% dplyr::filter(.data[[filter_name]])
   }else if(is.null(filter_name)){
     df_temp <- df
   }
@@ -49,12 +49,12 @@ cluster_add_lda <- function(
   lda_score <- function(x, df){
     x <- x %>% predict(df)
 
-    x <- bind_cols(
-      pluck(x, "posterior"),
-      pluck(x, "class")
+    x <- dplyr::bind_cols(
+      purrr::pluck(x, "posterior"),
+      purrr::pluck(x, "class")
     ) %>%
       suppressMessages() %>%
-      setNames(., glue("seg_{seq(ncol(.))}"))
+      setNames(., glue::glue("seg_{seq(ncol(.))}"))
 
     names(x)[ncol(x)] <- "seg"
 
@@ -65,13 +65,13 @@ cluster_add_lda <- function(
 
   if(use_reduced){
 
-    result <- cluster_table %>% mutate(
-      "lda_name" = glue("LDA_opt_{cluster_name}")
+    result <- cluster_table %>% dplyr::mutate(
+      "lda_name" = glue::glue("LDA_opt_{cluster_name}")
     )
   }else if(!use_reduced){
 
-    result <- cluster_table %>% mutate(
-      "lda_name" = glue("LDA_{cluster_name}")
+    result <- cluster_table %>% dplyr::mutate(
+      "lda_name" = glue::glue("LDA_{cluster_name}")
     )
   }
 
@@ -94,8 +94,8 @@ cluster_add_lda <- function(
   }else if(!is.null(lda_vars)){
 
     result <- cluster_table %>%
-      mutate(
-        "lda_name" = glue("LDA_{cluster_name}"),
+      dplyr::mutate(
+        "lda_name" = glue::glue("LDA_{cluster_name}"),
         "lda_inputs" = list(lda_vars),
         "lda_profiles" = list(lda_vars_profiles)
       )
@@ -140,10 +140,10 @@ cluster_add_lda <- function(
 
 
   result <- result %>%
-    mutate(
+    dplyr::mutate(
       "lda_fit" = purrr::pmap(
         {{temp_list}},
-        possibly(
+        purrr::possibly(
           function(x, y, z, w){
             set.seed(1)
 
@@ -154,7 +154,7 @@ cluster_add_lda <- function(
 
             dx <- dplyr::left_join(
               x,
-              df_temp %>% dplyr::select(all_of(c(!!resp_id_name, unlist(w)))),
+              df_temp %>% dplyr::select(dplyr::all_of(c(!!resp_id_name, unlist(w)))),
               by = dplyr::join_by("id" == !!resp_id_name)
             )
 
@@ -178,20 +178,20 @@ cluster_add_lda <- function(
 
 
   result <- result %>%
-    mutate(
+    dplyr::mutate(
       "lda_coefficient_function" = purrr::pmap(
         list(
           lda_fit,
           lda_inputs,
           cluster_seed,
           cluster_name
-        ), possibly(
+        ), purrr::possibly(
           function(x,y,z,w){
             coefficient_lda(
               fit = x,
               input = df_temp %>%
                 dplyr::filter(.data[[resp_id_name]] %in% z[["id"]]) %>%
-                dplyr::select(all_of(unlist(y))),
+                dplyr::select(dplyr::all_of(unlist(y))),
               grp = z[[w]]
             )
           },
@@ -199,22 +199,22 @@ cluster_add_lda <- function(
       ),
 
       "lda_predict" = purrr::map2(
-        lda_fit, lda_inputs, possibly(
+        lda_fit, lda_inputs, purrr::possibly(
           ~lda_score(
             .x,
             df %>%
-              dplyr::select(all_of(unlist(.y)))),
+              dplyr::select(dplyr::all_of(unlist(.y)))),
           otherwise = NA)
       ),
 
       "lda_seg" = purrr::map2(
         lda_predict, lda_name,
-        possibly(
-          ~pluck(.x, "seg") %>%
+        purrr::possibly(
+          ~purrr::pluck(.x, "seg") %>%
             as.character() %>%
             as.numeric() %>%
-            bind_cols(id, .) %>%
-            set_names(c("id", .y)) %>%
+            dplyr::bind_cols(id, .) %>%
+            rlang::set_names(c("id", .y)) %>%
             suppressMessages(),
           otherwise = NA)
       )
@@ -225,16 +225,16 @@ cluster_add_lda <- function(
   if(is.null(filter_name)){
 
     result <- result %>%
-      mutate(
+      dplyr::mutate(
         "confusion" = purrr::pmap(
           list(cluster_seed, lda_seg, cluster_name, lda_name),
-          possibly(
+          purrr::possibly(
             function(x,y,z,w){
 
-              temp <- left_join(
+              temp <- dplyr::left_join(
                 x,
                 y,
-                by = join_by(id)
+                by = dplyr::join_by(id)
               )
 
               caret::confusionMatrix(
@@ -249,24 +249,24 @@ cluster_add_lda <- function(
   }else if(!is.null(filter_name)){
 
     result <- result %>%
-      mutate(
+      dplyr::mutate(
         "confusion" = purrr::pmap(
           list(cluster_seed, lda_seg, cluster_name, lda_name),
-          possibly(
+          purrr::possibly(
             function(x,y,z,w){
 
-              # y <- y %>% filter(y[["id"]] %in% x[["id"]])
+              # y <- y %>% dplyr::filter(y[["id"]] %in% x[["id"]])
               #
               # caret::confusionMatrix(
-              #   as.factor(y %>% pluck(w) %>% .[df[[filter_name]]]),
-              #   as.factor(x %>% pluck(z))
+              #   as.factor(y %>% purrr::pluck(w) %>% .[df[[filter_name]]]),
+              #   as.factor(x %>% purrr::pluck(z))
               # ) %>%
               #   suppressWarnings()
 
-              temp <- left_join(
+              temp <- dplyr::left_join(
                 x,
                 y[df[[filter_name]], ],
-                by = join_by(id)
+                by = dplyr::join_by(id)
               )
 
               caret::confusionMatrix(
@@ -282,21 +282,21 @@ cluster_add_lda <- function(
 
 
   result <- result %>%
-    mutate(
+    dplyr::mutate(
       "accuracy" = purrr::map(
         confusion,
-        possibly(
+        purrr::possibly(
           ~.x %>%
-            pluck("overall") %>%
-            pluck("Accuracy") %>%
+            purrr::pluck("overall") %>%
+            purrr::pluck("Accuracy") %>%
             round(10),
           otherwise = NA)) %>% unlist(),
 
       "df_append" = purrr::map2(
         cluster_seed, lda_seg,
-        possibly(
-          ~full_join(
-            .x, .y, by = join_by("id")
+        purrr::possibly(
+          ~dplyr::full_join(
+            .x, .y, by = dplyr::join_by("id")
           ),
           otherwise = NA)),
     )
@@ -304,4 +304,3 @@ cluster_add_lda <- function(
 
   return(result)
 }
-
