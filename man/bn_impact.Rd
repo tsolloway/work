@@ -13,6 +13,7 @@ bn_impact(
   community_assignment = NULL,
   type = c("gr", "cp", "mi"),
   add_index = TRUE,
+  index_by = c("maxVmin", "lift", "mi"),
   process_subgroups = TRUE,
   dictionary = NULL,
   n_boot = 1,
