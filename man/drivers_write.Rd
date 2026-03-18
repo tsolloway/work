@@ -8,6 +8,7 @@ drivers_write(
   drivers_result,
   file_name = NULL,
   sub_title = NULL,
+  variable_width = 20,
   label_width = "auto",
   single_workbook = FALSE,
   path = "."
@@ -22,6 +23,8 @@ drivers_write(
 \code{Drivers of {dv}.xlsx}.}
 
 \item{sub_title}{Character. Subtitle text (e.g. project name). Default NULL.}
+
+\item{variable_width}{Column width for the Variable column (default 20).}
 
 \item{label_width}{Column width for the Label column (default \code{"auto"}).}
 

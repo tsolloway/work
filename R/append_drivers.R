@@ -181,18 +181,19 @@ append_drivers <- function(
       sign_col_pos <- which(names(analysis_table) == sign_col_name)
       p_col_pos <- which(names(analysis_table) == p_col_name)
 
-      if (length(sign_col_pos) == 1) {
-        sign_excel_col <- sign_col_pos + (col_data_start - 1)
-        neg_formula <- paste0(num2let(sign_excel_col), driver_rows[1], " < 0")
-        openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
-          style = styles$neg_sign, rule = neg_formula)
-      }
-
+      # Order matters: blackout first, then neg sign, then colour scale
       if (length(p_col_pos) == 1) {
         p_excel_col <- p_col_pos + (col_data_start - 1)
         p_formula <- paste0(num2let(p_excel_col), driver_rows[1], " > .1")
         openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
-          style = styles$insig, rule = p_formula)
+          style = styles$insig, type = "expression", rule = p_formula)
+      }
+
+      if (length(sign_col_pos) == 1) {
+        sign_excel_col <- sign_col_pos + (col_data_start - 1)
+        neg_formula <- paste0(num2let(sign_excel_col), driver_rows[1], " < 0")
+        openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
+          style = styles$neg_sign, type = "expression", rule = neg_formula)
       }
     }
 

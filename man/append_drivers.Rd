@@ -12,6 +12,7 @@ append_drivers(
   title = NULL,
   sub_title = NULL,
   footer = NULL,
+  variable_width = 20,
   label_width = "auto",
   engine = c("linear", "logistic")
 )
@@ -31,6 +32,8 @@ display columns.}
 \item{sub_title}{Character. Subtitle text below the title.}
 
 \item{footer}{Character. Footer text below the data.}
+
+\item{variable_width}{Column width for Variable column (default 20).}
 
 \item{label_width}{Column width for Label column (default \code{"auto"}).}
 
