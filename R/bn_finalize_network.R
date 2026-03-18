@@ -14,7 +14,7 @@ bn_finalize_network <- function(
     node_label_type = c("both", "variable", "label"),
     manual_groups = NULL,
     impact_type = c("gr", "cp", "mi"),
-    impact_index_by = c("maxVmin", "lift", "mi"),
+    impact_index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     impact_n_boot = 1,
     impact_n_querry = 1e4,
     impact_lift = 0,

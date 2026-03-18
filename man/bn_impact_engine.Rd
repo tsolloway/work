@@ -12,8 +12,7 @@ bn_impact_engine(
   do_community = FALSE,
   community_assignment = NULL,
   type = c("gr", "cp", "mi"),
-  add_index = TRUE,
-  index_by = c("maxVmin", "lift", "mi"),
+  index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
   n_boot = 1,
   n_querry = 10000,
   lift = 0,
@@ -57,11 +56,11 @@ Deterministic, fast, no Monte Carlo noise.
 \item \code{"mi"}: mutual information test only (no probability lift).
 }}
 
-\item{add_index}{Logical. If \code{TRUE} (default), appends an \code{index}
-column scaled to 100 relative to the mean. Based on \code{index_by}.}
-
 \item{index_by}{Character. Which metric to use for the index column:
-\code{"maxVmin"} (default), \code{"lift"}, or \code{"mi"}.}
+\code{"lift_first"} (default), \code{"lift_second"}, \code{"maxVmin"},
+\code{"mi"}, or \code{"none"} (no index column).
+\code{"lift_first"} and \code{"lift_second"} select the first or second
+lift column when \code{lift} is a vector.}
 
 \item{n_boot}{Integer. Number of bootstrap replicates. If \code{n_boot = 1}
 (recommended default), computes a single point estimate without bootstrapping.
@@ -115,8 +114,8 @@ A tibble with one row per variable (or community) containing:
 shift in the IV (types \code{"gr"} and \code{"cp"})
 \item \code{mi}: normalized mutual information (all types)
 \item \code{p_val}: MI chi-squared p-value (all types)
-\item \code{index}: relative impact index based on maxVmin
-(when \code{add_index = TRUE})
+\item \code{index}: relative impact index based on \code{index_by}
+(omitted when \code{index_by = "none"})
 }
 
 When \code{n_boot > 1}, maxVmin, lift, and MI columns are expanded with

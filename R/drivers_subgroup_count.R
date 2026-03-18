@@ -6,11 +6,11 @@ drivers_subgroup_count <- function(
     subgroups
 ){
 
-  df[, subgroups] %>%
+  df_flat[, subgroups] %>%
     apply(2, function(x){
 
-      xsum = x %>% sum(na.rm = T)
-      xbase = x %>% is.na() %>% not() %>% sum()
+      xsum <- sum(x, na.rm = TRUE)
+      xbase <- sum(!is.na(x))
 
       tibble::tibble(
         count = xsum,
@@ -18,7 +18,7 @@ drivers_subgroup_count <- function(
       )
 
     }) %>%
-    bind_rows() %>%
-    mutate(names = subgroups) %>%
-    select(names, count, base)
+    dplyr::bind_rows() %>%
+    dplyr::mutate(names = subgroups) %>%
+    dplyr::select(names, count, base)
 }

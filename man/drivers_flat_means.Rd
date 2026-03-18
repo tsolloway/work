@@ -2,10 +2,10 @@
 % Please edit documentation in R/drivers_flat_means.R
 \name{drivers_flat_means}
 \alias{drivers_flat_means}
-\title{drivers_subgroup_count}
+\title{drivers_flat_means}
 \usage{
 drivers_flat_means(df, vars)
 }
 \description{
-drivers_subgroup_count
+drivers_flat_means
 }

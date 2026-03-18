@@ -144,8 +144,7 @@ bn_impact <- function(
     do_community = FALSE,
     community_assignment = NULL,
     type = c("gr", "cp", "mi"),
-    add_index = TRUE,
-    index_by = c("maxVmin", "lift", "mi"),
+    index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     process_subgroups = TRUE,
     dictionary = NULL,
     n_boot = 1,
@@ -184,7 +183,6 @@ bn_impact <- function(
           do_community = do_community,
           community_assignment = community_assignment,
           type = type,
-          add_index = add_index,
           index_by = index_by,
           n_boot = n_boot,
           n_querry = n_querry,
@@ -217,7 +215,7 @@ bn_impact <- function(
       do_community = do_community,
       community_assignment = community_assignment,
       type = type,
-      add_index = add_index,
+      index_by = index_by,
       n_boot = n_boot,
       n_querry = n_querry,
       lift = lift,
@@ -226,6 +224,7 @@ bn_impact <- function(
       min_base_for_lift = min_base_for_lift,
       include_base = include_base,
       dv_metric = dv_metric,
+      weight = weight,
       seed = seed
     ) %>%
       dplyr::rename(Variable = variable)

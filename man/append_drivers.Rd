@@ -10,11 +10,38 @@ append_drivers(
   wb = NULL,
   sheet_name = NULL,
   title = NULL,
+  sub_title = NULL,
   footer = NULL,
   label_width = "auto",
   engine = c("linear", "logistic")
 )
 }
+\arguments{
+\item{analysis_table}{Tibble from \code{driver_impact()$table}.}
+
+\item{subgroups}{Character vector or NULL. Subgroup names used to identify
+display columns.}
+
+\item{wb}{Workbook object. If NULL, creates a new one.}
+
+\item{sheet_name}{Character. Sheet name (default \code{"drivers"}).}
+
+\item{title}{Character. Title text above the data.}
+
+\item{sub_title}{Character. Subtitle text below the title.}
+
+\item{footer}{Character. Footer text below the data.}
+
+\item{label_width}{Column width for Label column (default \code{"auto"}).}
+
+\item{engine}{Character. \code{"linear"} or \code{"logistic"}. Controls
+which metric is used for the Total Impact row and conditional formatting.}
+}
+\value{
+Modified workbook object.
+}
 \description{
-append_drivers
+Appends a formatted driver analysis sheet to a workbook.
+Handles the "Total Impact" summary row, column hiding, conditional
+formatting, and styling.
 }

@@ -1,16 +1,16 @@
-#' drivers_subgroup_count
-#' @description drivers_subgroup_count
+#' drivers_flat_means
+#' @description drivers_flat_means
 #' @export
 drivers_flat_means <- function(
     df,
     vars
 ){
   df %>%
-    select(all_of(vars)) %>%
+    dplyr::select(dplyr::all_of(vars)) %>%
     apply(2, function(x){
 
-      xmean = x %>% mean(na.rm = T)
-      xbase = x %>% is.na() %>% not() %>% sum()
+      xmean <- mean(x, na.rm = TRUE)
+      xbase <- sum(!is.na(x))
 
       tibble::tibble(
         mean = xmean,
@@ -18,7 +18,7 @@ drivers_flat_means <- function(
       )
 
     }) %>%
-    bind_rows() %>%
-    mutate(names = vars) %>%
-    select(names, mean, base)
+    dplyr::bind_rows() %>%
+    dplyr::mutate(names = vars) %>%
+    dplyr::select(names, mean, base)
 }
