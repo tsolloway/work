@@ -134,6 +134,8 @@ append_drivers <- function(
 
   openxlsx::writeData(wb, sheet_name, write_total, startRow = total_impact_row, startCol = col_data_start, colNames = FALSE)
   openxlsx::writeData(wb, sheet_name, footer, startRow = total_impact_row + 1, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, "Bold italicized index means a negative relationship", startRow = total_impact_row + 2, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, "Black cells mean an insignificant relationship", startRow = total_impact_row + 3, startCol = col_data_start)
   openxlsx::setColWidths(wb, sheet_name, cols = cols_to_hide, widths = 8.43, hidden = rep(TRUE, length(cols_to_hide)))
 
 
@@ -181,13 +183,9 @@ append_drivers <- function(
       sign_col_pos <- which(names(analysis_table) == sign_col_name)
       p_col_pos <- which(names(analysis_table) == p_col_name)
 
-      # Order matters: blackout first, then neg sign, then colour scale
-      if (length(p_col_pos) == 1) {
-        p_excel_col <- p_col_pos + (col_data_start - 1)
-        p_formula <- paste0(num2let(p_excel_col), driver_rows[1], " > .1")
-        openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
-          style = styles$insig, type = "expression", rule = p_formula)
-      }
+      # openxlsx writes rules in reverse order — last call = highest priority in Excel
+      openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
+        style = c("#f66a6e", "#feea8a", "#66bd7d"), type = "colourScale")
 
       if (length(sign_col_pos) == 1) {
         sign_excel_col <- sign_col_pos + (col_data_start - 1)
@@ -195,10 +193,14 @@ append_drivers <- function(
         openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
           style = styles$neg_sign, type = "expression", rule = neg_formula)
       }
-    }
 
-    openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
-      style = c("#f66a6e", "#feea8a", "#66bd7d"), type = "colourScale")
+      if (length(p_col_pos) == 1) {
+        p_excel_col <- p_col_pos + (col_data_start - 1)
+        p_formula <- paste0(num2let(p_excel_col), driver_rows[1], " > .1")
+        openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
+          style = styles$insig, type = "expression", rule = p_formula)
+      }
+    }
   }
 
 
