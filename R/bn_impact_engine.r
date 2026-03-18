@@ -476,18 +476,20 @@ bn_impact_engine <- function(
       lift_labels <- if (multi_lift) paste0("lift_", round(lift * 100)) else "lift"
       brand_levels <- if (!is.null(brand)) sort(unique(as.character(dat_boot[[brand]]))) else NULL
 
-      # Build column names
+      # Build column names — market lift always included
+      market_lift_col_names <- lift_labels
       if (is.null(brand_levels)) {
         lift_col_names <- lift_labels
       } else if (!multi_lift) {
-        lift_col_names <- paste0("lift_", brand_levels)
+        lift_col_names <- c(lift_labels, paste0("lift_", brand_levels))
       } else {
-        lift_col_names <- expand.grid(
+        brand_lift_col_names <- expand.grid(
           lift_label = lift_labels,
           brand = brand_levels,
           stringsAsFactors = FALSE
         ) %>%
           with(paste(lift_label, brand, sep = "_"))
+        lift_col_names <- c(lift_labels, brand_lift_col_names)
       }
 
       # Helper: weighted frequency table (falls back to table() when weight is NULL)
@@ -560,18 +562,21 @@ bn_impact_engine <- function(
               }
             }
 
+            # Market lift: always computed on full distribution
+            market_vals <- compute_lift_vals(freq_full, dv_probs)
+
             if (is.null(brand_levels)) {
-              # No brand: compute lift on full distribution
-              compute_lift_vals(freq_full, dv_probs)
+              market_vals
             } else {
-              # Per-brand: compute lift on brand-specific distribution
-              purrr::map(brand_levels, function(b) {
+              # Per-brand lift appended after market lift
+              brand_vals <- purrr::map(brand_levels, function(b) {
                 brand_mask <- dat_boot[[brand]] == b
                 w_b <- if (!is.null(weight)) dat_boot[[weight]][brand_mask] else NULL
                 freq_b <- wtd_table(dat_boot[[single_iv]][brand_mask], w = w_b, levels = levels_v)
                 compute_lift_vals(freq_b, dv_probs)
               }) %>%
                 unlist()
+              c(market_vals, brand_vals)
             }
           }) %>%
             do.call(rbind, .)
@@ -590,13 +595,15 @@ bn_impact_engine <- function(
         base_results <- temp_ivs_r %>%
           purrr::imap(function(iv_vars, iv_name) {
             per_iv_bases <- purrr::map(iv_vars, function(single_iv) {
+              market_base <- c(base = sum(table(dat_boot[[single_iv]])))
               if (is.null(brand_levels)) {
-                c(base = sum(table(dat_boot[[single_iv]])))
+                market_base
               } else {
-                purrr::map_dbl(brand_levels, function(b) {
+                brand_bases <- purrr::map_dbl(brand_levels, function(b) {
                   sum(dat_boot[[brand]] == b, na.rm = TRUE)
                 }) %>%
                   setNames(paste0("base_", brand_levels))
+                c(market_base, brand_bases)
               }
             }) %>%
               do.call(rbind, .)
@@ -714,16 +721,19 @@ bn_impact_engine <- function(
 
   if(index_by != "none"){
 
-    # Resolve lift_first / lift_second to actual column names
+    # Resolve lift_first / lift_second to market lift columns (bare lift / lift_0 / lift_10)
     if (index_by %in% c("lift_first", "lift_second")) {
       lift_cols <- grep("^lift", names(result), value = TRUE)
       lift_cols <- lift_cols[!grepl("_mean$|_sd$|_ci_lo$|_ci_hi$", lift_cols)]
-      if (length(lift_cols) == 0) {
+      # Use market lift only (bare names without brand suffix)
+      market_lift_cols <- lift_cols[grep("^lift$|^lift_\\d+$", lift_cols)]
+      if (length(market_lift_cols) == 0) market_lift_cols <- lift_cols
+      if (length(market_lift_cols) == 0) {
         warning("index_by = '", index_by, "': no lift columns found. Skipping index.")
         return(result)
       }
-      idx <- if (index_by == "lift_first") 1L else min(2L, length(lift_cols))
-      resolved_col <- lift_cols[idx]
+      idx <- if (index_by == "lift_first") 1L else min(2L, length(market_lift_cols))
+      resolved_col <- market_lift_cols[idx]
     } else {
       resolved_col <- index_by
     }

@@ -251,7 +251,7 @@ bn_finalize_network <- function(
     weight = impact_weight,
     use_parallel = impact_parallel,
     seed = seed
-  )
+  )$table
 
   cli::cli_alert_info("Beginning impact estimation — communities")
 
@@ -276,7 +276,7 @@ bn_finalize_network <- function(
     weight = impact_weight,
     use_parallel = impact_parallel,
     seed = seed
-  )
+  )$table
 
   cli::cli_alert_info("Completed impact estimation")
 

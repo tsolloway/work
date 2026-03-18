@@ -95,13 +95,17 @@ bn_report <- function(
 
   # --- auto-name from title/subtitle ---
   auto_name <- if (!is.null(subtitle)) {
-    paste(title, subtitle, sep = " - ")
+    paste(subtitle, title, sep = " - ")
   } else {
     title
   }
 
   if (is.null(save_name)) save_name <- auto_name
-  if (is.null(file)) file <- paste0(auto_name, ".html")
+  if (is.null(file)) {
+    file <- paste0(auto_name, ".html")
+  } else if (!grepl("\\.html$", file, ignore.case = TRUE)) {
+    file <- paste0(file, ".html")
+  }
 
   # --- default type ---
   if (is.null(default_type)) default_type <- types[1]

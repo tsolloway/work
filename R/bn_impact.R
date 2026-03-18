@@ -161,6 +161,7 @@ bn_impact <- function(
 ){
 
   type <- match.arg(type)
+  index_by <- match.arg(index_by)
   impact_metric_type <- match.arg(impact_metric_type)
   dv_metric <- match.arg(dv_metric)
 
@@ -270,8 +271,14 @@ bn_impact <- function(
 
 
 
-  return(output)
+  list(
+    table = output,
+    meta = list(
+      type = type,
+      index_by = index_by,
+      lift = lift,
+      subgroups = if (process_subgroups) names(obj) else NULL,
+      dv = dv
+    )
+  )
 }
-
-
-
