@@ -322,15 +322,80 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
       rows = row_dropdowns, cols = metric_cell_col, stack = TRUE)
 
+    # Build metric key lookup formula (used by Focus cell formula and _lookup column F)
+    dash_sheet_escaped <- gsub("'", "''", dash_sheet)
+    metric_cell_abs <- paste0("'", dash_sheet_escaped, "'!$", num2let(metric_cell_col), "$", row_dropdowns)
+    mk_lookup <- paste0(
+      "INDEX(_lookup!$C$2:$C$", length(metric_labels) + 1,
+      ",MATCH(", metric_cell_abs, ",_lookup!$B$2:$B$", length(metric_labels) + 1, ",0))"
+    )
+
     openxlsx::writeData(wb, dash_sheet, "Focus: ", startRow = row_dropdowns, startCol = focus_label_col)
     openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
       rows = row_dropdowns, cols = focus_label_col, stack = TRUE)
-    openxlsx::writeData(wb, dash_sheet, focus_options[1], startRow = row_dropdowns, startCol = focus_cell_col)
+
+    # Focus cell: static default value (formula gets overwritten by dropdown)
+    openxlsx::writeData(wb, dash_sheet, focus_options[1],
+      startRow = row_dropdowns, startCol = focus_cell_col)
     openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
       rows = row_dropdowns, cols = focus_cell_col, stack = TRUE)
 
+    # Warning text above Focus cell — formula shows message when non-Market + maxVmin/mi
+    focus_cell_let <- num2let(focus_cell_col)
+    warning_row <- row_dropdowns - 1L
+    warning_formula <- paste0(
+      "IF(AND(", focus_cell_let, row_dropdowns, "<>\"Market\",",
+      "OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\")),",
+      num2let(metric_cell_col), row_dropdowns, "&\" must have a Market focus\",\"\")"
+    )
+    openxlsx::writeFormula(wb, dash_sheet, x = warning_formula,
+      startRow = warning_row, startCol = focus_cell_col)
+
+    # Red styling on warning cell when message is shown
+    red_warning <- openxlsx::createStyle(fontColour = "#FF0000", textDecoration = "bold")
+    red_rule <- paste0(
+      "AND(", focus_cell_let, row_dropdowns, "<>\"Market\",",
+      "OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\"))"
+    )
+    openxlsx::conditionalFormatting(wb, dash_sheet,
+      cols = focus_cell_col, rows = warning_row,
+      style = red_warning, type = "expression", rule = red_rule)
+
+    # Extend red bold styling across K4:P4 (cols 11-16, row 4 = warning_row)
+    openxlsx::conditionalFormatting(wb, dash_sheet,
+      cols = 11:16, rows = warning_row,
+      style = red_warning, type = "expression", rule = red_rule)
+
+    # Red background on the Focus dropdown cell itself
+    red_cell <- openxlsx::createStyle(bgFill = "#FF0000", fontColour = "#FFFFFF")
+    openxlsx::conditionalFormatting(wb, dash_sheet,
+      cols = focus_cell_col, rows = row_dropdowns,
+      style = red_cell, type = "expression", rule = red_rule)
+
+    # Dynamic Focus column in _lookup (col F) — filters brands when metric is maxVmin/mi
+
+    openxlsx::writeData(wb, lookup_sheet, "Dynamic Focus", startRow = 1, startCol = 6)
+    # F2 always = "Market"
+    openxlsx::writeData(wb, lookup_sheet, "Market", startRow = 2, startCol = 6)
+    # F3+ = IF(OR(metric_key="maxVmin", metric_key="mi"), "", A{row})
+    if (length(focus_options) > 1) {
+      for (fi in 2:length(focus_options)) {
+        f_formula <- paste0(
+          "IF(OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\"),\"\",A", fi + 1, ")"
+        )
+        openxlsx::writeFormula(wb, lookup_sheet, x = f_formula,
+          startRow = fi + 1, startCol = 6)
+      }
+    }
+
+    # G2 = count of non-blank dynamic focus entries
+    openxlsx::writeData(wb, lookup_sheet, "Focus Count", startRow = 1, startCol = 7)
+    count_formula <- paste0("COUNTIF($F$2:$F$", length(focus_options) + 1, ",\"<>\"&\"\")")
+    openxlsx::writeFormula(wb, lookup_sheet, x = count_formula, startRow = 2, startCol = 7)
+
     # Data validation for dropdowns
-    focus_range <- paste0("_lookup!$A$2:$A$", length(focus_options) + 1)
+    # Focus: dynamic OFFSET range based on count
+    focus_range <- paste0("OFFSET(_lookup!$F$2,0,0,_lookup!$G$2,1)")
     metric_range <- paste0("_lookup!$B$2:$B$", length(metric_labels) + 1)
     openxlsx::dataValidation(wb, dash_sheet,
       col = focus_cell_col, rows = row_dropdowns,
