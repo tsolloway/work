@@ -11,6 +11,7 @@ bn_impact_write(
   title = NULL,
   variable_width = 20,
   label_width = "auto",
+  wb_type = c("standard", "dynamic"),
   path = "."
 )
 }
@@ -31,6 +32,9 @@ defaults to \code{"Network Drivers of {dv}"} using the DV display name.}
 \item{variable_width}{Column width for the Variable column (default 20).}
 
 \item{label_width}{Column width for the Label column (default \code{"auto"}).}
+
+\item{wb_type}{Character. Workbook type: \code{"standard"} (default) or
+\code{"dynamic"}.}
 
 \item{path}{Directory to write workbook to (default \code{"."}).}
 }

@@ -209,6 +209,19 @@ seg_cluster_input_sheet <- function(
   priors <- match.arg(priors)
   polar_type <- match.arg(polar_type)
 
+  # ---- cli: config summary ----
+  methods_enabled <- c(
+    if (do_kmeans) "kmeans", if (do_medoid) "medoid",
+    if (do_gaus_mix) "gaus_mix", if (do_hierarchical) "hierarchical",
+    if (do_spectral) "spectral", if (do_iterative) "iterative",
+    if (do_consensus) "consensus"
+  )
+  n_families <- if (is.null(solution_family)) length(seg[["solutions"]][["inputs"]]) else length(solution_family)
+  cli::cli_h2("seg_cluster_input_sheet")
+  cli::cli_alert_info("Methods: {.val {methods_enabled}}")
+  cli::cli_alert_info("Families: {.val {n_families}} | K range: {n_min}\u2013{n_max} | Priors: {.val {priors}} | Polar type: {.val {polar_type}}")
+  if (do_optimized) cli::cli_alert_info("Optimized strategies: polar, profile, all")
+
   if(is.null(resp_id_name)){
     resp_id_name <- seg %>% get_resp_id_name()
   }
@@ -221,7 +234,7 @@ seg_cluster_input_sheet <- function(
     filter_name <- "okay_filter"
 
     if(!filter_name %in% names(df)){
-
+      cli::cli_alert("Computing variability & side-bias filters\u2026")
 
       df <- df %>%
         seg_cluster_variability(
@@ -408,6 +421,7 @@ seg_cluster_input_sheet <- function(
   }else{
 
     # single family — run sequentially
+    cli::cli_alert("Running family {.val {solution_family}} sequentially\u2026")
     solutions_new <- list()
 
     sf <- solution_family
@@ -464,6 +478,7 @@ seg_cluster_input_sheet <- function(
       )
 
       for (opt_name in names(optimized_defs)) {
+        cli::cli_alert("Running optimized strategy: {.val {opt_name}}")
         opt_def <- optimized_defs[[opt_name]]
         result  <- list()
 
@@ -503,7 +518,7 @@ seg_cluster_input_sheet <- function(
               .x, solution_name, n, cluster_name,
               lda_name, lda_inputs, lda_profiles,
               lda_coefficient_function, lda_predict,
-              confusion, accuracy, df_append
+              confusion, accuracy, kappa, cv, split_half, df_append
             )
           ) %>%
           dplyr::bind_rows() %>%
@@ -530,6 +545,7 @@ seg_cluster_input_sheet <- function(
   }
 
   # ---- merge new results into existing solutions ----
+  cli::cli_alert("Merging results & building summary table\u2026")
   if (!is.null(solutions_existing)) {
     solutions <- solutions_existing
     for (nm in names(solutions_new)) {
@@ -570,13 +586,13 @@ seg_cluster_input_sheet <- function(
 
 
   solution_table <- solutions %>%
-    map("solution_table") %>%
-    bind_rows()
+    purrr::map("solution_table") %>%
+    dplyr::bind_rows()
 
 
   df_segment_append <- solutions %>%
-    map("df_segment_append") %>%
-    reduce(full_join, by = "id")
+    purrr::map("df_segment_append") %>%
+    purrr::reduce(dplyr::full_join, by = "id")
 
 
   df_temp <- seg[["data"]][["with_solutions"]]
@@ -585,24 +601,24 @@ seg_cluster_input_sheet <- function(
   }
 
 
-  df_return <- left_join(
+  df_return <- dplyr::left_join(
     df_temp %>%
-      select(
-        !any_of(
+      dplyr::select(
+        !dplyr::any_of(
           names(df_segment_append) %>%
             tail(-1)
         )
       ),
     df_segment_append,
-    by = join_by(seg_uuid == id)
+    by = dplyr::join_by(seg_uuid == id)
   )
 
 
   if("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)){
     df_return <- df_return %>%
-      left_join(
-        df %>% select(c(!!resp_id_name, "okay_filter")),
-        by = join_by(!!resp_id_name)
+      dplyr::left_join(
+        df %>% dplyr::select(c(!!resp_id_name, "okay_filter")),
+        by = dplyr::join_by(!!resp_id_name)
       )
   }
 
@@ -612,6 +628,8 @@ seg_cluster_input_sheet <- function(
   seg[["solutions"]][["df_segment_append"]] <- df_segment_append
   seg[["data"]][["with_solutions"]] <- df_return
 
+  n_solutions <- nrow(solution_table)
+  cli::cli_alert_success("Done \u2014 {n_solutions} solution{?s} across {length(solutions)} famil{?y/ies}")
 
   return(seg)
 }
@@ -799,6 +817,7 @@ seg_cluster_input_sheet <- function(
 
 
   ntasks <- length(tasks)
+  cli::cli_alert_info("{ntasks} task{?s} queued for parallel execution")
   future_plan(strategy = strategy, workers = workers, ntasks = ntasks)
 
 
@@ -880,6 +899,7 @@ seg_cluster_input_sheet <- function(
 
 
   # reconstruct nested structure grouped by solution family
+  cli::cli_alert("Reconstructing solution families\u2026")
   family_names <- unique(purrr::map_chr(tasks, "solution_name"))
 
   solutions <- purrr::map(purrr::set_names(family_names), function(sn) {
@@ -903,6 +923,7 @@ seg_cluster_input_sheet <- function(
 
     # ---- consensus second-pass (runs sequentially after parallel tasks) ----
     if (do_consensus) {
+      cli::cli_alert("Running consensus for family {.val {sn}}\u2026")
       fam <- solution_inputs[[sn]]
       filter_name_con <- if (ok_filter) "okay_filter" else NULL
 
@@ -963,7 +984,7 @@ seg_cluster_input_sheet <- function(
           .x, solution_name, n, cluster_name,
           lda_name, lda_inputs, lda_profiles,
           lda_coefficient_function, lda_predict,
-          confusion, accuracy, df_append
+          confusion, accuracy, kappa, cv, split_half, df_append
         )
       ) %>%
       dplyr::bind_rows() %>%

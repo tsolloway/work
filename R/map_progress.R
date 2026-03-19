@@ -49,7 +49,7 @@ map_progress <- function(
 
   # Graceful fallback if no active parallel plan
   if (.parallel && inherits(future::plan(), "sequential")) {
-    warning("No active parallel plan detected; falling back to sequential mode.")
+    cli::cli_alert_info("No active parallel plan detected; falling back to sequential mode.")
     .parallel <- FALSE
   }
 

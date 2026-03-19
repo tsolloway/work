@@ -24,30 +24,30 @@ seg_get_input_sheet <- function(seg, file_location = NULL, row_start = 6){
   input_table <- openxlsx::readWorkbook(
     file_location, sheet = "Inputs", startRow = row_start
   ) %>%
-    select(any_of(c("Source", "Profile", "RS", LETTERS))) %>%
-    as_tibble() %>%
+    dplyr::select(dplyr::any_of(c("Source", "Profile", "RS", LETTERS))) %>%
+    tibble::as_tibble() %>%
     janitor::remove_empty("cols")
 
 
   solutions_letters <- LETTERS[LETTERS %in% colnames(input_table)]
 
   input_table <- input_table %>%
-    mutate(across(all_of(solutions_letters), ~!is.na(.x)))
+    dplyr::mutate(dplyr::across(dplyr::all_of(solutions_letters), ~!is.na(.x)))
 
 
-  solution_inputs <- map(
-    c("Source", "Profile", "RS") %>% setNames(., .),
+  solution_inputs <- purrr::map(
+    c("Source", "Profile", "RS") %>% rlang::set_names(., .),
     function(y){
       input_table %>%
-        mutate(across(
-          all_of(solutions_letters),
+        dplyr::mutate(dplyr::across(
+          dplyr::all_of(solutions_letters),
           function(x) ifelse(x, input_table[[y]], NA)
         )) %>%
-        select(any_of(solutions_letters)) %>%
+        dplyr::select(dplyr::any_of(solutions_letters)) %>%
         as.list() %>%
-        map(remove_na)
+        purrr::map(remove_na)
     }
-  ) %>% transpose()
+  ) %>% purrr::transpose()
 
 
   seg[["solutions"]][["names"]] <- solutions_letters

@@ -45,6 +45,11 @@
 #' @param priors Character. LDA prior method: `"size"` (default) or `"equal"`.
 #' @param iter_max Integer. Maximum k-means iterations (default: 1000).
 #' @param nstart Integer. Number of random starts for k-means (default: 10).
+#' @param remove_nzv Logical. If `TRUE` (default), removes near-zero variance
+#'   profile variables before clustering via [caret::nearZeroVar()].
+#' @param cor_threshold Numeric or `NULL`. If numeric, removes collinear profile
+#'   variables where `|r|` exceeds this threshold via [caret::findCorrelation()].
+#'   Default: `0.90`. Set to `NULL` to skip.
 #'
 #' @return The seg object with updated `seg$solutions$analysis[[solution_name]]`,
 #'   `seg$solutions$summary_table`, `seg$solutions$df_segment_append`, and
@@ -70,7 +75,9 @@ seg_cluster_with_profiles <- function(
     side_bias_percent = .1,
     priors = c("size", "equal"),
     iter_max = 1000,
-    nstart = 10
+    nstart = 10,
+    remove_nzv = TRUE,
+    cor_threshold = 0.90
 ){
 
   # solution_previous = NULL
@@ -96,6 +103,9 @@ seg_cluster_with_profiles <- function(
   if (is.null(solution_name)) stop("solution_name is required.", call. = FALSE)
 
   priors <- match.arg(priors)
+
+  cli::cli_h2("seg_cluster_with_profiles")
+  cli::cli_alert_info("Solution: {.val {solution_name}} | K range: {n_min}\u2013{n_max} | Priors: {.val {priors}}")
 
   if(is.null(resp_id_name)){
     resp_id_name <- seg %>% get_resp_id_name()
@@ -131,6 +141,7 @@ seg_cluster_with_profiles <- function(
     filter_name <- "okay_filter"
 
     if(!filter_name %in% names(df)){
+      cli::cli_alert("Computing variability & side-bias filters\u2026")
 
       df <- df %>%
         seg_cluster_variability(
@@ -148,6 +159,7 @@ seg_cluster_with_profiles <- function(
 
 
   if(use_greedy && is.null(solution_previous) && is.null(inputs_polars)){
+    cli::cli_alert("Selecting polar inputs via greedy Wilks\u2019 Lambda\u2026")
     inputs_polars <- seg %>% get_greedy_vars(df=df, filter_name = filter_name)
   }
 
@@ -167,6 +179,47 @@ seg_cluster_with_profiles <- function(
     unlist() %>%
     setNames(NULL)
 
+
+  # ---- clean inputs_profiles: remove near-zero variance & collinear ----
+  if (!is.null(inputs_profiles) && length(inputs_profiles) > 0) {
+    n_orig <- length(inputs_profiles)
+
+    if (remove_nzv) {
+      profile_mat <- df %>%
+        dplyr::select(dplyr::all_of(inputs_profiles)) %>%
+        as.data.frame()
+      nzv_idx <- caret::nearZeroVar(profile_mat)
+      if (length(nzv_idx) > 0) {
+        nzv_names <- inputs_profiles[nzv_idx]
+        cli::cli_alert_warning("Removing {length(nzv_names)} near-zero variance profile var{?s}: {.val {nzv_names}}")
+        inputs_profiles <- inputs_profiles[-nzv_idx]
+      }
+    }
+
+    if (!is.null(cor_threshold) && length(inputs_profiles) > 1) {
+      profile_mat <- df %>%
+        dplyr::select(dplyr::all_of(inputs_profiles)) %>%
+        as.data.frame() %>%
+        stats::na.omit()
+      cor_mat <- stats::cor(profile_mat)
+      cor_idx <- caret::findCorrelation(cor_mat, cutoff = cor_threshold)
+      if (length(cor_idx) > 0) {
+        cor_names <- inputs_profiles[cor_idx]
+        cli::cli_alert_warning("Removing {length(cor_names)} collinear profile var{?s} (|r| > {cor_threshold}): {.val {cor_names}}")
+        inputs_profiles <- inputs_profiles[-cor_idx]
+      }
+    }
+
+    n_kept <- length(inputs_profiles)
+    if (n_kept < n_orig) {
+      cli::cli_alert_info("Profile inputs: {n_orig} \u2192 {n_kept}")
+    }
+
+    if (length(inputs_profiles) == 0) {
+      cli::cli_alert_warning("All profile inputs removed \u2014 clustering on polars only")
+      inputs_profiles <- NULL
+    }
+  }
 
   cluster_vars <- c(all_inputs_polars, inputs_profiles)
   cluster_profiles <- c(all_inputs_polars_profiles, inputs_profiles)
@@ -195,6 +248,11 @@ seg_cluster_with_profiles <- function(
   }
 
 
+  n_cluster_vars <- length(cluster_vars)
+  n_lda_vars <- length(lda_vars)
+  cli::cli_alert_info("Clustering on {n_cluster_vars} var{?s} | LDA on {n_lda_vars} var{?s}")
+  cli::cli_alert("Running k-means for K = {n_min}\u2013{n_max}\u2026")
+
   results <- withCallingHandlers(
     cluster_kmeans(
       df = df,
@@ -219,6 +277,7 @@ seg_cluster_with_profiles <- function(
   )
 
 
+  cli::cli_alert("Building solution family & merging results\u2026")
   # ---- build new solution family ----
   new_result <- list(kmeans = results)
 
@@ -229,7 +288,7 @@ seg_cluster_with_profiles <- function(
         .x, solution_name, n, cluster_name,
         lda_name, lda_inputs, lda_profiles,
         lda_coefficient_function, lda_predict,
-        confusion, accuracy, df_append
+        confusion, accuracy, kappa, cv, split_half, df_append
       )
     ) %>%
     dplyr::bind_rows() %>%
@@ -331,6 +390,8 @@ seg_cluster_with_profiles <- function(
   seg[["solutions"]][["df_segment_append"]] <- global_df_segment_append
   seg[["data"]][["with_solutions"]] <- df_return
 
+  n_solutions <- nrow(solution_table)
+  cli::cli_alert_success("Done \u2014 {n_solutions} solution{?s} for family {.val {solution_name}}")
 
   return(seg)
 

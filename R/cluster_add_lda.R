@@ -292,6 +292,70 @@ cluster_add_lda <- function(
             round(10),
           otherwise = NA)) %>% unlist(),
 
+      "kappa" = purrr::map(
+        confusion,
+        purrr::possibly(
+          ~.x %>%
+            purrr::pluck("overall") %>%
+            purrr::pluck("Kappa") %>%
+            round(10),
+          otherwise = NA)) %>% unlist(),
+
+      "cv" = purrr::pmap(
+        {{temp_list}},
+        purrr::possibly(
+          function(x, y, z, w){
+            set.seed(1)
+
+            dx <- dplyr::left_join(
+              x,
+              df_temp %>% dplyr::select(dplyr::all_of(c(!!resp_id_name, unlist(w)))),
+              by = dplyr::join_by("id" == !!resp_id_name)
+            )
+
+            dx <- dx %>% dplyr::filter(!is.na(dx[[{z}]]))
+            dg <- dx %>% dplyr::select(dplyr::all_of(z)) %>% unlist() %>% setNames(NULL)
+            dx <- dx %>% dplyr::select(!dplyr::any_of(c("id", resp_id_name, z)))
+            dp <- y / sum(y)
+
+            cv_result <- MASS::lda(x = dx, grouping = dg, prior = dp, CV = TRUE)
+            round(mean(cv_result$class == dg), 10)
+          },
+          otherwise = NA)) %>% unlist(),
+
+      "split_half" = purrr::pmap(
+        {{temp_list}},
+        purrr::possibly(
+          function(x, y, z, w){
+            set.seed(1)
+
+            dx <- dplyr::left_join(
+              x,
+              df_temp %>% dplyr::select(dplyr::all_of(c(!!resp_id_name, unlist(w)))),
+              by = dplyr::join_by("id" == !!resp_id_name)
+            )
+
+            dx <- dx %>% dplyr::filter(!is.na(dx[[{z}]]))
+            dg <- dx %>% dplyr::select(dplyr::all_of(z)) %>% unlist() %>% setNames(NULL)
+            dx_vars <- dx %>% dplyr::select(!dplyr::any_of(c("id", resp_id_name, z)))
+            dp <- y / sum(y)
+
+            n_obs <- nrow(dx_vars)
+            idx <- sample(n_obs)
+            half <- floor(n_obs / 2)
+            idx_a <- idx[seq_len(half)]
+            idx_b <- idx[(half + 1):n_obs]
+
+            lda_a <- MASS::lda(x = dx_vars[idx_a, ], grouping = dg[idx_a], prior = dp)
+            lda_b <- MASS::lda(x = dx_vars[idx_b, ], grouping = dg[idx_b], prior = dp)
+
+            pred_a <- predict(lda_a, dx_vars)$class
+            pred_b <- predict(lda_b, dx_vars)$class
+
+            round(mean(pred_a == pred_b), 10)
+          },
+          otherwise = NA)) %>% unlist(),
+
       "df_append" = purrr::map2(
         cluster_seed, lda_seg,
         purrr::possibly(

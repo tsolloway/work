@@ -118,13 +118,6 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
 
     wb <- oxl_create_workbook()
 
-    # -------------------------------------------------------------------------
-    # Sheet 2: Results (raw data)
-    # -------------------------------------------------------------------------
-    results_sheet <- "Results"
-    openxlsx::addWorksheet(wb, results_sheet)
-    openxlsx::writeData(wb, results_sheet, table, startRow = 1, startCol = 1)
-
     n_results_rows <- nrow(table)
     n_results_cols <- ncol(table)
 
@@ -182,6 +175,19 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     }
 
     # -------------------------------------------------------------------------
+    # Sheet 1: Dashboard (created first so it appears first)
+    # -------------------------------------------------------------------------
+    dash_sheet <- sheet_name
+    openxlsx::addWorksheet(wb, dash_sheet)
+
+    # -------------------------------------------------------------------------
+    # Sheet 2: Results (raw data)
+    # -------------------------------------------------------------------------
+    results_sheet <- "Results"
+    openxlsx::addWorksheet(wb, results_sheet)
+    openxlsx::writeData(wb, results_sheet, table, startRow = 1, startCol = 1)
+
+    # -------------------------------------------------------------------------
     # Sheet 3: _lookup (hidden) — maps dropdown selections to column names
     # -------------------------------------------------------------------------
     lookup_sheet <- "_lookup"
@@ -228,16 +234,6 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       openxlsx::writeData(wb, lookup_sheet, index_descriptions[di], startRow = di + 1, startCol = 5)
     }
 
-    openxlsx::sheetVisibility(wb)[which(names(wb) == lookup_sheet)] <- FALSE
-
-    # -------------------------------------------------------------------------
-    # Sheet 1: Dashboard
-    # -------------------------------------------------------------------------
-    dash_sheet <- sheet_name
-    openxlsx::addWorksheet(wb, dash_sheet)
-    openxlsx::worksheetOrder(wb) <- c(which(names(wb) == dash_sheet),
-      which(names(wb) == results_sheet), which(names(wb) == lookup_sheet))
-
     # Styles
     styles <- list(
       title     = openxlsx::createStyle(textDecoration = "bold", fontSize = 18),
@@ -275,54 +271,12 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     dash_col_names <- c(leading_cols, sgs)
     n_dash_cols <- length(dash_col_names)
 
-    # Write title
-    openxlsx::writeData(wb, dash_sheet, title, startRow = row_title, startCol = col_data_start)
-    openxlsx::addStyle(wb, dash_sheet, style = styles$title,
-      rows = row_title, cols = col_data_start, stack = TRUE)
-
-    if (!is.null(row_subtitle)) {
-      openxlsx::writeData(wb, dash_sheet, sub_title, startRow = row_subtitle, startCol = col_data_start)
-      openxlsx::addStyle(wb, dash_sheet, style = styles$sub_title,
-        rows = row_subtitle, cols = col_data_start, stack = TRUE)
-    }
-
-    # Dropdown labels and cells
-    focus_label_col <- col_data_start
-    focus_cell_col <- col_data_start + 1L
-    metric_label_col <- col_data_start + 2L
-    metric_cell_col <- col_data_start + 3L
-
-    openxlsx::writeData(wb, dash_sheet, "Focus:", startRow = row_dropdowns, startCol = focus_label_col)
-    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
-      rows = row_dropdowns, cols = focus_label_col, stack = TRUE)
-    openxlsx::writeData(wb, dash_sheet, focus_options[1], startRow = row_dropdowns, startCol = focus_cell_col)
-    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_cell,
-      rows = row_dropdowns, cols = focus_cell_col, stack = TRUE)
-
-    openxlsx::writeData(wb, dash_sheet, "Metric:", startRow = row_dropdowns, startCol = metric_label_col)
-    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
-      rows = row_dropdowns, cols = metric_label_col, stack = TRUE)
-    openxlsx::writeData(wb, dash_sheet, metric_labels[1], startRow = row_dropdowns, startCol = metric_cell_col)
-    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_cell,
-      rows = row_dropdowns, cols = metric_cell_col, stack = TRUE)
-
-    # Data validation for dropdowns
-    focus_range <- paste0("_lookup!$A$2:$A$", length(focus_options) + 1)
-    metric_range <- paste0("_lookup!$B$2:$B$", length(metric_labels) + 1)
-    openxlsx::dataValidation(wb, dash_sheet,
-      col = focus_cell_col, rows = row_dropdowns,
-      type = "list", value = focus_range)
-    openxlsx::dataValidation(wb, dash_sheet,
-      col = metric_cell_col, rows = row_dropdowns,
-      type = "list", value = metric_range)
-
     # -----------------------------------------------------------------------
     # Column layout per subgroup: Metric (hidden) | P Value (hidden) | Index (visible)
+    # Compute positions FIRST so dropdowns can use visible columns
     # -----------------------------------------------------------------------
-    # Total dashboard columns = leading + subgroups * 3
     n_total_cols <- n_leading + length(sgs) * 3
 
-    # Compute column positions per subgroup
     raw_metric_cols <- integer(length(sgs))
     p_val_cols <- integer(length(sgs))
     index_cols_pos <- integer(length(sgs))
@@ -335,6 +289,55 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       index_cols_pos[sg_i] <- sg_offset + 2
       hidden_cols <- c(hidden_cols, sg_offset, sg_offset + 1)
     }
+
+    # Visible columns = leading cols + index cols
+    visible_cols <- c(seq(col_data_start, col_data_start + n_leading - 1), index_cols_pos)
+
+    # Write title
+    openxlsx::writeData(wb, dash_sheet, title, startRow = row_title, startCol = col_data_start)
+    openxlsx::addStyle(wb, dash_sheet, style = styles$title,
+      rows = row_title, cols = col_data_start, stack = TRUE)
+
+    if (!is.null(row_subtitle)) {
+      openxlsx::writeData(wb, dash_sheet, sub_title, startRow = row_subtitle, startCol = col_data_start)
+      openxlsx::addStyle(wb, dash_sheet, style = styles$sub_title,
+        rows = row_subtitle, cols = col_data_start, stack = TRUE)
+    }
+
+    # Dropdown placement — use only visible columns
+    # Metric first, then Focus
+    metric_label_col <- visible_cols[1]
+    metric_cell_col <- visible_cols[2]
+    focus_label_col <- if (length(visible_cols) >= 4) visible_cols[3] else visible_cols[length(visible_cols) - 1]
+    focus_cell_col <- if (length(visible_cols) >= 4) visible_cols[4] else visible_cols[length(visible_cols)]
+
+    dropdown_cell_style <- openxlsx::createStyle(
+      border = "Bottom", borderStyle = "thin", halign = "left"
+    )
+
+    openxlsx::writeData(wb, dash_sheet, "Metric: ", startRow = row_dropdowns, startCol = metric_label_col)
+    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
+      rows = row_dropdowns, cols = metric_label_col, stack = TRUE)
+    openxlsx::writeData(wb, dash_sheet, metric_labels[1], startRow = row_dropdowns, startCol = metric_cell_col)
+    openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
+      rows = row_dropdowns, cols = metric_cell_col, stack = TRUE)
+
+    openxlsx::writeData(wb, dash_sheet, "Focus: ", startRow = row_dropdowns, startCol = focus_label_col)
+    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
+      rows = row_dropdowns, cols = focus_label_col, stack = TRUE)
+    openxlsx::writeData(wb, dash_sheet, focus_options[1], startRow = row_dropdowns, startCol = focus_cell_col)
+    openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
+      rows = row_dropdowns, cols = focus_cell_col, stack = TRUE)
+
+    # Data validation for dropdowns
+    focus_range <- paste0("_lookup!$A$2:$A$", length(focus_options) + 1)
+    metric_range <- paste0("_lookup!$B$2:$B$", length(metric_labels) + 1)
+    openxlsx::dataValidation(wb, dash_sheet,
+      col = focus_cell_col, rows = row_dropdowns,
+      type = "list", value = focus_range)
+    openxlsx::dataValidation(wb, dash_sheet,
+      col = metric_cell_col, rows = row_dropdowns,
+      type = "list", value = metric_range)
 
     # Write leading headers
     for (ci in seq_along(leading_cols)) {
@@ -540,6 +543,11 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       paste0(dv_suffix, ".xlsx")
     }
     file_path <- file.path(path, fname)
+
+    # Hide helper sheets — creation order: Dashboard(1), Results(2), _lookup(3)
+    openxlsx::sheetVisibility(wb) <- c(TRUE, FALSE, FALSE)
+    openxlsx::sheetVisibility(wb)[3] <- "veryHidden"
+
     openxlsx::saveWorkbook(wb, file_path, overwrite = TRUE)
 
     invisible(wb)

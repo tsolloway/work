@@ -23,7 +23,9 @@ seg_cluster_with_profiles(
   side_bias_percent = 0.1,
   priors = c("size", "equal"),
   iter_max = 1000,
-  nstart = 10
+  nstart = 10,
+  remove_nzv = TRUE,
+  cor_threshold = 0.9
 )
 }
 \arguments{
@@ -80,6 +82,13 @@ the variability filter (default: 0.1).}
 \item{iter_max}{Integer. Maximum k-means iterations (default: 1000).}
 
 \item{nstart}{Integer. Number of random starts for k-means (default: 10).}
+
+\item{remove_nzv}{Logical. If \code{TRUE} (default), removes near-zero variance
+profile variables before clustering via \code{\link[caret:nearZeroVar]{caret::nearZeroVar()}}.}
+
+\item{cor_threshold}{Numeric or \code{NULL}. If numeric, removes collinear profile
+variables where \verb{|r|} exceeds this threshold via \code{\link[caret:findCorrelation]{caret::findCorrelation()}}.
+Default: \code{0.90}. Set to \code{NULL} to skip.}
 }
 \value{
 The seg object with updated \code{seg$solutions$analysis[[solution_name]]},

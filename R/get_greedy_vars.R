@@ -52,14 +52,14 @@ get_greedy_vars <- function(
     grp = ifelse(
       group_exists,
       unlist(grp),
-      map(
+      purrr::map(
         n,
         ~stats::kmeans(df, .x, iter.max = iter_max, nstart = nstart) %>%
-          pluck("cluster")
+          purrr::pluck("cluster")
       )
     ),
 
-    greedy = map(
+    greedy = purrr::map(
       grp,
       ~cluster_reduce_vars(df, vars, .x, type = "greedy", return_only_var = FALSE)
     )
