@@ -628,7 +628,7 @@ cluster_solution_family <- function(
         .x, solution_name, n, cluster_name,
         lda_name, lda_inputs, lda_profiles,
         lda_coefficient_function, lda_predict,
-        confusion, accuracy, kappa, cv, split_half, df_append
+        confusion, accuracy, kappa, cv, collinear, split_half, df_append
       )
     ) %>%
     dplyr::bind_rows() %>%

@@ -12,6 +12,9 @@ bn_impact_write(
   variable_width = 20,
   label_width = "auto",
   wb_type = c("standard", "dynamic"),
+  add_simple_simulator = FALSE,
+  bn_obj = NULL,
+  dictionary = NULL,
   path = "."
 )
 }
@@ -35,6 +38,17 @@ defaults to \code{"Network Drivers of {dv}"} using the DV display name.}
 
 \item{wb_type}{Character. Workbook type: \code{"standard"} (default) or
 \code{"dynamic"}.}
+
+\item{add_simple_simulator}{Logical. If TRUE, adds a Simulator sheet with
+interactive dropdowns for exploring conditional probability distributions.
+Requires \code{bn_obj} to be provided. Default FALSE.}
+
+\item{bn_obj}{The BN subgroups object (named list with \code{fit} and
+\code{meta} elements), as produced by \code{bn_finalize_network()}.
+Required when \code{add_simple_simulator = TRUE}.}
+
+\item{dictionary}{Optional. A data frame or named object for variable labels.
+Passed to the simulator for labeling target variables.}
 
 \item{path}{Directory to write workbook to (default \code{"."}).}
 }

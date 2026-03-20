@@ -17,6 +17,14 @@
 #' @param label_width Column width for the Label column (default \code{"auto"}).
 #' @param wb_type Character. Workbook type: \code{"standard"} (default) or
 #'   \code{"dynamic"}.
+#' @param add_simple_simulator Logical. If TRUE, adds a Simulator sheet with
+#'   interactive dropdowns for exploring conditional probability distributions.
+#'   Requires \code{bn_obj} to be provided. Default FALSE.
+#' @param bn_obj The BN subgroups object (named list with \code{fit} and
+#'   \code{meta} elements), as produced by \code{bn_finalize_network()}.
+#'   Required when \code{add_simple_simulator = TRUE}.
+#' @param dictionary Optional. A data frame or named object for variable labels.
+#'   Passed to the simulator for labeling target variables.
 #' @param path Directory to write workbook to (default \code{"."}).
 #'
 #' @return Workbook object (invisibly).
@@ -28,8 +36,12 @@ bn_impact_write <- function(
     sub_title = NULL,
     title = NULL,
     variable_width = 20,
+    community_width = 20,
     label_width = "auto",
     wb_type = c("standard", "dynamic"),
+    add_simple_simulator = FALSE,
+    bn_obj = NULL,
+    dictionary = NULL,
     path = "."
 ){
 
@@ -110,6 +122,31 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       paste0(dv_suffix, ".xlsx")
     }
     file_path <- file.path(path, fname)
+
+    if (add_simple_simulator) {
+      if (is.null(bn_obj)) stop("bn_obj is required when add_simple_simulator = TRUE")
+      # Extract community lookup from table if Community column exists
+      comm_lookup <- NULL
+      if ("Community" %in% names(table)) {
+        comm_lookup <- rlang::set_names(table$Community, table$Variable)
+      }
+      wb <- append_bn_simulator(
+        wb = wb, obj = bn_obj, df = NULL, dv = dv,
+        subgroups = subgroups, dictionary = dictionary,
+        community_lookup = comm_lookup
+      )
+      # _sim_data and _sim_lookup sheets added — hide them
+      n_sheets <- length(names(wb))
+      vis <- rep(TRUE, n_sheets)
+      sheet_names <- names(wb)
+      for (si in seq_along(sheet_names)) {
+        sn <- sheet_names[si]
+        if (sn == "_sim_data") vis[si] <- FALSE
+        if (sn == "_sim_lookup") vis[si] <- "veryHidden"
+      }
+      openxlsx::sheetVisibility(wb) <- vis
+    }
+
     openxlsx::saveWorkbook(wb, file_path, overwrite = TRUE)
 
     invisible(wb)
@@ -255,7 +292,6 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     row_title <- 2L
     row_subtitle <- if (!is.null(sub_title)) 3L else NULL
     row_dropdowns <- if (!is.null(sub_title)) 5L else 4L
-    row_data_start <- row_dropdowns + 2L
     col_data_start <- 2L
 
     # Determine leading columns (Variable, Community, Label)
@@ -305,48 +341,53 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     }
 
     # Dropdown placement — use only visible columns
-    # Metric first, then Focus
-    metric_label_col <- visible_cols[1]
-    metric_cell_col <- visible_cols[2]
-    focus_label_col <- if (length(visible_cols) >= 4) visible_cols[3] else visible_cols[length(visible_cols) - 1]
-    focus_cell_col <- if (length(visible_cols) >= 4) visible_cols[4] else visible_cols[length(visible_cols)]
+    # Dropdown controls — stacked vertically in columns B (label) and C (value)
+    label_col <- col_data_start
+    cell_col <- col_data_start + 1L
+    current_row <- row_dropdowns
 
     dropdown_cell_style <- openxlsx::createStyle(
       border = "Bottom", borderStyle = "thin", halign = "left"
     )
 
-    openxlsx::writeData(wb, dash_sheet, "Metric: ", startRow = row_dropdowns, startCol = metric_label_col)
+    # Metric dropdown
+    metric_cell_col <- cell_col
+    metric_cell_row <- current_row
+    openxlsx::writeData(wb, dash_sheet, "Metric: ", startRow = current_row, startCol = label_col)
     openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
-      rows = row_dropdowns, cols = metric_label_col, stack = TRUE)
-    openxlsx::writeData(wb, dash_sheet, metric_labels[1], startRow = row_dropdowns, startCol = metric_cell_col)
+      rows = current_row, cols = label_col, stack = TRUE)
+    openxlsx::writeData(wb, dash_sheet, metric_labels[1], startRow = current_row, startCol = cell_col)
     openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
-      rows = row_dropdowns, cols = metric_cell_col, stack = TRUE)
+      rows = current_row, cols = cell_col, stack = TRUE)
+    current_row <- current_row + 1L
 
-    # Build metric key lookup formula (used by Focus cell formula and _lookup column F)
+    # Focus dropdown
+    focus_cell_col <- cell_col
+    focus_cell_row <- current_row
+    openxlsx::writeData(wb, dash_sheet, "Focus: ", startRow = current_row, startCol = label_col)
+    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
+      rows = current_row, cols = label_col, stack = TRUE)
+    openxlsx::writeData(wb, dash_sheet, focus_options[1],
+      startRow = current_row, startCol = cell_col)
+    openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
+      rows = current_row, cols = cell_col, stack = TRUE)
+
+    # Build metric key lookup formula (used by Focus warning and _lookup column F)
     dash_sheet_escaped <- gsub("'", "''", dash_sheet)
-    metric_cell_abs <- paste0("'", dash_sheet_escaped, "'!$", num2let(metric_cell_col), "$", row_dropdowns)
+    metric_cell_abs <- paste0("'", dash_sheet_escaped, "'!$", num2let(metric_cell_col), "$", metric_cell_row)
     mk_lookup <- paste0(
       "INDEX(_lookup!$C$2:$C$", length(metric_labels) + 1,
       ",MATCH(", metric_cell_abs, ",_lookup!$B$2:$B$", length(metric_labels) + 1, ",0))"
     )
 
-    openxlsx::writeData(wb, dash_sheet, "Focus: ", startRow = row_dropdowns, startCol = focus_label_col)
-    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
-      rows = row_dropdowns, cols = focus_label_col, stack = TRUE)
-
-    # Focus cell: static default value (formula gets overwritten by dropdown)
-    openxlsx::writeData(wb, dash_sheet, focus_options[1],
-      startRow = row_dropdowns, startCol = focus_cell_col)
-    openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
-      rows = row_dropdowns, cols = focus_cell_col, stack = TRUE)
-
-    # Warning text above Focus cell — formula shows message when non-Market + maxVmin/mi
+    # Warning text below Focus cell — formula shows message when non-Market + maxVmin/mi
+    current_row <- current_row + 1L
     focus_cell_let <- num2let(focus_cell_col)
-    warning_row <- row_dropdowns - 1L
+    warning_row <- current_row
     warning_formula <- paste0(
-      "IF(AND(", focus_cell_let, row_dropdowns, "<>\"Market\",",
+      "IF(AND(", focus_cell_let, focus_cell_row, "<>\"Market\",",
       "OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\")),",
-      num2let(metric_cell_col), row_dropdowns, "&\" must have a Market focus\",\"\")"
+      num2let(metric_cell_col), metric_cell_row, "&\" must have a Market focus\",\"\")"
     )
     openxlsx::writeFormula(wb, dash_sheet, x = warning_formula,
       startRow = warning_row, startCol = focus_cell_col)
@@ -354,30 +395,27 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     # Red styling on warning cell when message is shown
     red_warning <- openxlsx::createStyle(fontColour = "#FF0000", textDecoration = "bold")
     red_rule <- paste0(
-      "AND(", focus_cell_let, row_dropdowns, "<>\"Market\",",
+      "AND(", focus_cell_let, focus_cell_row, "<>\"Market\",",
       "OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\"))"
     )
     openxlsx::conditionalFormatting(wb, dash_sheet,
       cols = focus_cell_col, rows = warning_row,
       style = red_warning, type = "expression", rule = red_rule)
 
-    # Extend red bold styling across K4:P4 (cols 11-16, row 4 = warning_row)
+    # Extend red bold styling across remaining columns on warning row
     openxlsx::conditionalFormatting(wb, dash_sheet,
-      cols = 11:16, rows = warning_row,
+      cols = seq(focus_cell_col + 1, col_data_start + n_total_cols - 1), rows = warning_row,
       style = red_warning, type = "expression", rule = red_rule)
 
     # Red background on the Focus dropdown cell itself
     red_cell <- openxlsx::createStyle(bgFill = "#FF0000", fontColour = "#FFFFFF")
     openxlsx::conditionalFormatting(wb, dash_sheet,
-      cols = focus_cell_col, rows = row_dropdowns,
+      cols = focus_cell_col, rows = focus_cell_row,
       style = red_cell, type = "expression", rule = red_rule)
 
     # Dynamic Focus column in _lookup (col F) — filters brands when metric is maxVmin/mi
-
     openxlsx::writeData(wb, lookup_sheet, "Dynamic Focus", startRow = 1, startCol = 6)
-    # F2 always = "Market"
     openxlsx::writeData(wb, lookup_sheet, "Market", startRow = 2, startCol = 6)
-    # F3+ = IF(OR(metric_key="maxVmin", metric_key="mi"), "", A{row})
     if (length(focus_options) > 1) {
       for (fi in 2:length(focus_options)) {
         f_formula <- paste0(
@@ -394,15 +432,17 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     openxlsx::writeFormula(wb, lookup_sheet, x = count_formula, startRow = 2, startCol = 7)
 
     # Data validation for dropdowns
-    # Focus: dynamic OFFSET range based on count
     focus_range <- paste0("OFFSET(_lookup!$F$2,0,0,_lookup!$G$2,1)")
     metric_range <- paste0("_lookup!$B$2:$B$", length(metric_labels) + 1)
     openxlsx::dataValidation(wb, dash_sheet,
-      col = focus_cell_col, rows = row_dropdowns,
+      col = focus_cell_col, rows = focus_cell_row,
       type = "list", value = focus_range)
     openxlsx::dataValidation(wb, dash_sheet,
-      col = metric_cell_col, rows = row_dropdowns,
+      col = metric_cell_col, rows = metric_cell_row,
       type = "list", value = metric_range)
+
+    # Update row_data_start to account for stacked controls
+    row_data_start <- current_row + 2L
 
     # Write leading headers
     for (ci in seq_along(leading_cols)) {
@@ -428,15 +468,15 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     # Write leading columns (Variable, Label, etc.) — static values
     for (ri in seq_len(n_results_rows)) {
       for (ci in seq_along(leading_cols)) {
-        val <- table[[leading_cols[ci]]][ri]
+        val <- as.character(table[[leading_cols[ci]]][ri])
         openxlsx::writeData(wb, dash_sheet, val,
           startRow = row_data_start + ri, startCol = col_data_start + ci - 1)
       }
     }
 
     # Excel references
-    focus_ref <- paste0("$", num2let(focus_cell_col), "$", row_dropdowns)
-    metric_ref <- paste0("$", num2let(metric_cell_col), "$", row_dropdowns)
+    focus_ref <- paste0("$", num2let(focus_cell_col), "$", focus_cell_row)
+    metric_ref <- paste0("$", num2let(metric_cell_col), "$", metric_cell_row)
     metric_key_range <- paste0("_lookup!$B$2:$B$", length(metric_labels) + 1)
     metric_key_col <- paste0("_lookup!$C$2:$C$", length(metric_labels) + 1)
     results_header_range <- "Results!$1:$1"
@@ -513,7 +553,12 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
 
     # Column widths
     openxlsx::setColWidths(wb, dash_sheet, cols = col_data_start, widths = variable_width)
-    if (n_leading >= 2) {
+    if (has_community) {
+      openxlsx::setColWidths(wb, dash_sheet, cols = col_data_start + 1, widths = community_width)
+      if (has_label) {
+        openxlsx::setColWidths(wb, dash_sheet, cols = col_data_start + 2, widths = label_width)
+      }
+    } else if (has_label) {
       openxlsx::setColWidths(wb, dash_sheet, cols = col_data_start + 1, widths = label_width)
     }
 
@@ -609,9 +654,30 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     }
     file_path <- file.path(path, fname)
 
-    # Hide helper sheets — creation order: Dashboard(1), Results(2), _lookup(3)
-    openxlsx::sheetVisibility(wb) <- c(TRUE, FALSE, FALSE)
-    openxlsx::sheetVisibility(wb)[3] <- "veryHidden"
+    if (add_simple_simulator) {
+      if (is.null(bn_obj)) stop("bn_obj is required when add_simple_simulator = TRUE")
+      # Extract community lookup from table if Community column exists
+      comm_lookup <- NULL
+      if ("Community" %in% names(table)) {
+        comm_lookup <- rlang::set_names(table$Community, table$Variable)
+      }
+      wb <- append_bn_simulator(
+        wb = wb, obj = bn_obj, df = NULL, dv = dv,
+        subgroups = subgroups, dictionary = dictionary,
+        community_lookup = comm_lookup
+      )
+    }
+
+    # Hide helper sheets — set visibility for all sheets
+    n_sheets <- length(names(wb))
+    vis <- rep(TRUE, n_sheets)
+    sheet_names <- names(wb)
+    for (si in seq_along(sheet_names)) {
+      sn <- sheet_names[si]
+      if (sn %in% c("Results", "_sim_data")) vis[si] <- FALSE
+      if (sn %in% c("_lookup", "_sim_lookup")) vis[si] <- "veryHidden"
+    }
+    openxlsx::sheetVisibility(wb) <- vis
 
     openxlsx::saveWorkbook(wb, file_path, overwrite = TRUE)
 

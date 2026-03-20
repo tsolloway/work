@@ -184,29 +184,39 @@ seg_cluster_with_profiles <- function(
   if (!is.null(inputs_profiles) && length(inputs_profiles) > 0) {
     n_orig <- length(inputs_profiles)
 
+    # Build complete-case profile matrix (matches what k-means will see)
+    profile_mat <- df %>%
+      dplyr::select(dplyr::all_of(inputs_profiles)) %>%
+      as.data.frame() %>%
+      stats::na.omit()
+
     if (remove_nzv) {
-      profile_mat <- df %>%
-        dplyr::select(dplyr::all_of(inputs_profiles)) %>%
-        as.data.frame()
       nzv_idx <- caret::nearZeroVar(profile_mat)
       if (length(nzv_idx) > 0) {
         nzv_names <- inputs_profiles[nzv_idx]
         cli::cli_alert_warning("Removing {length(nzv_names)} near-zero variance profile var{?s}: {.val {nzv_names}}")
         inputs_profiles <- inputs_profiles[-nzv_idx]
+        profile_mat <- profile_mat[, -nzv_idx, drop = FALSE]
       }
     }
 
     if (!is.null(cor_threshold) && length(inputs_profiles) > 1) {
-      profile_mat <- df %>%
-        dplyr::select(dplyr::all_of(inputs_profiles)) %>%
-        as.data.frame() %>%
-        stats::na.omit()
-      cor_mat <- stats::cor(profile_mat)
-      cor_idx <- caret::findCorrelation(cor_mat, cutoff = cor_threshold)
-      if (length(cor_idx) > 0) {
-        cor_names <- inputs_profiles[cor_idx]
-        cli::cli_alert_warning("Removing {length(cor_names)} collinear profile var{?s} (|r| > {cor_threshold}): {.val {cor_names}}")
-        inputs_profiles <- inputs_profiles[-cor_idx]
+      # Drop any zero-variance columns
+      zv_mask <- vapply(profile_mat, function(x) stats::var(x) > 0, logical(1))
+      if (any(!zv_mask)) {
+        zv_names <- names(profile_mat)[!zv_mask]
+        cli::cli_alert_warning("Removing {length(zv_names)} zero-variance profile var{?s}: {.val {zv_names}}")
+        inputs_profiles <- setdiff(inputs_profiles, zv_names)
+        profile_mat <- profile_mat[, zv_mask, drop = FALSE]
+      }
+      if (ncol(profile_mat) > 1) {
+        cor_mat <- stats::cor(profile_mat)
+        cor_idx <- caret::findCorrelation(cor_mat, cutoff = cor_threshold)
+        if (length(cor_idx) > 0) {
+          cor_names <- names(profile_mat)[cor_idx]
+          cli::cli_alert_warning("Removing {length(cor_names)} collinear profile var{?s} (|r| > {cor_threshold}): {.val {cor_names}}")
+          inputs_profiles <- setdiff(inputs_profiles, cor_names)
+        }
       }
     }
 
@@ -288,7 +298,7 @@ seg_cluster_with_profiles <- function(
         .x, solution_name, n, cluster_name,
         lda_name, lda_inputs, lda_profiles,
         lda_coefficient_function, lda_predict,
-        confusion, accuracy, kappa, cv, split_half, df_append
+        confusion, accuracy, kappa, cv, collinear, split_half, df_append
       )
     ) %>%
     dplyr::bind_rows() %>%

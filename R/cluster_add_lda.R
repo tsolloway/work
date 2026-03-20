@@ -166,11 +166,18 @@ cluster_add_lda <- function(
 
             dp <- y / sum(y)
 
-            MASS::lda(
-              x = dx,
-              grouping = dg,
-              prior = dp
+            .collinear <- FALSE
+            fit <- withCallingHandlers(
+              MASS::lda(x = dx, grouping = dg, prior = dp),
+              warning = function(w) {
+                if (grepl("collinear", conditionMessage(w))) {
+                  .collinear <<- TRUE
+                  invokeRestart("muffleWarning")
+                }
+              }
             )
+            attr(fit, "collinear") <- .collinear
+            fit
           },
           otherwise = NA)
         )
@@ -318,7 +325,7 @@ cluster_add_lda <- function(
             dx <- dx %>% dplyr::select(!dplyr::any_of(c("id", resp_id_name, z)))
             dp <- y / sum(y)
 
-            cv_result <- MASS::lda(x = dx, grouping = dg, prior = dp, CV = TRUE)
+            cv_result <- suppressWarnings(MASS::lda(x = dx, grouping = dg, prior = dp, CV = TRUE))
             round(mean(cv_result$class == dg), 10)
           },
           otherwise = NA)) %>% unlist(),
@@ -346,14 +353,20 @@ cluster_add_lda <- function(
             idx_a <- idx[seq_len(half)]
             idx_b <- idx[(half + 1):n_obs]
 
-            lda_a <- MASS::lda(x = dx_vars[idx_a, ], grouping = dg[idx_a], prior = dp)
-            lda_b <- MASS::lda(x = dx_vars[idx_b, ], grouping = dg[idx_b], prior = dp)
+            lda_a <- suppressWarnings(MASS::lda(x = dx_vars[idx_a, ], grouping = dg[idx_a], prior = dp))
+            lda_b <- suppressWarnings(MASS::lda(x = dx_vars[idx_b, ], grouping = dg[idx_b], prior = dp))
 
             pred_a <- predict(lda_a, dx_vars)$class
             pred_b <- predict(lda_b, dx_vars)$class
 
             round(mean(pred_a == pred_b), 10)
           },
+          otherwise = NA)) %>% unlist(),
+
+      "collinear" = purrr::map(
+        lda_fit,
+        purrr::possibly(
+          ~isTRUE(attr(.x, "collinear")),
           otherwise = NA)) %>% unlist(),
 
       "df_append" = purrr::map2(

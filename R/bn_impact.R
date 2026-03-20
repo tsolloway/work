@@ -252,7 +252,9 @@ bn_impact <- function(
   if(!do_community && !is.null(community_assignment)){
     output <- output %>%
       dplyr::left_join(
-        community_assignment %>% dplyr::select(id, community_name),
+        community_assignment %>%
+          dplyr::mutate(community_name = as.character(community_name)) %>%
+          dplyr::select(id, community_name),
         by = dplyr::join_by(Variable == id)
       ) %>%
       dplyr::rename(Community = community_name)

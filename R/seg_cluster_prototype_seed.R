@@ -222,7 +222,7 @@ seg_cluster_prototype_seed <- function(
   solution_family_results[["solution_table"]] <- solution_family_results[["result"]] %>%
     purrr::discard_at("hierarchical_fit") %>%
     purrr::flatten() %>%
-    purrr::map(~dplyr::select(.x, solution_name, n, cluster_name, lda_name, lda_inputs, lda_profiles, lda_coefficient_function, lda_predict, confusion, accuracy, kappa, cv, split_half, df_append)) %>%
+    purrr::map(~dplyr::select(.x, solution_name, n, cluster_name, lda_name, lda_inputs, lda_profiles, lda_coefficient_function, lda_predict, confusion, accuracy, kappa, cv, collinear, split_half, df_append)) %>%
     dplyr::bind_rows() %>%
     dplyr::filter(!is.na(df_append))
 
