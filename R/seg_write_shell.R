@@ -153,12 +153,12 @@
       # vectorized target means across all vars at once
       target_rows <- keep & grp == k
       target <- round(colSums(var_mat[target_rows, , drop = FALSE] * w[target_rows], na.rm = TRUE) /
-        colSums(!is.na(var_mat[target_rows, , drop = FALSE]) * w[target_rows]), 5)
+        colSums((1L * !is.na(var_mat[target_rows, , drop = FALSE])) * w[target_rows]), 5)
 
       # vectorized others means across all vars at once
       other_rows <- keep & grp != k
       others <- round(colSums(var_mat[other_rows, , drop = FALSE] * w[other_rows], na.rm = TRUE) /
-        colSums(!is.na(var_mat[other_rows, , drop = FALSE]) * w[other_rows]), 5)
+        colSums((1L * !is.na(var_mat[other_rows, , drop = FALSE])) * w[other_rows]), 5)
 
       table_summary <- data.frame(
         target = as.numeric(target),
