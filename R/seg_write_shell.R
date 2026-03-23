@@ -297,8 +297,358 @@
 
 
 #########################
-# formatted helpers
+# style batch + write helpers
 #########################
+
+#' @keywords internal
+.style_batch_new <- function() {
+  ops <- list()
+  box_ops <- list()
+  cf_ops <- list()
+
+  list(
+    add = function(sheet, style, rows, cols, stack = TRUE) {
+      ops[[length(ops) + 1L]] <<- list(
+        sheet = sheet, style = style,
+        rows = rows, cols = cols, stack = stack
+      )
+    },
+
+    add_box = function(sheet, row_start, row_end, col_start, col_end,
+                       borderStyle = "thick") {
+      box_ops[[length(box_ops) + 1L]] <<- list(
+        sheet = sheet,
+        row_start = row_start, row_end = row_end,
+        col_start = col_start, col_end = col_end,
+        borderStyle = borderStyle
+      )
+    },
+
+    add_grid = function(sheet, row_start, row_end, col_start, col_end,
+                        borderStyle = "thin") {
+      # Store as a grid op — expanded in flush
+      box_ops[[length(box_ops) + 1L]] <<- list(
+        sheet = sheet,
+        row_start = row_start, row_end = row_end,
+        col_start = col_start, col_end = col_end,
+        borderStyle = borderStyle,
+        grid = TRUE
+      )
+    },
+
+    add_cf = function(sheet, cols, rows, rule, style) {
+      cf_ops[[length(cf_ops) + 1L]] <<- list(
+        sheet = sheet, cols = cols, rows = rows,
+        rule = rule, style = style
+      )
+    },
+
+    flush = function(wb) {
+
+      # --- Phase 1: collect per-cell style ATTRIBUTES as named lists ---
+      # Key = "sheet|row|col", value = list(sheet, row, col, attrs)
+      # attrs is a named list of raw createStyle args to be merged
+      cell_attrs <- new.env(hash = TRUE, parent = emptyenv())
+
+      .add_attrs <- function(sheet, row, col, attrs) {
+        k <- paste0(sheet, "|", row, "|", col)
+        if (is.null(cell_attrs[[k]])) {
+          cell_attrs[[k]] <- list(sheet = sheet, row = row, col = col, attrs = attrs)
+        } else {
+          # merge: later attrs override, except borders are additive
+          existing <- cell_attrs[[k]]$attrs
+          for (nm in names(attrs)) {
+            existing[[nm]] <- attrs[[nm]]
+          }
+          cell_attrs[[k]]$attrs <- existing
+        }
+      }
+
+      # Convert a Style object to a named list of createStyle-compatible args
+      .style_to_attrs <- function(s) {
+        a <- list()
+        if (length(s$fontColour) > 0) a$fontColour <- s$fontColour$rgb
+        if (length(s$fontDecoration) > 0 && nzchar(paste(s$fontDecoration, collapse = "")))
+          a$fontDecoration <- s$fontDecoration
+        if (length(s$fontSize) > 0) a$fontSize <- s$fontSize$val
+        if (length(s$halign) > 0 && nzchar(s$halign)) a$halign <- s$halign
+        if (length(s$numFmt) > 0) a$numFmt <- s$numFmt
+        if (length(s$fill) > 0) a$fill <- s$fill
+        # borders stored individually
+        if (length(s$borderTop) > 0 && nzchar(s$borderTop)) a$borderTop <- s$borderTop
+        if (length(s$borderBottom) > 0 && nzchar(s$borderBottom)) a$borderBottom <- s$borderBottom
+        if (length(s$borderLeft) > 0 && nzchar(s$borderLeft)) a$borderLeft <- s$borderLeft
+        if (length(s$borderRight) > 0 && nzchar(s$borderRight)) a$borderRight <- s$borderRight
+        a
+      }
+
+      # --- expand style ops into per-cell attributes ---
+      for (op in ops) {
+        attrs <- .style_to_attrs(op$style)
+        grid <- expand.grid(r = op$rows, c = op$cols, KEEP.OUT.ATTRS = FALSE)
+        for (i in seq_len(nrow(grid))) {
+          .add_attrs(op$sheet, grid$r[i], grid$c[i], attrs)
+        }
+      }
+
+      # --- expand border box/grid ops into per-cell border attributes ---
+      for (bop in box_ops) {
+        sh <- bop$sheet
+        bs <- bop$borderStyle
+        rs <- bop$row_start; re <- bop$row_end
+        cs <- bop$col_start; ce <- bop$col_end
+        is_grid <- isTRUE(bop$grid)
+
+        if (is_grid) {
+          # Grid: all 4 borders on every cell
+          all_borders <- list(borderTop = bs, borderBottom = bs, borderLeft = bs, borderRight = bs)
+          for (rr in seq(rs, re)) {
+            for (cc in seq(cs, ce)) {
+              .add_attrs(sh, rr, cc, all_borders)
+            }
+          }
+        } else {
+          # Box: borders only on perimeter
+          for (cc in seq(cs, ce)) {
+            .add_attrs(sh, rs, cc, list(borderTop = bs))
+            .add_attrs(sh, re, cc, list(borderBottom = bs))
+          }
+          for (rr in seq(rs, re)) {
+            .add_attrs(sh, rr, cs, list(borderLeft = bs))
+            .add_attrs(sh, rr, ce, list(borderRight = bs))
+          }
+        }
+      }
+
+      # --- Phase 2: convert attr lists to fingerprints, group cells ---
+      # Build one createStyle per unique fingerprint, inject directly into wb$styleObjects
+
+      groups <- new.env(hash = TRUE, parent = emptyenv())
+
+      for (k in ls(cell_attrs)) {
+        cell <- cell_attrs[[k]]
+        # Serialize attrs to a stable fingerprint — handles nested lists (e.g., numFmt, fill)
+        fp_parts <- vapply(names(cell$attrs), function(nm) {
+          v <- cell$attrs[[nm]]
+          if (is.list(v)) {
+            paste0(nm, "=", paste(vapply(v, as.character, character(1L)), collapse = ","))
+          } else {
+            paste0(nm, "=", paste(v, collapse = ","))
+          }
+        }, character(1L))
+        fp <- paste0(cell$sheet, "||", paste(sort(fp_parts), collapse = "|"))
+
+        if (is.null(groups[[fp]])) {
+          groups[[fp]] <- list(
+            sheet = cell$sheet, attrs = cell$attrs,
+            rows = cell$row, cols = cell$col
+          )
+        } else {
+          g <- groups[[fp]]
+          g$rows <- c(g$rows, cell$row)
+          g$cols <- c(g$cols, cell$col)
+          groups[[fp]] <- g
+        }
+      }
+
+      # --- Phase 3: create Style objects and inject into wb$styleObjects ---
+
+      # Deduplicate numFmt IDs: createStyle always assigns numFmtId=165 for custom
+      # formats, causing collisions when different formatCodes exist. Assign unique IDs.
+      numfmt_map <- list()  # formatCode -> numFmtId
+      next_id <- 165L
+
+      for (fp in ls(groups)) {
+        g <- groups[[fp]]
+        a <- g$attrs
+
+        # Build createStyle args
+        border <- c()
+        borderStyle <- c()
+        for (side in c("Top", "Bottom", "Left", "Right")) {
+          bname <- paste0("border", side)
+          if (!is.null(a[[bname]])) {
+            border <- c(border, side)
+            borderStyle <- c(borderStyle, a[[bname]])
+          }
+        }
+
+        # Decode fontColour back from "FFRRGGBB" to "#RRGGBB"
+        fc <- a$fontColour
+        if (!is.null(fc) && nchar(fc) == 8 && startsWith(fc, "FF"))
+          fc <- paste0("#", substring(fc, 3))
+
+        # Decode fill
+        bg <- NULL
+        fg <- NULL
+        if (!is.null(a$fill)) {
+          if (!is.null(a$fill$fillBg$rgb)) {
+            v <- a$fill$fillBg$rgb
+            if (nchar(v) == 8 && startsWith(v, "FF")) bg <- paste0("#", substring(v, 3)) else bg <- v
+          }
+          if (!is.null(a$fill$fillFg$rgb)) {
+            v <- a$fill$fillFg$rgb
+            if (nchar(v) == 8 && startsWith(v, "FF")) fg <- paste0("#", substring(v, 3)) else fg <- v
+          }
+        }
+
+        # Decode numFmt
+        nf <- NULL
+        if (!is.null(a$numFmt)) nf <- a$numFmt$formatCode
+
+        # Decode fontDecoration
+        td <- NULL
+        if (!is.null(a$fontDecoration)) {
+          td <- a$fontDecoration
+          td <- gsub("BOLD", "Bold", td)
+          td <- gsub("ITALIC", "italic", td)
+        }
+
+        args <- list()
+        if (!is.null(fc)) args$fontColour <- fc
+        if (!is.null(a$fontSize)) args$fontSize <- a$fontSize
+        if (!is.null(a$halign)) args$halign <- a$halign
+        if (!is.null(nf)) args$numFmt <- nf
+        if (!is.null(td)) args$textDecoration <- td
+        if (!is.null(fg)) args$fgFill <- fg
+        if (!is.null(bg)) args$bgFill <- bg
+        if (length(border) > 0) {
+          args$border <- border
+          args$borderStyle <- borderStyle
+        }
+
+        style <- do.call(openxlsx::createStyle, args)
+
+        # Fix numFmtId collision: assign unique ID per distinct formatCode
+        if (!is.null(style$numFmt) && length(style$numFmt) > 0) {
+          fc_key <- style$numFmt$formatCode
+          if (is.null(numfmt_map[[fc_key]])) {
+            numfmt_map[[fc_key]] <- next_id
+            next_id <- next_id + 1L
+          }
+          style$numFmt$numFmtId <- numfmt_map[[fc_key]]
+        }
+
+        # Direct injection into wb$styleObjects — bypasses addStyle S4 dispatch
+        wb$styleObjects[[length(wb$styleObjects) + 1L]] <- list(
+          style = style,
+          sheet = g$sheet,
+          rows = as.integer(g$rows),
+          cols = as.integer(g$cols)
+        )
+      }
+
+      # --- Phase 5: inject conditional formatting rules directly ---
+      if (length(cf_ops) > 0L) {
+
+        # Build dxf XML for each unique style, dedup by identity
+        dxf_cache <- list()  # key = style identity -> dxfId
+        dxf_xml_list <- list()
+        sheet_names <- wb$sheet_names
+
+        .style_to_dxf <- function(s) {
+          # Build <dxf> XML from a Style object
+          parts <- character(0)
+
+          # Font
+          font_parts <- character(0)
+          font_parts <- c(font_parts, '<sz val="11"/>')
+          if (length(s$fontColour) > 0 && !is.null(s$fontColour$rgb) && nzchar(s$fontColour$rgb)) {
+            font_parts <- c(font_parts, paste0('<color rgb="', s$fontColour$rgb, '"/>'))
+          }
+          font_parts <- c(font_parts, '<name val="Calibri"/>')
+          if (length(s$fontDecoration) > 0) {
+            if ("BOLD" %in% toupper(s$fontDecoration)) font_parts <- c(font_parts, "<b/>")
+            if ("ITALIC" %in% toupper(s$fontDecoration)) font_parts <- c(font_parts, "<i/>")
+          }
+          parts <- c(parts, paste0("<font>", paste(font_parts, collapse = ""), "</font>"))
+
+          # Fill
+          if (length(s$fill) > 0) {
+            bg_rgb <- s$fill$fillBg$rgb %||% s$fill$fillFg$rgb
+            if (!is.null(bg_rgb) && nzchar(bg_rgb)) {
+              parts <- c(parts, paste0(
+                '<fill><patternFill patternType="solid"><bgColor rgb="', bg_rgb, '"/></patternFill></fill>'
+              ))
+            }
+          }
+
+          paste0("<dxf>", paste(parts, collapse = ""), " </dxf>")
+        }
+
+        .get_dxf_id <- function(s) {
+          # Create a key from the style to dedup
+          key <- paste0(
+            s$fontColour$rgb %||% "", "|",
+            paste(s$fontDecoration, collapse = ""), "|",
+            s$fill$fillBg$rgb %||% s$fill$fillFg$rgb %||% ""
+          )
+          if (is.null(dxf_cache[[key]])) {
+            dxf_xml <- .style_to_dxf(s)
+            idx <- length(wb$styles$dxfs)
+            wb$styles$dxfs[[idx + 1L]] <- dxf_xml
+            dxf_cache[[key]] <<- idx  # 0-based
+          }
+          dxf_cache[[key]]
+        }
+
+        # Inject CF rules
+        priority <- 1L
+        for (cf in cf_ops) {
+          dxf_id <- .get_dxf_id(cf$style)
+
+          # Build sqref from cols/rows
+          col_min <- num2let(min(cf$cols))
+          col_max <- num2let(max(cf$cols))
+          row_min <- min(cf$rows)
+          row_max <- max(cf$rows)
+          sqref <- paste0(col_min, row_min, ":", col_max, row_max)
+
+          # Detect simple comparison rules (e.g., "== 0", ">= 5") and prepend cell ref
+          # openxlsx does this: strips leading operator, prepends top-left cell ref
+          rule_text <- trimws(cf$rule)
+          top_left <- paste0(col_min, row_min)
+
+          if (grepl("^(==|!=|<>|<=|>=|<|>)", rule_text)) {
+            # Simple comparison — prepend cell ref, strip extra "=" from "=="
+            rule_text <- sub("^==", "=", rule_text)
+            rule_text <- paste0(top_left, rule_text)
+          }
+
+          # HTML-encode the formula
+          formula_escaped <- rule_text
+          formula_escaped <- gsub("&", "&amp;", formula_escaped, fixed = TRUE)
+          formula_escaped <- gsub("<", "&lt;", formula_escaped, fixed = TRUE)
+          formula_escaped <- gsub(">", "&gt;", formula_escaped, fixed = TRUE)
+          formula_escaped <- gsub("\"", "&quot;", formula_escaped, fixed = TRUE)
+
+          cf_xml <- paste0(
+            '<cfRule type="expression" dxfId="', dxf_id,
+            '" priority="', priority, '"><formula>',
+            formula_escaped, '</formula></cfRule>'
+          )
+
+          # Find sheet index
+          sheet_idx <- match(cf$sheet, sheet_names)
+
+          # Append to the worksheet CF storage
+          existing <- wb$worksheets[[sheet_idx]]$conditionalFormatting
+          n <- length(existing) + 1L
+          existing[[n]] <- cf_xml
+          names(existing)[n] <- sqref
+          wb$worksheets[[sheet_idx]]$conditionalFormatting <- existing
+
+          priority <- priority + 1L
+        }
+      }
+
+      ops <<- list()
+      box_ops <<- list()
+      cf_ops <<- list()
+    }
+  )
+}
+
 
 #' @keywords internal
 .seg_add_spec_table <- function(
@@ -315,48 +665,23 @@
     do_italic = TRUE,
     do_seg_bw = TRUE,
     hide_pvalue = FALSE,
-    styles = NULL
+    styles = NULL,
+    batch = NULL
 ){
 
   sheet_name_summary <- "summary"
 
-  if(!is.null(styles)){
-    style_center <- styles$style_center
-    style_percent <- styles$style_percent
-    style_number <- styles$style_number
-    style_bold <- styles$style_bold
-    style_white_font <- styles$style_white_font
-    pos_style <- styles$pos_style
-    pos_style_bw <- styles$pos_style_bw
-    neg_style <- styles$neg_style
-    neg_style_bw <- styles$neg_style_bw
-    seg_pos_style_bw <- styles$seg_pos_style_bw
-    seg_neg_style_bw <- styles$seg_neg_style_bw
-  }else{
-    style_center <- openxlsx::createStyle(halign = "center")
-    style_percent <- openxlsx::createStyle(halign = "center", numFmt = "0%")
-    style_number <- openxlsx::createStyle(halign = "center", numFmt = "0")
-    style_bold <- openxlsx::createStyle(textDecoration = "Bold")
-    style_white_font <- openxlsx::createStyle(fontColour = "white")
-
-    pos_style <- openxlsx::createStyle(fontColour = "#006100", bgFill = "#C6EFCE")
-    pos_style_bw <- openxlsx::createStyle(fontColour = "white", bgFill = "black")
-
-    neg_style <- openxlsx::createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
-    neg_style_bw <- openxlsx::createStyle(fontColour = "black", bgFill = "#e0e0e0")
-
-    seg_pos_style_bw <- openxlsx::createStyle(textDecoration = "bold",  bgFill = "#e0e0e0")
-    seg_neg_style_bw <- openxlsx::createStyle(textDecoration = c("bold", "italic"),  bgFill = "#e0e0e0")
-
-    if(do_seg_bw){
-      seg_pos_style_bw <- pos_style_bw
-      seg_neg_style_bw <- neg_style_bw
-    }
-
-    if(!do_italic){
-      seg_neg_style_bw <- seg_pos_style_bw
-    }
-  }
+  style_center <- styles$style_center
+  style_percent <- styles$style_percent
+  style_number <- styles$style_number
+  style_bold <- styles$style_bold
+  style_white_font <- styles$style_white_font
+  pos_style <- styles$pos_style
+  pos_style_bw <- styles$pos_style_bw
+  neg_style <- styles$neg_style
+  neg_style_bw <- styles$neg_style_bw
+  seg_pos_style_bw <- styles$seg_pos_style_bw
+  seg_neg_style_bw <- styles$seg_neg_style_bw
 
   row_end <- (row_start + nrow(data_table) - 1)
   rows_all <- seq(row_start, row_end)
@@ -487,13 +812,7 @@
     colNames = FALSE
   )
 
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = style_bold,
-    rows = row_start - 1,
-    cols = col_start + 1,
-    gridExpand = T
-  )
+  batch$add(sheet_name, style_bold, rows = row_start - 1, cols = col_start + 1)
 
 
 
@@ -504,9 +823,10 @@
     x = xdf_label,
     startRow = row_start,
     startCol = col_start,
-    colNames = FALSE,
-    borders = "all"
+    colNames = FALSE
   )
+
+  batch$add_grid(sheet_name, row_start, row_end, col_start, col_label_last)
 
 
   if(segment_specific){
@@ -521,45 +841,16 @@
   }
 
 
-  oxl_outer_box(
-    wb, sheet_name,
-    row_start = row_start, row_end = row_end,
-    col_start = col_start, col_end = col_start,
-    borderStyle = "medium"
-  )
-
-
-  oxl_outer_box(
-    wb, sheet_name,
-    row_start = row_start, row_end = row_end,
-    col_start = col_start + 1 , col_end = col_label_last,
-    borderStyle = "medium"
-  )
+  batch$add_box(sheet_name, row_start, row_end, col_start, col_start, borderStyle = "medium")
+  batch$add_box(sheet_name, row_start, row_end, col_start + 1, col_label_last, borderStyle = "medium")
 
 
   if(!segment_specific){
-    openxlsx::addStyle(
-      wb, sheet_name, style = style_number,
-      rows = rows_all,
-      cols = col_start + 2,
-      gridExpand = TRUE, stack = TRUE
-    )
-
-    openxlsx::addStyle(
-      wb, sheet_name, style = style_percent,
-      rows = rows_all,
-      cols = col_start + 3,
-      gridExpand = TRUE, stack = TRUE
-    )
+    batch$add(sheet_name, style_number, rows = rows_all, cols = col_start + 2)
+    batch$add(sheet_name, style_percent, rows = rows_all, cols = col_start + 3)
   }
 
-
-  openxlsx::addStyle(
-    wb, sheet_name, style = style_center,
-    rows = rows_all,
-    cols = col_start,
-    gridExpand = TRUE, stack = TRUE
-  )
+  batch$add(sheet_name, style_center, rows = rows_all, cols = col_start)
 
 
 
@@ -570,16 +861,11 @@
     x = xdf_seg,
     startRow = row_start,
     startCol = col_seg_first_number,
-    colNames = FALSE,
-    borders = "all"
+    colNames = FALSE
   )
 
-  oxl_outer_box(
-    wb, sheet_name,
-    row_start = row_start, row_end = row_end,
-    col_start = col_seg_first_number, col_end = col_seg_last_number,
-    borderStyle = "medium"
-  )
+  batch$add_grid(sheet_name, row_start, row_end, col_seg_first_number, col_seg_last_number)
+  batch$add_box(sheet_name, row_start, row_end, col_seg_first_number, col_seg_last_number, borderStyle = "medium")
 
 
 
@@ -590,25 +876,15 @@
       x = Rxdf_seg,
       startRow = row_start,
       startCol = Rcol_seg_first_number,
-      colNames = FALSE,
-      borders = "all"
+      colNames = FALSE
     )
 
-    oxl_outer_box(
-      wb, sheet_name,
-      row_start = row_start, row_end = row_end,
-      col_start = Rcol_seg_first_number, col_end = Rcol_seg_last_number,
-      borderStyle = "medium"
-    )
+    batch$add_grid(sheet_name, row_start, row_end, Rcol_seg_first_number, Rcol_seg_last_number)
+    batch$add_box(sheet_name, row_start, row_end, Rcol_seg_first_number, Rcol_seg_last_number, borderStyle = "medium")
   }
 
 
-  openxlsx::addStyle(
-    wb, sheet_name, style = style_percent,
-    rows = rows_all,
-    cols = col_seg_number_all,
-    gridExpand = TRUE, stack = TRUE
-  )
+  batch$add(sheet_name, style_percent, rows = rows_all, cols = col_seg_number_all)
 
 
 
@@ -619,26 +895,14 @@
     x = xdf_eval,
     startRow = row_start,
     startCol = col_range_number,
-    colNames = FALSE,
-    borders = "all"
+    colNames = FALSE
   )
 
-  oxl_outer_box(
-    wb, sheet_name,
-    row_start = row_start, row_end = row_end,
-    col_start = col_range_number,
-    col_end = col_pvalue_number,
-    borderStyle = "medium"
-  )
+  batch$add_grid(sheet_name, row_start, row_end, col_range_number, col_pvalue_number)
+  batch$add_box(sheet_name, row_start, row_end, col_range_number, col_pvalue_number, borderStyle = "medium")
 
   if(hide_pvalue){
-    oxl_outer_box(
-      wb, sheet_name,
-      row_start = row_start, row_end = row_end,
-      col_start = col_range_number,
-      col_end = col_range_number,
-      borderStyle = "medium"
-    )
+    batch$add_box(sheet_name, row_start, row_end, col_range_number, col_range_number, borderStyle = "medium")
   }
 
 
@@ -649,24 +913,14 @@
       x = Rxdf_eval,
       startRow = row_start,
       startCol = Rcol_range_number,
-      colNames = FALSE,
-      borders = "all"
+      colNames = FALSE
     )
 
-    oxl_outer_box(
-      wb, sheet_name,
-      row_start = row_start, row_end = row_end,
-      col_start = Rcol_range_number, col_end = Rcol_pvalue_number,
-      borderStyle = "medium"
-    )
+    batch$add_grid(sheet_name, row_start, row_end, Rcol_range_number, Rcol_pvalue_number)
+    batch$add_box(sheet_name, row_start, row_end, Rcol_range_number, Rcol_pvalue_number, borderStyle = "medium")
 
     if(hide_pvalue){
-      oxl_outer_box(
-        wb, sheet_name,
-        row_start = row_start, row_end = row_end,
-        col_start = Rcol_range_number, col_end = Rcol_range_number,
-        borderStyle = "medium"
-      )
+      batch$add_box(sheet_name, row_start, row_end, Rcol_range_number, Rcol_range_number, borderStyle = "medium")
     }
 
     col_eval_number_all <- c(
@@ -677,12 +931,7 @@
   }
 
 
-  openxlsx::addStyle(
-    wb, sheet_name, style = style_percent,
-    rows = rows_all,
-    cols = col_eval_number_all,
-    gridExpand = TRUE, stack = TRUE
-  )
+  batch$add(sheet_name, style_percent, rows = rows_all, cols = col_eval_number_all)
 
 
 
@@ -693,10 +942,10 @@
     x = data_table %>% dplyr::select(type),
     startRow = row_start,
     startCol = col_type_number,
-    colNames = FALSE,
-    borders = "surrounding",
-    borderStyle = "medium"
+    colNames = FALSE
   )
+
+  batch$add_box(sheet_name, row_start, row_end, col_type_number, col_type_number, borderStyle = "medium")
 
 
   if(segment_specific){
@@ -713,22 +962,17 @@
   }
 
 
-  openxlsx::addStyle(
-    wb, sheet_name, style = style_center,
-    rows = rows_all,
-    cols = col_type_number,
-    gridExpand = TRUE, stack = TRUE
-  )
+  batch$add(sheet_name, style_center, rows = rows_all, cols = col_type_number)
 
 
 
-  # conditional formatting
+  # conditional formatting (stays direct — can't batch these)
 
   if(segment_specific){
 
     temp_func <- function(x,y,z,s, xc){
-      openxlsx::conditionalFormatting(
-        wb, sheet_name,
+      batch$add_cf(
+        sheet = sheet_name,
         cols = xc,
         rows = rows_all,
         rule = glue::glue('OR(
@@ -821,12 +1065,7 @@
     }
 
 
-    openxlsx::addStyle(
-      wb, sheet_name, style = style_center,
-      cols = col_dynamic_number_all,
-      rows = rows_all,
-      gridExpand = TRUE, stack = TRUE
-    )
+    batch$add(sheet_name, style_center, rows = rows_all, cols = col_dynamic_number_all)
 
 
   }else if(!segment_specific){
@@ -839,8 +1078,8 @@
         s = c(pos_style, pos_style_bw, neg_style, neg_style_bw)
       ),
       function(x,y,z,s){
-        openxlsx::conditionalFormatting(
-          wb, sheet_name,
+        batch$add_cf(
+          sheet = sheet_name,
           cols = col_seg_number_all,
           rows = rows_all,
           rule = glue::glue('AND(
@@ -871,12 +1110,7 @@
     )
 
 
-    openxlsx::addStyle(
-      wb, sheet_name, style = style_percent,
-      cols = col_dynamic_number,
-      rows = rows_all,
-      gridExpand = TRUE, stack = TRUE
-    )
+    batch$add(sheet_name, style_percent, rows = rows_all, cols = col_dynamic_number)
 
     purrr::pwalk(
       list(
@@ -885,8 +1119,8 @@
         z = c(pos_style, pos_style_bw, neg_style, neg_style_bw)
       ),
       function(x, y, z){
-        openxlsx::conditionalFormatting(
-          wb, sheet_name,
+        batch$add_cf(
+          sheet = sheet_name,
           cols = col_dynamic_number,
           rows = rows_all,
           rule = glue::glue('OR(AND({cell_rule_color} = {x}, {col_dynamic}{row_start} {y} {cell_rule_diff}), )'),
@@ -894,8 +1128,8 @@
         )
       })
 
-    openxlsx::conditionalFormatting(
-      wb, sheet_name,
+    batch$add_cf(
+      sheet = sheet_name,
       cols = col_dynamic_number,
       rows = rows_all,
       rule = "== 0",
@@ -929,7 +1163,8 @@
     setting_polar_threshold = .2,
     setting_profile_threshold = .15, setting_tolerance = .05,
     setting_pvalue = .1, setting_diff = .1,
-    setting_type = c("diff", "pvalue"), setting_color = c("bw", "color")
+    setting_type = c("diff", "pvalue"), setting_color = c("bw", "color"),
+    batch = NULL
 ){
 
   setting_type <- match.arg(setting_type)
@@ -1041,15 +1276,8 @@
 
   for(i in seq(nrow(xtable))){
 
-    temp_type <- xtable %>%
-      dplyr::slice(i) %>%
-      dplyr::select(type) %>%
-      unlist()
-
-    temp_header <- xtable %>%
-      dplyr::slice(i) %>%
-      dplyr::select(block_header) %>%
-      unlist()
+    temp_type <- xtable[["type"]][[i]]
+    temp_header <- xtable[["block_header"]][[i]]
 
     temp <- xtable %>%
       dplyr::select(by, type) %>%
@@ -1077,7 +1305,7 @@
       wb, sheet_name, row_data_start = row_data_start, row_start = row_start, col_start = col_start,
       data_table = temp, header = temp_header, seg_count = seg_count, segment_specific = segment_specific,
       version = temp_version, do_italic = do_italic, do_seg_bw = do_seg_bw, hide_pvalue = hide_pvalue,
-      styles = spec_styles
+      styles = spec_styles, batch = batch
     )
 
 
@@ -1145,12 +1373,11 @@
     )
   }
 
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(textDecoration = "Bold", fontSize = 18),
+  batch$add(
+    sheet_name,
+    openxlsx::createStyle(textDecoration = "Bold", fontSize = 18),
     rows = row_data_start - 4,
-    cols = col_start + 1,
-    stack = T
+    cols = col_start + 1
   )
 
 
@@ -1233,12 +1460,11 @@
       )
 
 
-      openxlsx::addStyle(
-        wb, sheet_name,
-        style = openxlsx::createStyle(textDecoration = "Bold", halign = "center", fgFill = "#e0e0e0"),
+      batch$add(
+        sheet_name,
+        openxlsx::createStyle(textDecoration = "Bold", halign = "center", fgFill = "#e0e0e0"),
         rows = row_data_start - 5,
-        cols = c(col_start + 3, col_start + 11),
-        stack = T
+        cols = c(col_start + 3, col_start + 11)
       )
 
     }
@@ -1321,44 +1547,33 @@
     }
 
 
-    oxl_outer_box(
-      wb, sheet_name,
-      row_start = row_data_start - 3 , row_end = row_data_start - 2,
-      col_start = col_start + 5, col_end = col_start + 5 + seg_count - 1
-    )
+    batch$add_box(sheet_name, row_data_start - 3, row_data_start - 2, col_start + 5, col_start + 5 + seg_count - 1)
 
   }
 
 
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(numFmt = "0", halign = "center"),
+  batch$add(
+    sheet_name,
+    openxlsx::createStyle(numFmt = "0", halign = "center"),
     rows = row_data_start - 3,
-    cols = cols_header,
-    gridExpand = T, stack = T
+    cols = cols_header
   )
 
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(numFmt = "0%", halign = "center"),
+  batch$add(
+    sheet_name,
+    openxlsx::createStyle(numFmt = "0%", halign = "center"),
     rows = row_data_start - 2,
-    cols = cols_header,
-    gridExpand = T, stack = T
+    cols = cols_header
   )
 
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(textDecoration = "Bold", halign = "center"),
+  batch$add(
+    sheet_name,
+    openxlsx::createStyle(textDecoration = "Bold", halign = "center"),
     rows = row_data_start - 4,
-    cols = cols_header_bold,
-    gridExpand = T, stack = T
+    cols = cols_header_bold
   )
 
-  oxl_outer_box(
-    wb, sheet_name,
-    row_start = row_data_start - 3 , row_end = row_data_start - 2,
-    col_start = col_start + 3, col_end = col_first_box_end
-  )
+  batch$add_box(sheet_name, row_data_start - 3, row_data_start - 2, col_start + 3, col_first_box_end)
 
 
   ## add controls
@@ -1384,9 +1599,6 @@
   }
 
 
-
-
-
   openxlsx::writeData(
     wb, sheet_name,
     x = data.frame(
@@ -1398,10 +1610,10 @@
     ),
     colNames = FALSE,
     startRow = 2,
-    startCol = col_controls,
-    borders = "surrounding",
-    borderStyle = "medium"
+    startCol = col_controls
   )
+
+  batch$add_box(sheet_name, 2, 8, col_controls, col_controls + 1, borderStyle = "medium")
 
 
   if(segment_specific || add_key){
@@ -1430,10 +1642,13 @@
 
 
 
-  ## add dynamic x/o contorls
+  ## add dynamic x/o controls
 
   if(!segment_specific){
     col_dynamic_number <- col_start + 5 + seg_count - 1 + 5
+
+    col_seg_first <- num2let(col_start + 5)
+    col_seg_last <- num2let(col_start + 5 + seg_count - 1)
 
     openxlsx::writeData(
       wb, sheet_name,
@@ -1443,20 +1658,18 @@
       startCol = col_start + 3
     )
 
-    openxlsx::addStyle(
-      wb, sheet_name,
-      style = openxlsx::createStyle(textDecoration = "Bold", halign = "center"),
+    batch$add(
+      sheet_name,
+      openxlsx::createStyle(textDecoration = "Bold", halign = "center"),
       rows = row_data_start - 5,
-      cols = col_start + 3,
-      gridExpand = T, stack = T
+      cols = col_start + 3
     )
 
-    openxlsx::addStyle(
-      wb, sheet_name,
-      style = openxlsx::createStyle(fgFill = "#e0e0e0", halign = "center"),
+    batch$add(
+      sheet_name,
+      openxlsx::createStyle(fgFill = "#e0e0e0", halign = "center"),
       rows = row_data_start - 5,
-      cols = seq((col_start + 5), (col_start + 2 + seg_count + 2)),
-      gridExpand = T, stack = T
+      cols = seq((col_start + 5), (col_start + 2 + seg_count + 2))
     )
 
 
@@ -1473,8 +1686,8 @@
                  )')
       )
 
-      openxlsx::conditionalFormatting(
-        wb, sheet_name,
+      batch$add_cf(
+        sheet = sheet_name,
         cols = col_dynamic_number,
         rows = i,
         rule = "== 0",
@@ -1482,20 +1695,18 @@
       )
     }
 
-    openxlsx::addStyle(
-      wb, sheet_name,
-      style = openxlsx::createStyle(halign = "center", numFmt = "0"),
-      cols = col_dynamic_number,
+    batch$add(
+      sheet_name,
+      openxlsx::createStyle(halign = "center", numFmt = "0"),
       rows = row_data_start - 3,
-      gridExpand = T, stack = T
+      cols = col_dynamic_number
     )
 
-    openxlsx::addStyle(
-      wb, sheet_name,
-      style = openxlsx::createStyle(halign = "center", numFmt = "0%"),
-      cols = col_dynamic_number,
+    batch$add(
+      sheet_name,
+      openxlsx::createStyle(halign = "center", numFmt = "0%"),
       rows = row_data_start - 2,
-      gridExpand = T, stack = T
+      cols = col_dynamic_number
     )
   }
 
@@ -1531,53 +1742,15 @@
 
 }
 
-#########################
-# MAIN FUNCTION
-#########################
 
 #' seg_write_shell
 #'
-#' @description Generates the segmentation shell Excel workbook for a chosen
-#'   clustering solution. Computes segment means, significance tests (chi-square
-#'   for profiles, t-tests for polars), and writes a formatted deliverable with
-#'   conditional formatting, thresholds, and optional truncation.
+#' @description Performance-optimized version of [seg_write_shell()]. Batches
+#'   `addStyle` calls to reduce S4 dispatch overhead. Produces identical output.
 #'
-#' @param seg A seg object with data, spec, and solutions populated.
-#' @param solution_var Character. Name of the segment assignment column.
-#' @param key Named character vector mapping segment numbers to labels, or
-#'   `NULL` for auto-numbering.
-#' @param add_key Logical. If `TRUE`, appends a key sheet (default: `FALSE`).
-#' @param label_width Numeric. Column width for label columns (default: `75`).
-#' @param hide_pvalue Logical. If `TRUE`, hides p-value columns (default:
-#'   `FALSE`).
-#' @param truncate Logical. If `TRUE`, removes non-discriminating variables
-#'   (default: `FALSE`).
-#' @param truncate_polar_threshold Numeric. Min diff to keep a polar variable
-#'   when truncating (default: `0.15`).
-#' @param truncate_profile_threshold Numeric. Min diff to keep a profile
-#'   variable when truncating (default: `0.1`).
-#' @param var_weight Character. Weight variable name, or `NULL`.
-#' @param use_weight Logical. If `TRUE` (default), applies weight if available.
-#' @param version Character. Output version: `"traditional"` or `"both"`.
-#' @param do_seg_bw Logical. Include black/white formatted sheet (default:
-#'   `TRUE`).
-#' @param do_italic Logical. Italicize non-significant values (default: `TRUE`).
-#' @param switched_polars Logical. If `TRUE`, reverses polar direction (default:
-#'   `FALSE`).
-#' @param setting_polar_threshold Numeric. Polar threshold for conditional
-#'   formatting (default: `0.2`).
-#' @param setting_profile_threshold Numeric. Profile threshold for conditional
-#'   formatting (default: `0.15`).
-#' @param setting_tolerance Numeric. Tolerance band around thresholds (default:
-#'   `0.05`).
-#' @param setting_pvalue Numeric. P-value significance cutoff (default: `0.1`).
-#' @param setting_diff Numeric. Diff-from-total threshold (default: `0.1`).
-#' @param setting_type Character. Significance method: `"diff"` or `"pvalue"`.
-#' @param setting_color Character. Color scheme: `"bw"` or `"color"`.
-#' @param where Character. Output directory. Defaults to the solution folder.
-#' @param verbose Logical. Print progress messages (default: `FALSE`).
+#' @inheritParams seg_write_shell
 #'
-#' @return The seg object with the shell workbook path stored.
+#' @return Invisibly returns `NULL`. Writes the solution workbook to disk.
 #'
 #' @export
 seg_write_shell <- function(
@@ -1606,30 +1779,6 @@ seg_write_shell <- function(
     where = NULL,
     verbose = FALSE
 ){
-
-
-  # key = NULL
-  # add_key = FALSE
-  # label_width = 75
-  # hide_pvalue = FALSE
-  # truncate = FALSE
-  # truncate_polar_threshold = .15
-  # truncate_profile_threshold = .1
-  # var_weight = NULL
-  # use_weight = TRUE
-  # version = "traditional"
-  # do_seg_bw = TRUE
-  # do_italic = TRUE
-  # switched_polars = FALSE
-  # setting_polar_threshold = .2
-  # setting_profile_threshold = .15
-  # setting_tolerance = .05
-  # setting_pvalue = .1
-  # setting_diff = .1
-  # setting_type = "diff"
-  # setting_color = "bw"
-  # where = NULL
-  # verbose = FALSE
 
 
   work::start()
@@ -1716,7 +1865,7 @@ seg_write_shell <- function(
   # write workbook
   #########################
 
-
+  batch <- .style_batch_new()
 
   wb <- oxl_create_workbook()
 
@@ -1733,7 +1882,8 @@ seg_write_shell <- function(
     setting_type = setting_type,
     setting_color = setting_color,
     label_width = label_width,
-    hide_pvalue = hide_pvalue
+    hide_pvalue = hide_pvalue,
+    batch = batch
   )
 
 
@@ -1745,7 +1895,8 @@ seg_write_shell <- function(
       solution_var = solution_var,
       add_key = TRUE,
       label_width = label_width,
-      hide_pvalue = hide_pvalue
+      hide_pvalue = hide_pvalue,
+      batch = batch
     )
 
     openxlsx::worksheetOrder(wb) <- 2:1
@@ -1767,11 +1918,15 @@ seg_write_shell <- function(
       do_italic = do_italic,
       do_seg_bw = do_seg_bw,
       label_width = label_width,
-      hide_pvalue = hide_pvalue
+      hide_pvalue = hide_pvalue,
+      batch = batch
     ) %>%
       suppressWarnings()
   )
 
+
+  # flush all batched styles at once
+  batch$flush(wb)
 
 
   if(truncate){
