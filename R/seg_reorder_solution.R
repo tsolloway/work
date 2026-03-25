@@ -1,5 +1,13 @@
 #' seg_reorder_solution
-#' @description seg_reorder_solution
+#' @description Reorder segment numbers for a solution. Takes an existing LDA
+#'   solution and remaps the segment assignments and coefficient function to
+#'   reflect a new ordering.
+#' @param seg A seg object with solutions.
+#' @param solution_old Character. The `lda_name` of the solution to reorder.
+#' @param solution_new Character. The new `lda_name` for the reordered solution.
+#' @param new_order Integer vector. New segment ordering
+#'   (e.g., `c(6,2,3,4,5,1)` maps old seg 1 → new seg 6, etc.).
+#' @return The seg object with the reordered solution added.
 #' @export
 seg_reorder_solution <- function(
     seg,
@@ -14,21 +22,9 @@ seg_reorder_solution <- function(
 
   summary_table <- seg[["solutions"]][["summary_table"]]
 
-  summary_append <- seg[["solutions"]][["df_segment_append"]]
-
-
-  summary_append_new <- summary_append %>%
-    select(all_of(c("id", !!solution_old)))
-
 
   summary_table_new <- summary_table %>%
-    filter(
-      lda_name == !!solution_old
-    ) %>%
-    mutate(
-      df_append = list(summary_append_new)
-    )
-
+    dplyr::filter(lda_name == !!solution_old)
 
 
   if(!all(seq(summary_table_new[["n"]]) == sort(new_order))){
@@ -36,107 +32,57 @@ seg_reorder_solution <- function(
   }
 
 
-  summary_table_new <- summary_table_new %>% mutate(
+  summary_table_new <- summary_table_new %>% dplyr::mutate(
 
     solution_name = "recode",
     cluster_name = solution_old,
     lda_name = solution_new,
 
     lda_coefficient_function = lda_coefficient_function %>%
-      flatten_df() %>%
-      select(
-        all_of(c(1, 1 + new_order))
+      purrr::flatten_df() %>%
+      dplyr::select(
+        dplyr::all_of(c(1, 1 + new_order))
       ) %>%
-      setNames(
-        names(flatten_df(lda_coefficient_function))
-      ) %>%
-      list(),
-
-    lda_predict = lda_predict %>%
-      flatten_df() %>%
-      select(
-        all_of(new_order)
-      ) %>%
-      mutate(
-        seg = apply(., 1, which.max)
-      ) %>%
-      setNames(
-        names(flatten_df(lda_predict))
+      rlang::set_names(
+        names(purrr::flatten_df(lda_coefficient_function))
       ) %>%
       list(),
 
-    confusion = NA,
+    n_segments = list(sort(new_order)),
 
-    df_append = df_append %>%
-      flatten_df() %>%
-      select(all_of(c("id", !!solution_old))) %>%
-      mutate(
-        !!solution_new := .data[[solution_old]] %>%
-          recode_values(
-            !!!rlang::parse_exprs(glue("{sort(new_order)}~{new_order}"))
+    df_solution = purrr::map(df_solution, function(d) {
+      lda_col <- setdiff(names(d), c("id", solution_old))
+      d %>%
+        dplyr::mutate(
+          !!solution_new := .data[[solution_old]] %>%
+            dplyr::recode_values(
+              !!!rlang::parse_exprs(glue::glue("{sort(new_order)}~{new_order}"))
+            )
+        ) %>%
+        dplyr::mutate(
+          dplyr::across(
+            dplyr::all_of(lda_col),
+            ~dplyr::recode_values(
+              .x,
+              !!!rlang::parse_exprs(glue::glue("{sort(new_order)}~{new_order}"))
+            )
           )
-      ) %>%
-      select(-solution_old) %>%
-      list()
+        ) %>%
+        dplyr::select(dplyr::all_of(c("id", solution_old, solution_new, lda_col)))
+    })
   )
 
 
-  seg[["solutions"]][["analysis"]][["reorder"]][["solution_table"]] <- bind_rows(
+  seg[["solutions"]][["analysis"]][["reorder"]][["solution_table"]] <- dplyr::bind_rows(
     seg[["solutions"]][["analysis"]][["reorder"]][["solution_table"]],
-    summary_table_new %>% select(!df_append)
+    summary_table_new
   )
 
 
-  if(is.null(seg[["solutions"]][["analysis"]][["reorder"]][["df_segment_append"]])){
-
-    seg[["solutions"]][["analysis"]][["reorder"]][["df_segment_append"]] <- summary_table_new[["df_append"]] %>% flatten_df()
-
-  }else{
-
-    seg[["solutions"]][["analysis"]][["reorder"]][["df_segment_append"]] <- full_join(
-      seg[["solutions"]][["analysis"]][["reorder"]][["df_segment_append"]],
-      summary_table_new[["df_append"]] %>% flatten_df(),
-      by = "id"
-    )
-
-  }
+  seg[["solutions"]][["summary_table"]] <- seg_bind_summary_tables(seg)
 
 
-  summary_table <- seg[["solutions"]][["analysis"]] %>%
-    map(pluck, "solution_table") %>%
-    bind_rows()
-
-
-
-  df_segment_append <- seg[["solutions"]][["analysis"]] %>%
-    map(pluck, "df_segment_append") %>%
-    reduce(full_join, by = "id")
-
-
-
-
-  df_temp <- seg[["data"]][["with_solutions"]]
-  if(is.null(df_temp) || all(is.na(df_temp))){
-    df_temp <- seg[["data"]][["with_shell"]]
-  }
-
-
-  df_return <- left_join(
-    df_temp %>%
-      select(
-        !any_of(
-          names(df_segment_append) %>%
-            tail(-1)
-        )
-      ),
-    df_segment_append,
-    by = join_by(seg_uuid == id)
-  )
-
-
-  seg[["solutions"]][["summary_table"]] <- summary_table
-  seg[["solutions"]][["df_segment_append"]] <- df_segment_append
-  seg[["data"]][["with_solutions"]] <- df_return
+  seg <- seg_build_with_solutions(seg)
 
 
   return(seg)

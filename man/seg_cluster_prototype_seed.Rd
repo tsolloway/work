@@ -16,7 +16,8 @@ seg_cluster_prototype_seed(
   use_top_n_polars = 20,
   reduced_inputs_max = 14,
   priors = c("size", "equal"),
-  resp_id_name = NULL
+  resp_id_name = NULL,
+  keep_raw = FALSE
 )
 }
 \arguments{

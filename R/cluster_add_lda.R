@@ -47,11 +47,26 @@ cluster_add_lda <- function(
 
 
   lda_score <- function(x, df){
-    x <- x %>% predict(df)
+    seed_classes <- x$lev
+    pred <- x %>% predict(df)
+    predicted_classes <- levels(pred$class)
+
+    if (!setequal(seed_classes, predicted_classes)) {
+      missing <- setdiff(seed_classes, predicted_classes)
+      warning(
+        "LDA predicted classes do not match seed classes. ",
+        "Seed had: ", paste(seed_classes, collapse = ", "),
+        ". Predicted: ", paste(predicted_classes, collapse = ", "),
+        ". Missing: ", paste(missing, collapse = ", "),
+        ". Returning NA for this solution.",
+        call. = FALSE
+      )
+      return(NA)
+    }
 
     x <- dplyr::bind_cols(
-      purrr::pluck(x, "posterior"),
-      purrr::pluck(x, "class")
+      purrr::pluck(pred, "posterior"),
+      purrr::pluck(pred, "class")
     ) %>%
       suppressMessages() %>%
       setNames(., glue::glue("seg_{seq(ncol(.))}"))
@@ -369,7 +384,13 @@ cluster_add_lda <- function(
           ~isTRUE(attr(.x, "collinear")),
           otherwise = NA)) %>% unlist(),
 
-      "df_append" = purrr::map2(
+      "n_segments" = purrr::map(
+        lda_predict,
+        purrr::possibly(
+          ~sort(unique(as.numeric(as.character(.x$seg)))),
+          otherwise = NA)),
+
+      "df_solution" = purrr::map2(
         cluster_seed, lda_seg,
         purrr::possibly(
           ~dplyr::full_join(

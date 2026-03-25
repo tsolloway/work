@@ -72,7 +72,8 @@ seg_cluster_prototype_seed <- function(
     use_top_n_polars = 20,
     reduced_inputs_max = 14,
     priors = c("size", "equal"),
-    resp_id_name = NULL
+    resp_id_name = NULL,
+    keep_raw = FALSE
 ){
 
 
@@ -222,73 +223,32 @@ seg_cluster_prototype_seed <- function(
   solution_family_results[["solution_table"]] <- solution_family_results[["result"]] %>%
     purrr::discard_at("hierarchical_fit") %>%
     purrr::flatten() %>%
-    purrr::map(~dplyr::select(.x, solution_name, n, cluster_name, lda_name, lda_inputs, lda_profiles, lda_coefficient_function, lda_predict, confusion, accuracy, kappa, cv, collinear, split_half, df_append)) %>%
+    purrr::map(~dplyr::select(.x, solution_name, n, cluster_name, lda_name, lda_inputs, lda_profiles, lda_coefficient_function, n_segments, accuracy, kappa, cv, collinear, split_half, df_solution)) %>%
     dplyr::bind_rows() %>%
-    dplyr::filter(!is.na(df_append))
+    dplyr::filter(!is.na(df_solution))
 
 
 
-  solution_family_results[["df_segment_append"]] <- solution_family_results[["solution_table"]] %>%
-    dplyr::select(df_append) %>%
-    unlist(recursive = FALSE) %>%
-    purrr::reduce(dplyr::full_join, by = "id") %>%
-    dplyr::select(-dplyr::ends_with(".y")) %>%
-    setNames(., names(.) %>% gsub(".x", "", .))
-
-
-
-  solution_family_results[["solution_table"]] <- solution_family_results[["solution_table"]] %>% dplyr::select(-df_append)
-
-
+  if (!keep_raw) solution_family_results[["result"]] <- NULL
 
   seg[["solutions"]][["analysis"]][[solution_family_name]] <- solution_family_results
 
 
 
-  solution_table <- seg[["solutions"]][["analysis"]] %>%
-    purrr::map(purrr::pluck, "solution_table") %>%
-    dplyr::bind_rows()
+  seg[["solutions"]][["summary_table"]] <- seg_bind_summary_tables(seg)
 
 
-
-  df_segment_append <- seg[["solutions"]][["analysis"]] %>%
-    purrr::map(purrr::pluck, "df_segment_append") %>%
-    purrr::reduce(dplyr::full_join, by = "id")
+  seg <- seg_build_with_solutions(seg, resp_id_name = resp_id_name)
 
 
-
-  df_temp <- seg[["data"]][["with_solutions"]]
-  if(is.null(df_temp) || all(is.na(df_temp))){
-    df_temp <- seg[["data"]][["with_shell"]]
-  }
-
-
-  df_return <- dplyr::left_join(
-    df_temp %>%
-      dplyr::select(
-        !dplyr::any_of(
-          names(df_segment_append) %>%
-            tail(-1)
-        )
-      ),
-    df_segment_append,
-    by = dplyr::join_by(seg_uuid == id)
-  )
-
-
-
-  if("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)){
-    df_return <- df_return %>%
+  df_return <- seg[["data"]][["with_solutions"]]
+  if ("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)) {
+    seg[["data"]][["with_solutions"]] <- df_return %>%
       dplyr::left_join(
-        df %>% dplyr::select(c(!!resp_id_name, "okay_filter")),
+        df %>% dplyr::select(dplyr::all_of(c(resp_id_name, "okay_filter"))),
         by = dplyr::join_by(!!resp_id_name)
       )
   }
-
-
-  seg[["solutions"]][["summary_table"]] <- solution_table
-  seg[["solutions"]][["df_segment_append"]] <- df_segment_append
-  seg[["data"]][["with_solutions"]] <- df_return
 
 
   return(seg)

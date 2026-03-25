@@ -6,6 +6,21 @@
 \usage{
 seg_reorder_solution(seg, solution_old, solution_new, new_order)
 }
+\arguments{
+\item{seg}{A seg object with solutions.}
+
+\item{solution_old}{Character. The \code{lda_name} of the solution to reorder.}
+
+\item{solution_new}{Character. The new \code{lda_name} for the reordered solution.}
+
+\item{new_order}{Integer vector. New segment ordering
+(e.g., \code{c(6,2,3,4,5,1)} maps old seg 1 → new seg 6, etc.).}
+}
+\value{
+The seg object with the reordered solution added.
+}
 \description{
-seg_reorder_solution
+Reorder segment numbers for a solution. Takes an existing LDA
+solution and remaps the segment assignments and coefficient function to
+reflect a new ordering.
 }

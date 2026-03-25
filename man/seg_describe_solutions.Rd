@@ -14,15 +14,16 @@ seg_describe_solutions(
   n_profile = 10,
   model = "claude-sonnet-4-20250514",
   api_key = NULL,
-  add_to_wb = FALSE,
+  add_to_wb = TRUE,
+  candidates_folder = "1. candidates",
   verbose = TRUE
 )
 }
 \arguments{
 \item{seg}{A seg object with solutions written via \code{\link[=seg_write_solutions]{seg_write_solutions()}}.}
 
-\item{solution}{Character. The \code{lda_name} of the solution to describe
-(e.g. \code{"LDA_opt_kmeans_source_eq_H7"}).}
+\item{solution}{Character vector. One or more \code{lda_name} values to describe
+(e.g. \code{"LDA_opt_kmeans_source_eq_H7"} or \code{c("sol_A", "sol_B")}).}
 
 \item{where}{Character. Path to the solutions directory. Defaults to
 \code{seg[["paths"]][["folders"]][["solution"]]}.}
@@ -46,13 +47,18 @@ per segment in the prompt (default: \code{10}).}
 via \code{get_environment_key("ANTHROPIC_API_KEY")}.}
 
 \item{add_to_wb}{Logical. If \code{TRUE}, appends a "Descriptions" sheet to the
-solution Excel workbook (default: \code{FALSE}).}
+solution Excel workbook (default: \code{TRUE}).}
+
+\item{candidates_folder}{Character or \code{NULL}. If non-NULL, copies the
+workbook (after adding the Descriptions sheet) into this subfolder under
+\code{where}. Defaults to \code{"1. candidates"}. Set to \code{NULL} to skip.}
 
 \item{verbose}{Logical. Print descriptions to console (default: \code{TRUE}).}
 }
 \value{
-A tibble with columns: \code{segment}, \code{name}, \code{description}, \code{n}, \code{pct},
-\code{polar_hits}, \code{profile_hits}.
+A tibble (or list of tibbles when \code{length(solution) > 1}) with
+columns: \code{segment}, \code{name}, \code{description}, \code{n}, \code{pct}, \code{polar_hits},
+\code{profile_hits}.
 }
 \description{
 Generates AI-written segment descriptions by calling the

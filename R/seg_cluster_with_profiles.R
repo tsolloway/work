@@ -77,7 +77,8 @@ seg_cluster_with_profiles <- function(
     iter_max = 1000,
     nstart = 10,
     remove_nzv = TRUE,
-    cor_threshold = 0.90
+    cor_threshold = 0.90,
+    keep_raw = FALSE
 ){
 
   # solution_previous = NULL
@@ -297,28 +298,16 @@ seg_cluster_with_profiles <- function(
       ~dplyr::select(
         .x, solution_name, n, cluster_name,
         lda_name, lda_inputs, lda_profiles,
-        lda_coefficient_function, lda_predict,
-        confusion, accuracy, kappa, cv, collinear, split_half, df_append
+        lda_coefficient_function,
+        n_segments, accuracy, kappa, cv, collinear, split_half, df_solution
       )
     ) %>%
     dplyr::bind_rows() %>%
-    dplyr::filter(!is.na(df_append))
-
-  df_segment_append <- solution_table %>%
-    dplyr::select(df_append) %>%
-    unlist(recursive = FALSE) %>%
-    purrr::reduce(function(x, y) {
-      x %>%
-        dplyr::select(!dplyr::any_of(setdiff(names(y), "id"))) %>%
-        dplyr::left_join(y, by = "id")
-    })
-
-  solution_table <- solution_table %>% dplyr::select(-df_append)
+    dplyr::filter(!is.na(df_solution))
 
   solutions_new <- list(
-    result = new_result,
-    solution_table = solution_table,
-    df_segment_append = df_segment_append
+    result = if (keep_raw) new_result else NULL,
+    solution_table = solution_table
   )
 
 
@@ -338,67 +327,29 @@ seg_cluster_with_profiles <- function(
       dplyr::filter(!lda_name %in% new_lda_names) %>%
       dplyr::bind_rows(solutions_new[["solution_table"]])
 
-    # df_segment_append: drop old columns that appear in new, then bind
-    new_seg_cols <- setdiff(names(solutions_new[["df_segment_append"]]), "id")
-    merged_df <- existing_family[["df_segment_append"]] %>%
-      dplyr::select(!dplyr::any_of(new_seg_cols)) %>%
-      dplyr::left_join(solutions_new[["df_segment_append"]], by = "id")
-
     seg[["solutions"]][["analysis"]][[solution_name]] <- list(
       result = merged_result,
-      solution_table = merged_st,
-      df_segment_append = merged_df
+      solution_table = merged_st
     )
   } else {
     seg[["solutions"]][["analysis"]][[solution_name]] <- solutions_new
   }
 
 
-  # ---- rebuild global summary_table and df_segment_append ----
-  global_solution_table <- seg[["solutions"]][["analysis"]] %>%
-    purrr::map(purrr::pluck, "solution_table") %>%
-    dplyr::bind_rows()
+  # ---- rebuild global summary_table and df_segment_append (transient) ----
+  seg[["solutions"]][["summary_table"]] <- seg_bind_summary_tables(seg)
 
-  global_df_segment_append <- seg[["solutions"]][["analysis"]] %>%
-    purrr::map(purrr::pluck, "df_segment_append") %>%
-    purrr::reduce(dplyr::full_join, by = "id")
+  seg <- seg_build_with_solutions(seg, resp_id_name = resp_id_name)
 
 
-  # ---- rebuild with_solutions from with_shell + all segment columns ----
-  df_return <- dplyr::left_join(
-    seg[["data"]][["with_shell"]],
-    global_df_segment_append,
-    by = dplyr::join_by(!!resp_id_name == id)
-  )
-
-  # preserve extra columns already on with_solutions (e.g., from other functions)
-  if (!is.null(seg[["data"]][["with_solutions"]])) {
-    existing_cols <- names(seg[["data"]][["with_solutions"]])
-    new_cols <- names(df_return)
-    extra_cols <- setdiff(existing_cols, new_cols)
-
-    if (length(extra_cols) > 0) {
-      df_return <- dplyr::left_join(
-        df_return,
-        seg[["data"]][["with_solutions"]] %>%
-          dplyr::select(dplyr::all_of(c(resp_id_name, extra_cols))),
+  df_return <- seg[["data"]][["with_solutions"]]
+  if ("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)) {
+    seg[["data"]][["with_solutions"]] <- df_return %>%
+      dplyr::left_join(
+        df %>% dplyr::select(dplyr::all_of(c(resp_id_name, "okay_filter"))),
         by = dplyr::join_by(!!resp_id_name)
       )
-    }
   }
-
-  if ("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)) {
-    df_return <- dplyr::left_join(
-      df_return,
-      df %>% dplyr::select(dplyr::all_of(c(resp_id_name, "okay_filter"))),
-      by = dplyr::join_by(!!resp_id_name)
-    )
-  }
-
-
-  seg[["solutions"]][["summary_table"]] <- global_solution_table
-  seg[["solutions"]][["df_segment_append"]] <- global_df_segment_append
-  seg[["data"]][["with_solutions"]] <- df_return
 
   n_solutions <- nrow(solution_table)
   cli::cli_alert_success("Done \u2014 {n_solutions} solution{?s} for family {.val {solution_name}}")

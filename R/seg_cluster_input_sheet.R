@@ -182,7 +182,8 @@ seg_cluster_input_sheet <- function(
     iterative_config = list(),
     strategy = c("multisession", "multicore", "sequential", 'cluster'),
     workers = NULL,
-    seed = 1
+    seed = 1,
+    keep_raw = FALSE
 ){
 
 
@@ -517,28 +518,16 @@ seg_cluster_input_sheet <- function(
             ~dplyr::select(
               .x, solution_name, n, cluster_name,
               lda_name, lda_inputs, lda_profiles,
-              lda_coefficient_function, lda_predict,
-              confusion, accuracy, kappa, cv, collinear, split_half, df_append
+              lda_coefficient_function,
+              n_segments, accuracy, kappa, cv, collinear, split_half, df_solution
             )
           ) %>%
           dplyr::bind_rows() %>%
-          dplyr::filter(!is.na(df_append))
-
-        df_seg <- sol_tbl %>%
-          dplyr::select(df_append) %>%
-          unlist(recursive = FALSE) %>%
-          purrr::reduce(function(x, y) {
-            x %>%
-              dplyr::select(!dplyr::any_of(setdiff(names(y), "id"))) %>%
-              dplyr::left_join(y, by = "id")
-          })
-
-        sol_tbl <- sol_tbl %>% dplyr::select(-df_append)
+          dplyr::filter(!is.na(df_solution))
 
         solutions_new[[opt_name]] <- list(
           result = result,
-          solution_table = sol_tbl,
-          df_segment_append = df_seg
+          solution_table = sol_tbl
         )
       }
     }
@@ -565,16 +554,9 @@ seg_cluster_input_sheet <- function(
           dplyr::filter(!lda_name %in% new_lda_names) %>%
           dplyr::bind_rows(new[["solution_table"]])
 
-        # df_segment_append: drop old columns that appear in new, then bind
-        new_seg_cols <- setdiff(names(new[["df_segment_append"]]), "id")
-        merged_df <- old[["df_segment_append"]] %>%
-          dplyr::select(!dplyr::any_of(new_seg_cols)) %>%
-          dplyr::left_join(new[["df_segment_append"]], by = "id")
-
         solutions[[nm]] <- list(
           result = merged_result,
-          solution_table = merged_st,
-          df_segment_append = merged_df
+          solution_table = merged_st
         )
       } else {
         solutions[[nm]] <- solutions_new[[nm]]
@@ -585,50 +567,27 @@ seg_cluster_input_sheet <- function(
   }
 
 
-  solution_table <- solutions %>%
-    purrr::map("solution_table") %>%
-    dplyr::bind_rows()
-
-
-  df_segment_append <- solutions %>%
-    purrr::map("df_segment_append") %>%
-    purrr::reduce(dplyr::full_join, by = "id")
-
-
-  df_temp <- seg[["data"]][["with_solutions"]]
-  if(is.null(df_temp) || all(is.na(df_temp))){
-    df_temp <- seg[["data"]][["with_shell"]]
+  if (!keep_raw) {
+    solutions <- purrr::map(solutions, function(s) { s[["result"]] <- NULL; s })
   }
 
+  seg[["solutions"]][["analysis"]] <- solutions
 
-  df_return <- dplyr::left_join(
-    df_temp %>%
-      dplyr::select(
-        !dplyr::any_of(
-          names(df_segment_append) %>%
-            tail(-1)
-        )
-      ),
-    df_segment_append,
-    by = dplyr::join_by(seg_uuid == id)
-  )
+  seg[["solutions"]][["summary_table"]] <- seg_bind_summary_tables(seg)
+
+  seg <- seg_build_with_solutions(seg, resp_id_name = resp_id_name)
 
 
-  if("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)){
-    df_return <- df_return %>%
+  df_return <- seg[["data"]][["with_solutions"]]
+  if ("okay_filter" %in% names(df) && !"okay_filter" %in% names(df_return)) {
+    seg[["data"]][["with_solutions"]] <- df_return %>%
       dplyr::left_join(
-        df %>% dplyr::select(c(!!resp_id_name, "okay_filter")),
+        df %>% dplyr::select(dplyr::all_of(c(resp_id_name, "okay_filter"))),
         by = dplyr::join_by(!!resp_id_name)
       )
   }
 
-
-  seg[["solutions"]][["analysis"]] <- solutions
-  seg[["solutions"]][["summary_table"]] <- solution_table
-  seg[["solutions"]][["df_segment_append"]] <- df_segment_append
-  seg[["data"]][["with_solutions"]] <- df_return
-
-  n_solutions <- nrow(solution_table)
+  n_solutions <- nrow(seg[["solutions"]][["summary_table"]])
   cli::cli_alert_success("Done \u2014 {n_solutions} solution{?s} across {length(solutions)} famil{?y/ies}")
 
   return(seg)
@@ -983,29 +942,16 @@ seg_cluster_input_sheet <- function(
         ~dplyr::select(
           .x, solution_name, n, cluster_name,
           lda_name, lda_inputs, lda_profiles,
-          lda_coefficient_function, lda_predict,
-          confusion, accuracy, kappa, cv, split_half, df_append
+          lda_coefficient_function,
+          n_segments, accuracy, kappa, cv, collinear, split_half, df_solution
         )
       ) %>%
       dplyr::bind_rows() %>%
-      dplyr::filter(!is.na(df_append))
-
-    # build df_segment_append
-    df_segment_append <- solution_table %>%
-      dplyr::select(df_append) %>%
-      unlist(recursive = FALSE) %>%
-      purrr::reduce(function(x, y) {
-        x %>%
-          dplyr::select(!dplyr::any_of(setdiff(names(y), "id"))) %>%
-          dplyr::left_join(y, by = "id")
-      })
-
-    solution_table <- solution_table %>% dplyr::select(-df_append)
+      dplyr::filter(!is.na(df_solution))
 
     list(
       result = result,
-      solution_table = solution_table,
-      df_segment_append = df_segment_append
+      solution_table = solution_table
     )
   })
 

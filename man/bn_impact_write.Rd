@@ -10,6 +10,7 @@ bn_impact_write(
   sub_title = NULL,
   title = NULL,
   variable_width = 20,
+  community_width = 20,
   label_width = "auto",
   wb_type = c("standard", "dynamic"),
   add_simple_simulator = FALSE,

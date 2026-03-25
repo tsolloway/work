@@ -30,9 +30,14 @@
 #' @param remove_first Character vector. Variables to remove first (before
 #'   the greedy ranking kicks in). Listed in removal order — first element
 #'   is removed first. Defaults to `NULL`.
-#' @param min_items Integer. Minimum number of items to evaluate. Stops the
-#'   analysis at this item count or at failure, whichever comes first.
+#' @param direction Character. `"backward"` (default) starts with all variables
+#'   and removes one at a time. `"forward"` starts with the most important
+#'   variable and adds one at a time.
+#' @param min_items Integer. Minimum number of items to evaluate (backward only).
+#'   Stops the analysis at this item count or at failure, whichever comes first.
 #'   Defaults to `NULL` (go as low as possible).
+#' @param max_items Integer. Maximum number of items to evaluate (forward only).
+#'   Defaults to `NULL` (go up to the full variable set).
 #' @param seed Numeric. Random seed for reproducibility. Defaults to `1`.
 #'
 #' @return A list with two elements:
@@ -53,8 +58,10 @@ seg_short_form_analysis <- function(
     id_name = NULL,
     priors = c("equal", "size"),
     reduce_type = c("greedy_step", "greedy", "step"),
+    direction = c("backward", "forward"),
     remove_first = NULL,
     min_items = NULL,
+    max_items = NULL,
     seed = 1
 ) {
 
@@ -65,7 +72,10 @@ seg_short_form_analysis <- function(
   # id_name = NULL
   # priors = "equal"
   # reduce_type = "greedy_step"
+  # direction = "backward"
   # seed = 1
+
+  direction <- match.arg(direction)
 
   if(is.character(priors))priors <- match.arg(priors)
 
@@ -148,10 +158,17 @@ seg_short_form_analysis <- function(
   }
 
   n_segments <- length(unique(cluster_grp))
-  n_min <- max(min_items %||% 1, 1)
-  n_seq <- seq(length(vars), n_min)
 
-  cli::cli_alert_info("Fitting LDA at {length(n_seq)} item counts ({max(n_seq)} down to {min(n_seq)})...")
+  n_floor <- max(min_items %||% 1, 1)
+
+  if (direction == "backward") {
+    n_seq <- seq(length(vars), n_floor)
+    cli::cli_alert_info("Fitting LDA backward: {length(n_seq)} item counts ({max(n_seq)} down to {min(n_seq)})...")
+  } else {
+    n_max <- min(max_items %||% length(vars), length(vars))
+    n_seq <- seq(n_floor, n_max)
+    cli::cli_alert_info("Fitting LDA forward: {length(n_seq)} item counts ({min(n_seq)} up to {max(n_seq)})...")
+  }
 
   # -- set up priors --
   if (is.numeric(priors)) {
@@ -248,10 +265,19 @@ seg_short_form_analysis <- function(
     !any(is.na(all_vals)) && !any(all_vals == 0)
   }) & !is.na(results$accuracy_overall) & results$accuracy_overall > 0
 
-  # keep everything above the first failure
-  first_bad <- which(!keep_rows)[1]
-  if (!is.na(first_bad)) {
-    keep_rows[first_bad:length(keep_rows)] <- FALSE
+
+  # for backward: keep everything above the first failure (drop tail)
+  # for forward: keep everything after the last failure (drop head)
+  if (direction == "backward") {
+    first_bad <- which(!keep_rows)[1]
+    if (!is.na(first_bad)) {
+      keep_rows[first_bad:length(keep_rows)] <- FALSE
+    }
+  } else {
+    last_bad <- max(which(!keep_rows), 0)
+    if (last_bad > 0 && last_bad < length(keep_rows)) {
+      keep_rows[1:last_bad] <- FALSE
+    }
   }
 
   results <- results[keep_rows, ]
@@ -276,20 +302,29 @@ seg_short_form_analysis <- function(
     ) %>%
     dplyr::relocate(Items, Overall_Accuracy, .before = 1)
 
-  # -- build removal order (last in vars = removed first) --
-  removed_steps <- tibble::tibble(
-    step = seq_along(vars),
-    removed = rev(vars),
-    remaining = length(vars) - seq_along(vars)
-  )
+  # -- build variable order table --
+  if (direction == "backward") {
+    var_steps <- tibble::tibble(
+      step = seq_along(vars),
+      removed = rev(vars),
+      remaining = length(vars) - seq_along(vars)
+    )
+  } else {
+    var_steps <- tibble::tibble(
+      step = seq_along(vars),
+      added = vars,
+      total = seq_along(vars)
+    )
+  }
 
-  cli::cli_alert_success("Short-form analysis complete. {nrow(analysis)} item counts evaluated.")
+  cli::cli_alert_success("Short-form analysis complete ({direction}). {nrow(analysis)} item counts evaluated.")
 
   list(
     results = results,
     analysis = analysis,
     ranked_inputs = vars,
-    removed_steps = removed_steps,
+    var_steps = var_steps,
+    direction = direction,
     project_name = seg[["meta"]][["project_name"]],
     project_number = seg[["meta"]][["project_number"]]
   )

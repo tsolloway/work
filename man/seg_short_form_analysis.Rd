@@ -12,8 +12,10 @@ seg_short_form_analysis(
   id_name = NULL,
   priors = c("equal", "size"),
   reduce_type = c("greedy_step", "greedy", "step"),
+  direction = c("backward", "forward"),
   remove_first = NULL,
   min_items = NULL,
+  max_items = NULL,
   seed = 1
 )
 }
@@ -41,13 +43,20 @@ segment 1 becomes new segment 6, old 6 becomes new 1). If provided, calls
 \code{\link[=cluster_reduce_vars]{cluster_reduce_vars()}}. One of \code{"greedy_step"}, \code{"greedy"}, or \code{"step"}.
 Defaults to \code{"greedy_step"}.}
 
+\item{direction}{Character. \code{"backward"} (default) starts with all variables
+and removes one at a time. \code{"forward"} starts with the most important
+variable and adds one at a time.}
+
 \item{remove_first}{Character vector. Variables to remove first (before
 the greedy ranking kicks in). Listed in removal order — first element
 is removed first. Defaults to \code{NULL}.}
 
-\item{min_items}{Integer. Minimum number of items to evaluate. Stops the
-analysis at this item count or at failure, whichever comes first.
+\item{min_items}{Integer. Minimum number of items to evaluate (backward only).
+Stops the analysis at this item count or at failure, whichever comes first.
 Defaults to \code{NULL} (go as low as possible).}
+
+\item{max_items}{Integer. Maximum number of items to evaluate (forward only).
+Defaults to \code{NULL} (go up to the full variable set).}
 
 \item{seed}{Numeric. Random seed for reproducibility. Defaults to \code{1}.}
 }

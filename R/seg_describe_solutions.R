@@ -7,8 +7,8 @@
 #'   segment name and 3-sentence description per segment.
 #'
 #' @param seg A seg object with solutions written via [seg_write_solutions()].
-#' @param solution Character. The `lda_name` of the solution to describe
-#'   (e.g. `"LDA_opt_kmeans_source_eq_H7"`).
+#' @param solution Character vector. One or more `lda_name` values to describe
+#'   (e.g. `"LDA_opt_kmeans_source_eq_H7"` or `c("sol_A", "sol_B")`).
 #' @param where Character. Path to the solutions directory. Defaults to
 #'   `seg[["paths"]][["folders"]][["solution"]]`.
 #' @param polar_threshold Numeric. Minimum absolute diff for a polar hit
@@ -24,11 +24,16 @@
 #' @param api_key Character. Anthropic API key. If `NULL` (default), retrieves
 #'   via `get_environment_key("ANTHROPIC_API_KEY")`.
 #' @param add_to_wb Logical. If `TRUE`, appends a "Descriptions" sheet to the
-#'   solution Excel workbook (default: `FALSE`).
+#'   solution Excel workbook (default: `TRUE`).
 #' @param verbose Logical. Print descriptions to console (default: `TRUE`).
 #'
-#' @return A tibble with columns: `segment`, `name`, `description`, `n`, `pct`,
-#'   `polar_hits`, `profile_hits`.
+#' @param candidates_folder Character or `NULL`. If non-NULL, copies the
+#'   workbook (after adding the Descriptions sheet) into this subfolder under
+#'   `where`. Defaults to `"1. candidates"`. Set to `NULL` to skip.
+#'
+#' @return A tibble (or list of tibbles when `length(solution) > 1`) with
+#'   columns: `segment`, `name`, `description`, `n`, `pct`, `polar_hits`,
+#'   `profile_hits`.
 #'
 #' @export
 seg_describe_solutions <- function(
@@ -41,7 +46,8 @@ seg_describe_solutions <- function(
     n_profile = 10,
     model = "claude-sonnet-4-20250514",
     api_key = NULL,
-    add_to_wb = FALSE,
+    add_to_wb = TRUE,
+    candidates_folder = "1. candidates",
     verbose = TRUE
 ) {
 
@@ -58,28 +64,7 @@ seg_describe_solutions <- function(
     where <- getwd()
   }
 
-  # find the file — look in the expected subfolder first, then fall back to recursive search
-  sol_filename <- paste0("Solution - ", solution, ".xlsx")
-  sol_file <- file.path(where, solution, sol_filename)
-
-  if (!file.exists(sol_file)) {
-    # fall back to recursive search, excluding archive/previous folders
-    candidates <- list.files(
-      where, pattern = paste0("Solution - ", solution, "\\.xlsx$"),
-      recursive = TRUE, full.names = TRUE
-    )
-    candidates <- candidates[!grepl("~\\$", candidates)]
-    candidates <- candidates[!grepl("previous|archive|old|backup", candidates, ignore.case = TRUE)]
-
-    if (length(candidates) == 0) {
-      cli::cli_abort("No solution file found for {.val {solution}} in {.path {where}}")
-    }
-    sol_file <- candidates[1]
-  }
-
-  if (verbose) cli::cli_alert_info("Reading {.file {sol_file}}")
-
-  # ---- build battery legend from spec ----
+  # ---- build battery legend + polar prefixes from spec (lightweight) ----
   polar_blocks <- seg[["spec"]][["polars"]] %>%
     dplyr::select(prefix, block_label) %>%
     dplyr::distinct()
@@ -103,8 +88,123 @@ seg_describe_solutions <- function(
     collapse = "\n"
   )
 
-  # ---- polar prefixes ----
   polar_prefixes <- seg[["spec"]][["polars"]][["prefix"]]
+
+  # ---- vectorised: parallel over solutions ----
+  if (length(solution) > 1) {
+    if (verbose) cli::cli_alert_info("Describing {length(solution)} solutions")
+
+    results <- .describe_parallel(
+      solution = solution, where = where,
+      battery_legend = battery_legend,
+      polar_prefixes = polar_prefixes,
+      polar_threshold = polar_threshold,
+      profile_threshold = profile_threshold,
+      n_polar = n_polar, n_profile = n_profile,
+      model = model, api_key = api_key,
+      add_to_wb = add_to_wb,
+      candidates_folder = candidates_folder
+    )
+    return(invisible(results))
+  }
+
+  # ---- single solution ----
+  result <- .describe_one_solution(
+    solution = solution, where = where,
+    battery_legend = battery_legend,
+    polar_prefixes = polar_prefixes,
+    polar_threshold = polar_threshold,
+    profile_threshold = profile_threshold,
+    n_polar = n_polar, n_profile = n_profile,
+    model = model, api_key = api_key,
+    add_to_wb = add_to_wb,
+    candidates_folder = candidates_folder,
+    verbose = verbose
+  )
+
+  invisible(result)
+}
+
+
+#' Internal parallel dispatcher — no seg object in scope
+#'
+#' @keywords internal
+.describe_parallel <- function(
+    solution, where,
+    battery_legend, polar_prefixes,
+    polar_threshold, profile_threshold,
+    n_polar, n_profile,
+    model, api_key,
+    add_to_wb, candidates_folder
+) {
+
+  # ensure parallel plan; restore original on exit
+  old_plan <- future::plan()
+  if (inherits(old_plan, "sequential")) {
+    future::plan(future::multisession)
+  }
+  on.exit(future::plan(old_plan), add = TRUE)
+
+  results <- map_progress(
+    .x = solution,
+    .label = "Describing",
+    .parallel = TRUE,
+    .furrr_packages = c("work"),
+    .f = function(.sol) {
+      .describe_one_solution(
+        solution = .sol, where = where,
+        battery_legend = battery_legend,
+        polar_prefixes = polar_prefixes,
+        polar_threshold = polar_threshold,
+        profile_threshold = profile_threshold,
+        n_polar = n_polar, n_profile = n_profile,
+        model = model, api_key = api_key,
+        add_to_wb = add_to_wb,
+        candidates_folder = candidates_folder,
+        verbose = FALSE
+      )
+    }
+  ) %>% rlang::set_names(solution)
+
+  results
+}
+
+
+#' Internal worker for a single solution description
+#'
+#' @description All heavy lifting lives here. Takes only lightweight scalar/vector
+#'   arguments — no seg object — so it can be serialized cheaply to parallel workers.
+#'
+#' @keywords internal
+.describe_one_solution <- function(
+    solution, where,
+    battery_legend, polar_prefixes,
+    polar_threshold, profile_threshold,
+    n_polar, n_profile,
+    model, api_key,
+    add_to_wb, candidates_folder,
+    verbose
+) {
+
+  # ---- find solution file ----
+  sol_filename <- paste0("Solution - ", solution, ".xlsx")
+  sol_file <- file.path(where, solution, sol_filename)
+
+  if (!file.exists(sol_file)) {
+    candidates <- list.files(
+      where, pattern = paste0("Solution - ", solution, "\\.xlsx$"),
+      recursive = TRUE, full.names = TRUE
+    )
+    candidates <- candidates[!grepl("~\\$", candidates)]
+    candidates <- candidates[!grepl("previous|archive|old|backup", candidates, ignore.case = TRUE)]
+
+    if (length(candidates) == 0) {
+      cli::cli_abort("No solution file found for {.val {solution}} in {.path {where}}")
+    }
+    sol_file <- candidates[1]
+  }
+
+  if (verbose) cli::cli_alert_info("Reading {.file {sol_file}}")
 
   # ---- parse solution file ----
   df <- openxlsx::read.xlsx(sol_file, sheet = "summary", colNames = FALSE)
@@ -247,13 +347,6 @@ seg_describe_solutions <- function(
   response_text <- resp_json[["content"]][[1]][["text"]]
 
   # ---- parse response into tibble ----
-  # Expected format:
-  # Segment 1: "Name Here"
-  # Description...
-  #
-  # Segment 2: "Name Here"
-  # ...
-
   seg_pattern <- 'Segment\\s+(\\d+):\\s*"([^"]+)"\\s*\\n([^\\n].*?)(?=\\nSegment\\s+\\d+:|$)'
   matches <- stringr::str_match_all(
     response_text,
@@ -261,7 +354,6 @@ seg_describe_solutions <- function(
   )[[1]]
 
   # fallback: split by "Segment N:" if regex is too strict
-
   if (nrow(matches) == 0) {
     chunks <- stringr::str_split(response_text, "(?=Segment\\s+\\d+:)")[[1]]
     chunks <- chunks[nchar(trimws(chunks)) > 0]
@@ -369,7 +461,16 @@ seg_describe_solutions <- function(
       error = function(e) stop(sprintf("Failed to save workbook to %s: %s", sol_file, e$message), call. = FALSE)
     )
     if (verbose) cli::cli_alert_success("Saved to {.path {sol_file}}")
+
+    # ---- copy to candidates folder ----
+    if (!is.null(candidates_folder)) {
+      candidates_dir <- file.path(where, candidates_folder)
+      if (!dir.exists(candidates_dir)) dir.create(candidates_dir, recursive = TRUE)
+      dest_file <- file.path(candidates_dir, basename(sol_file))
+      file.copy(sol_file, dest_file, overwrite = TRUE)
+      if (verbose) cli::cli_alert_success("Copied to {.path {dest_file}}")
+    }
   }
 
-  invisible(result)
+  result
 }

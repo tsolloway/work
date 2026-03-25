@@ -203,7 +203,8 @@ cluster_solution_family <- function(
     profile_threshold   = 0.15,
     min_seg_pct         = 0.05,
     swap_max_iter       = 1000,
-    weight_var          = NULL
+    weight_var          = NULL,
+    keep_raw            = FALSE
 ){
 
   result <- list()
@@ -627,34 +628,18 @@ cluster_solution_family <- function(
       ~dplyr::select(
         .x, solution_name, n, cluster_name,
         lda_name, lda_inputs, lda_profiles,
-        lda_coefficient_function, lda_predict,
-        confusion, accuracy, kappa, cv, collinear, split_half, df_append
+        lda_coefficient_function,
+        n_segments, accuracy, kappa, cv, collinear, split_half, df_solution
       )
     ) %>%
     dplyr::bind_rows() %>%
-    dplyr::filter(!is.na(df_append))
-
-
-
-  df_segment_append <- solution_table %>%
-    dplyr::select(df_append) %>%
-    unlist(recursive = FALSE) %>%
-    purrr::reduce(function(x, y) {
-      x %>%
-        dplyr::select(!dplyr::any_of(setdiff(names(y), "id"))) %>%
-        dplyr::left_join(y, by = "id")
-    })
-
-
-
-  solution_table <- solution_table %>% dplyr::select(-df_append)
+    dplyr::filter(!is.na(df_solution))
 
 
 
   output <- list(
-    result = result,
-    solution_table = solution_table,
-    df_segment_append = df_segment_append
+    result = if (keep_raw) result else NULL,
+    solution_table = solution_table
   )
 
 

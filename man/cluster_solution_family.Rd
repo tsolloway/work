@@ -40,7 +40,8 @@ cluster_solution_family(
   profile_threshold = 0.15,
   min_seg_pct = 0.05,
   swap_max_iter = 1000,
-  weight_var = NULL
+  weight_var = NULL,
+  keep_raw = FALSE
 )
 }
 \arguments{

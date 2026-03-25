@@ -157,13 +157,10 @@ seg_typing_tool <- function(
     setNames(., stringr::str_to_title(names(.)))
 
 
-  data_solution_check <- seg[["solutions"]][["summary_table"]] %>%
-    filter(lda_name == !!solution_name) %>%
-    select(lda_predict) %>%
-    flatten_dfc()
-
-
-  segments <- data_solution_check %>% select(seg) %>% unlist() %>% unique() %>% sort() %>% as.character() %>% as.numeric()
+  segments <- seg[["solutions"]][["summary_table"]] %>%
+    dplyr::filter(lda_name == !!solution_name) %>%
+    dplyr::pull(n_segments) %>%
+    purrr::pluck(1)
 
 
   if(is.null(segment_names)){

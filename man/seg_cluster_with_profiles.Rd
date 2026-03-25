@@ -25,7 +25,8 @@ seg_cluster_with_profiles(
   iter_max = 1000,
   nstart = 10,
   remove_nzv = TRUE,
-  cor_threshold = 0.9
+  cor_threshold = 0.9,
+  keep_raw = FALSE
 )
 }
 \arguments{

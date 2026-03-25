@@ -30,7 +30,8 @@ seg_cluster_input_sheet(
   iterative_config = list(),
   strategy = c("multisession", "multicore", "sequential", "cluster"),
   workers = NULL,
-  seed = 1
+  seed = 1,
+  keep_raw = FALSE
 )
 }
 \arguments{
