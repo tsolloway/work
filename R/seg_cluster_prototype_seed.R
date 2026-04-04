@@ -39,8 +39,6 @@
 #'   `NULL` and `use_greedy = TRUE`, selected automatically via
 #'   [get_greedy_vars()]. If `NULL` and `use_greedy = FALSE`, uses all RS
 #'   polars from the spec.
-#' @param vars_profiles Character vector or `NULL`. Profile variables
-#'   corresponding to `vars`. If `NULL`, derived from the spec's polar table.
 #' @param filter_name Character or `NULL`. Column name containing a logical
 #'   filter (e.g. `"okay_filter"`). `NULL` uses all rows.
 #' @param use_greedy Logical. If `TRUE` (default), select polar inputs via
@@ -51,7 +49,17 @@
 #'   number of reduced input variables. If numeric, truncates the greedy
 #'   selection to this many. If character, uses exactly those variables. `NULL`
 #'   uses all selected variables. Default: `14`.
-#' @param priors Character. LDA prior method: `"size"` (default) or `"equal"`.
+#' @param profile_lda_ratio Numeric between 0 and 1, or `NULL`. Target proportion
+#'   of reduced LDA inputs that should come from profile (non-polar) variables.
+#'   Rounding favours the polar count. Default: `NULL` (no balancing — all vars
+#'   compete equally in the ranked list).
+#' @param force_inputs Character vector or `NULL`. Variable names to always
+#'   include in the optimised (reduced) LDA input set, even if they are not
+#'   ranked in the top N by `cluster_reduce_vars`. Appended after
+#'   budget/cap selection. Default: `NULL`.
+#' @param priors Character or numeric vector. LDA prior method: `"size"` (default),
+#'   `"equal"`, or a numeric vector of length k (one value per segment, will be
+#'   normalised to sum to 1). If `NULL`, defaults to `"equal"`.
 #' @param resp_id_name Character or `NULL`. Respondent ID column. If `NULL`,
 #'   auto-detected via [get_resp_id_name()].
 #'
@@ -66,12 +74,13 @@ seg_cluster_prototype_seed <- function(
     seed_name,
     seed = NULL,
     vars = NULL,
-    vars_profiles = NULL,
     filter_name = NULL,
     use_greedy = TRUE,
     use_top_n_polars = 20,
     reduced_inputs_max = 14,
-    priors = c("size", "equal"),
+    profile_lda_ratio = NULL,
+    force_inputs = NULL,
+    priors = NULL,
     resp_id_name = NULL,
     keep_raw = FALSE
 ){
@@ -81,15 +90,21 @@ seg_cluster_prototype_seed <- function(
   # seed_name = "proto_D7to5"
   # seed = NULL
   # vars = NULL
-  # vars_profiles = NULL
   # filter_name = NULL
   # reduced_inputs_max = 14
   # priors = "size"
   # resp_id_name = NULL
 
 
-  priors <- match.arg(priors)
-
+  if (is.null(priors)) {
+    priors <- "equal"
+  } else if (is.character(priors)) {
+    priors <- match.arg(priors, c("size", "equal"))
+  } else if (is.numeric(priors)) {
+    priors <- priors / sum(priors)  # normalise
+  } else {
+    stop("priors must be NULL, 'size', 'equal', or a numeric vector.", call. = FALSE)
+  }
 
   if(is.null(resp_id_name)){
     resp_id_name <- seg %>% get_resp_id_name()
@@ -128,22 +143,29 @@ seg_cluster_prototype_seed <- function(
 
   if(is.null(vars)){
     vars <- seg %>% seg_get_vars_polars(.return = "rs")
-    vars_profiles <- seg %>% seg_get_vars_polars(.return = "profiles")
   }
 
-
-  if(is.null(vars_profiles)){
-    vars_profiles <- seg_get_vars_polars(seg, .return = "all") %>%
-      dplyr::filter(rs_var %in% vars) %>%
-      dplyr::select(profile_var) %>%
-      unlist() %>%
-      setNames(NULL)
+  # derive vars_profiles and polar_var_names from vars via spec lookup
+  polar_lookup <- seg_get_vars_polars(seg)
+  bad_vars <- intersect(vars, polar_lookup[["profile_var"]])
+  if (length(bad_vars) > 0) {
+    stop(
+      "vars contains polar profile vars — use rs or source vars instead: ",
+      paste(bad_vars, collapse = ", "),
+      call. = FALSE
+    )
   }
+  vars_profiles <- purrr::map_chr(vars, function(v) {
+    idx <- match(v, polar_lookup[["rs_var"]])
+    if (is.na(idx)) idx <- match(v, polar_lookup[["source_var"]])
+    if (!is.na(idx)) polar_lookup[["profile_var"]][idx] else v
+  })
+  polar_var_names <- vars[vars %in% c(polar_lookup[["rs_var"]], polar_lookup[["source_var"]])]
 
 
 
   results <- tibble::tibble(
-    n = max(seed[[seed_name]], na.rm = TRUE),
+    n = length(unique(na.omit(seed[[seed_name]]))),
     solution_name = solution_family_name,
     cluster_name = seed_name,
     inputs = list(vars),
@@ -170,11 +192,57 @@ seg_cluster_prototype_seed <- function(
   if(!is.null(reduced_inputs_max)){
 
     if(is.numeric(reduced_inputs_max)){
-      results <- results %>%
-        dplyr::mutate(
-          "reduced_inputs" = purrr::map(reduced_inputs, head, reduced_inputs_max),
-          "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
-        )
+
+      # ---- budget-aware selection when profile_lda_ratio is set ----
+      if (!is.null(profile_lda_ratio) && profile_lda_ratio > 0 && profile_lda_ratio < 1 &&
+          length(polar_var_names) > 0) {
+        # identify which vars are polars vs profiles
+        profile_var_names <- setdiff(vars, polar_var_names)
+
+        if (length(profile_var_names) > 0) {
+          n_profile_budget <- floor(reduced_inputs_max * profile_lda_ratio)
+          n_polar_budget <- reduced_inputs_max - n_profile_budget
+
+          # rank polars and profiles separately so each pool fills its budget
+          results <- results %>%
+            dplyr::mutate(
+              "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, function(cs, cn) {
+                grp <- cs[[cn]]
+                polar_ranked <- purrr::possibly(
+                  ~cluster_reduce_vars(df_temp, polar_var_names[polar_var_names %in% vars], grp,
+                                       type = "greedy_step", return_only_var = TRUE),
+                  otherwise = polar_var_names[polar_var_names %in% vars]
+                )()
+                profile_ranked <- purrr::possibly(
+                  ~cluster_reduce_vars(df_temp, profile_var_names, grp,
+                                       type = "greedy_step", return_only_var = TRUE),
+                  otherwise = profile_var_names
+                )()
+                c(utils::head(polar_ranked, n_polar_budget),
+                  utils::head(profile_ranked, n_profile_budget))
+              }),
+              "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+            )
+
+          n_actual_polar <- sum(results$reduced_inputs[[1]] %in% polar_var_names)
+          n_actual_profile <- length(results$reduced_inputs[[1]]) - n_actual_polar
+          cli::cli_alert_info(
+            "LDA budget split (ratio={profile_lda_ratio}): {n_actual_polar} polar + {n_actual_profile} profile = {n_actual_polar + n_actual_profile}"
+          )
+        } else {
+          results <- results %>%
+            dplyr::mutate(
+              "reduced_inputs" = purrr::map(reduced_inputs, ~utils::head(.x, reduced_inputs_max)),
+              "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+            )
+        }
+      } else {
+        results <- results %>%
+          dplyr::mutate(
+            "reduced_inputs" = purrr::map(reduced_inputs, ~utils::head(.x, reduced_inputs_max)),
+            "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+          )
+      }
 
     }else if(is.character(reduced_inputs_max)){
       results <- results %>%
@@ -184,6 +252,30 @@ seg_cluster_prototype_seed <- function(
         )
     }
 
+  }
+
+  # ---- force_inputs: guaranteed slots within the budget ----
+  if (!is.null(force_inputs) && length(force_inputs) > 0 && is.numeric(reduced_inputs_max)) {
+    results <- results %>%
+      dplyr::mutate(
+        "reduced_inputs" = purrr::map(reduced_inputs, function(ri) {
+          forced   <- intersect(force_inputs, c(ri, force_inputs))
+          n_free   <- max(reduced_inputs_max - length(forced), 0)
+          ranked   <- utils::head(setdiff(ri, forced), n_free)
+          unique(c(ranked, forced))
+        }),
+        "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+      )
+    cli::cli_alert_info("Forced {length(force_inputs)} var{?s} into LDA opt (within budget of {reduced_inputs_max}): {.val {force_inputs}}")
+  } else if (!is.null(force_inputs) && length(force_inputs) > 0) {
+    # character reduced_inputs_max — just ensure forced vars are present
+    results <- results %>%
+      dplyr::mutate(
+        "reduced_inputs" = purrr::map(reduced_inputs, function(ri) {
+          unique(c(ri, setdiff(force_inputs, ri)))
+        }),
+        "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+      )
   }
 
 
@@ -223,7 +315,7 @@ seg_cluster_prototype_seed <- function(
   solution_family_results[["solution_table"]] <- solution_family_results[["result"]] %>%
     purrr::discard_at("hierarchical_fit") %>%
     purrr::flatten() %>%
-    purrr::map(~dplyr::select(.x, solution_name, n, cluster_name, lda_name, lda_inputs, lda_profiles, lda_coefficient_function, n_segments, accuracy, kappa, cv, collinear, split_half, df_solution)) %>%
+    purrr::map(~dplyr::select(.x, solution_name, n, cluster_name, lda_name, lda_inputs, lda_profiles, lda_fit, lda_coefficient_function, lda_predict, n_segments, accuracy, kappa, cv, collinear, split_half, df_solution)) %>%
     dplyr::bind_rows() %>%
     dplyr::filter(!is.na(df_solution))
 

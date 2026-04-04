@@ -24,6 +24,8 @@ seg_cluster_with_profiles(
   priors = c("size", "equal"),
   iter_max = 1000,
   nstart = 10,
+  profile_lda_ratio = NULL,
+  force_inputs = NULL,
   remove_nzv = TRUE,
   cor_threshold = 0.9,
   keep_raw = FALSE
@@ -83,6 +85,13 @@ the variability filter (default: 0.1).}
 \item{iter_max}{Integer. Maximum k-means iterations (default: 1000).}
 
 \item{nstart}{Integer. Number of random starts for k-means (default: 10).}
+
+\item{profile_lda_ratio}{Numeric between 0 and 1, or \code{NULL}. Target proportion
+of LDA inputs that should come from profile variables when
+\code{include_profiles_lda = TRUE}. For example, \code{0.4} means ~40\\% profiles and
+~60\\% polars. Rounding favours the polar count. Applied to
+\code{reduced_inputs_max} to split the budget. If \code{NULL} (default), no balancing
+is applied and all variables compete equally.}
 
 \item{remove_nzv}{Logical. If \code{TRUE} (default), removes near-zero variance
 profile variables before clustering via \code{\link[caret:nearZeroVar]{caret::nearZeroVar()}}.}

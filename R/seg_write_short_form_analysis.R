@@ -444,6 +444,223 @@ seg_write_short_form_analysis <- function(
   )
 
 
+  # ====================================================================
+  # Sheet 3: All Combinations (best_combo only)
+  # ====================================================================
+  direction <- short_form_analysis[["direction"]] %||% "backward"
+  all_combos <- short_form_analysis[["all_combos"]]
+
+  if (direction == "best_combo" && !is.null(all_combos)) {
+    sheet3 <- "all_combinations"
+    openxlsx::addWorksheet(wb, sheet3, gridLines = FALSE)
+
+    # pivot accuracy_seg into wide columns (same as sheet 1)
+    combo_wide <- all_combos %>%
+      dplyr::arrange(dplyr::desc(accuracy_overall), n) %>%
+      dplyr::mutate(
+        inputs_str = purrr::map_chr(inputs, ~paste(.x, collapse = ", "))
+      )
+
+    seg_wide <- combo_wide %>%
+      dplyr::select(accuracy_seg) %>%
+      purrr::flatten() %>%
+      purrr::map(~ tidyr::pivot_wider(
+        .x,
+        names_from = Segment,
+        values_from = c(Precision, Recall)
+      )) %>%
+      purrr::list_rbind()
+
+    combo_tbl <- dplyr::bind_cols(
+      combo_wide %>% dplyr::select(n, accuracy_overall, inputs_str),
+      seg_wide
+    )
+
+    s3_prec_cols <- paste0("Precision_", segment_labels)
+    s3_rec_cols <- paste0("Recall_", segment_labels)
+    names(combo_tbl) <- c("Items", "Overall Accuracy", "Variables",
+                          s3_prec_cols, s3_rec_cols)
+
+    # layout
+    s3_col_start <- 2
+    s3_row_title <- 2
+    s3_row_subtitle <- 3
+    s3_row_header_1 <- 5
+    s3_row_header_2 <- 6
+    s3_row_data_start <- 7
+    s3_row_data_end <- s3_row_data_start + nrow(combo_tbl) - 1
+
+    s3_col_items <- s3_col_start
+    s3_col_acc <- s3_col_start + 1
+    s3_col_vars <- s3_col_start + 2
+    s3_col_prec_start <- s3_col_start + 3
+    s3_col_prec_end <- s3_col_prec_start + n_segs - 1
+    s3_col_rec_start <- s3_col_prec_end + 1
+    s3_col_rec_end <- s3_col_rec_start + n_segs - 1
+
+    # title
+    openxlsx::writeData(wb, sheet3, "All Combinations",
+      startRow = s3_row_title, startCol = s3_col_start, colNames = FALSE
+    )
+    openxlsx::addStyle(wb, sheet3, s_title,
+      rows = s3_row_title, cols = s3_col_start, stack = TRUE
+    )
+
+    # subtitle
+    if (!is.null(project_name)) {
+      openxlsx::writeData(wb, sheet3, project_name,
+        startRow = s3_row_subtitle, startCol = s3_col_start, colNames = FALSE
+      )
+      openxlsx::addStyle(wb, sheet3, s_subtitle,
+        rows = s3_row_subtitle, cols = s3_col_start, stack = TRUE
+      )
+    }
+
+    # row 1 headers
+    openxlsx::writeData(wb, sheet3, "Items",
+      startRow = s3_row_header_1, startCol = s3_col_items, colNames = FALSE
+    )
+    openxlsx::writeData(wb, sheet3, "Overall Accuracy",
+      startRow = s3_row_header_1, startCol = s3_col_acc, colNames = FALSE
+    )
+    openxlsx::writeData(wb, sheet3, "Variables",
+      startRow = s3_row_header_1, startCol = s3_col_vars, colNames = FALSE
+    )
+    openxlsx::writeData(wb, sheet3, "Precision",
+      startRow = s3_row_header_1, startCol = s3_col_prec_start, colNames = FALSE
+    )
+    openxlsx::writeData(wb, sheet3, "Recall",
+      startRow = s3_row_header_1, startCol = s3_col_rec_start, colNames = FALSE
+    )
+
+    # merge: Items, Overall Accuracy, Variables span both header rows
+    openxlsx::mergeCells(wb, sheet3,
+      cols = s3_col_items, rows = s3_row_header_1:s3_row_header_2
+    )
+    openxlsx::mergeCells(wb, sheet3,
+      cols = s3_col_acc, rows = s3_row_header_1:s3_row_header_2
+    )
+    openxlsx::mergeCells(wb, sheet3,
+      cols = s3_col_vars, rows = s3_row_header_1:s3_row_header_2
+    )
+    if (n_segs > 1) {
+      openxlsx::mergeCells(wb, sheet3,
+        cols = s3_col_prec_start:s3_col_prec_end, rows = s3_row_header_1
+      )
+      openxlsx::mergeCells(wb, sheet3,
+        cols = s3_col_rec_start:s3_col_rec_end, rows = s3_row_header_1
+      )
+    }
+
+    # segment sub-headers
+    for (i in seq_along(segment_labels)) {
+      openxlsx::writeData(wb, sheet3, segment_labels[i],
+        startRow = s3_row_header_2, startCol = s3_col_prec_start + i - 1, colNames = FALSE
+      )
+      openxlsx::writeData(wb, sheet3, segment_labels[i],
+        startRow = s3_row_header_2, startCol = s3_col_rec_start + i - 1, colNames = FALSE
+      )
+    }
+
+    # header styles
+    openxlsx::addStyle(wb, sheet3, s_header_wrap,
+      rows = s3_row_header_1,
+      cols = c(s3_col_items, s3_col_acc, s3_col_vars),
+      gridExpand = FALSE, stack = TRUE
+    )
+    openxlsx::addStyle(wb, sheet3, s_header,
+      rows = s3_row_header_1,
+      cols = c(s3_col_prec_start, s3_col_rec_start),
+      gridExpand = FALSE, stack = TRUE
+    )
+    openxlsx::addStyle(wb, sheet3, s_header,
+      rows = s3_row_header_2,
+      cols = seq(s3_col_prec_start, s3_col_rec_end),
+      gridExpand = FALSE, stack = TRUE
+    )
+
+    # data: Items
+    openxlsx::writeData(wb, sheet3, combo_tbl[["Items"]],
+      startRow = s3_row_data_start, startCol = s3_col_items, colNames = FALSE
+    )
+    openxlsx::addStyle(wb, sheet3, s_center,
+      rows = seq(s3_row_data_start, s3_row_data_end), cols = s3_col_items,
+      gridExpand = FALSE, stack = TRUE
+    )
+
+    # data: Overall Accuracy
+    openxlsx::writeData(wb, sheet3, combo_tbl[["Overall Accuracy"]],
+      startRow = s3_row_data_start, startCol = s3_col_acc, colNames = FALSE
+    )
+
+    # data: Variables
+    openxlsx::writeData(wb, sheet3, combo_tbl[["Variables"]],
+      startRow = s3_row_data_start, startCol = s3_col_vars, colNames = FALSE
+    )
+
+    # data: Precision + Recall per segment
+    for (i in seq_along(s3_prec_cols)) {
+      openxlsx::writeData(wb, sheet3, combo_tbl[[s3_prec_cols[i]]],
+        startRow = s3_row_data_start, startCol = s3_col_prec_start + i - 1, colNames = FALSE
+      )
+    }
+    for (i in seq_along(s3_rec_cols)) {
+      openxlsx::writeData(wb, sheet3, combo_tbl[[s3_rec_cols[i]]],
+        startRow = s3_row_data_start, startCol = s3_col_rec_start + i - 1, colNames = FALSE
+      )
+    }
+
+    # percentage format on accuracy + precision + recall columns
+    openxlsx::addStyle(wb, sheet3, s_percent,
+      rows = seq(s3_row_data_start, s3_row_data_end),
+      cols = seq(s3_col_acc, s3_col_rec_end),
+      gridExpand = TRUE, stack = TRUE
+    )
+
+    # borders
+    oxl_outer_box(wb, sheet3,
+      row_start = s3_row_header_1, row_end = s3_row_data_end,
+      col_start = s3_col_items, col_end = s3_col_rec_end,
+      borderStyle = "medium"
+    )
+    openxlsx::addStyle(wb, sheet3,
+      openxlsx::createStyle(border = "bottom", borderStyle = "medium"),
+      rows = s3_row_header_2,
+      cols = seq(s3_col_items, s3_col_rec_end),
+      gridExpand = FALSE, stack = TRUE
+    )
+
+    # vertical dividers
+    for (dc in c(s3_col_acc, s3_col_vars, s3_col_prec_start, s3_col_rec_start)) {
+      openxlsx::addStyle(wb, sheet3, s_divider,
+        rows = seq(s3_row_header_1, s3_row_data_end),
+        cols = dc,
+        gridExpand = FALSE, stack = TRUE
+      )
+    }
+
+    # column widths
+    openxlsx::setColWidths(wb, sheet3, cols = s3_col_items, widths = 8)
+    openxlsx::setColWidths(wb, sheet3, cols = s3_col_acc, widths = 18)
+    openxlsx::setColWidths(wb, sheet3, cols = s3_col_vars, widths = 60)
+    openxlsx::setColWidths(wb, sheet3,
+      cols = seq(s3_col_prec_start, s3_col_rec_end), widths = 10
+    )
+
+    # autoFilter for sorting
+    openxlsx::addFilter(wb, sheet3,
+      rows = s3_row_header_2,
+      cols = seq(s3_col_items, s3_col_rec_end)
+    )
+
+    # freeze pane below headers
+    openxlsx::freezePane(wb, sheet3,
+      firstActiveRow = s3_row_data_start,
+      firstActiveCol = s3_col_start
+    )
+  }
+
+
   # -- save to temp file, add charts, copy to final location --
   temp_path <- tempfile(fileext = ".xlsx")
   openxlsx::saveWorkbook(wb, temp_path, overwrite = TRUE)
@@ -560,6 +777,14 @@ for sheet_name in src.sheetnames:
     for row_num, dim in src_ws.row_dimensions.items():
         if dim.height:
             dst_ws.row_dimensions[row_num].height = dim.height
+
+    # preserve freeze panes
+    if src_ws.freeze_panes:
+        dst_ws.freeze_panes = src_ws.freeze_panes
+
+    # preserve auto filters
+    if src_ws.auto_filter.ref:
+        dst_ws.auto_filter.ref = src_ws.auto_filter.ref
 
 dst_ws = dst['<<sheet>>']
 

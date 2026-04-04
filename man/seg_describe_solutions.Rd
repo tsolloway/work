@@ -14,6 +14,7 @@ seg_describe_solutions(
   n_profile = 10,
   model = "claude-sonnet-4-20250514",
   api_key = NULL,
+  prompt = NULL,
   add_to_wb = TRUE,
   candidates_folder = "1. candidates",
   verbose = TRUE
@@ -45,6 +46,9 @@ per segment in the prompt (default: \code{10}).}
 
 \item{api_key}{Character. Anthropic API key. If \code{NULL} (default), retrieves
 via \code{get_environment_key("ANTHROPIC_API_KEY")}.}
+
+\item{prompt}{Character or \code{NULL}. Optional additional guidance appended to
+the system prompt (e.g. \code{"Emphasise age and gender differences between segments"}). \code{NULL} (default) uses the standard prompt only.}
 
 \item{add_to_wb}{Logical. If \code{TRUE}, appends a "Descriptions" sheet to the
 solution Excel workbook (default: \code{TRUE}).}

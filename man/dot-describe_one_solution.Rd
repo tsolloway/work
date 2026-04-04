@@ -15,6 +15,7 @@
   n_profile,
   model,
   api_key,
+  prompt,
   add_to_wb,
   candidates_folder,
   verbose

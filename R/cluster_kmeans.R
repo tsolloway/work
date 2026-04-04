@@ -93,6 +93,11 @@ cluster_kmeans <- function(
     n_min = 4,
     n_max = 7,
     reduced_inputs_max = NULL,
+    polar_lda_budget = NULL,
+    profile_lda_budget = NULL,
+    polar_var_names = NULL,
+    profile_var_names = NULL,
+    force_inputs = NULL,
     priors = c("equal", "size"),
     iter_max = 1000,
     nstart = 10,
@@ -182,13 +187,70 @@ cluster_kmeans <- function(
 
 
   if(!is.null(reduced_inputs_max)){
+    if (is.character(reduced_inputs_max)) {
+      # explicit variable names — use directly, bypass ranking
+      result <- result %>%
+        dplyr::mutate(
+          "reduced_inputs" = list(reduced_inputs_max),
+          "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+        )
+    } else if (!is.null(polar_lda_budget) && !is.null(profile_lda_budget)) {
+      # budget-aware selection: rank polars and profiles separately
+      polar_set <- if (!is.null(polar_var_names)) intersect(polar_var_names, reduced_vars) else character(0)
+      profile_set <- if (!is.null(profile_var_names)) intersect(profile_var_names, reduced_vars) else character(0)
+      result <- result %>%
+        dplyr::mutate(
+          "reduced_inputs" = purrr::map2(cluster_seed, cluster_name, function(cs, cn) {
+            grp <- cs[[cn]]
+            polar_ranked <- if (length(polar_set) > 0) {
+              purrr::possibly(
+                ~cluster_reduce_vars(df_temp, polar_set, grp,
+                                     type = "greedy_step", return_only_var = TRUE, seed = seed),
+                otherwise = polar_set
+              )()
+            } else character(0)
+            profile_ranked <- if (length(profile_set) > 0) {
+              purrr::possibly(
+                ~cluster_reduce_vars(df_temp, profile_set, grp,
+                                     type = "greedy_step", return_only_var = TRUE, seed = seed),
+                otherwise = profile_set
+              )()
+            } else character(0)
+            c(utils::head(polar_ranked, polar_lda_budget),
+              utils::head(profile_ranked, profile_lda_budget))
+          }),
+          "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+        )
+    } else {
+      result <- result %>%
+        dplyr::mutate(
+          "reduced_inputs" = purrr::map(reduced_inputs, head, reduced_inputs_max),
+          "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+        )
+    }
+  }
+
+  # ---- force_inputs: guaranteed slots within the budget ----
+  if (!is.null(force_inputs) && length(force_inputs) > 0 && is.numeric(reduced_inputs_max)) {
     result <- result %>%
       dplyr::mutate(
-        "reduced_inputs" = purrr::map(reduced_inputs, head, reduced_inputs_max),
+        "reduced_inputs" = purrr::map(reduced_inputs, function(ri) {
+          forced <- intersect(force_inputs, c(ri, force_inputs))
+          n_free <- max(reduced_inputs_max - length(forced), 0)
+          ranked <- utils::head(setdiff(ri, forced), n_free)
+          unique(c(ranked, forced))
+        }),
+        "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+      )
+  } else if (!is.null(force_inputs) && length(force_inputs) > 0) {
+    result <- result %>%
+      dplyr::mutate(
+        "reduced_inputs" = purrr::map(reduced_inputs, function(ri) {
+          unique(c(ri, setdiff(force_inputs, ri)))
+        }),
         "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
       )
   }
-
 
 
   if(!is.null(seed)) set.seed(seed)

@@ -17,5 +17,5 @@ seg_bind_summary_tables <- function(seg) {
   seg[["solutions"]][["analysis"]] %>%
     purrr::map(purrr::pluck, "solution_table") %>%
     dplyr::bind_rows() %>%
-    dplyr::select(-dplyr::any_of("df_solution"))
+    dplyr::select(-dplyr::any_of(c("lda_fit", "lda_predict", "df_solution")))
 }

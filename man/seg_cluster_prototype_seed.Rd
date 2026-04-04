@@ -10,12 +10,13 @@ seg_cluster_prototype_seed(
   seed_name,
   seed = NULL,
   vars = NULL,
-  vars_profiles = NULL,
   filter_name = NULL,
   use_greedy = TRUE,
   use_top_n_polars = 20,
   reduced_inputs_max = 14,
-  priors = c("size", "equal"),
+  profile_lda_ratio = NULL,
+  force_inputs = NULL,
+  priors = NULL,
   resp_id_name = NULL,
   keep_raw = FALSE
 )
@@ -40,9 +41,6 @@ using \code{resp_id_name} and \code{seed_name}.}
 \code{\link[=get_greedy_vars]{get_greedy_vars()}}. If \code{NULL} and \code{use_greedy = FALSE}, uses all RS
 polars from the spec.}
 
-\item{vars_profiles}{Character vector or \code{NULL}. Profile variables
-corresponding to \code{vars}. If \code{NULL}, derived from the spec's polar table.}
-
 \item{filter_name}{Character or \code{NULL}. Column name containing a logical
 filter (e.g. \code{"okay_filter"}). \code{NULL} uses all rows.}
 
@@ -57,7 +55,19 @@ number of reduced input variables. If numeric, truncates the greedy
 selection to this many. If character, uses exactly those variables. \code{NULL}
 uses all selected variables. Default: \code{14}.}
 
-\item{priors}{Character. LDA prior method: \code{"size"} (default) or \code{"equal"}.}
+\item{profile_lda_ratio}{Numeric between 0 and 1, or \code{NULL}. Target proportion
+of reduced LDA inputs that should come from profile (non-polar) variables.
+Rounding favours the polar count. Default: \code{NULL} (no balancing — all vars
+compete equally in the ranked list).}
+
+\item{force_inputs}{Character vector or \code{NULL}. Variable names to always
+include in the optimised (reduced) LDA input set, even if they are not
+ranked in the top N by \code{cluster_reduce_vars}. Appended after
+budget/cap selection. Default: \code{NULL}.}
+
+\item{priors}{Character or numeric vector. LDA prior method: \code{"size"} (default),
+\code{"equal"}, or a numeric vector of length k (one value per segment, will be
+normalised to sum to 1). If \code{NULL}, defaults to \code{"equal"}.}
 
 \item{resp_id_name}{Character or \code{NULL}. Respondent ID column. If \code{NULL},
 auto-detected via \code{\link[=get_resp_id_name]{get_resp_id_name()}}.}

@@ -243,11 +243,18 @@
 
     if(solution_var %in% seg[["solutions"]][["summary_table"]][["lda_name"]]){
 
+      polar_lookup <- seg_get_vars_polars(seg)
       key <- seg[["solutions"]][["summary_table"]] %>%
         dplyr::filter(lda_name == solution_var) %>%
-        dplyr::select(lda_profiles) %>%
+        dplyr::select(lda_inputs) %>%
         unlist() %>%
-        setNames(NULL)
+        setNames(NULL) %>%
+        purrr::map_chr(function(v) {
+          idx <- match(v, polar_lookup[["source_var"]])
+          if (is.na(idx)) idx <- match(v, polar_lookup[["rs_var"]])
+          if (!is.na(idx)) polar_lookup[["profile_var"]][idx] else v
+        }) %>%
+        .[. %in% shell_all[["var"]]]
     }
   }
 

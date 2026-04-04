@@ -10,7 +10,6 @@ seg_split_segments(
   seg_splits,
   new_solution_name,
   vars = NULL,
-  vars_profiles = NULL,
   split_into = 2,
   resp_id_name = NULL,
   use_greedy = TRUE,
@@ -19,6 +18,8 @@ seg_split_segments(
   priors = c("equal", "size"),
   filter_logical_vector = NULL,
   reduced_inputs_max = 14,
+  profile_lda_ratio = NULL,
+  force_inputs = NULL,
   prototype_seed = TRUE,
   return_append_only = FALSE
 )
@@ -38,10 +39,9 @@ The output column will be \verb{seed_\{new_solution_name\}}.}
 \item{vars}{Character vector or \code{NULL}. Polar input variables for the
 sub-clustering. If \code{NULL} and \code{use_greedy = TRUE}, selected via
 \code{\link[=get_greedy_vars]{get_greedy_vars()}}. If \code{NULL} and \code{use_greedy = FALSE}, uses all RS
-polars.}
-
-\item{vars_profiles}{Character vector or \code{NULL}. Profile variables
-corresponding to \code{vars}. If \code{NULL}, derived from the spec.}
+polars. Profile (non-polar) variables may also be included — they are
+passed through to LDA as-is. Do not pass polar profile vars (e.g. \code{TN01});
+use rs or source vars instead.}
 
 \item{split_into}{Integer. Number of sub-segments to create from each
 split segment (default: \code{2}).}
@@ -70,6 +70,15 @@ number of reduced input variables passed to
 \code{\link[=seg_cluster_prototype_seed]{seg_cluster_prototype_seed()}}. If numeric, truncates the greedy-selected
 variables to this many. If character, uses the supplied variable names
 directly. If \code{NULL}, no cap is applied (default: \code{14}).}
+
+\item{profile_lda_ratio}{Numeric between 0 and 1, or \code{NULL}. Target proportion
+of LDA inputs from profile variables. Rounding favours the polar count.
+Passed through to \code{\link[=seg_cluster_prototype_seed]{seg_cluster_prototype_seed()}}. Default: \code{NULL} (no
+balancing).}
+
+\item{force_inputs}{Character vector or \code{NULL}. Variable names to always
+include in the optimised LDA, even if they fall outside the top-ranked set.
+Passed through to \code{\link[=seg_cluster_prototype_seed]{seg_cluster_prototype_seed()}}. Default: \code{NULL}.}
 
 \item{prototype_seed}{Logical. If \code{TRUE} (default), automatically calls
 \code{\link[=seg_cluster_prototype_seed]{seg_cluster_prototype_seed()}} after sub-clustering to fit a unified LDA

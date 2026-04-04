@@ -32,8 +32,12 @@
 #'   is removed first. Defaults to `NULL`.
 #' @param direction Character. `"backward"` (default) starts with all variables
 #'   and removes one at a time. `"forward"` starts with the most important
-#'   variable and adds one at a time.
-#' @param min_items Integer. Minimum number of items to evaluate (backward only).
+#'   variable and adds one at a time. `"best_combo"` evaluates all combinations
+#'   of variables at each item count and keeps the best per size (parallel).
+#' @param max_combos Integer. Safety cap on total number of combinations for
+#'   `direction = "best_combo"`. Defaults to `5000`. If total combos exceed
+#'   this, the function errors with a suggestion to narrow `min_items`/`max_items`.
+#' @param min_items Integer. Minimum number of items to evaluate.
 #'   Stops the analysis at this item count or at failure, whichever comes first.
 #'   Defaults to `NULL` (go as low as possible).
 #' @param max_items Integer. Maximum number of items to evaluate (forward only).
@@ -58,7 +62,8 @@ seg_short_form_analysis <- function(
     id_name = NULL,
     priors = c("equal", "size"),
     reduce_type = c("greedy_step", "greedy", "step"),
-    direction = c("backward", "forward"),
+    direction = c("backward", "forward", "best_combo"),
+    max_combos = 5000,
     remove_first = NULL,
     min_items = NULL,
     max_items = NULL,
@@ -137,7 +142,122 @@ seg_short_form_analysis <- function(
   # train on raw cluster assignments (matches how cluster_add_lda works)
   df_complete <- df %>% dplyr::filter(!is.na(.data[[cluster_name]]))
   cluster_grp <- df_complete[[cluster_name]] %>% unlist()
+  n_segments <- length(unique(cluster_grp))
 
+  # -- set up priors --
+  if (is.numeric(priors)) {
+    if (length(priors) != n_segments) {
+      stop(glue::glue("Length of `priors` ({length(priors)}) must match number of segments ({n_segments})."))
+    }
+    lda_priors <- priors / sum(priors)
+  } else if (priors == "equal") {
+    lda_priors <- rep(1 / n_segments, n_segments)
+  } else {
+    seg_counts <- table(cluster_grp)
+    lda_priors <- as.numeric(seg_counts) / sum(seg_counts)
+  }
+
+  # ---- best_combo path: all combinations in parallel ----
+  if (direction == "best_combo") {
+
+    vars <- lda_input_vars
+    if (!is.null(remove_first)) {
+      vars <- setdiff(vars, remove_first)
+    }
+
+    # filter to rows with non-NA input vars + non-NA lda classification
+    df_predict <- df %>%
+      dplyr::filter(
+        !is.na(.data[[lda_name]]),
+        dplyr::if_all(dplyr::all_of(vars), ~ !is.na(.x))
+      )
+
+    n_min_bc <- max(min_items %||% 1, 1)
+    n_max_bc <- min(max_items %||% length(vars), length(vars))
+
+    # build flat task list of all combos across all sizes
+    combo_tasks <- purrr::map(seq(n_min_bc, n_max_bc), function(k) {
+      combos <- utils::combn(vars, k, simplify = FALSE)
+      purrr::map(combos, ~list(size = k, vars = .x))
+    }) %>% purrr::list_c()
+
+    total_combos <- length(combo_tasks)
+    cli::cli_alert_info(
+      "Best-combo: {total_combos} combinations across {n_min_bc}–{n_max_bc} items from {length(vars)} variables"
+    )
+
+    if (total_combos > max_combos) {
+      cli::cli_abort(c(
+        "Total combinations ({total_combos}) exceeds `max_combos` ({max_combos}).",
+        "i" = "Narrow `min_items`/`max_items` or increase `max_combos`."
+      ))
+    }
+
+    # prepare lightweight data for workers (no seg object)
+    df_complete_mat <- df_complete %>% dplyr::select(dplyr::all_of(vars)) %>% as.data.frame()
+    df_predict_mat <- df_predict %>% dplyr::select(dplyr::all_of(vars)) %>% as.data.frame()
+    predict_ids <- df_predict[[id_name]]
+    predict_lda_col <- df_predict[[lda_name]]
+    ref_levels <- levels(as.factor(predict_lda_col))
+
+    combo_results <- .sf_combo_parallel(
+      combo_tasks = combo_tasks,
+      df_complete_mat = df_complete_mat,
+      cluster_grp = cluster_grp,
+      lda_priors = lda_priors,
+      df_predict_mat = df_predict_mat,
+      predict_ids = predict_ids,
+      predict_lda_col = predict_lda_col,
+      ref_levels = ref_levels,
+      lda_name = lda_name,
+      id_name = id_name,
+      seed = seed
+    )
+
+    if (nrow(combo_results) == 0) {
+      stop("All combo LDA fits failed. Check your solution and input data.")
+    }
+
+    # keep best per size (highest accuracy_overall)
+    results <- combo_results %>%
+      dplyr::group_by(n) %>%
+      dplyr::slice_max(accuracy_overall, n = 1, with_ties = FALSE) %>%
+      dplyr::ungroup() %>%
+      dplyr::arrange(n)
+
+    # build analysis summary
+    analysis <- results %>%
+      dplyr::select(accuracy_seg) %>%
+      purrr::flatten() %>%
+      purrr::map(~ tidyr::pivot_wider(
+        .x,
+        names_from = Segment,
+        values_from = c(Precision, Recall)
+      )) %>%
+      purrr::list_rbind() %>%
+      dplyr::mutate(
+        Items = results[["n"]],
+        Overall_Accuracy = results[["accuracy_overall"]]
+      ) %>%
+      dplyr::relocate(Items, Overall_Accuracy, .before = 1)
+
+    cli::cli_alert_success(
+      "Short-form analysis complete (best_combo). {nrow(analysis)} item counts evaluated from {total_combos} combinations."
+    )
+
+    return(list(
+      results = results,
+      analysis = analysis,
+      all_combos = combo_results,
+      ranked_inputs = vars,
+      var_steps = NULL,
+      direction = direction,
+      project_name = seg[["meta"]][["project_name"]],
+      project_number = seg[["meta"]][["project_number"]]
+    ))
+  }
+
+  # ---- backward / forward: rank variables first ----
   cli::cli_alert_info("Reducing {length(lda_input_vars)} variables with '{reduce_type}' strategy...")
 
   ranked_vars <- cluster_reduce_vars(
@@ -157,8 +277,14 @@ seg_short_form_analysis <- function(
     vars <- c(setdiff(vars, remove_first), rev(remove_first))
   }
 
-  n_segments <- length(unique(cluster_grp))
+  # -- filter to rows with non-NA input vars + non-NA lda classification --
+  df_predict <- df %>%
+    dplyr::filter(
+      !is.na(.data[[lda_name]]),
+      dplyr::if_all(dplyr::all_of(vars), ~ !is.na(.x))
+    )
 
+  # ---- backward / forward path ----
   n_floor <- max(min_items %||% 1, 1)
 
   if (direction == "backward") {
@@ -169,26 +295,6 @@ seg_short_form_analysis <- function(
     n_seq <- seq(n_floor, n_max)
     cli::cli_alert_info("Fitting LDA forward: {length(n_seq)} item counts ({min(n_seq)} up to {max(n_seq)})...")
   }
-
-  # -- set up priors --
-  if (is.numeric(priors)) {
-    if (length(priors) != n_segments) {
-      stop(glue::glue("Length of `priors` ({length(priors)}) must match number of segments ({n_segments})."))
-    }
-    lda_priors <- priors / sum(priors)
-  } else if (priors == "equal") {
-    lda_priors <- rep(1 / n_segments, n_segments)
-  } else {
-    seg_counts <- table(cluster_grp)
-    lda_priors <- as.numeric(seg_counts) / sum(seg_counts)
-  }
-
-  # -- filter to rows with non-NA input vars + non-NA lda classification --
-  df_predict <- df %>%
-    dplyr::filter(
-      !is.na(.data[[lda_name]]),
-      dplyr::if_all(dplyr::all_of(vars), ~ !is.na(.x))
-    )
 
   # -- iterative LDA refitting --
   results_list <- purrr::map(n_seq, function(items) {
@@ -328,4 +434,115 @@ seg_short_form_analysis <- function(
     project_name = seg[["meta"]][["project_name"]],
     project_number = seg[["meta"]][["project_number"]]
   )
+}
+
+
+#' Fit LDA for a single variable combination
+#'
+#' @description Internal worker for best_combo parallel path. Takes only
+#'   lightweight pre-extracted data — no seg object — so it serializes cheaply.
+#'
+#' @keywords internal
+.sf_fit_combo <- function(
+    input_vars, size,
+    df_complete_mat, cluster_grp, lda_priors,
+    df_predict_mat, predict_ids, predict_lda_col,
+    ref_levels, lda_name, id_name, seed
+) {
+
+  res <- tryCatch({
+    set.seed(seed)
+    fit <- MASS::lda(
+      x = df_complete_mat[, input_vars, drop = FALSE],
+      grouping = cluster_grp,
+      prior = lda_priors
+    )
+    coef <- coefficient_lda(
+      fit = fit,
+      input = df_complete_mat[, input_vars, drop = FALSE],
+      grp = cluster_grp
+    )
+    pred <- predict(fit, df_predict_mat[, input_vars, drop = FALSE])
+    list(lda_fit = fit, lda_coefficient_function = coef, lda_predict = pred)
+  }, error = function(e) NULL)
+
+  if (is.null(res)) return(NULL)
+
+  col_name <- glue::glue("{lda_name}_items{size}")
+  seg_col <- tibble::tibble(
+    id = predict_ids,
+    seg_col = as.numeric(as.character(res$lda_predict[["class"]]))
+  )
+  names(seg_col)[2] <- col_name
+
+  conf <- tryCatch(
+    caret::confusionMatrix(
+      factor(seg_col[[2]], levels = ref_levels),
+      factor(predict_lda_col, levels = ref_levels)
+    ),
+    error = function(e) NULL
+  )
+  if (is.null(conf)) return(NULL)
+
+  tibble::tibble(
+    n = size,
+    inputs = list(input_vars),
+    lda_fit = list(res$lda_fit),
+    lda_inputs = list(input_vars),
+    lda_coefficient_function = list(res$lda_coefficient_function),
+    lda_seg = list(seg_col),
+    confusion = list(conf),
+    accuracy_overall = conf %>% purrr::pluck("overall") %>% purrr::pluck("Accuracy"),
+    accuracy_seg = list(
+      conf %>%
+        purrr::pluck("byClass") %>%
+        tibble::as_tibble() %>%
+        dplyr::mutate(Segment = glue::glue("Seg_{seq(dplyr::n())}")) %>%
+        dplyr::select(Segment, Precision, Recall)
+    )
+  )
+}
+
+
+#' Internal parallel dispatcher for best_combo — no seg object in scope
+#'
+#' @keywords internal
+.sf_combo_parallel <- function(
+    combo_tasks,
+    df_complete_mat, cluster_grp, lda_priors,
+    df_predict_mat, predict_ids, predict_lda_col,
+    ref_levels, lda_name, id_name, seed
+) {
+
+  # ensure parallel plan; restore original on exit
+  old_plan <- future::plan()
+  if (inherits(old_plan, "sequential")) {
+    future::plan(future::multisession)
+  }
+  on.exit(future::plan(old_plan), add = TRUE)
+
+  results <- map_progress(
+    .x = combo_tasks,
+    .label = "Best combo",
+    .parallel = TRUE,
+    .furrr_packages = c("work"),
+    .f = function(.task) {
+      .sf_fit_combo(
+        input_vars = .task$vars,
+        size = .task$size,
+        df_complete_mat = df_complete_mat,
+        cluster_grp = cluster_grp,
+        lda_priors = lda_priors,
+        df_predict_mat = df_predict_mat,
+        predict_ids = predict_ids,
+        predict_lda_col = predict_lda_col,
+        ref_levels = ref_levels,
+        lda_name = lda_name,
+        id_name = id_name,
+        seed = seed
+      )
+    }
+  )
+
+  purrr::compact(results) %>% purrr::list_rbind()
 }

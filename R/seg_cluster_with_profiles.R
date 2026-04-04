@@ -45,6 +45,12 @@
 #' @param priors Character. LDA prior method: `"size"` (default) or `"equal"`.
 #' @param iter_max Integer. Maximum k-means iterations (default: 1000).
 #' @param nstart Integer. Number of random starts for k-means (default: 10).
+#' @param profile_lda_ratio Numeric between 0 and 1, or `NULL`. Target proportion
+#'   of LDA inputs that should come from profile variables when
+#'   `include_profiles_lda = TRUE`. For example, `0.4` means ~40\% profiles and
+#'   ~60\% polars. Rounding favours the polar count. Applied to
+#'   `reduced_inputs_max` to split the budget. If `NULL` (default), no balancing
+#'   is applied and all variables compete equally.
 #' @param remove_nzv Logical. If `TRUE` (default), removes near-zero variance
 #'   profile variables before clustering via [caret::nearZeroVar()].
 #' @param cor_threshold Numeric or `NULL`. If numeric, removes collinear profile
@@ -76,6 +82,8 @@ seg_cluster_with_profiles <- function(
     priors = c("size", "equal"),
     iter_max = 1000,
     nstart = 10,
+    profile_lda_ratio = NULL,
+    force_inputs = NULL,
     remove_nzv = TRUE,
     cor_threshold = 0.90,
     keep_raw = FALSE
@@ -259,6 +267,35 @@ seg_cluster_with_profiles <- function(
   }
 
 
+  # ---- apply profile_lda_ratio budget split ----
+  if (!is.null(profile_lda_ratio) && include_profiles_lda && include_polars_lda &&
+      !is.null(inputs_profiles) && length(inputs_profiles) > 0) {
+
+    if (profile_lda_ratio <= 0 || profile_lda_ratio >= 1) {
+      stop("profile_lda_ratio must be between 0 and 1 (exclusive).", call. = FALSE)
+    }
+
+    # split reduced_inputs_max: floor for profiles (round in favour of polars)
+    n_profile_budget <- floor(reduced_inputs_max * profile_lda_ratio)
+    n_polar_budget <- reduced_inputs_max - n_profile_budget
+
+    # cap each group to available vars
+    n_profile_budget <- min(n_profile_budget, length(inputs_profiles))
+    n_polar_budget <- min(n_polar_budget, length(all_inputs_polars))
+
+    lda_reduced_inputs_max <- n_polar_budget + n_profile_budget
+    lda_polar_budget <- n_polar_budget
+    lda_profile_budget <- n_profile_budget
+
+    cli::cli_alert_info(
+      "LDA budget split (ratio={profile_lda_ratio}): {n_polar_budget} polar + {n_profile_budget} profile = {lda_reduced_inputs_max} max"
+    )
+  } else {
+    lda_reduced_inputs_max <- reduced_inputs_max
+    lda_polar_budget <- NULL
+    lda_profile_budget <- NULL
+  }
+
   n_cluster_vars <- length(cluster_vars)
   n_lda_vars <- length(lda_vars)
   cli::cli_alert_info("Clustering on {n_cluster_vars} var{?s} | LDA on {n_lda_vars} var{?s}")
@@ -272,7 +309,12 @@ seg_cluster_with_profiles <- function(
       solution_name = solution_name,
       lda_vars = lda_vars,
       lda_vars_profiles = lda_profiles,
-      reduced_inputs_max = reduced_inputs_max,
+      reduced_inputs_max = lda_reduced_inputs_max,
+      polar_lda_budget = lda_polar_budget,
+      profile_lda_budget = lda_profile_budget,
+      polar_var_names = all_inputs_polars,
+      profile_var_names = inputs_profiles,
+      force_inputs = force_inputs,
       resp_id_name = resp_id_name,
       filter_name = filter_name,
       n_min = n_min,
@@ -298,7 +340,7 @@ seg_cluster_with_profiles <- function(
       ~dplyr::select(
         .x, solution_name, n, cluster_name,
         lda_name, lda_inputs, lda_profiles,
-        lda_coefficient_function,
+        lda_fit, lda_coefficient_function, lda_predict,
         n_segments, accuracy, kappa, cv, collinear, split_half, df_solution
       )
     ) %>%

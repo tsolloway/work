@@ -31,9 +31,9 @@
 #' @param vars Character vector or `NULL`. Polar input variables for the
 #'   sub-clustering. If `NULL` and `use_greedy = TRUE`, selected via
 #'   [get_greedy_vars()]. If `NULL` and `use_greedy = FALSE`, uses all RS
-#'   polars.
-#' @param vars_profiles Character vector or `NULL`. Profile variables
-#'   corresponding to `vars`. If `NULL`, derived from the spec.
+#'   polars. Profile (non-polar) variables may also be included — they are
+#'   passed through to LDA as-is. Do not pass polar profile vars (e.g. `TN01`);
+#'   use rs or source vars instead.
 #' @param split_into Integer. Number of sub-segments to create from each
 #'   split segment (default: `2`).
 #' @param resp_id_name Character or `NULL`. Respondent ID column. If `NULL`,
@@ -54,6 +54,13 @@
 #'   [seg_cluster_prototype_seed()]. If numeric, truncates the greedy-selected
 #'   variables to this many. If character, uses the supplied variable names
 #'   directly. If `NULL`, no cap is applied (default: `14`).
+#' @param profile_lda_ratio Numeric between 0 and 1, or `NULL`. Target proportion
+#'   of LDA inputs from profile variables. Rounding favours the polar count.
+#'   Passed through to [seg_cluster_prototype_seed()]. Default: `NULL` (no
+#'   balancing).
+#' @param force_inputs Character vector or `NULL`. Variable names to always
+#'   include in the optimised LDA, even if they fall outside the top-ranked set.
+#'   Passed through to [seg_cluster_prototype_seed()]. Default: `NULL`.
 #' @param prototype_seed Logical. If `TRUE` (default), automatically calls
 #'   [seg_cluster_prototype_seed()] after sub-clustering to fit a unified LDA
 #'   typing tool across the new seed. If `FALSE`, only the seed column is
@@ -76,7 +83,6 @@ seg_split_segments <- function(
     seg_splits,
     new_solution_name,
     vars = NULL,
-    vars_profiles = NULL,
     split_into = 2,
     resp_id_name = NULL,
     use_greedy = TRUE,
@@ -85,6 +91,8 @@ seg_split_segments <- function(
     priors = c("equal", "size"),
     filter_logical_vector = NULL,
     reduced_inputs_max = 14,
+    profile_lda_ratio = NULL,
+    force_inputs = NULL,
     prototype_seed = TRUE,
     return_append_only = FALSE
 ){
@@ -143,17 +151,24 @@ seg_split_segments <- function(
 
   if(is.null(vars)){
     vars <- seg %>% seg_get_vars_polars(.return = "rs")
-    vars_profiles <- seg %>% seg_get_vars_polars(.return = "profiles")
   }
 
-
-  if(is.null(vars_profiles)){
-    vars_profiles <- seg_get_vars_polars(seg, .return = "all") %>%
-      dplyr::filter(rs_var %in% vars) %>%
-      dplyr::select(profile_var) %>%
-      unlist() %>%
-      setNames(NULL)
+  # derive vars_profiles and polar_var_names from vars via spec lookup
+  polar_lookup <- seg_get_vars_polars(seg)
+  bad_vars <- intersect(vars, polar_lookup[["profile_var"]])
+  if (length(bad_vars) > 0) {
+    stop(
+      "vars contains polar profile vars — use rs or source vars instead: ",
+      paste(bad_vars, collapse = ", "),
+      call. = FALSE
+    )
   }
+  vars_profiles <- purrr::map_chr(vars, function(v) {
+    idx <- match(v, polar_lookup[["rs_var"]])
+    if (is.na(idx)) idx <- match(v, polar_lookup[["source_var"]])
+    if (!is.na(idx)) polar_lookup[["profile_var"]][idx] else v
+  })
+  polar_var_names <- vars[vars %in% c(polar_lookup[["rs_var"]], polar_lookup[["source_var"]])]
 
 
   if(method == "kmeans"){
@@ -238,6 +253,17 @@ seg_split_segments <- function(
   };rm(y,x,i)
 
 
+  # renumber seed to be sequential 1:n — splitting a non-last segment creates gaps
+  # (e.g. splitting seg 7 when seg 8 exists yields {1..6, 9, 10}; downstream code
+  # assumes seq(max) is a valid segment iterator)
+  seed_col_name <- as.character(glue::glue("seed_{new_solution_name}"))
+  existing_vals <- sort(unique(na.omit(df_append[[seed_col_name]])))
+  val_map <- rlang::set_names(seq_along(existing_vals), as.character(existing_vals))
+  df_append <- df_append %>%
+    dplyr::mutate(
+      "{seed_col_name}" := as.integer(val_map[as.character(!!rlang::sym(seed_col_name))])
+    )
+
 
   # drop solution_name to avoid .x/.y duplication — it already exists in with_solutions
   df_append <- df_append %>%
@@ -266,13 +292,14 @@ seg_split_segments <- function(
         solution_family_name = new_solution_name,
         seed_name            = glue::glue("seed_{new_solution_name}"),
         vars                 = vars,
-        vars_profiles        = vars_profiles,
         filter_name          = if(is.character(filter_logical_vector)) filter_logical_vector else NULL,
         use_greedy           = use_greedy,
         use_top_n_polars     = use_top_n_polars,
         priors               = priors,
         resp_id_name         = resp_id_name,
-        reduced_inputs_max   = reduced_inputs_max
+        reduced_inputs_max   = reduced_inputs_max,
+        profile_lda_ratio    = profile_lda_ratio,
+        force_inputs         = force_inputs
       )
   }
 

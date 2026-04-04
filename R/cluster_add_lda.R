@@ -24,7 +24,8 @@ cluster_add_lda <- function(
 
   set.seed(1)
 
-  priors <- match.arg(priors)
+  if (is.character(priors)) priors <- match.arg(priors, c("size", "equal"))
+  # numeric priors pass through as-is (already normalised by caller)
 
 
   if(is.null(resp_id_name)){
@@ -222,10 +223,10 @@ cluster_add_lda <- function(
 
       "lda_predict" = purrr::map2(
         lda_fit, lda_inputs, purrr::possibly(
-          ~lda_score(
-            .x,
-            df %>%
-              dplyr::select(dplyr::all_of(unlist(.y)))),
+          ~dplyr::bind_cols(
+            dplyr::select(df, seg_uuid),
+            lda_score(.x, df %>% dplyr::select(dplyr::all_of(unlist(.y))))
+          ),
           otherwise = NA)
       ),
 

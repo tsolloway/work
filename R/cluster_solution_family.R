@@ -628,7 +628,7 @@ cluster_solution_family <- function(
       ~dplyr::select(
         .x, solution_name, n, cluster_name,
         lda_name, lda_inputs, lda_profiles,
-        lda_coefficient_function,
+        lda_fit, lda_coefficient_function, lda_predict,
         n_segments, accuracy, kappa, cv, collinear, split_half, df_solution
       )
     ) %>%

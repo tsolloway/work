@@ -12,7 +12,8 @@ seg_short_form_analysis(
   id_name = NULL,
   priors = c("equal", "size"),
   reduce_type = c("greedy_step", "greedy", "step"),
-  direction = c("backward", "forward"),
+  direction = c("backward", "forward", "best_combo"),
+  max_combos = 5000,
   remove_first = NULL,
   min_items = NULL,
   max_items = NULL,
@@ -45,13 +46,18 @@ Defaults to \code{"greedy_step"}.}
 
 \item{direction}{Character. \code{"backward"} (default) starts with all variables
 and removes one at a time. \code{"forward"} starts with the most important
-variable and adds one at a time.}
+variable and adds one at a time. \code{"best_combo"} evaluates all combinations
+of variables at each item count and keeps the best per size (parallel).}
+
+\item{max_combos}{Integer. Safety cap on total number of combinations for
+\code{direction = "best_combo"}. Defaults to \code{5000}. If total combos exceed
+this, the function errors with a suggestion to narrow \code{min_items}/\code{max_items}.}
 
 \item{remove_first}{Character vector. Variables to remove first (before
 the greedy ranking kicks in). Listed in removal order — first element
 is removed first. Defaults to \code{NULL}.}
 
-\item{min_items}{Integer. Minimum number of items to evaluate (backward only).
+\item{min_items}{Integer. Minimum number of items to evaluate.
 Stops the analysis at this item count or at failure, whichever comes first.
 Defaults to \code{NULL} (go as low as possible).}
 

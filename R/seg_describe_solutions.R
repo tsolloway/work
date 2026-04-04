@@ -23,6 +23,9 @@
 #'   `"claude-sonnet-4-20250514"`).
 #' @param api_key Character. Anthropic API key. If `NULL` (default), retrieves
 #'   via `get_environment_key("ANTHROPIC_API_KEY")`.
+#' @param prompt Character or `NULL`. Optional additional guidance appended to
+#'   the system prompt (e.g. `"Emphasise age and gender differences between
+#'   segments"`). `NULL` (default) uses the standard prompt only.
 #' @param add_to_wb Logical. If `TRUE`, appends a "Descriptions" sheet to the
 #'   solution Excel workbook (default: `TRUE`).
 #' @param verbose Logical. Print descriptions to console (default: `TRUE`).
@@ -46,6 +49,7 @@ seg_describe_solutions <- function(
     n_profile = 10,
     model = "claude-sonnet-4-20250514",
     api_key = NULL,
+    prompt = NULL,
     add_to_wb = TRUE,
     candidates_folder = "1. candidates",
     verbose = TRUE
@@ -101,7 +105,7 @@ seg_describe_solutions <- function(
       polar_threshold = polar_threshold,
       profile_threshold = profile_threshold,
       n_polar = n_polar, n_profile = n_profile,
-      model = model, api_key = api_key,
+      model = model, api_key = api_key, prompt = prompt,
       add_to_wb = add_to_wb,
       candidates_folder = candidates_folder
     )
@@ -116,7 +120,7 @@ seg_describe_solutions <- function(
     polar_threshold = polar_threshold,
     profile_threshold = profile_threshold,
     n_polar = n_polar, n_profile = n_profile,
-    model = model, api_key = api_key,
+    model = model, api_key = api_key, prompt = prompt,
     add_to_wb = add_to_wb,
     candidates_folder = candidates_folder,
     verbose = verbose
@@ -134,7 +138,7 @@ seg_describe_solutions <- function(
     battery_legend, polar_prefixes,
     polar_threshold, profile_threshold,
     n_polar, n_profile,
-    model, api_key,
+    model, api_key, prompt,
     add_to_wb, candidates_folder
 ) {
 
@@ -158,7 +162,7 @@ seg_describe_solutions <- function(
         polar_threshold = polar_threshold,
         profile_threshold = profile_threshold,
         n_polar = n_polar, n_profile = n_profile,
-        model = model, api_key = api_key,
+        model = model, api_key = api_key, prompt = prompt,
         add_to_wb = add_to_wb,
         candidates_folder = candidates_folder,
         verbose = FALSE
@@ -181,7 +185,7 @@ seg_describe_solutions <- function(
     battery_legend, polar_prefixes,
     polar_threshold, profile_threshold,
     n_polar, n_profile,
-    model, api_key,
+    model, api_key, prompt,
     add_to_wb, candidates_folder,
     verbose
 ) {
@@ -294,6 +298,7 @@ seg_describe_solutions <- function(
     "The first sentence should capture the core identity. The second should ",
     "elaborate on attitudes or behaviors. The third should note actionable ",
     "implications or notable contrasts.\n\n",
+    if (!is.null(prompt)) paste0("Additional guidance:\n", prompt, "\n\n") else "",
     "Format your response as:\n",
     "Segment 1: \"Name Here\"\n",
     "Description line 1. Description line 2. Description line 3.\n\n",
@@ -467,8 +472,10 @@ seg_describe_solutions <- function(
       candidates_dir <- file.path(where, candidates_folder)
       if (!dir.exists(candidates_dir)) dir.create(candidates_dir, recursive = TRUE)
       dest_file <- file.path(candidates_dir, basename(sol_file))
-      file.copy(sol_file, dest_file, overwrite = TRUE)
-      if (verbose) cli::cli_alert_success("Copied to {.path {dest_file}}")
+      if (normalizePath(sol_file, mustWork = FALSE) != normalizePath(dest_file, mustWork = FALSE)) {
+        file.copy(sol_file, dest_file, overwrite = TRUE)
+        if (verbose) cli::cli_alert_success("Copied to {.path {dest_file}}")
+      }
     }
   }
 
