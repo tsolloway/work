@@ -11,7 +11,12 @@ append_bn_simulator(
   dv,
   subgroups = NULL,
   dictionary = NULL,
-  community_lookup = NULL
+  community_nodes = NULL,
+  brand = NULL,
+  brand_names = NULL,
+  add_freq_shifts = FALSE,
+  shift_range = c(-0.5, 0.5),
+  shift_step = 0.025
 )
 }
 \arguments{

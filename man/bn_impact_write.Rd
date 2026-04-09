@@ -15,12 +15,20 @@ bn_impact_write(
   wb_type = c("standard", "dynamic"),
   add_simple_simulator = FALSE,
   bn_obj = NULL,
+  df = NULL,
+  brand_names = NULL,
+  shift_range = c(-0.5, 0.5),
+  shift_step = 0.025,
+  network_type = "none",
   dictionary = NULL,
   path = "."
 )
 }
 \arguments{
-\item{bn_impact_result}{The output of \code{bn_impact()}.}
+\item{bn_impact_result}{The output of \code{bn_impact()} or
+\code{bn_impacts()}. When from \code{bn_impacts()}, community and weighted
+tables are automatically included. When weighted tables are present, a
+Weight control is added to the dynamic dashboard.}
 
 \item{file_name}{Character. Prefix for output file name. File is saved as
 \code{{file_name} - Network Drivers of {dv}.xlsx}. If NULL, inherits from
@@ -44,9 +52,10 @@ defaults to \code{"Network Drivers of {dv}"} using the DV display name.}
 interactive dropdowns for exploring conditional probability distributions.
 Requires \code{bn_obj} to be provided. Default FALSE.}
 
-\item{bn_obj}{The BN subgroups object (named list with \code{fit} and
-\code{meta} elements), as produced by \code{bn_finalize_network()}.
-Required when \code{add_simple_simulator = TRUE}.}
+\item{bn_obj}{The BN object. Accepts either the full output of
+\code{bn_finalize_network()} or just the \code{bn_subgroups} element.
+When the full object is provided, network maps are automatically added
+and \code{bn_subgroups} is extracted for the simulator.}
 
 \item{dictionary}{Optional. A data frame or named object for variable labels.
 Passed to the simulator for labeling target variables.}

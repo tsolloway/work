@@ -22,6 +22,7 @@ bn_impact_engine(
   include_base = TRUE,
   dv_metric = c("top_box", "mean"),
   weight = NULL,
+  mi_boot = NULL,
   seed = 1
 )
 }
@@ -102,6 +103,14 @@ observations, the lift cell returns \code{NA}. Applied per-brand when
 highest DV level. \code{"mean"} uses \code{E[DV | IV=v]} — the expected value
 across all DV levels (works with any scale: 3-point, 5-point, 7-point, etc.).}
 
+\item{mi_boot}{Integer or NULL. When set and \code{do_community = TRUE},
+bootstraps the MI calculation this many times to derive a p-value from the
+bootstrap distribution instead of the chi-squared approximation. The
+chi-squared p-value is unreliable for community-level MI because the
+composite factor has too many levels relative to sample size. Bootstrap
+p-value is the proportion of replicates with MI at or below zero.
+Default NULL (use analytic p-value).}
+
 \item{seed}{Integer. Random seed for reproducibility.}
 }
 \value{
@@ -144,7 +153,18 @@ frequency distribution by \code{lift} percent using
 This is the distribution-aware impact: it accounts for where respondents
 currently sit on the IV, so IVs with little headroom produce small lift
 values even if maxVmin is large.
-\item Computes mutual information between each IV and the DV.
+\item Computes mutual information (MI) between each IV and the DV. For
+individual attributes, this is a standard unconditional MI test via
+\code{bnlearn::ci.test()}. For communities (\code{do_community = TRUE}),
+a conditional MI chain is used: each attribute is tested sequentially,
+conditioning on all previously tested attributes in the community.
+\code{MI(IV1; DV) + MI(IV2; DV | IV1) + MI(IV3; DV | IV1, IV2) + ...}
+The G-statistics and degrees of freedom are summed across steps to
+produce a single chi-squared test. This avoids the dimensionality
+problem of testing all community attributes jointly (which creates a
+composite factor with too many levels relative to sample size) and
+prevents double-counting shared information between correlated
+attributes.
 \item Optionally bootstraps steps 1-4 to produce standard errors, confidence
 intervals, and p-values.
 }

@@ -80,8 +80,15 @@
 #'   `work::bn_visNetwork_deliverable_interactivity()`.
 #' @param save_visuals Logical. If `TRUE`, saves the visualization as a
 #'   standalone HTML file.
-#' @param save_file_name Character. File name (without extension) used if
-#'   `save_visuals = TRUE`. Default `"Network Visual"`.
+#' @param save_to_png Logical. If `TRUE`, captures the visualization as a
+#'   PNG image using \code{webshot2}. Requires the \code{webshot2} package.
+#'   Default `FALSE`.
+#' @param save_file_name Character. File name (without extension) used for
+#'   saved HTML or PNG files. Default `"Network Visual"`.
+#' @param png_width Numeric. PNG capture width in pixels. Default 1200.
+#' @param png_height Numeric. PNG capture height in pixels. Default 900.
+#' @param png_delay Numeric. Seconds to wait for physics stabilization before
+#'   capturing PNG. Default 5.
 #' @param seed Numeric. Random seed for reproducible layout placement.
 #'
 #' @details
@@ -155,7 +162,11 @@ bn_visual <- function(
     panel_ns = NULL,
     download_prefix = "network",
     save_visuals = FALSE,
+    save_to_png = FALSE,
     save_file_name = "Network Visual",
+    png_width = 1200,
+    png_height = 900,
+    png_delay = 5,
     seed = 1
 ){
 
@@ -327,6 +338,37 @@ bn_visual <- function(
       file = glue::glue("{save_file_name}.html"),
       selfcontained = TRUE
     )
+  }
+
+  if(save_to_png){
+    if (!requireNamespace("webshot2", quietly = TRUE)) {
+      warning("webshot2 package required for save_to_png. Install with install.packages('webshot2')")
+      return(viz)
+    }
+
+    tmp_dir <- tempfile("bn_png_")
+    dir.create(tmp_dir, recursive = TRUE)
+    tmp_html <- file.path(tmp_dir, "temp_network.html")
+    png_path <- paste0(save_file_name, ".png")
+
+    htmlwidgets::saveWidget(viz, file = normalizePath(tmp_html, mustWork = FALSE),
+      selfcontained = TRUE)
+
+    webshot2::webshot(
+      url = normalizePath(tmp_html),
+      file = png_path,
+      vwidth = png_width,
+      vheight = png_height,
+      delay = png_delay
+    )
+
+    unlink(tmp_dir, recursive = TRUE)
+
+    if (file.exists(png_path)) {
+      cli::cli_alert_success("Saved {png_path}")
+    } else {
+      warning("PNG capture failed")
+    }
   }
 
   return(viz)

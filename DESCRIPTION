@@ -75,7 +75,8 @@ Suggests:
     knitr,
     mclust,
     pak,
-    rmarkdown
+    rmarkdown,
+    webshot2
 SystemRequirements: Node.js (>= 18), npm
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)

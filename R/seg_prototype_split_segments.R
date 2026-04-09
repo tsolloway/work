@@ -8,9 +8,7 @@ seg_prototype_split_segments <- function(
     new_solution_family_name,
     split_into = 2,
     split_vars = NULL,
-    split_vars_profiles = NULL,
     lda_vars = NULL,
-    lda_vars_profiles = NULL,
     use_greedy = TRUE,
     use_top_n_polars = 20,
     reduced_inputs_max = 14,
@@ -26,9 +24,7 @@ seg_prototype_split_segments <- function(
   # new_solution_family_name = "Foo"
   # split_into = 2
   # split_vars = NULL
-  # split_vars_profiles = NULL
   # lda_vars = NULL
-  # lda_vars_profiles = NULL
   # use_greedy = TRUE
   # use_top_n_polars = 20
   # reduced_inputs_max = 14
@@ -50,7 +46,6 @@ seg_prototype_split_segments <- function(
     seg = seg, solution_name = solution_to_split,
     seg_splits = seg_splits, new_solution_name = new_solution_family_name,
     vars = split_vars,
-    vars_profiles = split_vars_profiles,
     use_greedy = use_greedy,
     use_top_n_polars = use_top_n_polars,
     split_into = split_into, resp_id_name = resp_id_name, method = method,
@@ -63,7 +58,7 @@ seg_prototype_split_segments <- function(
     seg = seg, solution_family_name = new_solution_family_name,
     seed_name = glue("seed_{new_solution_family_name}"),
     seed = created_seed %>% select(-2),
-    vars = lda_vars, vars_profiles = lda_vars_profiles,
+    vars = lda_vars,
     use_greedy = use_greedy,
     use_top_n_polars = use_top_n_polars,
     reduced_inputs_max = reduced_inputs_max, priors = priors, resp_id_name = resp_id_name

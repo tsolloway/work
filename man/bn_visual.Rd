@@ -23,7 +23,11 @@ bn_visual(
   panel_ns = NULL,
   download_prefix = "network",
   save_visuals = FALSE,
+  save_to_png = FALSE,
   save_file_name = "Network Visual",
+  png_width = 1200,
+  png_height = 900,
+  png_delay = 5,
   seed = 1
 )
 }
@@ -120,8 +124,19 @@ drag, font slider, PNG/SVG export) via
 \item{save_visuals}{Logical. If \code{TRUE}, saves the visualization as a
 standalone HTML file.}
 
-\item{save_file_name}{Character. File name (without extension) used if
-\code{save_visuals = TRUE}. Default \code{"Network Visual"}.}
+\item{save_to_png}{Logical. If \code{TRUE}, captures the visualization as a
+PNG image using \code{webshot2}. Requires the \code{webshot2} package.
+Default \code{FALSE}.}
+
+\item{save_file_name}{Character. File name (without extension) used for
+saved HTML or PNG files. Default \code{"Network Visual"}.}
+
+\item{png_width}{Numeric. PNG capture width in pixels. Default 1200.}
+
+\item{png_height}{Numeric. PNG capture height in pixels. Default 900.}
+
+\item{png_delay}{Numeric. Seconds to wait for physics stabilization before
+capturing PNG. Default 5.}
 
 \item{seed}{Numeric. Random seed for reproducible layout placement.}
 }

@@ -57,6 +57,10 @@
 #'   include in the optimised (reduced) LDA input set, even if they are not
 #'   ranked in the top N by `cluster_reduce_vars`. Appended after
 #'   budget/cap selection. Default: `NULL`.
+#' @param force_remove_lda_inputs Character vector or `NULL`. Variable names to
+#'   remove from the optimised (reduced) LDA input set after
+#'   `reduced_inputs_max`, `profile_lda_ratio`, and `force_inputs` are all
+#'   applied. Default: `NULL`.
 #' @param priors Character or numeric vector. LDA prior method: `"size"` (default),
 #'   `"equal"`, or a numeric vector of length k (one value per segment, will be
 #'   normalised to sum to 1). If `NULL`, defaults to `"equal"`.
@@ -80,6 +84,7 @@ seg_cluster_prototype_seed <- function(
     reduced_inputs_max = 14,
     profile_lda_ratio = NULL,
     force_inputs = NULL,
+    force_remove_lda_inputs = NULL,
     priors = NULL,
     resp_id_name = NULL,
     keep_raw = FALSE
@@ -274,6 +279,16 @@ seg_cluster_prototype_seed <- function(
         "reduced_inputs" = purrr::map(reduced_inputs, function(ri) {
           unique(c(ri, setdiff(force_inputs, ri)))
         }),
+        "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
+      )
+  }
+
+
+  # ---- force_remove_lda_inputs: remove specific vars after all budget decisions ----
+  if (!is.null(force_remove_lda_inputs) && length(force_remove_lda_inputs) > 0) {
+    results <- results %>%
+      dplyr::mutate(
+        "reduced_inputs"   = purrr::map(reduced_inputs, ~setdiff(.x, force_remove_lda_inputs)),
         "reduced_profiles" = purrr::map(reduced_inputs, ~vars_profiles[match(.x, vars)])
       )
   }

@@ -24,6 +24,7 @@ bn_impact(
   include_base = TRUE,
   dv_metric = c("top_box", "mean"),
   weight = NULL,
+  mi_boot = NULL,
   use_parallel = TRUE,
   seed = 1
 )

@@ -156,6 +156,7 @@ bn_impact <- function(
     include_base = TRUE,
     dv_metric = c("top_box", "mean"),
     weight = NULL,
+    mi_boot = NULL,
     use_parallel = TRUE,
     seed = 1
 ){
@@ -194,6 +195,7 @@ bn_impact <- function(
           include_base = include_base,
           dv_metric = dv_metric,
           weight = weight,
+          mi_boot = mi_boot,
           seed = seed
         ) %>%
           setNames(glue::glue("{.y}_{names(.)}"))
@@ -226,6 +228,7 @@ bn_impact <- function(
       include_base = include_base,
       dv_metric = dv_metric,
       weight = weight,
+      mi_boot = mi_boot,
       seed = seed
     ) %>%
       dplyr::rename(Variable = variable)
@@ -273,6 +276,13 @@ bn_impact <- function(
 
 
 
+  # Resolve brand names
+  brand_names_resolved <- if (!is.null(brand) && brand %in% names(df)) {
+    sort(unique(as.character(df[[brand]])))
+  } else {
+    NULL
+  }
+
   list(
     table = output,
     meta = list(
@@ -280,7 +290,9 @@ bn_impact <- function(
       index_by = index_by,
       lift = lift,
       subgroups = if (process_subgroups) names(obj) else NULL,
-      dv = dv
+      dv = dv,
+      brand = brand,
+      brand_names = brand_names_resolved
     )
   )
 }

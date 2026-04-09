@@ -68,6 +68,13 @@
 #'   overall distribution. Produces separate lift columns per brand (e.g.,
 #'   \code{lift_Apex}, \code{lift_Vero}). The DV probability queries are shared
 #'   across brands; only the observed distribution changes. Default \code{NULL}.
+#' @param mi_boot Integer or NULL. When set and \code{do_community = TRUE},
+#'   bootstraps the MI calculation this many times to derive a p-value from the
+#'   bootstrap distribution instead of the chi-squared approximation. The
+#'   chi-squared p-value is unreliable for community-level MI because the
+#'   composite factor has too many levels relative to sample size. Bootstrap
+#'   p-value is the proportion of replicates with MI at or below zero.
+#'   Default NULL (use analytic p-value).
 #' @param seed Integer. Random seed for reproducibility.
 #'
 #' @details
@@ -85,7 +92,18 @@
 #'     This is the distribution-aware impact: it accounts for where respondents
 #'     currently sit on the IV, so IVs with little headroom produce small lift
 #'     values even if maxVmin is large.
-#'   \item Computes mutual information between each IV and the DV.
+#'   \item Computes mutual information (MI) between each IV and the DV. For
+#'     individual attributes, this is a standard unconditional MI test via
+#'     \code{bnlearn::ci.test()}. For communities (\code{do_community = TRUE}),
+#'     a conditional MI chain is used: each attribute is tested sequentially,
+#'     conditioning on all previously tested attributes in the community.
+#'     \code{MI(IV1; DV) + MI(IV2; DV | IV1) + MI(IV3; DV | IV1, IV2) + ...}
+#'     The G-statistics and degrees of freedom are summed across steps to
+#'     produce a single chi-squared test. This avoids the dimensionality
+#'     problem of testing all community attributes jointly (which creates a
+#'     composite factor with too many levels relative to sample size) and
+#'     prevents double-counting shared information between correlated
+#'     attributes.
 #'   \item Optionally bootstraps steps 1-4 to produce standard errors, confidence
 #'     intervals, and p-values.
 #' }
@@ -174,6 +192,7 @@ bn_impact_engine <- function(
     include_base = TRUE,
     dv_metric = c("top_box", "mean"),
     weight = NULL,
+    mi_boot = NULL,
     seed = 1
 ){
 
@@ -379,7 +398,7 @@ bn_impact_engine <- function(
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
     n_querry = 1e5, lift = 0, impact_metric_type = "proportional", brand = NULL,
-    min_base_for_lift = 60, include_base = TRUE, dv_metric = "top_box", weight = NULL, fit = NULL, seed = 1
+    min_base_for_lift = 60, include_base = TRUE, dv_metric = "top_box", weight = NULL, fit = NULL, mi_boot = NULL, seed = 1
   ){
     type <- match.arg(type)
 
@@ -625,17 +644,53 @@ bn_impact_engine <- function(
       results_mi <- temp_ivs %>%
         purrr::imap(
           ~{
-            xmi = bnlearn::ci.test(apply(dat_boot[.x], 1, paste0, collapse = "_") %>% as.factor(), dat_boot[[dv]], test = "mi")
+            xmi <- bnlearn::ci.test(
+              apply(fit_data[.x], 1, paste0, collapse = "_") %>% as.factor(),
+              fit_data[[dv]], test = "mi"
+            )
 
             dplyr::tibble(
               "variable" = .y,
-              "mi" = xmi$statistic / (2*nrow(dat_boot)),
+              "mi" = xmi$statistic / (2 * nrow(dat_boot)),
               "p_val" = xmi$p.value
             )
           }
         ) %>%
         dplyr::bind_rows()
 
+
+      # Bootstrap MI for communities to get CI-based p-value
+      if (!is.null(mi_boot) && !is.null(community_assignment)) {
+        n_mi_boot <- as.integer(mi_boot)
+        n_obs <- nrow(fit_data)
+
+        mi_boot_results <- temp_ivs %>%
+          purrr::imap(function(iv_vars, comm_name) {
+            boot_mi <- replicate(n_mi_boot, {
+              boot_idx <- sample(n_obs, replace = TRUE)
+              boot_data <- fit_data[boot_idx, , drop = FALSE]
+              composite <- apply(boot_data[iv_vars], 1, paste0, collapse = "_") %>% as.factor()
+              xmi <- bnlearn::ci.test(composite, boot_data[[dv]], test = "mi")
+              xmi$statistic / (2 * n_obs)
+            })
+
+            # P-value: proportion of bootstrap replicates at or below zero
+            boot_p <- mean(boot_mi <= 0)
+
+            dplyr::tibble(
+              variable = comm_name,
+              mi_boot_p = boot_p,
+              mi_boot_lower = stats::quantile(boot_mi, 0.025),
+              mi_boot_upper = stats::quantile(boot_mi, 0.975)
+            )
+          }) %>%
+          dplyr::bind_rows()
+
+        results_mi <- results_mi %>%
+          dplyr::left_join(mi_boot_results, by = "variable") %>%
+          dplyr::mutate(p_val = mi_boot_p) %>%
+          dplyr::select(-mi_boot_p)
+      }
 
       if(type != "mi"){
         results <- results %>%
@@ -668,7 +723,7 @@ bn_impact_engine <- function(
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
           add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
           impact_metric_type = impact_metric_type, brand = brand, min_base_for_lift = min_base_for_lift,
-          include_base = include_base, dv_metric = dv_metric, weight = weight, fit = NULL, community_assignment = community_assignment
+          include_base = include_base, dv_metric = dv_metric, weight = weight, fit = NULL, mi_boot = mi_boot, community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
       ) %>%
@@ -713,7 +768,7 @@ bn_impact_engine <- function(
       ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
       add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
       impact_metric_type = impact_metric_type, brand = brand, min_base_for_lift = min_base_for_lift,
-      include_base = include_base, dv_metric = dv_metric, weight = weight, fit = fit, community_assignment = community_assignment
+      include_base = include_base, dv_metric = dv_metric, weight = weight, fit = fit, mi_boot = mi_boot, community_assignment = community_assignment
     )
 
   }

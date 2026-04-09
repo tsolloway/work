@@ -16,6 +16,7 @@ seg_cluster_prototype_seed(
   reduced_inputs_max = 14,
   profile_lda_ratio = NULL,
   force_inputs = NULL,
+  force_remove_lda_inputs = NULL,
   priors = NULL,
   resp_id_name = NULL,
   keep_raw = FALSE
@@ -64,6 +65,11 @@ compete equally in the ranked list).}
 include in the optimised (reduced) LDA input set, even if they are not
 ranked in the top N by \code{cluster_reduce_vars}. Appended after
 budget/cap selection. Default: \code{NULL}.}
+
+\item{force_remove_lda_inputs}{Character vector or \code{NULL}. Variable names to
+remove from the optimised (reduced) LDA input set after
+\code{reduced_inputs_max}, \code{profile_lda_ratio}, and \code{force_inputs} are all
+applied. Default: \code{NULL}.}
 
 \item{priors}{Character or numeric vector. LDA prior method: \code{"size"} (default),
 \code{"equal"}, or a numeric vector of length k (one value per segment, will be
