@@ -16,14 +16,15 @@
 #'   defaults to \code{"Prioritization Analysis"}. Default NULL.
 #' @param variable_width Numeric. Column width for the Variable column.
 #'   Default 20.
-#' @param label_width Numeric or \code{"auto"}. Column width for the Label
-#'   column. Default \code{"auto"}.
+#' @param label_width Numeric. Column width for the Label column. Default 20.
 #' @param combo_width Numeric. Column width for the Combo column.
 #'   Default 40.
 #' @param sig_threshold Numeric. P-value threshold for green (significant).
 #'   Default 0.05.
 #' @param marginal_threshold Numeric. P-value threshold for orange (marginal).
 #'   Default 0.10.
+#' @param lift Numeric. The lift fraction used in the prioritization analysis,
+#'   displayed in the footer. Default 0.10 (10\%).
 #' @param path Character. Directory to write workbook to. Default \code{"."}.
 #'
 #' @return Workbook object (invisibly).
@@ -37,10 +38,11 @@ bn_prioritize_write <- function(
     sub_title = NULL,
     title = NULL,
     variable_width = 20,
-    label_width = "auto",
+    label_width = 20,
     combo_width = 40,
     sig_threshold = 0.05,
     marginal_threshold = 0.10,
+    lift = 0.10,
     path = "."
 ) {
 
@@ -72,7 +74,10 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   # 1. Dashboard sheet (created first)
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, "Dashboard")
+  openxlsx::addWorksheet(wb, "Dashboard", tabColour = "#FFFFFF")
+  openxlsx::addStyle(wb, "Dashboard",
+    style = openxlsx::createStyle(fgFill = "#FFFFFF"),
+    rows = 1:200, cols = 1:50, gridExpand = TRUE, stack = TRUE)
 
   # ---------------------------------------------------------------------------
   # 2. Write hidden data sheets
@@ -352,17 +357,46 @@ bn_prioritize_write <- function(
       # White when step is blank or 0 (last = highest priority in Excel)
       openxlsx::conditionalFormatting(wb, dash,
         cols = col_pvalue, rows = step_rows,
-        style = openxlsx::createStyle(), type = "expression",
+        style = openxlsx::createStyle(bgFill = "#FFFFFF"), type = "expression",
         rule = paste0("OR(", step_let, step_rows[1], "=\"\",",
                        step_let, step_rows[1], "=0)"))
     }
   }
 
-  # --- Borders ---
-  oxl_outer_box(wb, dash,
-    row_start = row_data_start, row_end = max(data_rows),
-    col_start = min(cols_all), col_end = max(cols_all),
-    borderStyle = "medium")
+  # --- Conditional borders (only on rows with data) ---
+  step_let <- num2let(col_step)
+  border_rule <- paste0(step_let, data_rows[1], "<>\"\"")
+
+  # Left border on first column
+  openxlsx::conditionalFormatting(wb, dash,
+    cols = min(cols_all), rows = data_rows,
+    style = openxlsx::createStyle(border = "Left", borderStyle = "medium"),
+    type = "expression", rule = border_rule)
+
+  # Right border on last column
+  openxlsx::conditionalFormatting(wb, dash,
+    cols = max(cols_all), rows = data_rows,
+    style = openxlsx::createStyle(border = "Right", borderStyle = "medium"),
+    type = "expression", rule = border_rule)
+
+  # Bottom border only on last data row (this row has data, next row is blank)
+  bottom_rule <- paste0("AND(", step_let, data_rows[1], "<>\"\",",
+                         step_let, data_rows[1] + 1, "=\"\")")
+  openxlsx::conditionalFormatting(wb, dash,
+    cols = cols_all, rows = data_rows,
+    style = openxlsx::createStyle(border = "Bottom", borderStyle = "medium"),
+    type = "expression", rule = bottom_rule)
+
+  # Header row — outer box only
+  openxlsx::addStyle(wb, dash,
+    style = openxlsx::createStyle(border = "TopBottom", borderStyle = "medium"),
+    rows = row_data_start, cols = cols_all, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, dash,
+    style = openxlsx::createStyle(border = "TopBottomLeft", borderStyle = "medium"),
+    rows = row_data_start, cols = min(cols_all), stack = TRUE)
+  openxlsx::addStyle(wb, dash,
+    style = openxlsx::createStyle(border = "TopBottomRight", borderStyle = "medium"),
+    rows = row_data_start, cols = max(cols_all), stack = TRUE)
 
   # --- Footer ---
   footer_row <- max(data_rows) + 2
@@ -393,9 +427,11 @@ bn_prioritize_write <- function(
     )
   }
 
+  lift_pct <- round(lift * 100)
   footer_lines <- c(footer_lines,
     "",
-    "Lift \u2014 Shifts each IV's distribution upward by a percentage, reflecting a realistic improvement scenario",
+    paste0("Lift \u2014 Shifts each IV's distribution upward by ", lift_pct,
+           "%, reflecting a realistic improvement scenario"),
     "Max \u2014 Sets each IV to its highest level as hard evidence, representing the theoretical ceiling"
   )
 
@@ -403,10 +439,6 @@ bn_prioritize_write <- function(
     openxlsx::writeData(wb, dash, footer_lines[fi],
       startRow = footer_row + fi - 1, startCol = col_data_start)
   }
-
-  # --- Filter ---
-  openxlsx::addFilter(wb, dash,
-    rows = row_data_start, cols = cols_all)
 
   # ---------------------------------------------------------------------------
   # 5. Hide data + lookup sheets

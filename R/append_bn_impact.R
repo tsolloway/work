@@ -44,7 +44,8 @@ append_bn_impact <- function(
   styles <- list(
     title         = openxlsx::createStyle(textDecoration = "bold", fontSize = 18),
     sub_title     = openxlsx::createStyle(textDecoration = c("bold", "italic"), fontSize = 14),
-    header        = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE),
+    header        = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE,
+                                          border = "TopBottom", borderStyle = "medium"),
     center        = openxlsx::createStyle(numFmt = "0", halign = "center"),
     left          = openxlsx::createStyle(halign = "left"),
     total_impact  = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
@@ -193,10 +194,15 @@ append_bn_impact <- function(
     openxlsx::setColWidths(wb, sheet_name, cols = col_data_start + 1, widths = label_width)
   }
 
-  # Header row
+  # Header row — outer box only
   openxlsx::addStyle(wb, sheet_name, style = styles$header,
-    rows = row_data_start, cols = cols_all, gridExpand = TRUE, stack = TRUE
-  )
+    rows = row_data_start, cols = cols_all, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name,
+    style = openxlsx::createStyle(border = "TopBottomLeft", borderStyle = "medium"),
+    rows = row_data_start, cols = min(cols_all), stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name,
+    style = openxlsx::createStyle(border = "TopBottomRight", borderStyle = "medium"),
+    rows = row_data_start, cols = max(cols_all), stack = TRUE)
 
   # Total impact row
   openxlsx::addStyle(wb, sheet_name, style = styles$total_impact,

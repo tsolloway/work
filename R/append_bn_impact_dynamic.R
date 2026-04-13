@@ -168,7 +168,8 @@ append_bn_impact_dynamic <- function(
   styles <- list(
     title     = openxlsx::createStyle(textDecoration = "bold", fontSize = 18),
     sub_title = openxlsx::createStyle(textDecoration = c("bold", "italic"), fontSize = 14),
-    header    = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE),
+    header    = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE,
+                                      border = "TopBottom", borderStyle = "medium"),
     center    = openxlsx::createStyle(numFmt = "0", halign = "center"),
     left      = openxlsx::createStyle(halign = "left"),
     total_impact = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
@@ -399,6 +400,12 @@ append_bn_impact_dynamic <- function(
   all_header_cols <- seq(col_data_start, col_data_start + n_total_cols - 1)
   openxlsx::addStyle(wb, dash_sheet, style = styles$header,
     rows = row_data_start, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, dash_sheet,
+    style = openxlsx::createStyle(border = "TopBottomLeft", borderStyle = "medium"),
+    rows = row_data_start, cols = min(all_header_cols), stack = TRUE)
+  openxlsx::addStyle(wb, dash_sheet,
+    style = openxlsx::createStyle(border = "TopBottomRight", borderStyle = "medium"),
+    rows = row_data_start, cols = max(all_header_cols), stack = TRUE)
 
   # Write leading columns — static values
   for (ri in seq_len(n_results_rows)) {
