@@ -15,9 +15,11 @@
 #' @param dv Character. Dependent variable name.
 #' @param ivs Character vector. Independent variable names. If NULL,
 #'   auto-detected from \code{obj$meta$ivs}.
+#' @param ivs_excluded Character vector or NULL. Variables to exclude from the
+#'   analysis. Removed from \code{ivs} before any computation. Default NULL.
 #' @param strategy Character. Evidence strategy:
+#'   \code{"lift"} (default) shifts selected IVs' distributions via soft evidence.
 #'   \code{"max"} sets selected IVs to their max level as hard evidence.
-#'   \code{"lift"} shifts selected IVs' distributions via soft evidence.
 #' @param search Character. Search method:
 #'   \code{"greedy"} (default) adds one IV at a time, keeping the best
 #'   extension at each step.
@@ -42,6 +44,9 @@
 #'   to produce p-values via a noise-floor test.
 #' @param noise_tail Numeric. Fraction of tail steps used to estimate the
 #'   noise floor for bootstrap p-values. Default 1/3.
+#' @param weight Character or NULL. Column name in \code{df} containing
+#'   observation weights for the lift strategy frequency distribution. Default
+#'   NULL (unweighted).
 #' @param dictionary Optional. Dictionary for variable labels.
 #' @param use_parallel Logical. Parallelize candidate evaluation within rounds.
 #' @param seed Integer. Random seed for reproducibility.
@@ -58,7 +63,8 @@ bn_prioritize <- function(
     df,
     dv,
     ivs = NULL,
-    strategy = c("max", "lift"),
+    ivs_excluded = NULL,
+    strategy = c("lift", "max"),
     search = c("greedy", "exhaustive"),
     impact_result = NULL,
     dv_metric = c("mean", "top_box"),
@@ -66,8 +72,9 @@ bn_prioritize <- function(
     impact_metric_type = c("proportional", "absolute"),
     threshold = 0.01,
     max_rounds = NULL,
-    n_boot_final = NULL,
+    n_boot_final = 100,
     noise_tail = 1/3,
+    weight = NULL,
     dictionary = NULL,
     use_parallel = TRUE,
     seed = 1
@@ -85,6 +92,14 @@ bn_prioritize <- function(
 
   # Flatten ivs if passed as a list (e.g., community groups)
   if (is.list(ivs)) ivs <- unlist(ivs) %>% setNames(NULL)
+
+  # Weighted frequency helper
+  .get_freq <- function(x, w = NULL) {
+    if (is.null(w)) return(table(x))
+    out <- tapply(w, x, sum)
+    out[is.na(out)] <- 0
+    out
+  }
 
   # ---------------------------------------------------------------------------
   # 1. Extract fit object
@@ -107,6 +122,9 @@ bn_prioritize <- function(
   } else {
     stop("Cannot extract fitted BN from obj.")
   }
+
+  # Remove excluded IVs
+  if (!is.null(ivs_excluded)) ivs <- setdiff(ivs, ivs_excluded)
 
   # ---------------------------------------------------------------------------
   # 2. Compile grain object once
@@ -153,9 +171,10 @@ bn_prioritize <- function(
       .query_dv(grain_bn, evidence = ev)
     }
   } else {
+    w <- if (!is.null(weight)) df[[weight]] else NULL
     ivs_likelihood <- purrr::map(rlang::set_names(ivs), function(iv) {
       prior <- suppressMessages(gRain::querygrain(grain_bn, nodes = iv, simplify = TRUE))
-      freq <- table(df[[iv]])
+      freq <- .get_freq(df[[iv]], w)
       shifted <- bn_freq_prob_shift(
         freq = freq, type = "exponential",
         lift = lift, impact_metric_type = impact_metric_type
@@ -331,8 +350,9 @@ bn_prioritize <- function(
   # Replays the combos from the result on bootstrapped data. Compares each
   # step's marginal gain to the noise floor (average gain of the tail steps).
   # ---------------------------------------------------------------------------
-  if (!is.null(n_boot_final) && n_boot_final > 1) {
-    cli::cli_alert_info("Bootstrapping {n_boot_final} replicates for p-values")
+  n_obs <- nrow(df)
+  if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs >= 150) {
+    cli::cli_alert_info("Bootstrapping {n_boot_final} replicates for p-values (n = {n_obs})")
 
     n_steps <- nrow(result)
     bn_nodes <- bnlearn::nodes(bn)
@@ -343,6 +363,7 @@ bn_prioritize <- function(
       strsplit(result$combo[i], ", ")[[1]]
     })
 
+    weight_vec <- if (!is.null(weight)) df[[weight]] else NULL
     boot_gains <- matrix(NA_real_, nrow = n_boot_final, ncol = n_steps)
 
     cli::cli_progress_bar("Bootstrap", total = n_boot_final)
@@ -352,9 +373,10 @@ bn_prioritize <- function(
 
       boot_idx <- sample(nrow(fit_df), replace = TRUE)
       boot_df <- fit_df[boot_idx, , drop = FALSE]
+      boot_w <- if (!is.null(weight_vec)) weight_vec[boot_idx] else NULL
 
       boot_grain <- suppressMessages(
-        bnlearn::bn.fit(bn, boot_df, method = "mle") %>%
+        bnlearn::bn.fit(bn, boot_df, method = "bayes") %>%
           bnlearn::as.grain()
       )
 
@@ -369,7 +391,7 @@ bn_prioritize <- function(
         all_ivs_in_combos <- unique(unlist(final_combos))
         boot_likelihoods <- purrr::map(rlang::set_names(all_ivs_in_combos), function(iv) {
           prior <- suppressMessages(gRain::querygrain(boot_grain, nodes = iv, simplify = TRUE))
-          freq <- table(boot_df[[iv]])
+          freq <- .get_freq(boot_df[[iv]], boot_w)
           shifted <- bn_freq_prob_shift(
             freq = freq, type = "exponential",
             lift = lift, impact_metric_type = impact_metric_type
@@ -397,7 +419,11 @@ bn_prioritize <- function(
     cli::cli_progress_done()
 
     # Noise floor: average gain of the tail Q steps per bootstrap
-    n_tail <- max(3, floor(n_steps * noise_tail))
+    if (n_steps <= 4) {
+      n_tail <- 1
+    } else {
+      n_tail <- max(3, floor(n_steps * noise_tail))
+    }
     tail_cols <- seq(n_steps - n_tail + 1, n_steps)
 
     result$p_value <- purrr::map_dbl(seq_len(n_steps), function(k) {
@@ -408,6 +434,8 @@ bn_prioritize <- function(
       # Proportion of bootstraps where step k's gain <= its noise floor
       round(mean(gains_k[valid] <= noise_k[valid]), 5)
     })
+  } else if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs < 150) {
+    cli::cli_alert_warning("Skipping bootstrap: base too small (n = {n_obs}, minimum = 150)")
   }
 
   # ---------------------------------------------------------------------------
@@ -438,7 +466,8 @@ bn_prioritize <- function(
   }
   result <- result[, col_order]
 
-  cli::cli_alert_success("Prioritization complete: {nrow(result) - 1} steps")
+  cli::cli_alert_success("Prioritization complete: {nrow(result) - 1} steps (n = {n_obs})")
 
+  attr(result, "n_obs") <- n_obs
   result
 }

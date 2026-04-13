@@ -11,6 +11,7 @@ bn_impacts(
   weight = NULL,
   community_assignment = NULL,
   mi_boot = NULL,
+  brand_names = NULL,
   ...
 )
 }
@@ -31,6 +32,10 @@ community-level analysis.}
 
 \item{mi_boot}{Integer or NULL. Bootstrap replicates for community MI.
 Only applied to community variants.}
+
+\item{brand_names}{Character vector or NULL. When provided, only compute
+brand-specific lift for these brand levels. Brands not in this vector are
+skipped. Market-level lift is always computed. Default NULL (all brands).}
 
 \item{...}{Additional arguments passed to \code{bn_impact()} (e.g.,
 \code{dv}, \code{type}, \code{n_boot}, \code{lift}, \code{brand},
@@ -53,4 +58,7 @@ Convenience wrapper around \code{bn_impact()} that runs all
 four variants (attribute, attribute weighted, community, community weighted)
 and returns them in a single list. Shares all parameters with
 \code{bn_impact()}.
+}
+\seealso{
+\code{\link[=bn_impact]{bn_impact()}}, \code{\link[=bn_impact_engine]{bn_impact_engine()}}, \code{\link[=bn_impact_write]{bn_impact_write()}}
 }

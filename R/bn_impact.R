@@ -58,27 +58,70 @@
 #'   \item Prioritize using an Impact × Evidence framework to guide investment decisions.
 #' }
 #'
-#' @param obj A Bayesian network object or (when \code{process_subgroups = TRUE}) a named list of
-#'   Bayesian network objects. Names must correspond to subgroup indicator columns in \code{df}
-#'   (values equal to 1) used to filter each subgroup.
+#' @param obj A Bayesian network object or (when \code{process_subgroups = TRUE})
+#'   a named list of Bayesian network objects. Names must correspond to subgroup
+#'   indicator columns in \code{df} (values equal to 1) used to filter each
+#'   subgroup.
 #' @param df A data frame containing variables used for impact estimation. When
-#'   \code{process_subgroups = TRUE}, it must also contain the subgroup indicator columns matching
-#'   \code{names(obj)}.
-#' @param dv Optional. Dependent/target variable name (character scalar). If \code{NULL},
-#'   \code{bn_impact_engine()} determines the target.
-#' @param ivs Optional. Independent variable names (character vector). If \code{NULL},
-#'   \code{bn_impact_engine()} determines which variables to evaluate.
-#' @param do_community Logical. Whether to compute community-level summaries (passed through to the engine).
-#' @param community_assignment Optional. Community assignment object used when \code{do_community = TRUE}.
-#' @param type Character. One of \code{"cp"}, \code{"gr"}, or \code{"mi"}.
-#' @param process_subgroups Logical. If \code{TRUE}, iterate over subgroup models and filter \code{df}
-#'   to rows where \code{df[[subgroup_name]] == 1}. If \code{FALSE}, compute once on the full \code{df}.
-#' @param n_boot Integer. Number of bootstrap replicates (passed through to the engine).
-#' @param n_querry Integer. Number of Monte Carlo queries/samples used by the engine.
-#'   (Note: argument name is spelled \code{n_querry} here.)
-#' @param lift Numeric. Target percentage lift for the \code{reality} metric.
-#'   Passed through to \code{bn_impact_engine()}. Default \code{0.10}.
-#' @param seed Integer. Random seed passed through to the engine.
+#'   \code{process_subgroups = TRUE}, it must also contain the subgroup indicator
+#'   columns matching \code{names(obj)}.
+#' @param dv Optional. Dependent/target variable name (character scalar). If
+#'   \code{NULL}, \code{bn_impact_engine()} determines the target.
+#' @param ivs Optional. Independent variable names (character vector). If
+#'   \code{NULL}, \code{bn_impact_engine()} determines which variables to
+#'   evaluate.
+#' @param do_community Logical. Whether to compute community-level summaries
+#'   (passed through to the engine).
+#' @param community_assignment Optional. Community assignment object used when
+#'   \code{do_community = TRUE}.
+#' @param type Character. Engine type: \code{"gr"} (gRain exact inference,
+#'   default), \code{"cp"} (cpdist sampling), or \code{"mi"} (mutual
+#'   information).
+#' @param index_by Character. How to compute the final impact index:
+#'   \code{"lift_first"} (default) ranks by lift then breaks ties by MI,
+#'   \code{"lift_second"} ranks by MI then lift, \code{"maxVmin"} uses the
+#'   max-minus-min DV range, \code{"mi"} uses MI only, \code{"none"} omits
+#'   the index column.
+#' @param process_subgroups Logical. If \code{TRUE}, iterate over subgroup
+#'   models and filter \code{df} to rows where \code{df[[subgroup_name]] == 1}.
+#'   If \code{FALSE}, compute once on the full \code{df}.
+#' @param dictionary Optional. A dictionary object (or named vector) for
+#'   variable labels. Joined to output via \code{work::dictionary_from_named_object()}.
+#'   Adds a \code{Label} column after \code{Variable}.
+#' @param n_boot Integer. Number of bootstrap replicates for the MI
+#'   significance test (passed through to the engine). Default 1.
+#' @param n_querry Integer. Number of Monte Carlo samples used by the
+#'   \code{"cp"} engine for \code{cpdist} queries. Ignored for \code{"gr"} and
+#'   \code{"mi"} types. Default 1e4.
+#' @param lift Numeric. Target lift for the shifted-distribution metric.
+#'   Interpretation depends on \code{impact_metric_type}. Default 0.
+#' @param impact_metric_type Character. How \code{lift} is interpreted:
+#'   \code{"proportional"} (default) shifts by a fraction of the current mean;
+#'   \code{"absolute"} shifts by a fixed number of scale points.
+#' @param brand Character or NULL. Column name in \code{df} containing a brand
+#'   or group variable. When provided, impact is computed separately for each
+#'   brand level, producing brand-prefixed output columns.
+#' @param brand_names Character vector or NULL. When provided, only compute
+#'   brand-specific lift for these brand levels. Brands not in this vector are
+#'   skipped. Market-level lift is always computed. Default NULL (all brands).
+#' @param min_base_for_lift Integer. Minimum sample size required for a brand
+#'   subgroup to compute lift estimates. Brands below this threshold are
+#'   excluded. Default 60.
+#' @param include_base Logical. Whether to include the base (overall/unfiltered)
+#'   estimate alongside brand-specific estimates. Default \code{TRUE}.
+#' @param dv_metric Character. How the DV is summarized: \code{"top_box"}
+#'   (default) uses the probability of the highest DV level; \code{"mean"}
+#'   computes the expected value across all DV levels.
+#' @param weight Character or NULL. Column name in \code{df} containing
+#'   observation weights. When provided, frequency distributions used for
+#'   lift calculations are weighted. Default NULL.
+#' @param mi_boot Integer or NULL. Number of bootstrap replicates specifically
+#'   for the mutual information significance test. Overrides \code{n_boot} for
+#'   MI computation when set. Default NULL (uses \code{n_boot}).
+#' @param use_parallel Logical. Whether to parallelize subgroup processing
+#'   via \code{work::imap_progress()}. Default \code{TRUE}.
+#' @param seed Integer. Random seed passed through to the engine for
+#'   reproducibility. Default 1.
 #'
 #' @return A \code{data.frame} (tibble-compatible) with one row per variable and one or more impact
 #'   summary columns. When \code{process_subgroups = TRUE}, columns are subgroup-prefixed and the
@@ -93,12 +136,6 @@
 #'   \item When \code{process_subgroups = FALSE}, the engine's \code{variable} column is renamed to
 #'     \code{Variable}.
 #' }
-#'
-#' Dictionary note:
-#' The function body includes an optional join to a \code{dictionary} object, but \code{dictionary}
-#' is not currently a formal argument. As written, the join runs only if a \code{dictionary} object
-#' exists in the calling environment. If you want package-safe behavior, consider adding
-#' \code{dictionary = NULL} to the function signature.
 #'
 #' @examples
 #' \dontrun{
@@ -152,6 +189,7 @@ bn_impact <- function(
     lift = 0,
     impact_metric_type = c("proportional", "absolute"),
     brand = NULL,
+    brand_names = NULL,
     min_base_for_lift = 60,
     include_base = TRUE,
     dv_metric = c("top_box", "mean"),
@@ -191,6 +229,7 @@ bn_impact <- function(
           lift = lift,
           impact_metric_type = impact_metric_type,
           brand = brand,
+          brand_names = brand_names,
           min_base_for_lift = min_base_for_lift,
           include_base = include_base,
           dv_metric = dv_metric,
@@ -224,6 +263,7 @@ bn_impact <- function(
       lift = lift,
       impact_metric_type = impact_metric_type,
       brand = brand,
+      brand_names = brand_names,
       min_base_for_lift = min_base_for_lift,
       include_base = include_base,
       dv_metric = dv_metric,
@@ -278,7 +318,8 @@ bn_impact <- function(
 
   # Resolve brand names
   brand_names_resolved <- if (!is.null(brand) && brand %in% names(df)) {
-    sort(unique(as.character(df[[brand]])))
+    all_brands <- sort(unique(as.character(df[[brand]])))
+    if (!is.null(brand_names)) intersect(all_brands, brand_names) else all_brands
   } else {
     NULL
   }

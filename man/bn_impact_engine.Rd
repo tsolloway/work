@@ -18,6 +18,7 @@ bn_impact_engine(
   lift = 0,
   impact_metric_type = c("proportional", "absolute"),
   brand = NULL,
+  brand_names = NULL,
   min_base_for_lift = 60,
   include_base = TRUE,
   dv_metric = c("top_box", "mean"),
@@ -92,6 +93,10 @@ computed using brand-specific frequency distributions rather than the
 overall distribution. Produces separate lift columns per brand (e.g.,
 \code{lift_Apex}, \code{lift_Vero}). The DV probability queries are shared
 across brands; only the observed distribution changes. Default \code{NULL}.}
+
+\item{brand_names}{Character vector or NULL. When provided, only compute
+brand-specific lift for these brand levels. Brands not in this vector are
+skipped. Market-level lift is always computed. Default NULL (all brands).}
 
 \item{min_base_for_lift}{Integer. Minimum sample size (frequency count) required
 to compute a lift value. If the distribution has fewer than this many

@@ -16,6 +16,9 @@
 #'   community-level analysis.
 #' @param mi_boot Integer or NULL. Bootstrap replicates for community MI.
 #'   Only applied to community variants.
+#' @param brand_names Character vector or NULL. When provided, only compute
+#'   brand-specific lift for these brand levels. Brands not in this vector are
+#'   skipped. Market-level lift is always computed. Default NULL (all brands).
 #' @param ... Additional arguments passed to \code{bn_impact()} (e.g.,
 #'   \code{dv}, \code{type}, \code{n_boot}, \code{lift}, \code{brand},
 #'   \code{dictionary}, \code{impact_metric_type}, \code{dv_metric}, etc.).
@@ -31,6 +34,8 @@
 #'   \item{meta}{Shared metadata from the attribute-level run.}
 #' }
 #'
+#' @seealso [bn_impact()], [bn_impact_engine()], [bn_impact_write()]
+#'
 #' @export
 bn_impacts <- function(
     obj,
@@ -39,6 +44,7 @@ bn_impacts <- function(
     weight = NULL,
     community_assignment = NULL,
     mi_boot = NULL,
+    brand_names = NULL,
     ...
 ) {
 
@@ -49,6 +55,7 @@ bn_impacts <- function(
     do_community = FALSE,
     community_assignment = community_assignment,
     weight = NULL,
+    brand_names = brand_names,
     ...
   )
 
@@ -61,6 +68,7 @@ bn_impacts <- function(
       do_community = FALSE,
       community_assignment = community_assignment,
       weight = weight,
+      brand_names = brand_names,
       ...
     )
   }
@@ -76,6 +84,7 @@ bn_impacts <- function(
       do_community = TRUE,
       community_assignment = community_assignment,
       weight = NULL,
+      brand_names = brand_names,
       mi_boot = mi_boot,
       ...
     )
@@ -88,6 +97,7 @@ bn_impacts <- function(
         do_community = TRUE,
         community_assignment = community_assignment,
         weight = weight,
+        brand_names = brand_names,
         mi_boot = mi_boot,
         ...
       )

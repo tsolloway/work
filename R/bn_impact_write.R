@@ -8,28 +8,49 @@
 #'   \code{bn_impacts()}. When from \code{bn_impacts()}, community and weighted
 #'   tables are automatically included. When weighted tables are present, a
 #'   Weight control is added to the dynamic dashboard.
-#' @param file_name Character. Prefix for output file name. File is saved as
-#'   \code{{file_name} - Network Drivers of {dv}.xlsx}. If NULL, inherits from
-#'   \code{sub_title}. If both are NULL, file is saved as
+#' @param file_name Character or NULL. Prefix for output file name. File is
+#'   saved as \code{{file_name} - Network Drivers of {dv}.xlsx}. If NULL,
+#'   inherits from \code{sub_title}. If both are NULL, file is saved as
 #'   \code{Network Drivers of {dv}.xlsx}.
-#' @param sub_title Character. Subtitle text (e.g. project name). If NULL,
-#'   inherits from \code{file_name}. Default NULL.
-#' @param title Character. Title displayed in the sheet header. If NULL,
+#' @param sub_title Character or NULL. Subtitle text displayed in the sheet
+#'   header (e.g. project name). If NULL, inherits from \code{file_name}.
+#'   Default NULL.
+#' @param title Character or NULL. Title displayed in the sheet header. If NULL,
 #'   defaults to \code{"Network Drivers of {dv}"} using the DV display name.
-#' @param variable_width Column width for the Variable column (default 20).
-#' @param label_width Column width for the Label column (default \code{"auto"}).
-#' @param wb_type Character. Workbook type: \code{"standard"} (default) or
-#'   \code{"dynamic"}.
+#' @param variable_width Numeric. Column width for the Variable column.
+#'   Default 20.
+#' @param community_width Numeric. Column width for the Community column when
+#'   community results are present. Default 20.
+#' @param label_width Numeric or \code{"auto"}. Column width for the Label
+#'   column. Default \code{"auto"}.
+#' @param wb_type Character. Workbook format: \code{"standard"} (default)
+#'   writes a static formatted table; \code{"dynamic"} writes an interactive
+#'   dashboard with dropdown filters.
 #' @param add_simple_simulator Logical. If TRUE, adds a Simulator sheet with
 #'   interactive dropdowns for exploring conditional probability distributions.
 #'   Requires \code{bn_obj} to be provided. Default FALSE.
-#' @param bn_obj The BN object. Accepts either the full output of
+#' @param bn_obj The BN object or NULL. Accepts either the full output of
 #'   \code{bn_finalize_network()} or just the \code{bn_subgroups} element.
 #'   When the full object is provided, network maps are automatically added
-#'   and \code{bn_subgroups} is extracted for the simulator.
+#'   and \code{bn_subgroups} is extracted for the simulator. Required when
+#'   \code{add_simple_simulator = TRUE}.
+#' @param df Data frame or NULL. The original data frame used for impact
+#'   estimation. Passed to the simulator for frequency-based shift calculations.
+#'   Required when \code{add_simple_simulator = TRUE} and frequency shifts are
+#'   desired.
+#' @param brand_names Character vector or NULL. Brand level names to use in the
+#'   simulator. If NULL, auto-detected from \code{meta$brand_names} in the
+#'   impact result.
+#' @param shift_range Numeric vector of length 2. Min and max shift values for
+#'   the simulator's frequency shift sliders. Default \code{c(-0.50, 0.50)}.
+#' @param shift_step Numeric. Step size for the simulator's frequency shift
+#'   sliders. Default 0.025.
+#' @param network_type Character. Type of network map to include when
+#'   \code{bn_obj} is the full \code{bn_finalize_network()} output.
+#'   \code{"none"} (default) skips network maps.
 #' @param dictionary Optional. A data frame or named object for variable labels.
 #'   Passed to the simulator for labeling target variables.
-#' @param path Directory to write workbook to (default \code{"."}).
+#' @param path Character. Directory to write workbook to. Default \code{"."}.
 #'
 #' @return Workbook object (invisibly).
 #'

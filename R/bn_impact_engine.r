@@ -68,6 +68,9 @@
 #'   overall distribution. Produces separate lift columns per brand (e.g.,
 #'   \code{lift_Apex}, \code{lift_Vero}). The DV probability queries are shared
 #'   across brands; only the observed distribution changes. Default \code{NULL}.
+#' @param brand_names Character vector or NULL. When provided, only compute
+#'   brand-specific lift for these brand levels. Brands not in this vector are
+#'   skipped. Market-level lift is always computed. Default NULL (all brands).
 #' @param mi_boot Integer or NULL. When set and \code{do_community = TRUE},
 #'   bootstraps the MI calculation this many times to derive a p-value from the
 #'   bootstrap distribution instead of the chi-squared approximation. The
@@ -188,6 +191,7 @@ bn_impact_engine <- function(
     lift = 0,
     impact_metric_type = c("proportional", "absolute"),
     brand = NULL,
+    brand_names = NULL,
     min_base_for_lift = 60,
     include_base = TRUE,
     dv_metric = c("top_box", "mean"),
@@ -494,6 +498,10 @@ bn_impact_engine <- function(
       multi_lift <- length(lift) > 1
       lift_labels <- if (multi_lift) paste0("lift_", round(lift * 100)) else "lift"
       brand_levels <- if (!is.null(brand)) sort(unique(as.character(dat_boot[[brand]]))) else NULL
+      if (!is.null(brand_levels) && !is.null(brand_names)) {
+        brand_levels <- intersect(brand_levels, brand_names)
+        if (length(brand_levels) == 0) brand_levels <- NULL
+      }
 
       # Build column names — market lift always included
       market_lift_col_names <- lift_labels
