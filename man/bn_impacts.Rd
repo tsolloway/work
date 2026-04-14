@@ -7,12 +7,27 @@
 bn_impacts(
   obj,
   df,
+  dv = NULL,
+  ivs = NULL,
   do_community = TRUE,
-  weight = NULL,
   community_assignment = NULL,
-  mi_boot = NULL,
+  type = c("gr", "cp", "mi"),
+  index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
+  process_subgroups = TRUE,
+  dictionary = NULL,
+  n_boot = 1,
+  n_querry = 10000,
+  lift = 0,
+  impact_metric_type = c("proportional", "absolute"),
+  brand = NULL,
   brand_names = NULL,
-  ...
+  min_base_for_lift = 60,
+  include_base = TRUE,
+  dv_metric = c("top_box", "mean"),
+  weight = NULL,
+  mi_boot = NULL,
+  use_parallel = TRUE,
+  seed = 1
 )
 }
 \arguments{
@@ -21,25 +36,58 @@ bn_impacts(
 
 \item{df}{Data frame used to fit the network.}
 
+\item{dv}{Named character vector. DV column(s) in \code{df}.}
+
+\item{ivs}{Character vector or NULL. IV columns. Default NULL (all).}
+
 \item{do_community}{Logical. If TRUE (default), includes community-level
 results. If FALSE, only attribute-level results are returned.}
-
-\item{weight}{Character scalar or NULL. Column name for weights. When NULL,
-weighted variants are omitted from the output.}
 
 \item{community_assignment}{Optional. Community assignment object for
 community-level analysis.}
 
+\item{type}{Character. Impact type: \code{"gr"}, \code{"cp"}, or
+\code{"mi"}. Default \code{"gr"}.}
+
+\item{index_by}{Character. Indexing method. Default \code{"lift_first"}.}
+
+\item{process_subgroups}{Logical. Process subgroups. Default TRUE.}
+
+\item{dictionary}{Optional dictionary for label lookup.}
+
+\item{n_boot}{Integer. Bootstrap replicates. Default 1.}
+
+\item{n_querry}{Integer. Query sample size. Default 1e4.}
+
+\item{lift}{Numeric vector. Lift fractions. Default 0.}
+
+\item{impact_metric_type}{Character. \code{"proportional"} or
+\code{"absolute"}. Default \code{"proportional"}.}
+
+\item{brand}{Character or NULL. Column name in \code{df} containing a brand
+variable. When provided, lift is computed separately for each brand level.
+Default NULL.}
+
+\item{brand_names}{Character vector or NULL. When provided, only compute
+brand-specific lift for these brand levels. Default NULL (all brands).}
+
+\item{min_base_for_lift}{Integer. Minimum sample size for brand lift.
+Default 60.}
+
+\item{include_base}{Logical. Include base sizes. Default TRUE.}
+
+\item{dv_metric}{Character. \code{"top_box"} or \code{"mean"}.
+Default \code{"top_box"}.}
+
+\item{weight}{Character scalar or NULL. Column name for weights. When NULL,
+weighted variants are omitted from the output.}
+
 \item{mi_boot}{Integer or NULL. Bootstrap replicates for community MI.
 Only applied to community variants.}
 
-\item{brand_names}{Character vector or NULL. When provided, only compute
-brand-specific lift for these brand levels. Brands not in this vector are
-skipped. Market-level lift is always computed. Default NULL (all brands).}
+\item{use_parallel}{Logical. Use parallel plan if available. Default TRUE.}
 
-\item{...}{Additional arguments passed to \code{bn_impact()} (e.g.,
-\code{dv}, \code{type}, \code{n_boot}, \code{lift}, \code{brand},
-\code{dictionary}, \code{impact_metric_type}, \code{dv_metric}, etc.).}
+\item{seed}{Integer. Random seed. Default 1.}
 }
 \value{
 A list with:
