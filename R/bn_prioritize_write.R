@@ -466,18 +466,18 @@ bn_prioritize_write <- function(
   est_let <- num2let(col_estimate)
   gain_let <- num2let(col_gain)
 
-  # NA()-guarded formulas: blank dashboard rows → #N/A so charts skip them
+  # Guarded formulas: blank rows → "" for labels, #N/A for numerics (charts skip #N/A)
   for (ri in seq_along(data_rows)) {
     dr <- data_rows[ri]
     chart_r <- ri + 1
     blank_check <- paste0('Dashboard!', var_let, dr, '=""')
 
-    # Col A: Label
+    # Col A: Label ("" so category axis doesn't show #N/A text)
     openxlsx::writeFormula(wb, "_chart_data",
-      x = paste0('IF(', blank_check, ',NA(),Dashboard!', var_let, dr, ')'),
+      x = paste0('IF(', blank_check, ',"",Dashboard!', var_let, dr, ')'),
       startRow = chart_r, startCol = 1)
 
-    # Col B: Previous = DV Estimate - Marginal Gain
+    # Col B: Previous = DV Estimate - Marginal Gain (#N/A so chart gaps)
     openxlsx::writeFormula(wb, "_chart_data",
       x = paste0('IF(', blank_check, ',NA(),Dashboard!', est_let, dr,
                  '-Dashboard!', gain_let, dr, ')'),
@@ -770,6 +770,7 @@ bn_prioritize_write <- function(
     '</c:legend>',
 
     '<c:plotVisOnly val="1"/>',
+    '<c:dispBlanksAs val="gap"/>',
     '</c:chart>',
     '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>',
     '</c:chartSpace>'
