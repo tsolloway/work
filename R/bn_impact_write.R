@@ -65,7 +65,7 @@ bn_impact_write <- function(
     variable_width = 20,
     community_width = 20,
     label_width = "auto",
-    wb_type = c("standard", "dynamic"),
+    wb_type = c("dynamic", "standard"),
     add_simple_simulator = FALSE,
     bn_obj = NULL,
     df = NULL,
@@ -75,6 +75,7 @@ bn_impact_write <- function(
     network_type = "none",
     dictionary = NULL,
     very_hide_all = TRUE,
+    min_base_for_lift = NULL,
     path = "."
 ){
 
@@ -114,7 +115,7 @@ bn_impact_write <- function(
   index_by         <- meta[["index_by"]]
   type             <- meta[["type"]]
   dv               <- meta[["dv"]]
-  min_base_for_lift <- meta[["min_base_for_lift"]]
+  if (is.null(min_base_for_lift)) min_base_for_lift <- meta[["min_base_for_lift"]]
 
   # Use name of dv if named, otherwise the value itself
 dv_display <- if (!is.null(names(dv))) names(dv) else dv
@@ -303,11 +304,11 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
 
     # Write weighted Results sheets after dashboards (so dashboards are first)
     if (has_weights) {
-      openxlsx::addWorksheet(wb, "Results_Weighted")
+      openxlsx::addWorksheet(wb, "Results_Weighted", gridLines = FALSE)
       openxlsx::writeData(wb, "Results_Weighted", table_weighted, startRow = 1, startCol = 1)
     }
     if (!is.null(community_weighted) && !"Results_Community_Weighted" %in% names(wb)) {
-      openxlsx::addWorksheet(wb, "Results_Community_Weighted")
+      openxlsx::addWorksheet(wb, "Results_Community_Weighted", gridLines = FALSE)
       openxlsx::writeData(wb, "Results_Community_Weighted", community_weighted, startRow = 1, startCol = 1)
     }
 

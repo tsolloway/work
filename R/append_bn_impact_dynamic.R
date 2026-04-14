@@ -95,21 +95,18 @@ append_bn_impact_dynamic <- function(
   # ---------------------------------------------------------------------------
   # Sheet 1: Dashboard (created first so it appears first)
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, dash_sheet)
-  openxlsx::addStyle(wb, dash_sheet,
-    style = openxlsx::createStyle(fgFill = "#FFFFFF"),
-    rows = 1:200, cols = 1:50, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addWorksheet(wb, dash_sheet, gridLines = FALSE)
 
   # ---------------------------------------------------------------------------
   # Sheet 2: Results (raw data)
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, results_sheet)
+  openxlsx::addWorksheet(wb, results_sheet, gridLines = FALSE)
   openxlsx::writeData(wb, results_sheet, table, startRow = 1, startCol = 1)
 
   # ---------------------------------------------------------------------------
   # Sheet 3: _lookup (hidden)
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, lookup_sheet)
+  openxlsx::addWorksheet(wb, lookup_sheet, gridLines = FALSE)
 
   # Focus options in A column
   openxlsx::writeData(wb, lookup_sheet, "Focus", startRow = 1, startCol = 1)
@@ -478,13 +475,20 @@ append_bn_impact_dynamic <- function(
         results_row_ref <- paste0(results_sheet, "!", ri + 1, ":", ri + 1)
       }
 
-      # Raw metric (hidden — blank if error)
-      raw_formula <- paste0("IFERROR(INDEX(", results_row_ref, ",", match_col, "),\"\")")
+      # Raw metric (hidden — blank if missing/zero)
+      raw_let <- num2let(raw_metric_cols[sg_i])
+      raw_formula <- paste0(
+        "IFERROR(IF(INDEX(", results_row_ref, ",", match_col, ")=0,\"\",",
+        "INDEX(", results_row_ref, ",", match_col, ")),\"\")"
+      )
       openxlsx::writeFormula(wb, dash_sheet, x = raw_formula,
         startRow = row, startCol = raw_metric_cols[sg_i])
 
-      # P-value (hidden — blank if error)
-      pval_formula <- paste0("IFERROR(INDEX(", results_row_ref, ",", pval_match, "),\"\")")
+      # P-value (hidden — 0 if raw metric is blank, no blackout)
+      pval_formula <- paste0(
+        "IF(", raw_let, row, "=\"\",0,",
+        "IFERROR(INDEX(", results_row_ref, ",", pval_match, "),\"\"))"
+      )
       openxlsx::writeFormula(wb, dash_sheet, x = pval_formula,
         startRow = row, startCol = p_val_cols[sg_i])
 
@@ -542,9 +546,10 @@ append_bn_impact_dynamic <- function(
     col_name_f <- .col_name_formula(sg, mk)
     match_col <- paste0("MATCH(", col_name_f, ",", results_header_range, ",0)")
 
+    sum_expr <- paste0("SUMPRODUCT(ABS(INDEX(", results_all_rows, ",0,", match_col, ")))")
     ti_formula <- paste0(
-      "IFERROR(SUMPRODUCT(ABS(INDEX(", results_all_rows, ",0,", match_col, ")))",
-      "/ROWS(", results_count_ref, "),\"\")"
+      "IFERROR(IF(", sum_expr, "=0,\"\",",
+      sum_expr, "/ROWS(", results_count_ref, ")),\"\")"
     )
     openxlsx::writeFormula(wb, dash_sheet, x = ti_formula,
       startRow = total_impact_row, startCol = index_cols_pos[sg_i])
@@ -565,23 +570,24 @@ append_bn_impact_dynamic <- function(
     style = openxlsx::createStyle(border = "Bottom", borderStyle = "medium"),
     rows = total_impact_row, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
 
-  # Dynamic footer
+  # Dynamic footer (one blank row after table)
+  footer_start <- total_impact_row + 2
   index_desc_range <- paste0(lookup_sheet, "!$E$2:$E$", length(metric_labels) + 1)
   footer_formula <- paste0(
     "\"", engine_footer, ". \"&INDEX(", index_desc_range,
     ",MATCH(", metric_ref, ",", metric_key_range, ",0))"
   )
   openxlsx::writeFormula(wb, dash_sheet, x = footer_formula,
-    startRow = total_impact_row + 1, startCol = col_data_start)
+    startRow = footer_start, startCol = col_data_start)
   openxlsx::writeData(wb, dash_sheet, "Bold italicized index means a negative relationship",
-    startRow = total_impact_row + 2, startCol = col_data_start)
+    startRow = footer_start + 1, startCol = col_data_start)
   openxlsx::writeData(wb, dash_sheet, "Black cells mean an insignificant relationship",
-    startRow = total_impact_row + 3, startCol = col_data_start)
+    startRow = footer_start + 2, startCol = col_data_start)
 
   if (!is.null(min_base_for_lift)) {
     openxlsx::writeData(wb, dash_sheet,
       paste0("Lift impacts are not calculated when the base is below ", min_base_for_lift),
-      startRow = total_impact_row + 4, startCol = col_data_start)
+      startRow = footer_start + 3, startCol = col_data_start)
   }
 
   # ---------------------------------------------------------------------------

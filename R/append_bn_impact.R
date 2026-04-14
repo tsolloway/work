@@ -145,10 +145,7 @@ append_bn_impact <- function(
   write_data <- write_table[-nrow(write_table), ]
   write_total <- write_table[nrow(write_table), ]
 
-  openxlsx::addWorksheet(wb, sheet_name)
-  openxlsx::addStyle(wb, sheet_name,
-    style = openxlsx::createStyle(fgFill = "#FFFFFF"),
-    rows = 1:200, cols = 1:50, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addWorksheet(wb, sheet_name, gridLines = FALSE)
 
   openxlsx::writeData(wb, sheet_name, title, startRow = row_title, startCol = col_data_start)
   openxlsx::addStyle(wb, sheet_name, style = styles$title,

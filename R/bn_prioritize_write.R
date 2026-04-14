@@ -77,24 +77,21 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   # 1. Prioritization sheet (created first)
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, "Prioritization", tabColour = "#FFFFFF")
-  openxlsx::addStyle(wb, "Prioritization",
-    style = openxlsx::createStyle(fgFill = "#FFFFFF"),
-    rows = 1:200, cols = 1:50, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addWorksheet(wb, "Prioritization", tabColour = "#FFFFFF", gridLines = FALSE)
 
   # ---------------------------------------------------------------------------
   # 2. Write hidden data sheets
   # ---------------------------------------------------------------------------
   for (entry in registry) {
     sn <- entry$sheet_name
-    openxlsx::addWorksheet(wb, sn)
+    openxlsx::addWorksheet(wb, sn, gridLines = FALSE)
     openxlsx::writeData(wb, sn, entry$tbl, startRow = 1, startCol = 1)
   }
 
   # ---------------------------------------------------------------------------
   # 3. Write _lookup sheet
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, "_lookup")
+  openxlsx::addWorksheet(wb, "_lookup", gridLines = FALSE)
 
   # Columns: Strategy | Search | Subgroup | Focus | Weight | Sheet | Base | Key
   lookup_headers <- c("Strategy", "Search", "Subgroup", "Focus", "Weight",
@@ -454,7 +451,7 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   # 4b. Chart data sheet (formulas referencing dashboard for dynamic chart)
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, "_chart_data")
+  openxlsx::addWorksheet(wb, "_chart_data", gridLines = FALSE)
 
   chart_headers <- c("Label", "Previous", "Incremental", "Cumulative DV")
   for (ci in seq_along(chart_headers)) {
