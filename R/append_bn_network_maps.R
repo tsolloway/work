@@ -35,12 +35,15 @@ append_bn_network_maps <- function(
   existing_tmp <- attr(wb, "tmp_dirs") %||% character(0)
   attr(wb, "tmp_dirs") <- c(existing_tmp, tmp_dir)
 
-  title_style <- openxlsx::createStyle(textDecoration = "bold", fontSize = 14)
+  title_style <- openxlsx::createStyle(textDecoration = "bold", fontSize = 18)
 
   # Helper: render one map to a sheet
   .add_map_sheet <- function(wb, sheet_name, do_community) {
     if (nchar(sheet_name) > 31) sheet_name <- substr(sheet_name, 1, 31)
     openxlsx::addWorksheet(wb, sheet_name)
+    openxlsx::addStyle(wb, sheet_name,
+      style = openxlsx::createStyle(fgFill = "#FFFFFF"),
+      rows = 1:200, cols = 1:50, gridExpand = TRUE, stack = TRUE)
 
     png_base <- file.path(tmp_dir, gsub(" ", "_", sheet_name))
     tryCatch({
@@ -63,16 +66,16 @@ append_bn_network_maps <- function(
     png_path <- paste0(png_base, ".png")
     if (file.exists(png_path) && file.info(png_path)$size > 1000) {
       openxlsx::writeData(wb, sheet_name, sheet_name,
-        startRow = 1, startCol = 2)
+        startRow = 2, startCol = 2)
       openxlsx::addStyle(wb, sheet_name, style = title_style,
-        rows = 1, cols = 2)
+        rows = 2, cols = 2)
       openxlsx::insertImage(wb, sheet_name, file = png_path,
-        startRow = 2, startCol = 2,
+        startRow = 3, startCol = 2,
         width = width, height = height, units = "in")
     } else {
       openxlsx::writeData(wb, sheet_name,
         paste(sheet_name, "could not be rendered."),
-        startRow = 2, startCol = 2)
+        startRow = 3, startCol = 2)
     }
 
     wb

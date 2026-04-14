@@ -24,7 +24,9 @@
 #' @param marginal_threshold Numeric. P-value threshold for orange (marginal).
 #'   Default 0.10.
 #' @param lift Numeric. The lift fraction used in the prioritization analysis,
-#'   displayed in the footer. Default 0.10 (10\%).
+#'   displayed in the footer. Default 0.10 (10 percent).
+#' @param very_hide_all Logical. If TRUE (default), all sheets except Dashboard
+#'   are set to veryHidden. If FALSE, they are simply hidden.
 #' @param path Character. Directory to write workbook to. Default \code{"."}.
 #'
 #' @return Workbook object (invisibly).
@@ -43,6 +45,7 @@ bn_prioritize_write <- function(
     sig_threshold = 0.05,
     marginal_threshold = 0.10,
     lift = 0.10,
+    very_hide_all = TRUE,
     path = "."
 ) {
 
@@ -151,9 +154,9 @@ bn_prioritize_write <- function(
     center_pct = openxlsx::createStyle(numFmt = "0.00%", halign = "center"),
     left       = openxlsx::createStyle(halign = "left"),
     baseline   = openxlsx::createStyle(textDecoration = "italic", fgFill = "#F2F2F2"),
-    p_green    = openxlsx::createStyle(fontColour = "#006100", bgFill = "#C6EFCE"),
-    p_orange   = openxlsx::createStyle(fontColour = "#9C5700", bgFill = "#FFEB9C"),
-    p_red      = openxlsx::createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE"),
+    p_green    = openxlsx::createStyle(fontColour = "#2E7D32", textDecoration = "bold"),
+    p_orange   = openxlsx::createStyle(fontColour = "#E65100"),
+    p_red      = openxlsx::createStyle(fontColour = "#B71C1C"),
     dropdown_label = openxlsx::createStyle(textDecoration = "bold", halign = "right"),
     dropdown_cell  = openxlsx::createStyle(border = "Bottom", borderStyle = "thin", halign = "left")
   )
@@ -255,7 +258,11 @@ bn_prioritize_write <- function(
 
   n_display_cols <- length(display_headers)
   row_data_start <- last_control_row + 2L
+  chart_height <- 19L
+
+  # Table at col B (left), chart to the right after a spacer
   cols_all <- seq(col_data_start, col_data_start + n_display_cols - 1)
+  col_chart_start <- max(cols_all) + 2L  # one spacer column after table
 
   # Write headers
   for (ci in seq_along(display_headers)) {
@@ -292,6 +299,7 @@ bn_prioritize_write <- function(
   col_gain_pct <- col_data_start + 5
   col_pvalue <- if (has_p) col_data_start + 6 else NULL
 
+  # Table columns
   openxlsx::setColWidths(wb, dash, cols = col_step, widths = 6)
   openxlsx::setColWidths(wb, dash, cols = col_variable, widths = variable_width)
   openxlsx::setColWidths(wb, dash, cols = col_label, widths = label_width)
@@ -301,6 +309,10 @@ bn_prioritize_write <- function(
   if (!is.null(col_pvalue)) {
     openxlsx::setColWidths(wb, dash, cols = col_pvalue, widths = 10)
   }
+  # Spacer column between table and chart
+  openxlsx::setColWidths(wb, dash, cols = max(cols_all) + 1, widths = 3)
+  # Chart area columns — even widths
+  openxlsx::setColWidths(wb, dash, cols = col_chart_start:(col_chart_start + 9), widths = 8.43)
 
   # --- Data styles ---
   # Step = integer
@@ -327,42 +339,6 @@ bn_prioritize_write <- function(
       style = c("#FFFFFF", "#66bd7d"), type = "colourScale")
   }
 
-  # --- P-value conditional formatting ---
-  if (has_p && !is.null(col_pvalue)) {
-    step_rows <- data_rows[-1]
-
-    openxlsx::addStyle(wb, dash, style = styles$center_2dp,
-      rows = data_rows, cols = col_pvalue, gridExpand = TRUE, stack = TRUE)
-
-    if (length(step_rows) > 0) {
-      p_let <- num2let(col_pvalue)
-      step_let <- num2let(col_step)
-
-      openxlsx::conditionalFormatting(wb, dash,
-        cols = col_pvalue, rows = step_rows,
-        style = styles$p_red, type = "expression",
-        rule = paste0(p_let, step_rows[1], ">=", marginal_threshold))
-
-      openxlsx::conditionalFormatting(wb, dash,
-        cols = col_pvalue, rows = step_rows,
-        style = styles$p_orange, type = "expression",
-        rule = paste0("AND(", p_let, step_rows[1], ">=", sig_threshold,
-                       ",", p_let, step_rows[1], "<", marginal_threshold, ")"))
-
-      openxlsx::conditionalFormatting(wb, dash,
-        cols = col_pvalue, rows = step_rows,
-        style = styles$p_green, type = "expression",
-        rule = paste0(p_let, step_rows[1], "<", sig_threshold))
-
-      # White when step is blank or 0 (last = highest priority in Excel)
-      openxlsx::conditionalFormatting(wb, dash,
-        cols = col_pvalue, rows = step_rows,
-        style = openxlsx::createStyle(bgFill = "#FFFFFF"), type = "expression",
-        rule = paste0("OR(", step_let, step_rows[1], "=\"\",",
-                       step_let, step_rows[1], "=0)"))
-    }
-  }
-
   # --- Conditional borders (only on rows with data) ---
   step_let <- num2let(col_step)
   border_rule <- paste0(step_let, data_rows[1], "<>\"\"")
@@ -386,6 +362,41 @@ bn_prioritize_write <- function(
     cols = cols_all, rows = data_rows,
     style = openxlsx::createStyle(border = "Bottom", borderStyle = "medium"),
     type = "expression", rule = bottom_rule)
+
+  # --- P-value conditional formatting (after borders so font colors win) ---
+  if (has_p && !is.null(col_pvalue)) {
+    step_rows <- data_rows[-1]
+
+    openxlsx::addStyle(wb, dash, style = styles$center_2dp,
+      rows = data_rows, cols = col_pvalue, gridExpand = TRUE, stack = TRUE)
+
+    if (length(step_rows) > 0) {
+      p_let <- num2let(col_pvalue)
+
+      openxlsx::conditionalFormatting(wb, dash,
+        cols = col_pvalue, rows = step_rows,
+        style = styles$p_red, type = "expression",
+        rule = paste0(p_let, step_rows[1], ">=", marginal_threshold))
+
+      openxlsx::conditionalFormatting(wb, dash,
+        cols = col_pvalue, rows = step_rows,
+        style = styles$p_orange, type = "expression",
+        rule = paste0("AND(", p_let, step_rows[1], ">=", sig_threshold,
+                       ",", p_let, step_rows[1], "<", marginal_threshold, ")"))
+
+      openxlsx::conditionalFormatting(wb, dash,
+        cols = col_pvalue, rows = step_rows,
+        style = styles$p_green, type = "expression",
+        rule = paste0(p_let, step_rows[1], "<", sig_threshold))
+
+      # Reset font when step is blank or 0 (last = highest priority in Excel)
+      openxlsx::conditionalFormatting(wb, dash,
+        cols = col_pvalue, rows = step_rows,
+        style = openxlsx::createStyle(fontColour = "#000000"), type = "expression",
+        rule = paste0("OR(", step_let, step_rows[1], "=\"\",",
+                       step_let, step_rows[1], "=0)"))
+    }
+  }
 
   # Header row — outer box only
   openxlsx::addStyle(wb, dash,
@@ -441,12 +452,56 @@ bn_prioritize_write <- function(
   }
 
   # ---------------------------------------------------------------------------
+  # 4b. Chart data sheet (formulas referencing dashboard for dynamic chart)
+  # ---------------------------------------------------------------------------
+  openxlsx::addWorksheet(wb, "_chart_data")
+
+  chart_headers <- c("Label", "Previous", "Incremental", "Cumulative DV")
+  for (ci in seq_along(chart_headers)) {
+    openxlsx::writeData(wb, "_chart_data", chart_headers[ci],
+      startRow = 1, startCol = ci)
+  }
+
+  var_let <- num2let(col_variable)
+  est_let <- num2let(col_estimate)
+  gain_let <- num2let(col_gain)
+
+  # NA()-guarded formulas: blank dashboard rows → #N/A so charts skip them
+  for (ri in seq_along(data_rows)) {
+    dr <- data_rows[ri]
+    chart_r <- ri + 1
+    blank_check <- paste0('Dashboard!', var_let, dr, '=""')
+
+    # Col A: Label
+    openxlsx::writeFormula(wb, "_chart_data",
+      x = paste0('IF(', blank_check, ',NA(),Dashboard!', var_let, dr, ')'),
+      startRow = chart_r, startCol = 1)
+
+    # Col B: Previous = DV Estimate - Marginal Gain
+    openxlsx::writeFormula(wb, "_chart_data",
+      x = paste0('IF(', blank_check, ',NA(),Dashboard!', est_let, dr,
+                 '-Dashboard!', gain_let, dr, ')'),
+      startRow = chart_r, startCol = 2)
+
+    # Col C: Incremental = Marginal Gain
+    openxlsx::writeFormula(wb, "_chart_data",
+      x = paste0('IF(', blank_check, ',NA(),Dashboard!', gain_let, dr, ')'),
+      startRow = chart_r, startCol = 3)
+
+    # Col D: Cumulative DV = DV Estimate
+    openxlsx::writeFormula(wb, "_chart_data",
+      x = paste0('IF(', blank_check, ',NA(),Dashboard!', est_let, dr, ')'),
+      startRow = chart_r, startCol = 4)
+  }
+
+  # ---------------------------------------------------------------------------
   # 5. Hide data + lookup sheets
   # ---------------------------------------------------------------------------
   sheet_names <- names(wb)
-  vis <- rep(TRUE, length(sheet_names))
-  for (si in seq_along(sheet_names)) {
-    if (sheet_names[si] != "Dashboard") vis[si] <- FALSE
+  if (very_hide_all) {
+    vis <- ifelse(sheet_names == "Dashboard", TRUE, "veryHidden")
+  } else {
+    vis <- ifelse(sheet_names == "Dashboard", TRUE, FALSE)
   }
   openxlsx::sheetVisibility(wb) <- vis
 
@@ -460,6 +515,30 @@ bn_prioritize_write <- function(
   }
   file_path <- file.path(path, fname)
   openxlsx::saveWorkbook(wb, file_path, overwrite = TRUE)
+
+  # ---------------------------------------------------------------------------
+  # 7. Add chart via openxlsx2 (reload → insert chart XML → re-save)
+  # ---------------------------------------------------------------------------
+  # Compute axis minimum from default data set baseline
+  default_tbl <- registry[[1]]$tbl
+  baseline <- default_tbl$dv_estimate[1]
+  n_steps <- nrow(default_tbl)
+  if (n_steps > 2) {
+    axis_min <- floor((baseline - 0.5) / 0.25) * 0.25
+  } else {
+    axis_min <- floor((baseline - 0.2) / 0.1) * 0.1
+  }
+  axis_min <- max(0, axis_min)
+
+  chart_xml <- .prioritize_chart_xml(max_rows, axis_min)
+  chart_dims <- paste0(
+    num2let(col_chart_start), row_data_start, ":",
+    num2let(col_chart_start + 9), row_data_start + chart_height - 1
+  )
+
+  wb2 <- openxlsx2::wb_load(file_path)
+  wb2$add_chart_xml(sheet = "Dashboard", dims = chart_dims, xml = chart_xml)
+  wb2$save(file_path, overwrite = TRUE)
 
   cli::cli_alert_success("Prioritization workbook saved: {file_path}")
 
@@ -552,4 +631,147 @@ bn_prioritize_write <- function(
   }
 
   registry
+}
+
+
+# =============================================================================
+# Internal: generate OOXML chart XML for combo stacked bar + line chart
+# =============================================================================
+.prioritize_chart_xml <- function(max_rows, axis_min = 0) {
+  n <- max_rows + 1  # last data row in _chart_data (row 1 = header)
+
+  # Helper to build a cell range reference for _chart_data
+  ref <- function(col, r1 = 2, r2 = n) {
+    paste0("'_chart_data'!$", col, "$", r1, ":$", col, "$", r2)
+  }
+  hdr <- function(col) {
+    paste0("'_chart_data'!$", col, "$1")
+  }
+
+  paste0(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ',
+    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ',
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+    '<c:roundedCorners val="0"/>',
+    '<c:chart>',
+    '<c:autoTitleDeleted val="1"/>',
+    '<c:plotArea>',
+    '<c:layout/>',
+
+    # ---- Stacked bar chart (Previous + Incremental) ----
+    '<c:barChart>',
+    '<c:barDir val="col"/>',
+    '<c:grouping val="stacked"/>',
+    '<c:varyColors val="0"/>',
+
+    # Series 1: Previous (light grey)
+    '<c:ser>',
+    '<c:idx val="0"/><c:order val="0"/>',
+    '<c:tx><c:strRef><c:f>', hdr("B"), '</c:f></c:strRef></c:tx>',
+    '<c:spPr>',
+    '<a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill>',
+    '<a:ln><a:noFill/></a:ln>',
+    '</c:spPr>',
+    '<c:cat><c:strRef><c:f>', ref("A"), '</c:f></c:strRef></c:cat>',
+    '<c:val><c:numRef><c:f>', ref("B"), '</c:f></c:numRef></c:val>',
+    '</c:ser>',
+
+    # Series 2: Incremental (dark grey)
+    '<c:ser>',
+    '<c:idx val="1"/><c:order val="1"/>',
+    '<c:tx><c:strRef><c:f>', hdr("C"), '</c:f></c:strRef></c:tx>',
+    '<c:spPr>',
+    '<a:solidFill><a:srgbClr val="595959"/></a:solidFill>',
+    '<a:ln><a:noFill/></a:ln>',
+    '</c:spPr>',
+    '<c:cat><c:strRef><c:f>', ref("A"), '</c:f></c:strRef></c:cat>',
+    '<c:val><c:numRef><c:f>', ref("C"), '</c:f></c:numRef></c:val>',
+    '</c:ser>',
+
+    '<c:overlap val="100"/>',
+    '<c:axId val="111111111"/>',
+    '<c:axId val="222222222"/>',
+    '</c:barChart>',
+
+    # ---- Line chart (Cumulative DV Estimate) ----
+    '<c:lineChart>',
+    '<c:grouping val="standard"/>',
+    '<c:varyColors val="0"/>',
+    '<c:ser>',
+    '<c:idx val="2"/><c:order val="2"/>',
+    '<c:tx><c:strRef><c:f>', hdr("D"), '</c:f></c:strRef></c:tx>',
+    '<c:spPr>',
+    '<a:ln w="22225"><a:solidFill><a:srgbClr val="595959"/></a:solidFill></a:ln>',
+    '</c:spPr>',
+    '<c:marker>',
+    '<c:symbol val="circle"/><c:size val="5"/>',
+    '<c:spPr>',
+    '<a:solidFill><a:srgbClr val="595959"/></a:solidFill>',
+    '<a:ln><a:solidFill><a:srgbClr val="595959"/></a:solidFill></a:ln>',
+    '</c:spPr>',
+    '</c:marker>',
+    '<c:cat><c:strRef><c:f>', ref("A"), '</c:f></c:strRef></c:cat>',
+    '<c:val><c:numRef><c:f>', ref("D"), '</c:f></c:numRef></c:val>',
+    '<c:smooth val="0"/>',
+    '</c:ser>',
+    '<c:marker val="1"/>',
+    '<c:axId val="111111111"/>',
+    '<c:axId val="222222222"/>',
+    '</c:lineChart>',
+
+    # ---- Category axis (bottom) ----
+    '<c:catAx>',
+    '<c:axId val="111111111"/>',
+    '<c:scaling><c:orientation val="minMax"/></c:scaling>',
+    '<c:delete val="0"/>',
+    '<c:axPos val="b"/>',
+    '<c:txPr>',
+    '<a:bodyPr rot="-2700000"/>',
+    '<a:lstStyle/>',
+    '<a:p><a:pPr><a:defRPr sz="800">',
+    '<a:latin typeface="Calibri"/><a:cs typeface="Calibri"/>',
+    '</a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p>',
+    '</c:txPr>',
+    '<c:crossAx val="222222222"/>',
+    '</c:catAx>',
+
+    # ---- Value axis (left) ----
+    '<c:valAx>',
+    '<c:axId val="222222222"/>',
+    '<c:scaling><c:orientation val="minMax"/>',
+    '<c:min val="', axis_min, '"/>',
+    '</c:scaling>',
+    '<c:delete val="0"/>',
+    '<c:axPos val="l"/>',
+    '<c:numFmt formatCode="0.00" sourceLinked="0"/>',
+    '<c:txPr>',
+    '<a:bodyPr/>',
+    '<a:lstStyle/>',
+    '<a:p><a:pPr><a:defRPr sz="800">',
+    '<a:latin typeface="Calibri"/><a:cs typeface="Calibri"/>',
+    '</a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p>',
+    '</c:txPr>',
+    '<c:crossAx val="111111111"/>',
+    '</c:valAx>',
+
+    '</c:plotArea>',
+
+    # ---- Legend (bottom) ----
+    '<c:legend>',
+    '<c:legendPos val="b"/>',
+    '<c:overlay val="0"/>',
+    '<c:txPr>',
+    '<a:bodyPr/><a:lstStyle/>',
+    '<a:p><a:pPr><a:defRPr sz="900">',
+    '<a:latin typeface="Calibri"/><a:cs typeface="Calibri"/>',
+    '</a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p>',
+    '</c:txPr>',
+    '</c:legend>',
+
+    '<c:plotVisOnly val="1"/>',
+    '</c:chart>',
+    '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>',
+    '</c:chartSpace>'
+  )
 }

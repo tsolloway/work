@@ -560,7 +560,7 @@ turf_write <- function(
 
   # Title
   wb$add_data("Greedy", x = "Greedy TURF Results", dims = "A1")
-  wb$add_font("Greedy", dims = "A1", bold = "true", size = 14)
+  wb$add_font("Greedy", dims = "A1", name = "Calibri", bold = "true", size = 14)
 
   # Table headers at row 2 (A-F)
   headers <- c("#", "Item", "Cumul", "Incr", "Avg Freq", "Abs")
@@ -568,7 +568,7 @@ turf_write <- function(
   for(i in seq_along(headers)){
     dims <- paste0(cols[i], "2")
     wb$add_data("Greedy", x = headers[i], dims = dims)
-    wb$add_font("Greedy", dims = dims, bold = "true", color = openxlsx2::wb_color("white"))
+    wb$add_font("Greedy", dims = dims, name = "Calibri", bold = "true", color = openxlsx2::wb_color("white"))
     wb$add_fill("Greedy", dims = dims, color = openxlsx2::wb_color("4472C4"))
     wb$add_cell_style("Greedy", dims = dims, horizontal = "center")
   }
@@ -607,12 +607,12 @@ turf_write <- function(
 
   # ---- Row 2: Title ----
   wb$add_data(sheet, x = "TURF Analysis", dims = "B2")
-  wb$add_font(sheet, dims = "B2", bold = "true", size = 18)
+  wb$add_font(sheet, dims = "B2", name = "Calibri", bold = "true", size = 18)
   wb$set_row_heights(sheet, rows = 2, heights = 24)
 
   # ---- Row 3: Project name placeholder ----
   wb$add_data(sheet, x = project_name, dims = "B3")
-  wb$add_font(sheet, dims = "B3", bold = "true", italic = "true", size = 14)
+  wb$add_font(sheet, dims = "B3", name = "Calibri", bold = "true", italic = "true", size = 14)
   wb$set_row_heights(sheet, rows = 3, heights = 19)
 
   # ---- Row 4: thin separator ----
@@ -628,19 +628,19 @@ turf_write <- function(
 
   # ---- Row 7: Section headers (merged, centered, grey fill) ----
   wb$add_data(sheet, x = "TURF Chart", dims = "B7")
-  wb$add_font(sheet, dims = "B7", bold = "true", size = 12)
+  wb$add_font(sheet, dims = "B7", name = "Calibri", bold = "true", size = 12)
   wb$add_cell_style(sheet, dims = "B7", horizontal = "center", vertical = "center")
   wb$add_fill(sheet, dims = "B7:O8", color = grey_fill)
   wb$merge_cells(sheet, dims = "B7:O8")
 
   wb$add_data(sheet, x = "TURF Results", dims = "Q7")
-  wb$add_font(sheet, dims = "Q7", bold = "true", size = 12)
+  wb$add_font(sheet, dims = "Q7", name = "Calibri", bold = "true", size = 12)
   wb$add_cell_style(sheet, dims = "Q7", horizontal = "center")
   wb$add_fill(sheet, dims = "Q7", color = grey_fill)
   wb$merge_cells(sheet, dims = "Q7:X7")
 
   wb$add_data(sheet, x = "Item Controls", dims = "Z7")
-  wb$add_font(sheet, dims = "Z7", bold = "true", size = 14)
+  wb$add_font(sheet, dims = "Z7", name = "Calibri", bold = "true", size = 14)
   wb$add_cell_style(sheet, dims = "Z7", horizontal = "center")
   wb$add_fill(sheet, dims = "Z7", color = grey_fill)
   wb$merge_cells(sheet, dims = "Z7:AB7")
@@ -659,7 +659,7 @@ turf_write <- function(
   for(i in seq_along(greedy_headers)){
     dims <- paste0(greedy_cols[i], "8")
     wb$add_data(sheet, x = greedy_headers[i], dims = dims)
-    wb$add_font(sheet, dims = dims, bold = "true")
+    wb$add_font(sheet, dims = dims, name = "Calibri", bold = "true")
     wb$add_fill(sheet, dims = dims, color = grey_fill)
     wb$add_cell_style(sheet, dims = dims, horizontal = "center")
   }
@@ -670,7 +670,7 @@ turf_write <- function(
   for(i in seq_along(items_headers)){
     dims <- paste0(items_cols[i], "8")
     wb$add_data(sheet, x = items_headers[i], dims = dims)
-    wb$add_font(sheet, dims = dims, bold = "true")
+    wb$add_font(sheet, dims = dims, name = "Calibri", bold = "true")
     wb$add_fill(sheet, dims = dims, color = grey_fill)
     wb$add_cell_style(sheet, dims = dims, horizontal = "center")
   }
@@ -710,6 +710,7 @@ turf_write <- function(
     wb$add_data(sheet, x = vars[i], dims = paste0("Z", row))
     wb$add_data(sheet, x = item_label, dims = paste0("AA", row))
     wb$add_data(sheet, x = TRUE, dims = paste0("AB", row))
+    wb$add_font(sheet, dims = paste0("Z", row, ":AB", row), name = "Calibri", size = 11)
   }
 
 
@@ -773,7 +774,7 @@ turf_write <- function(
 
     wb$add_data(sheet, x = footer_lines[fi], dims = dims_cell)
     wb$merge_cells(sheet, dims = dims_merge)
-    wb$add_font(sheet, dims = dims_cell, size = 9, italic = "true",
+    wb$add_font(sheet, dims = dims_cell, name = "Calibri", size = 9, italic = "true",
                 color = openxlsx2::wb_color("595959"))
     wb$add_cell_style(sheet, dims = dims_cell, horizontal = "left")
   }
@@ -802,12 +803,12 @@ turf_write <- function(
 
   # ---- Row 2: Title ----
   wb$add_data(sheet, x = "Optimized TURF Results", dims = "B2")
-  wb$add_font(sheet, dims = "B2", bold = "true", size = 18)
+  wb$add_font(sheet, dims = "B2", name = "Calibri", bold = "true", size = 18)
   wb$set_row_heights(sheet, rows = 2, heights = 24)
 
   # ---- Row 3: Project name placeholder ----
   wb$add_data(sheet, x = project_name, dims = "B3")
-  wb$add_font(sheet, dims = "B3", bold = "true", italic = "true", size = 14)
+  wb$add_font(sheet, dims = "B3", name = "Calibri", bold = "true", italic = "true", size = 14)
   wb$set_row_heights(sheet, rows = 3, heights = 19)
 
   # ---- Row 4: thin separator ----
@@ -822,7 +823,7 @@ turf_write <- function(
   # ---- Row 15: Section header (merged, grey fill, centered) ----
   merge_dims <- paste0("B15:", last_item_col, "15")
   wb$add_data(sheet, x = "Combo Results", dims = "B15")
-  wb$add_font(sheet, dims = "B15", bold = "true", size = 12)
+  wb$add_font(sheet, dims = "B15", name = "Calibri", bold = "true", size = 12)
   wb$add_cell_style(sheet, dims = "B15", horizontal = "center")
   wb$add_fill(sheet, dims = "B15", color = grey_fill)
   wb$merge_cells(sheet, dims = merge_dims)
@@ -846,7 +847,7 @@ turf_write <- function(
   for(i in seq_along(combo_headers)){
     dims <- paste0(combo_cols[i], "16")
     wb$add_data(sheet, x = combo_headers[i], dims = dims)
-    wb$add_font(sheet, dims = dims, bold = "true")
+    wb$add_font(sheet, dims = dims, name = "Calibri", bold = "true")
     wb$add_fill(sheet, dims = dims, color = grey_fill)
     wb$add_cell_style(sheet, dims = dims, horizontal = "center")
   }
@@ -879,39 +880,46 @@ turf_write <- function(
 
   grey_fill <- openxlsx2::wb_color("D9D9D9")
 
+  first_row <- 5L
+  last_row <- 13L
+
   # Helper: style a stacked control row (label in B, value in C)
+  # Only outer box borders — no horizontal lines between rows
   .style_bc_control <- function(row){
     b_dims <- paste0("B", row)
     c_dims <- paste0("C", row)
-    bc_dims <- paste0("B", row, ":C", row)
 
     wb$add_fill(sheet, dims = b_dims, color = grey_fill)
     wb$add_fill(sheet, dims = c_dims, color = grey_fill)
     wb$add_cell_style(sheet, dims = b_dims, horizontal = "right", vertical = "center")
     wb$add_cell_style(sheet, dims = c_dims, horizontal = "center", vertical = "center")
+
+    top_b <- if (row == first_row) "medium" else NULL
+    bottom_b <- if (row == last_row) "medium" else NULL
+
     wb$add_border(sheet, dims = b_dims,
-                  top_border = "medium", bottom_border = "medium",
+                  top_border = top_b, bottom_border = bottom_b,
                   left_border = "medium", right_border = NULL)
     wb$add_border(sheet, dims = c_dims,
-                  top_border = "medium", bottom_border = "medium",
+                  top_border = top_b, bottom_border = bottom_b,
                   left_border = NULL, right_border = "medium")
   }
 
   # Row 5: Subgroup (display labels: _ → space)
   sg_display <- gsub("_", " ", subgroup_names)
   wb$add_data(sheet, x = "Subgroup:", dims = "B5")
-  wb$add_font(sheet, dims = "B5", bold = "true", size = 11)
+  wb$add_font(sheet, dims = "B5", name = "Calibri", bold = "true", size = 11)
   wb$add_data(sheet, x = sg_display[1], dims = "C5")
   wb$add_data_validation(
     sheet, dims = "C5", type = "list",
     value = paste0('"', paste(sg_display, collapse = ","), '"')
   )
-  wb$add_font(sheet, dims = "C5", size = 11)
+  wb$add_font(sheet, dims = "C5", name = "Calibri", size = 11)
   .style_bc_control(5)
 
   # Row 6: Combo Size (default to 2 if available, else first)
   wb$add_data(sheet, x = "Combo Size:", dims = "B6")
-  wb$add_font(sheet, dims = "B6", bold = "true", size = 11)
+  wb$add_font(sheet, dims = "B6", name = "Calibri", bold = "true", size = 11)
   default_combo <- if(length(n_values) > 0) (if(2L %in% n_values) 2L else n_values[1]) else 2L
   wb$add_data(sheet, x = default_combo, dims = "C6")
   if(length(n_values) > 0){
@@ -920,37 +928,37 @@ turf_write <- function(
       value = paste0('"', paste(n_values, collapse = ","), '"')
     )
   }
-  wb$add_font(sheet, dims = "C6", size = 11)
+  wb$add_font(sheet, dims = "C6", name = "Calibri", size = 11)
   .style_bc_control(6)
 
   # Row 7: Display top N
   wb$add_data(sheet, x = "Display:", dims = "B7")
-  wb$add_font(sheet, dims = "B7", bold = "true", size = 11)
+  wb$add_font(sheet, dims = "B7", name = "Calibri", bold = "true", size = 11)
   wb$add_data(sheet, x = 1000L, dims = "C7")
-  wb$add_font(sheet, dims = "C7", size = 11)
+  wb$add_font(sheet, dims = "C7", name = "Calibri", size = 11)
   .style_bc_control(7)
 
   # Row 8: Optimize
   wb$add_data(sheet, x = "Optimize:", dims = "B8")
-  wb$add_font(sheet, dims = "B8", bold = "true", size = 11)
+  wb$add_font(sheet, dims = "B8", name = "Calibri", bold = "true", size = 11)
   wb$add_data(sheet, x = "Reach", dims = "C8")
   wb$add_data_validation(
     sheet, dims = "C8", type = "list",
     value = '"Reach,Freq"'
   )
-  wb$add_font(sheet, dims = "C8", size = 11)
+  wb$add_font(sheet, dims = "C8", name = "Calibri", size = 11)
   .style_bc_control(8)
 
   # Row 9: Weighted (only if weights exist)
   if(col_info$has_weights){
     wb$add_data(sheet, x = "Weighted:", dims = "B9")
-    wb$add_font(sheet, dims = "B9", bold = "true", size = 11)
+    wb$add_font(sheet, dims = "B9", name = "Calibri", bold = "true", size = 11)
     wb$add_data(sheet, x = "Yes", dims = "C9")
     wb$add_data_validation(
       sheet, dims = "C9", type = "list",
       value = '"Yes,No"'
     )
-    wb$add_font(sheet, dims = "C9", size = 11)
+    wb$add_font(sheet, dims = "C9", name = "Calibri", size = 11)
     .style_bc_control(9)
   } else {
     wb$set_row_heights(sheet, rows = 9, heights = 0)
@@ -958,46 +966,46 @@ turf_write <- function(
 
   # Row 10: Autofit
   wb$add_data(sheet, x = "Autofit:", dims = "B10")
-  wb$add_font(sheet, dims = "B10", bold = "true", size = 11)
+  wb$add_font(sheet, dims = "B10", name = "Calibri", bold = "true", size = 11)
   wb$add_data(sheet, x = "No", dims = "C10")
   wb$add_data_validation(
     sheet, dims = "C10", type = "list",
     value = '"Yes,No"'
   )
-  wb$add_font(sheet, dims = "C10", size = 11)
+  wb$add_font(sheet, dims = "C10", name = "Calibri", size = 11)
   .style_bc_control(10)
 
   # Row 11: Chart
   wb$add_data(sheet, x = "Chart:", dims = "B11")
-  wb$add_font(sheet, dims = "B11", bold = "true", size = 11)
+  wb$add_font(sheet, dims = "B11", name = "Calibri", bold = "true", size = 11)
   wb$add_data(sheet, x = "Top Reach", dims = "C11")
   wb$add_data_validation(
     sheet, dims = "C11", type = "list",
     value = '"Top Reach,Reach vs Freq,Item Frequency,None"'
   )
-  wb$add_font(sheet, dims = "C11", size = 11)
+  wb$add_font(sheet, dims = "C11", name = "Calibri", size = 11)
   .style_bc_control(11)
 
   # Row 12: Chart Location
   wb$add_data(sheet, x = "Chart Loc:", dims = "B12")
-  wb$add_font(sheet, dims = "B12", bold = "true", size = 11)
+  wb$add_font(sheet, dims = "B12", name = "Calibri", bold = "true", size = 11)
   wb$add_data(sheet, x = "Top", dims = "C12")
   wb$add_data_validation(
     sheet, dims = "C12", type = "list",
     value = '"Top,Right"'
   )
-  wb$add_font(sheet, dims = "C12", size = 11)
+  wb$add_font(sheet, dims = "C12", name = "Calibri", size = 11)
   .style_bc_control(12)
 
   # Row 13: Base (matches display label in _config col I)
   wb$add_data(sheet, x = "Base:", dims = "B13")
-  wb$add_font(sheet, dims = "B13", bold = "true", size = 11)
+  wb$add_font(sheet, dims = "B13", name = "Calibri", bold = "true", size = 11)
   n_sg <- length(subgroup_names)
   base_f <- paste0(
     'INDEX(_config!G2:G', 1 + n_sg, ',MATCH(C5,_config!I2:I', 1 + n_sg, ',0))'
   )
   wb$add_formula(sheet, x = base_f, dims = "C13")
-  wb$add_font(sheet, dims = "C13", bold = "true", size = 11)
+  wb$add_font(sheet, dims = "C13", name = "Calibri", bold = "true", size = 11)
   .style_bc_control(13)
 }
 
@@ -1036,96 +1044,96 @@ turf_write <- function(
   # Subgroup (display labels: _ → space)
   sg_display <- gsub("_", " ", subgroup_names)
   wb$add_data(sheet, x = "Subgroup:", dims = "B5")
-  wb$add_font(sheet, dims = "B5", bold = "true", size = 12)
+  wb$add_font(sheet, dims = "B5", name = "Calibri", bold = "true", size = 12)
   wb$add_data(sheet, x = sg_display[1], dims = "C5")
   wb$add_data_validation(
     sheet, dims = "C5", type = "list",
     value = paste0('"', paste(sg_display, collapse = ","), '"')
   )
-  wb$add_font(sheet, dims = "C5", size = 12)
+  wb$add_font(sheet, dims = "C5", name = "Calibri", size = 12)
   .style_control_pair("B5", "C5", "B5:C5")
 
   # E5:F5 — Dashboard: Optimize / Best Combos: Combo Size
   if(is_dashboard){
     wb$add_data(sheet, x = "Optimize:", dims = "E5")
-    wb$add_font(sheet, dims = "E5", bold = "true", size = 12)
+    wb$add_font(sheet, dims = "E5", name = "Calibri", bold = "true", size = 12)
     wb$add_data(sheet, x = "Reach", dims = "F5")
     wb$add_data_validation(
       sheet, dims = "F5", type = "list",
       value = '"Reach,Freq"'
     )
-    wb$add_font(sheet, dims = "F5", size = 12)
+    wb$add_font(sheet, dims = "F5", name = "Calibri", size = 12)
     .style_control_pair("E5", "F5", "E5:F5")
   } else {
     wb$add_data(sheet, x = "Combo Size:", dims = "E5")
-    wb$add_font(sheet, dims = "E5", bold = "true", size = 12)
+    wb$add_font(sheet, dims = "E5", name = "Calibri", bold = "true", size = 12)
     wb$add_data(sheet, x = n_values[1], dims = "F5")
     wb$add_data_validation(
       sheet, dims = "F5", type = "list",
       value = paste0('"', paste(n_values, collapse = ","), '"')
     )
-    wb$add_font(sheet, dims = "F5", size = 12)
+    wb$add_font(sheet, dims = "F5", name = "Calibri", size = 12)
     .style_control_pair("E5", "F5", "E5:F5")
   }
 
   # H5:I5 — Dashboard: Chart Label / Best Combos: Optimize
   if(is_dashboard){
     wb$add_data(sheet, x = "Chart Label:", dims = "H5")
-    wb$add_font(sheet, dims = "H5", bold = "true", size = 12)
+    wb$add_font(sheet, dims = "H5", name = "Calibri", bold = "true", size = 12)
     wb$add_data(sheet, x = "Label", dims = "I5")
     wb$add_data_validation(
       sheet, dims = "I5", type = "list",
       value = '"Variable,Variable - Label,Label"'
     )
-    wb$add_font(sheet, dims = "I5", size = 12)
+    wb$add_font(sheet, dims = "I5", name = "Calibri", size = 12)
     .style_control_pair("H5", "I5", "H5:I5")
   } else {
     wb$add_data(sheet, x = "Optimize:", dims = "H5")
-    wb$add_font(sheet, dims = "H5", bold = "true", size = 12)
+    wb$add_font(sheet, dims = "H5", name = "Calibri", bold = "true", size = 12)
     wb$add_data(sheet, x = "Reach", dims = "I5")
     wb$add_data_validation(
       sheet, dims = "I5", type = "list",
       value = '"Reach,Freq"'
     )
-    wb$add_font(sheet, dims = "I5", size = 12)
+    wb$add_font(sheet, dims = "I5", name = "Calibri", size = 12)
     .style_control_pair("H5", "I5", "H5:I5")
   }
 
   # Weighted toggle (same on both sheets)
   if(col_info$has_weights){
     wb$add_data(sheet, x = "Weighted:", dims = "K5")
-    wb$add_font(sheet, dims = "K5", bold = "true", size = 12)
+    wb$add_font(sheet, dims = "K5", name = "Calibri", bold = "true", size = 12)
     wb$add_data(sheet, x = "Yes", dims = "L5")
     wb$add_data_validation(
       sheet, dims = "L5", type = "list",
       value = '"Yes,No"'
     )
-    wb$add_font(sheet, dims = "L5", size = 12)
+    wb$add_font(sheet, dims = "L5", name = "Calibri", size = 12)
     .style_control_pair("K5", "L5", "K5:L5")
   }
 
   # Base count (matches display label in _config col I)
   wb$add_data(sheet, x = "Base:", dims = "N5")
-  wb$add_font(sheet, dims = "N5", bold = "true", size = 12)
+  wb$add_font(sheet, dims = "N5", name = "Calibri", bold = "true", size = 12)
   n_sg <- length(subgroup_names)
   base_f <- paste0(
     'INDEX(_config!G2:G', 1 + n_sg, ',MATCH(C5,_config!I2:I', 1 + n_sg, ',0))'
   )
   wb$add_formula(sheet, x = base_f, dims = "O5")
-  wb$add_font(sheet, dims = "O5", bold = "true", size = 12)
+  wb$add_font(sheet, dims = "O5", name = "Calibri", bold = "true", size = 12)
   .style_control_pair("N5", "O5", "N5:O5")
 
   # Items: All/None toggle (Dashboard only)
   if(is_dashboard){
     wb$add_data(sheet, x = "Select:", dims = "AB3")
-    wb$add_font(sheet, dims = "AB3", bold = "true", size = 12)
+    wb$add_font(sheet, dims = "AB3", name = "Calibri", bold = "true", size = 12)
     wb$add_cell_style(sheet, dims = "AB3", horizontal = "center")
     wb$add_data(sheet, x = "-", dims = "AB5")
     wb$add_data_validation(
       sheet, dims = "AB5", type = "list",
       value = '"-,All,None"'
     )
-    wb$add_font(sheet, dims = "AB5", size = 12)
+    wb$add_font(sheet, dims = "AB5", name = "Calibri", size = 12)
     grey_fill <- openxlsx2::wb_color("D9D9D9")
     wb$add_fill(sheet, dims = "AB5", color = grey_fill)
     wb$add_cell_style(sheet, dims = "AB5", horizontal = "center", vertical = "center")

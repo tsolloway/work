@@ -407,12 +407,17 @@ append_bn_simulator <- function(
 
   dash_sheet <- "Simulator"
   openxlsx::addWorksheet(wb, dash_sheet)
+  openxlsx::addStyle(wb, dash_sheet,
+    style = openxlsx::createStyle(fgFill = "#FFFFFF"),
+    rows = 1:200, cols = 1:50, gridExpand = TRUE, stack = TRUE)
 
   # Styles
   styles <- list(
     title     = openxlsx::createStyle(textDecoration = "bold", fontSize = 18),
     sub_title = openxlsx::createStyle(textDecoration = c("bold", "italic"), fontSize = 14),
-    header    = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE),
+    header    = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE,
+                                      border = "TopBottom", borderStyle = "medium",
+                                      fgFill = "#D9D9D9"),
     pct       = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
     left      = openxlsx::createStyle(halign = "left"),
     dropdown_label = openxlsx::createStyle(textDecoration = "bold", halign = "right"),
@@ -717,8 +722,8 @@ append_bn_simulator <- function(
 
   current_row <- current_row + 1L
 
-  # Update row_data_start to be 2 rows after last control
-  row_data_start <- current_row + 2L
+  # Update row_data_start to be 1 row after last control
+  row_data_start <- current_row + 1L
 
   # ---------------------------------------------------------------------------
   # Headers: Variable | Community | Label | Metric
@@ -765,6 +770,12 @@ append_bn_simulator <- function(
   all_header_cols <- seq(col_data_start, col_data_start + length(header_names) - 1)
   openxlsx::addStyle(wb, dash_sheet, style = styles$header,
     rows = row_data_start, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, dash_sheet,
+    style = openxlsx::createStyle(border = "TopBottomLeft", borderStyle = "medium"),
+    rows = row_data_start, cols = min(all_header_cols), stack = TRUE)
+  openxlsx::addStyle(wb, dash_sheet,
+    style = openxlsx::createStyle(border = "TopBottomRight", borderStyle = "medium"),
+    rows = row_data_start, cols = max(all_header_cols), stack = TRUE)
 
   # ---------------------------------------------------------------------------
   # Write target variable names, community, labels, and apply community colors

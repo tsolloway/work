@@ -10,10 +10,11 @@ bn_prioritize_write(
   sub_title = NULL,
   title = NULL,
   variable_width = 20,
-  label_width = "auto",
+  label_width = 20,
   combo_width = 40,
   sig_threshold = 0.05,
   marginal_threshold = 0.1,
+  lift = 0.1,
   path = "."
 )
 }
@@ -33,8 +34,7 @@ defaults to \code{"Prioritization Analysis"}. Default NULL.}
 \item{variable_width}{Numeric. Column width for the Variable column.
 Default 20.}
 
-\item{label_width}{Numeric or \code{"auto"}. Column width for the Label
-column. Default \code{"auto"}.}
+\item{label_width}{Numeric. Column width for the Label column. Default 20.}
 
 \item{combo_width}{Numeric. Column width for the Combo column.
 Default 40.}
@@ -44,6 +44,9 @@ Default 0.05.}
 
 \item{marginal_threshold}{Numeric. P-value threshold for orange (marginal).
 Default 0.10.}
+
+\item{lift}{Numeric. The lift fraction used in the prioritization analysis,
+displayed in the footer. Default 0.10 (10 percent).}
 
 \item{path}{Character. Directory to write workbook to. Default \code{"."}.}
 }

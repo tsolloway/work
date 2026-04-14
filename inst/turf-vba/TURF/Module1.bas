@@ -795,6 +795,12 @@ Private Sub WriteDashboardGreedy( _
     dashWs.Range(dashWs.Cells(DG_DATA_ROW, DG_STEP_COL), dashWs.Cells(lastR, DG_STEP_COL)).HorizontalAlignment = xlCenter
     dashWs.Range(dashWs.Cells(DG_DATA_ROW, DG_CUMUL_COL), dashWs.Cells(lastR, DG_PVAL_COL)).HorizontalAlignment = xlCenter
 
+    ' Set font on entire results table
+    With dashWs.Range(dashWs.Cells(DG_DATA_ROW, DG_STEP_COL), dashWs.Cells(lastR, DG_PVAL_COL)).Font
+        .Name = "Calibri"
+        .Size = 11
+    End With
+
     ' Apply conditional formatting color scales to Cumul, Incr, Freq, Abs columns
     Call ApplyGreedyConditionalFormatting(dashWs, nIncluded)
 
@@ -817,14 +823,17 @@ Private Sub WriteDashboardGreedy( _
 
         If pVal < sigThresh Then
             ' Green: significant
+            dashWs.Cells(pRow, DG_PVAL_COL).Font.Name = "Calibri"
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Color = RGB(46, 125, 50)
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Bold = True
         ElseIf pVal < margThresh Then
             ' Orange: marginal
+            dashWs.Cells(pRow, DG_PVAL_COL).Font.Name = "Calibri"
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Color = RGB(230, 81, 0)
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Bold = False
         Else
             ' Red: not significant
+            dashWs.Cells(pRow, DG_PVAL_COL).Font.Name = "Calibri"
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Color = RGB(183, 28, 28)
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Bold = False
         End If
@@ -903,6 +912,7 @@ Private Sub WriteGreedyFooter( _
         dashWs.Range(dashWs.Cells(r, DG_STEP_COL), dashWs.Cells(r, DG_PVAL_COL)).Merge
 
         With dashWs.Cells(r, DG_STEP_COL).Font
+            .Name = "Calibri"
             .Size = 9
             .Italic = True
             .Color = RGB(89, 89, 89)
@@ -1123,6 +1133,7 @@ Public Sub UpdateChart(ByVal chartWs As Worksheet, ByVal dataWs As Worksheet, By
         ' Category axis — reverse so step 1 is at top
         .Axes(xlCategory).ReversePlotOrder = True
         .Axes(xlCategory).TickLabels.Font.Size = 8
+        .Axes(xlCategory).TickLabels.Font.Name = "Calibri"
 
         ' Value axis
         .Axes(xlValue).HasTitle = False
@@ -1165,6 +1176,7 @@ Private Sub WriteComboResults( _
     bcWs.Range(bcWs.Cells(15, 2), bcWs.Cells(15, lastItemCol)).Merge
     bcWs.Cells(15, 2).Value = "Combo Results"
     With bcWs.Cells(15, 2).Font
+            .Name = "Calibri"
         .Bold = True
         .Size = 12
     End With
@@ -1185,6 +1197,7 @@ Private Sub WriteComboResults( _
     For hi = 1 To UBound(hdrNames)
         bcWs.Cells(BC_HEADER_ROW, 1 + hi).Value = hdrNames(hi)  ' B=2, C=3, ...
         With bcWs.Cells(BC_HEADER_ROW, 1 + hi).Font
+            .Name = "Calibri"
             .Bold = True
         End With
         bcWs.Cells(BC_HEADER_ROW, 1 + hi).HorizontalAlignment = xlCenter
@@ -1529,16 +1542,18 @@ Private Sub DrawBCTopReach(ByVal bcWs As Worksheet, ByVal nRows As Long, ByVal c
         ser.Name = "Reach %"
 
         On Error Resume Next
-        ser.Interior.Color = RGB(68, 114, 196)  ' blue
+        ser.Interior.Color = RGB(89, 89, 89)  ' dark grey
         On Error GoTo 0
 
         ser.HasDataLabels = True
         ser.DataLabels.ShowValue = True
         ser.DataLabels.NumberFormat = "0.0"
         ser.DataLabels.Font.Size = 8
+        ser.DataLabels.Font.Name = "Calibri"
 
         .Axes(xlCategory).ReversePlotOrder = True
         .Axes(xlCategory).TickLabels.Font.Size = 8
+        .Axes(xlCategory).TickLabels.Font.Name = "Calibri"
         .Axes(xlValue).HasTitle = False
         .Axes(xlValue).MaximumScale = axisMax
         .Axes(xlValue).MinimumScale = axisMin
@@ -1546,6 +1561,7 @@ Private Sub DrawBCTopReach(ByVal bcWs As Worksheet, ByVal nRows As Long, ByVal c
         .HasTitle = True
         .ChartTitle.Text = "Top " & CStr(showN) & " Combos by Reach"
         .ChartTitle.Font.Size = 11
+        .ChartTitle.Font.Name = "Calibri"
         .ChartTitle.Font.Bold = True
 
         .HasLegend = False
@@ -1651,8 +1667,8 @@ Private Sub DrawBCReachVsFreq(ByVal bcWs As Worksheet, ByVal nRows As Long, ByVa
             On Error Resume Next
             serOthers.MarkerStyle = 8  ' xlMarkerStyleCircle
             serOthers.MarkerSize = 6
-            serOthers.MarkerBackgroundColor = RGB(68, 114, 196)
-            serOthers.MarkerForegroundColor = RGB(68, 114, 196)
+            serOthers.MarkerBackgroundColor = RGB(217, 217, 217)
+            serOthers.MarkerForegroundColor = RGB(217, 217, 217)
             On Error GoTo 0
         End If
 
@@ -1666,14 +1682,15 @@ Private Sub DrawBCReachVsFreq(ByVal bcWs As Worksheet, ByVal nRows As Long, ByVa
         On Error Resume Next
         serTop.MarkerStyle = 8  ' xlMarkerStyleCircle
         serTop.MarkerSize = 9
-        serTop.MarkerBackgroundColor = RGB(237, 125, 49)
-        serTop.MarkerForegroundColor = RGB(237, 125, 49)
+        serTop.MarkerBackgroundColor = RGB(89, 89, 89)
+        serTop.MarkerForegroundColor = RGB(89, 89, 89)
         On Error GoTo 0
 
         ' Reach axis (X / Category)
         .Axes(xlCategory).HasTitle = True
         .Axes(xlCategory).AxisTitle.Text = "Reach %"
         .Axes(xlCategory).AxisTitle.Font.Size = 9
+        .Axes(xlCategory).AxisTitle.Font.Name = "Calibri"
         .Axes(xlCategory).MinimumScale = reachAxisMin
         .Axes(xlCategory).MaximumScale = reachAxisMax
 
@@ -1681,17 +1698,20 @@ Private Sub DrawBCReachVsFreq(ByVal bcWs As Worksheet, ByVal nRows As Long, ByVa
         .Axes(xlValue).HasTitle = True
         .Axes(xlValue).AxisTitle.Text = "Avg Freq"
         .Axes(xlValue).AxisTitle.Font.Size = 9
+        .Axes(xlValue).AxisTitle.Font.Name = "Calibri"
         .Axes(xlValue).MinimumScale = freqAxisMin
         .Axes(xlValue).MaximumScale = freqAxisMax
 
         .HasTitle = True
         .ChartTitle.Text = "Reach vs Avg Freq (Top " & CStr(showN) & ")"
         .ChartTitle.Font.Size = 11
+        .ChartTitle.Font.Name = "Calibri"
         .ChartTitle.Font.Bold = True
 
         .HasLegend = True
         .Legend.Position = xlLegendPositionBottom
         .Legend.Font.Size = 9
+        .Legend.Font.Name = "Calibri"
     End With
 End Sub
 
@@ -1811,22 +1831,25 @@ Private Sub DrawBCItemFrequency(ByVal bcWs As Worksheet, ByVal nRows As Long, By
         ser.Name = "Appearances"
 
         On Error Resume Next
-        ser.Interior.Color = RGB(112, 173, 71)  ' green
+        ser.Interior.Color = RGB(89, 89, 89)  ' dark grey
         On Error GoTo 0
 
         ser.HasDataLabels = True
         ser.DataLabels.ShowValue = True
         ser.DataLabels.NumberFormat = "0"
         ser.DataLabels.Font.Size = 8
+        ser.DataLabels.Font.Name = "Calibri"
 
         .Axes(xlCategory).ReversePlotOrder = True
         .Axes(xlCategory).TickLabels.Font.Size = 7
+        .Axes(xlCategory).TickLabels.Font.Name = "Calibri"
 
         .Axes(xlValue).HasTitle = False
 
         .HasTitle = True
         .ChartTitle.Text = "Item Appearances in Top " & CStr(showN) & " Combos"
         .ChartTitle.Font.Size = 11
+        .ChartTitle.Font.Name = "Calibri"
         .ChartTitle.Font.Bold = True
 
         .HasLegend = False

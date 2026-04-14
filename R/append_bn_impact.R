@@ -45,7 +45,8 @@ append_bn_impact <- function(
     title         = openxlsx::createStyle(textDecoration = "bold", fontSize = 18),
     sub_title     = openxlsx::createStyle(textDecoration = c("bold", "italic"), fontSize = 14),
     header        = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE,
-                                          border = "TopBottom", borderStyle = "medium"),
+                                          border = "TopBottom", borderStyle = "medium",
+                                          fgFill = "#D9D9D9"),
     center        = openxlsx::createStyle(numFmt = "0", halign = "center"),
     left          = openxlsx::createStyle(halign = "left"),
     total_impact  = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
@@ -145,6 +146,9 @@ append_bn_impact <- function(
   write_total <- write_table[nrow(write_table), ]
 
   openxlsx::addWorksheet(wb, sheet_name)
+  openxlsx::addStyle(wb, sheet_name,
+    style = openxlsx::createStyle(fgFill = "#FFFFFF"),
+    rows = 1:200, cols = 1:50, gridExpand = TRUE, stack = TRUE)
 
   openxlsx::writeData(wb, sheet_name, title, startRow = row_title, startCol = col_data_start)
   openxlsx::addStyle(wb, sheet_name, style = styles$title,
@@ -209,6 +213,17 @@ append_bn_impact <- function(
     rows = total_impact_row, cols = cols_all, gridExpand = TRUE, stack = TRUE
   )
 
+  # Outer box around table (header through total impact)
+  table_rows <- seq(row_data_start, total_impact_row)
+  openxlsx::addStyle(wb, sheet_name,
+    style = openxlsx::createStyle(border = "Left", borderStyle = "medium"),
+    rows = table_rows, cols = min(cols_all), gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name,
+    style = openxlsx::createStyle(border = "Right", borderStyle = "medium"),
+    rows = table_rows, cols = max(cols_all), gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name,
+    style = openxlsx::createStyle(border = "Bottom", borderStyle = "medium"),
+    rows = total_impact_row, cols = cols_all, gridExpand = TRUE, stack = TRUE)
 
   # ---------------------------------------------------------------------------
   # Conditional formatting per index column
