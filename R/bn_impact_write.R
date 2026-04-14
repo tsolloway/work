@@ -110,10 +110,11 @@ bn_impact_write <- function(
   }
 
   has_weights <- !is.null(table_weighted)
-  subgroups <- meta[["subgroups"]]
-  index_by  <- meta[["index_by"]]
-  type      <- meta[["type"]]
-  dv        <- meta[["dv"]]
+  subgroups        <- meta[["subgroups"]]
+  index_by         <- meta[["index_by"]]
+  type             <- meta[["type"]]
+  dv               <- meta[["dv"]]
+  min_base_for_lift <- meta[["min_base_for_lift"]]
 
   # Use name of dv if named, otherwise the value itself
 dv_display <- if (!is.null(names(dv))) names(dv) else dv
@@ -271,7 +272,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       variable_width = variable_width, community_width = community_width,
       label_width = label_width,
       has_weights = has_weights,
-      weighted_results_sheet = if (has_weights) "Results_Weighted" else NULL
+      weighted_results_sheet = if (has_weights) "Results_Weighted" else NULL,
+      min_base_for_lift = min_base_for_lift
     )
 
     # Community dynamic dashboard (optional)
@@ -294,7 +296,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
         variable_width = variable_width, community_width = community_width,
         label_width = label_width,
         has_weights = !is.null(community_weighted),
-        weighted_results_sheet = if (!is.null(community_weighted)) "Results_Community_Weighted" else NULL
+        weighted_results_sheet = if (!is.null(community_weighted)) "Results_Community_Weighted" else NULL,
+        min_base_for_lift = min_base_for_lift
       )
     }
 

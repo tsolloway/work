@@ -35,7 +35,8 @@ append_bn_impact_dynamic <- function(
     community_width = 20,
     label_width = "auto",
     has_weights = FALSE,
-    weighted_results_sheet = NULL
+    weighted_results_sheet = NULL,
+    min_base_for_lift = NULL
 ) {
 
   n_results_rows <- nrow(table)
@@ -477,21 +478,21 @@ append_bn_impact_dynamic <- function(
         results_row_ref <- paste0(results_sheet, "!", ri + 1, ":", ri + 1)
       }
 
-      # Raw metric (hidden)
-      raw_formula <- paste0("INDEX(", results_row_ref, ",", match_col, ")")
+      # Raw metric (hidden — blank if error)
+      raw_formula <- paste0("IFERROR(INDEX(", results_row_ref, ",", match_col, "),\"\")")
       openxlsx::writeFormula(wb, dash_sheet, x = raw_formula,
         startRow = row, startCol = raw_metric_cols[sg_i])
 
-      # P-value (hidden)
-      pval_formula <- paste0("INDEX(", results_row_ref, ",", pval_match, ")")
+      # P-value (hidden — blank if error)
+      pval_formula <- paste0("IFERROR(INDEX(", results_row_ref, ",", pval_match, "),\"\")")
       openxlsx::writeFormula(wb, dash_sheet, x = pval_formula,
         startRow = row, startCol = p_val_cols[sg_i])
 
-      # Index = ABS(raw) / mean(ABS(all)) * 100
+      # Index = ABS(raw) / mean(ABS(all)) * 100 (blank if all-zero column)
       cell_formula <- paste0(
-        "ABS(INDEX(", results_row_ref, ",", match_col, "))",
+        "IFERROR(ABS(INDEX(", results_row_ref, ",", match_col, "))",
         "/(SUMPRODUCT(ABS(INDEX(", results_all_rows, ",0,", match_col, ")))",
-        "/ROWS(", results_count_ref, "))*100"
+        "/ROWS(", results_count_ref, "))*100,\"\")"
       )
       openxlsx::writeFormula(wb, dash_sheet, x = cell_formula,
         startRow = row, startCol = index_cols_pos[sg_i])
@@ -542,8 +543,8 @@ append_bn_impact_dynamic <- function(
     match_col <- paste0("MATCH(", col_name_f, ",", results_header_range, ",0)")
 
     ti_formula <- paste0(
-      "SUMPRODUCT(ABS(INDEX(", results_all_rows, ",0,", match_col, ")))",
-      "/ROWS(", results_count_ref, ")"
+      "IFERROR(SUMPRODUCT(ABS(INDEX(", results_all_rows, ",0,", match_col, ")))",
+      "/ROWS(", results_count_ref, "),\"\")"
     )
     openxlsx::writeFormula(wb, dash_sheet, x = ti_formula,
       startRow = total_impact_row, startCol = index_cols_pos[sg_i])
@@ -576,6 +577,12 @@ append_bn_impact_dynamic <- function(
     startRow = total_impact_row + 2, startCol = col_data_start)
   openxlsx::writeData(wb, dash_sheet, "Black cells mean an insignificant relationship",
     startRow = total_impact_row + 3, startCol = col_data_start)
+
+  if (!is.null(min_base_for_lift)) {
+    openxlsx::writeData(wb, dash_sheet,
+      paste0("Lift impacts are not calculated when the base is below ", min_base_for_lift),
+      startRow = total_impact_row + 4, startCol = col_data_start)
+  }
 
   # ---------------------------------------------------------------------------
   # Conditional formatting

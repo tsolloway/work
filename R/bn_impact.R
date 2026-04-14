@@ -333,7 +333,8 @@ bn_impact <- function(
       subgroups = if (process_subgroups) names(obj) else NULL,
       dv = dv,
       brand = brand,
-      brand_names = brand_names_resolved
+      brand_names = brand_names_resolved,
+      min_base_for_lift = min_base_for_lift
     )
   )
 }

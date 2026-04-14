@@ -21,7 +21,7 @@ bn_impacts(
   impact_metric_type = c("proportional", "absolute"),
   brand = NULL,
   brand_names = NULL,
-  min_base_for_lift = 60,
+  min_base_for_lift = 75,
   include_base = TRUE,
   dv_metric = c("top_box", "mean"),
   weight = NULL,
