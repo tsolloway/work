@@ -15,6 +15,7 @@ bn_prioritize_write(
   sig_threshold = 0.05,
   marginal_threshold = 0.1,
   lift = 0.1,
+  very_hide_all = TRUE,
   path = "."
 )
 }
@@ -47,6 +48,9 @@ Default 0.10.}
 
 \item{lift}{Numeric. The lift fraction used in the prioritization analysis,
 displayed in the footer. Default 0.10 (10 percent).}
+
+\item{very_hide_all}{Logical. If TRUE (default), all sheets except Prioritization
+are set to veryHidden. If FALSE, they are simply hidden.}
 
 \item{path}{Character. Directory to write workbook to. Default \code{"."}.}
 }

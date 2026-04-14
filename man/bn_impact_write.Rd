@@ -21,6 +21,7 @@ bn_impact_write(
   shift_step = 0.025,
   network_type = "none",
   dictionary = NULL,
+  very_hide_all = TRUE,
   path = "."
 )
 }
@@ -86,6 +87,9 @@ sliders. Default 0.025.}
 
 \item{dictionary}{Optional. A data frame or named object for variable labels.
 Passed to the simulator for labeling target variables.}
+
+\item{very_hide_all}{Logical. If TRUE (default), all hidden sheets are set to
+veryHidden. If FALSE, they are simply hidden.}
 
 \item{path}{Character. Directory to write workbook to. Default \code{"."}.}
 }

@@ -25,7 +25,7 @@
 #'   Default 0.10.
 #' @param lift Numeric. The lift fraction used in the prioritization analysis,
 #'   displayed in the footer. Default 0.10 (10 percent).
-#' @param very_hide_all Logical. If TRUE (default), all sheets except Dashboard
+#' @param very_hide_all Logical. If TRUE (default), all sheets except Prioritization
 #'   are set to veryHidden. If FALSE, they are simply hidden.
 #' @param path Character. Directory to write workbook to. Default \code{"."}.
 #'
@@ -75,10 +75,10 @@ bn_prioritize_write <- function(
   active_dims <- names(dims)[purrr::map_int(dims, length) > 1]
 
   # ---------------------------------------------------------------------------
-  # 1. Dashboard sheet (created first)
+  # 1. Prioritization sheet (created first)
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, "Dashboard", tabColour = "#FFFFFF")
-  openxlsx::addStyle(wb, "Dashboard",
+  openxlsx::addWorksheet(wb, "Prioritization", tabColour = "#FFFFFF")
+  openxlsx::addStyle(wb, "Prioritization",
     style = openxlsx::createStyle(fgFill = "#FFFFFF"),
     rows = 1:200, cols = 1:50, gridExpand = TRUE, stack = TRUE)
 
@@ -143,12 +143,12 @@ bn_prioritize_write <- function(
   }
 
   # ---------------------------------------------------------------------------
-  # 4. Build Dashboard
+  # 4. Build Prioritization
   # ---------------------------------------------------------------------------
   styles <- list(
     title      = openxlsx::createStyle(textDecoration = "bold", fontSize = 18),
     sub_title  = openxlsx::createStyle(textDecoration = c("bold", "italic"), fontSize = 14),
-    header     = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE),
+    header     = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE, fgFill = "#D9D9D9"),
     center_int = openxlsx::createStyle(numFmt = "0", halign = "center"),
     center_2dp = openxlsx::createStyle(numFmt = "0.00", halign = "center"),
     center_pct = openxlsx::createStyle(numFmt = "0.00%", halign = "center"),
@@ -161,7 +161,7 @@ bn_prioritize_write <- function(
     dropdown_cell  = openxlsx::createStyle(border = "Bottom", borderStyle = "thin", halign = "left")
   )
 
-  dash <- "Dashboard"
+  dash <- "Prioritization"
   col_data_start <- 2L
 
   # Title
@@ -229,7 +229,7 @@ bn_prioritize_write <- function(
   # For dimensions with only one value, hardcode that value in the key
   key_parts <- purrr::map_chr(dim_names, function(dn) {
     if (dn %in% active_dims) {
-      paste0("Dashboard!", dropdown_refs[[dn]])
+      paste0("Prioritization!", dropdown_refs[[dn]])
     } else {
       paste0("\"", dims[[dn]], "\"")
     }
@@ -245,7 +245,7 @@ bn_prioritize_write <- function(
   )
 
   # --- Data table ---
-  # Dashboard columns (no combo) and their source column letters in the data sheets
+  # Prioritization columns (no combo) and their source column letters in the data sheets
   # Source: A=priority, B=variable, C=label, D=combo(skip), E=dv_estimate,
   #         F=marginal_gain, G=marginal_gain_pct, H=p_value
   display_headers <- c("Step", "Variable", "Label",
@@ -470,27 +470,27 @@ bn_prioritize_write <- function(
   for (ri in seq_along(data_rows)) {
     dr <- data_rows[ri]
     chart_r <- ri + 1
-    blank_check <- paste0('Dashboard!', var_let, dr, '=""')
+    blank_check <- paste0('Prioritization!', var_let, dr, '=""')
 
     # Col A: Label ("" so category axis doesn't show #N/A text)
     openxlsx::writeFormula(wb, "_chart_data",
-      x = paste0('IF(', blank_check, ',"",Dashboard!', var_let, dr, ')'),
+      x = paste0('IF(', blank_check, ',"",Prioritization!', var_let, dr, ')'),
       startRow = chart_r, startCol = 1)
 
     # Col B: Previous = DV Estimate - Marginal Gain (#N/A so chart gaps)
     openxlsx::writeFormula(wb, "_chart_data",
-      x = paste0('IF(', blank_check, ',NA(),Dashboard!', est_let, dr,
-                 '-Dashboard!', gain_let, dr, ')'),
+      x = paste0('IF(', blank_check, ',NA(),Prioritization!', est_let, dr,
+                 '-Prioritization!', gain_let, dr, ')'),
       startRow = chart_r, startCol = 2)
 
     # Col C: Incremental = Marginal Gain
     openxlsx::writeFormula(wb, "_chart_data",
-      x = paste0('IF(', blank_check, ',NA(),Dashboard!', gain_let, dr, ')'),
+      x = paste0('IF(', blank_check, ',NA(),Prioritization!', gain_let, dr, ')'),
       startRow = chart_r, startCol = 3)
 
     # Col D: Cumulative DV = DV Estimate
     openxlsx::writeFormula(wb, "_chart_data",
-      x = paste0('IF(', blank_check, ',NA(),Dashboard!', est_let, dr, ')'),
+      x = paste0('IF(', blank_check, ',NA(),Prioritization!', est_let, dr, ')'),
       startRow = chart_r, startCol = 4)
   }
 
@@ -499,9 +499,9 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   sheet_names <- names(wb)
   if (very_hide_all) {
-    vis <- ifelse(sheet_names == "Dashboard", TRUE, "veryHidden")
+    vis <- ifelse(sheet_names == "Prioritization", TRUE, "veryHidden")
   } else {
-    vis <- ifelse(sheet_names == "Dashboard", TRUE, FALSE)
+    vis <- ifelse(sheet_names == "Prioritization", TRUE, FALSE)
   }
   openxlsx::sheetVisibility(wb) <- vis
 
@@ -537,7 +537,7 @@ bn_prioritize_write <- function(
   )
 
   wb2 <- openxlsx2::wb_load(file_path)
-  wb2$add_chart_xml(sheet = "Dashboard", dims = chart_dims, xml = chart_xml)
+  wb2$add_chart_xml(sheet = "Prioritization", dims = chart_dims, xml = chart_xml)
   wb2$save(file_path, overwrite = TRUE)
 
   cli::cli_alert_success("Prioritization workbook saved: {file_path}")

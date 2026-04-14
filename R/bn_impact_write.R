@@ -50,6 +50,8 @@
 #'   \code{"none"} (default) skips network maps.
 #' @param dictionary Optional. A data frame or named object for variable labels.
 #'   Passed to the simulator for labeling target variables.
+#' @param very_hide_all Logical. If TRUE (default), all hidden sheets are set to
+#'   veryHidden. If FALSE, they are simply hidden.
 #' @param path Character. Directory to write workbook to. Default \code{"."}.
 #'
 #' @return Workbook object (invisibly).
@@ -72,6 +74,7 @@ bn_impact_write <- function(
     shift_step = 0.025,
     network_type = "none",
     dictionary = NULL,
+    very_hide_all = TRUE,
     path = "."
 ){
 
@@ -232,10 +235,12 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       )
       # _sim_data and _sim_lookup sheets added — hide them
       n_sheets <- length(names(wb))
-      vis <- rep(TRUE, n_sheets)
       sheet_names <- names(wb)
-      for (si in seq_along(sheet_names)) {
-        if (sheet_names[si] %in% c("_sim_data", "_sim_pct_data", "_sim_lookup")) vis[si] <- FALSE
+      hide_these <- c("_sim_data", "_sim_pct_data", "_sim_lookup")
+      if (very_hide_all) {
+        vis <- ifelse(sheet_names %in% hide_these, "veryHidden", TRUE)
+      } else {
+        vis <- ifelse(sheet_names %in% hide_these, FALSE, TRUE)
       }
       openxlsx::sheetVisibility(wb) <- vis
     }
@@ -340,16 +345,16 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       wb <- append_bn_network_maps(wb = wb, bn_full = bn_full, network_type = network_type)
     }
 
-    # Hide helper sheets — set visibility for all sheets
-    # Set visibility — all helper sheets hidden (no veryHidden to avoid coercion)
+    # Hide helper sheets
     sheet_names <- names(wb)
     hide_sheets <- c("Results", "Results_Community", "Results_Weighted",
       "Results_Community_Weighted", "_sim_data", "_sim_pct_data",
       "_lookup", "_lookup_community", "_sim_lookup")
 
-    vis <- rep(TRUE, length(sheet_names))
-    for (si in seq_along(sheet_names)) {
-      if (sheet_names[si] %in% hide_sheets) vis[si] <- FALSE
+    if (very_hide_all) {
+      vis <- ifelse(sheet_names %in% hide_sheets, "veryHidden", TRUE)
+    } else {
+      vis <- ifelse(sheet_names %in% hide_sheets, FALSE, TRUE)
     }
     openxlsx::sheetVisibility(wb) <- vis
 
