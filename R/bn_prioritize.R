@@ -44,6 +44,9 @@
 #'   to produce p-values via a noise-floor test.
 #' @param noise_tail Numeric. Fraction of tail steps used to estimate the
 #'   noise floor for bootstrap p-values. Default 1/3.
+#' @param min_base_for_boot Integer. Minimum sample size required to run
+#'   bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
+#'   skipped. Default 75.
 #' @param weight Character or NULL. Column name in \code{df} containing
 #'   observation weights for the lift strategy frequency distribution. Default
 #'   NULL (unweighted).
@@ -74,6 +77,7 @@ bn_prioritize <- function(
     max_rounds = NULL,
     n_boot_final = 100,
     noise_tail = 1/3,
+    min_base_for_boot = 75,
     weight = NULL,
     dictionary = NULL,
     use_parallel = TRUE,
@@ -84,6 +88,10 @@ bn_prioritize <- function(
   search <- match.arg(search)
   dv_metric <- match.arg(dv_metric)
   impact_metric_type <- match.arg(impact_metric_type)
+
+  # Preserve named dv for display, strip for bnlearn
+  dv <- unname(dv)
+
   set.seed(seed)
 
   # gRain uses cat() not message() — sink stdout to suppress
@@ -351,7 +359,7 @@ bn_prioritize <- function(
   # step's marginal gain to the noise floor (average gain of the tail steps).
   # ---------------------------------------------------------------------------
   n_obs <- nrow(df)
-  if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs >= 150) {
+  if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs >= min_base_for_boot) {
     cli::cli_alert_info("Bootstrapping {n_boot_final} replicates for p-values (n = {n_obs})")
 
     n_steps <- nrow(result)
@@ -434,8 +442,8 @@ bn_prioritize <- function(
       # Proportion of bootstraps where step k's gain <= its noise floor
       round(mean(gains_k[valid] <= noise_k[valid]), 5)
     })
-  } else if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs < 150) {
-    cli::cli_alert_warning("Skipping bootstrap: base too small (n = {n_obs}, minimum = 150)")
+  } else if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs < min_base_for_boot) {
+    cli::cli_alert_warning("Skipping bootstrap: base too small (n = {n_obs}, minimum = {min_base_for_boot})")
   }
 
   # ---------------------------------------------------------------------------

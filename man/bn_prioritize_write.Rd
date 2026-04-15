@@ -10,6 +10,7 @@ bn_prioritize_write(
   sub_title = NULL,
   title = NULL,
   variable_width = 20,
+  community_width = 20,
   label_width = 20,
   combo_width = 40,
   sig_threshold = 0.05,
@@ -33,6 +34,9 @@ header (e.g. project name). Default NULL.}
 defaults to \code{"Prioritization Analysis"}. Default NULL.}
 
 \item{variable_width}{Numeric. Column width for the Variable column.
+Default 20.}
+
+\item{community_width}{Numeric. Column width for the Community column.
 Default 20.}
 
 \item{label_width}{Numeric. Column width for the Label column. Default 20.}

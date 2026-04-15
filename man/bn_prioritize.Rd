@@ -20,6 +20,7 @@ bn_prioritize(
   max_rounds = NULL,
   n_boot_final = 100,
   noise_tail = 1/3,
+  min_base_for_boot = 75,
   weight = NULL,
   dictionary = NULL,
   use_parallel = TRUE,
@@ -80,6 +81,10 @@ to produce p-values via a noise-floor test.}
 
 \item{noise_tail}{Numeric. Fraction of tail steps used to estimate the
 noise floor for bootstrap p-values. Default 1/3.}
+
+\item{min_base_for_boot}{Integer. Minimum sample size required to run
+bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
+skipped. Default 75.}
 
 \item{weight}{Character or NULL. Column name in \code{df} containing
 observation weights for the lift strategy frequency distribution. Default

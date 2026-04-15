@@ -68,21 +68,20 @@ bn_impacts <- function(
     dictionary = NULL,
     n_boot = 1,
     n_querry = 1e4,
-    lift = 0,
+    lift = c(0, 0.1),
     impact_metric_type = c("proportional", "absolute"),
     brand = NULL,
     brand_names = NULL,
     min_base_for_lift = 75,
     include_base = TRUE,
-    dv_metric = c("top_box", "mean"),
+    dv_metric = c("mean", "top_box"),
     weight = NULL,
-    mi_boot = NULL,
+    mi_boot = 100,
     use_parallel = TRUE,
     seed = 1
 ) {
 
   # Attribute (unweighted)
-  cli::cli_alert_info("Running attribute impact (unweighted)")
   attr_result <- bn_impact(
     obj = obj, df = df, dv = dv, ivs = ivs,
     do_community = FALSE,
@@ -105,7 +104,6 @@ bn_impacts <- function(
   # Attribute (weighted)
   attr_weighted <- NULL
   if (!is.null(weight)) {
-    cli::cli_alert_info("Running attribute impact (weighted)")
     attr_weighted <- bn_impact(
       obj = obj, df = df, dv = dv, ivs = ivs,
       do_community = FALSE,
@@ -131,7 +129,6 @@ bn_impacts <- function(
   comm_weighted <- NULL
 
   if (do_community) {
-    cli::cli_alert_info("Running community impact (unweighted)")
     comm_result <- bn_impact(
       obj = obj, df = df, dv = dv, ivs = ivs,
       do_community = TRUE,
@@ -153,7 +150,6 @@ bn_impacts <- function(
 
     # Community (weighted)
     if (!is.null(weight)) {
-      cli::cli_alert_info("Running community impact (weighted)")
       comm_weighted <- bn_impact(
         obj = obj, df = df, dv = dv, ivs = ivs,
         do_community = TRUE,

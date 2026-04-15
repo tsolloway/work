@@ -12,7 +12,7 @@ bn_impact_write(
   variable_width = 20,
   community_width = 20,
   label_width = "auto",
-  wb_type = c("standard", "dynamic"),
+  wb_type = c("dynamic", "standard"),
   add_simple_simulator = FALSE,
   bn_obj = NULL,
   df = NULL,
@@ -22,6 +22,7 @@ bn_impact_write(
   network_type = "none",
   dictionary = NULL,
   very_hide_all = TRUE,
+  min_base_for_lift = NULL,
   path = "."
 )
 }

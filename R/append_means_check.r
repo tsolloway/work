@@ -12,129 +12,125 @@ append_means_check <- function(
     write_file = TRUE
 ){
 
-  work::start()
-
-  if( is.null(wb) ) wb <- oxl_create_workbook()
-  if( is.null(sheet_name) ) sheet_name <- "means_check"
+  if(is.null(wb)) wb <- oxl_create_workbook()
+  if(is.null(sheet_name)) sheet_name <- "means_check"
 
 
-  #############################
-  # set up
-  #############################
+  # ---------------------------------------------------------------------------
+  # Styles (matches bn_impact)
+  # ---------------------------------------------------------------------------
+  styles <- list(
+    title     = openxlsx::createStyle(textDecoration = "bold", fontSize = 18),
+    sub_title = openxlsx::createStyle(textDecoration = c("bold", "italic"), fontSize = 14),
+    header    = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE,
+                                      border = "TopBottom", borderStyle = "medium",
+                                      fgFill = "#D9D9D9"),
+    center    = openxlsx::createStyle(halign = "center"),
+    left      = openxlsx::createStyle(halign = "left"),
+    mean_fmt  = openxlsx::createStyle(numFmt = "0.00", halign = "center"),
+    count_fmt = openxlsx::createStyle(numFmt = "0", halign = "center")
+  )
 
-  row_data_start <- 5
+
+  # ---------------------------------------------------------------------------
+  # Layout
+  # ---------------------------------------------------------------------------
+  row_title <- 2
+  row_subtitle <- 3
+  row_header <- 5
   col_data_start <- 2
 
   col_all <- seq(ncol(df_means)) + col_data_start - 1
+  col_first <- min(col_all)
+  col_last <- max(col_all)
 
   col_var <- col_data_start
   col_label <- col_var + 1
   col_count <- grep("- N", names(df_means)) + col_data_start - 1
   col_mean <- setdiff(col_all, c(col_var, col_label, col_count))
 
-  row_header <- row_data_start
-  row_data_all <- seq(nrow(df_means)) + row_data_start
-  row_data_start <- row_data_all %>% head(1)
-  row_data_end <- row_data_all %>% tail(1)
-
-  row_title <- row_data_start - 4
-  row_subtitle <- row_title + 1
-
-  openxlsx::addWorksheet(wb, sheet_name)
+  row_data_all <- seq(nrow(df_means)) + row_header
+  row_data_start <- min(row_data_all)
+  row_data_end <- max(row_data_all)
 
 
-  #############################
-  # add data
-  #############################
+  # ---------------------------------------------------------------------------
+  # Write data
+  # ---------------------------------------------------------------------------
+  openxlsx::addWorksheet(wb, sheet_name, gridLines = FALSE)
 
-  openxlsx::writeData(wb, sheet_name, title, startRow = row_title, startCol = col_var)
-  openxlsx::writeData(wb, sheet_name, sub_title, startRow = row_subtitle, startCol = col_var)
+  openxlsx::writeData(wb, sheet_name, title, startRow = row_title, startCol = col_data_start)
+  openxlsx::addStyle(wb, sheet_name, style = styles$title,
+    rows = row_title, cols = col_data_start, stack = TRUE)
 
-  openxlsx::writeData(wb, sheet_name, df_means, startRow = row_header, startCol = col_var)
+  openxlsx::writeData(wb, sheet_name, sub_title, startRow = row_subtitle, startCol = col_data_start)
+  openxlsx::addStyle(wb, sheet_name, style = styles$sub_title,
+    rows = row_subtitle, cols = col_data_start, stack = TRUE)
+
+  openxlsx::writeData(wb, sheet_name, df_means, startRow = row_header, startCol = col_data_start)
 
 
-  #############################
-  # format data
-  #############################
+  # ---------------------------------------------------------------------------
+  # Cell formatting
+  # ---------------------------------------------------------------------------
+  openxlsx::addStyle(wb, sheet_name, style = styles$mean_fmt,
+    rows = row_data_all, cols = col_mean, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = styles$count_fmt,
+    rows = row_data_all, cols = col_count, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = styles$center,
+    rows = row_data_all, cols = col_var, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name, style = styles$left,
+    rows = row_data_all, cols = col_label, gridExpand = TRUE, stack = TRUE)
 
-  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(numFmt = "0.00", halign = "center"), rows = row_data_all, cols = col_mean, gridExpand = TRUE, stack = TRUE)
-  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(numFmt = "0", halign = "center"), rows = row_data_all, cols = col_count, gridExpand = TRUE, stack = TRUE)
-  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(halign = "center"), rows = row_data_all, cols = col_var, gridExpand = TRUE, stack = TRUE)
-  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(halign = "left"), rows = row_data_all, cols = col_label, gridExpand = TRUE, stack = TRUE)
-
-  openxlsx::setColWidths(wb, sheet_name, cols = col_label, widths = label_width)
   openxlsx::setColWidths(wb, sheet_name, cols = col_var, widths = variable_width)
-
-  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(fontSize = 16, textDecoration = "bold"), rows = row_title, cols = col_var, gridExpand = TRUE, stack = TRUE)
-  openxlsx::addStyle(wb, sheet_name, style = openxlsx::createStyle(fontSize = 14, textDecoration = c("bold", "italic")), rows = row_subtitle, cols = col_var, gridExpand = TRUE, stack = TRUE)
+  openxlsx::setColWidths(wb, sheet_name, cols = col_label, widths = label_width)
 
 
+  # ---------------------------------------------------------------------------
+  # Header
+  # ---------------------------------------------------------------------------
+  openxlsx::addStyle(wb, sheet_name, style = styles$header,
+    rows = row_header, cols = col_all, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name,
+    style = openxlsx::createStyle(border = "TopBottomLeft", borderStyle = "medium"),
+    rows = row_header, cols = col_first, stack = TRUE)
+  openxlsx::addStyle(wb, sheet_name,
+    style = openxlsx::createStyle(border = "TopBottomRight", borderStyle = "medium"),
+    rows = row_header, cols = col_last, stack = TRUE)
+
+
+  # ---------------------------------------------------------------------------
+  # Conditional formatting
+  # ---------------------------------------------------------------------------
   for(i in col_mean){
-    openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = row_data_all, style = c("#f66a6e","#feea8a","#66bd7d"), type = "colourScale", stack = TRUE)
+    openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = row_data_all,
+      style = c("#f66a6e", "#feea8a", "#66bd7d"), type = "colourScale")
   }
 
 
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(
-      textDecoration = "bold", halign = "center", wrapText = TRUE,
-      border = "TopBottom", borderStyle = "thick", borderColour = "black"
-    ),
-    rows = row_header, cols = col_all, gridExpand = TRUE, stack = TRUE
+  # ---------------------------------------------------------------------------
+  # Outer box border (matches bn_impact)
+  # ---------------------------------------------------------------------------
+  oxl_outer_box(wb, sheet_name,
+    row_start = row_header, row_end = row_data_end,
+    col_start = col_first, col_end = col_last,
+    borderStyle = "medium"
   )
 
 
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(
-      border = "left", borderStyle = "thick", borderColour = "black"
-    ),
-    rows = c(row_header, row_data_all), cols = col_var, gridExpand = TRUE, stack = TRUE
-  )
-
-
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(
-      border = "right", borderStyle = "thick", borderColour = "black"
-    ),
-    rows = c(row_header, row_data_all), cols = col_all %>% tail(1), gridExpand = TRUE, stack = TRUE
-  )
-
-
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(
-      border = "bottom", borderStyle = "thick", borderColour = "black"
-    ),
-    rows = row_data_end, cols = col_all, gridExpand = TRUE, stack = TRUE
-  )
-
-
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(
-      border = "right", borderStyle = "thick", borderColour = "black"
-    ),
-    rows = row_data_all, cols = col_label, gridExpand = TRUE, stack = TRUE
-  )
-
-
-  openxlsx::freezePane(
-    wb,
-    sheet_name,
+  # ---------------------------------------------------------------------------
+  # Freeze & filter
+  # ---------------------------------------------------------------------------
+  openxlsx::freezePane(wb, sheet_name,
     firstActiveRow = row_data_start,
-    firstActiveCol = col_label + 1
-  )
+    firstActiveCol = col_label + 1)
 
-
-  openxlsx::addFilter(wb, sheet_name, row = row_header, col_all)
+  openxlsx::addFilter(wb, sheet_name, rows = row_header, cols = col_all)
 
 
   if(write_file){
-    openxlsx::saveWorkbook(wb, glue("{title} - Means Check.xlsx"), overwrite = TRUE)
+    openxlsx::saveWorkbook(wb, glue::glue("{title} - Means Check.xlsx"), overwrite = TRUE)
   }
-
 
   return(wb)
 }

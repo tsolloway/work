@@ -204,6 +204,9 @@ bn_impact <- function(
   impact_metric_type <- match.arg(impact_metric_type)
   dv_metric <- match.arg(dv_metric)
 
+  # Preserve named dv for meta, strip for bnlearn
+  dv_original <- dv
+  dv <- unname(dv)
 
   if(process_subgroups){
 
@@ -331,7 +334,7 @@ bn_impact <- function(
       index_by = index_by,
       lift = lift,
       subgroups = if (process_subgroups) names(obj) else NULL,
-      dv = dv,
+      dv = dv_original,
       brand = brand,
       brand_names = brand_names_resolved,
       min_base_for_lift = min_base_for_lift

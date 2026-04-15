@@ -42,7 +42,13 @@
 #'   Default 100.
 #' @param noise_tail Numeric. Fraction of tail steps for noise floor.
 #'   Default 1/3.
+#' @param min_base_for_boot Integer. Minimum sample size to run bootstrap
+#'   p-values. Default 75.
 #' @param dictionary Optional. Dictionary for variable labels.
+#' @param community_assignment Optional. Community assignment node table (e.g.,
+#'   \code{bn$viz_prep$attribute_viz_prep$nodes}) with \code{id} and
+#'   \code{community_name} columns. When provided, a \code{community} column
+#'   is added to each result tibble after \code{variable}.
 #' @param use_parallel Logical. Parallelize candidate evaluation. Default TRUE.
 #' @param seed Integer. Random seed. Default 1.
 #'
@@ -83,7 +89,9 @@ bn_prioritizations <- function(
     max_rounds = NULL,
     n_boot_final = 100,
     noise_tail = 1/3,
+    min_base_for_boot = 75,
     dictionary = NULL,
+    community_assignment = NULL,
     use_parallel = TRUE,
     seed = 1
 ) {
@@ -187,6 +195,7 @@ bn_prioritizations <- function(
         impact_metric_type = impact_metric_type,
         threshold = threshold, max_rounds = max_rounds,
         n_boot_final = n_boot_final, noise_tail = noise_tail,
+        min_base_for_boot = min_base_for_boot,
         weight = task$wt, dictionary = dictionary,
         use_parallel = FALSE, seed = seed
       )
@@ -241,6 +250,38 @@ bn_prioritizations <- function(
       for (b in names(results_lift_brand_weighted)) {
         results_lift_brand_weighted[[b]] <- results_lift_brand_weighted[[b]][[1]]
       }
+    }
+  }
+
+  # ---------------------------------------------------------------------------
+  # Add community assignment (variable → community name)
+  # ---------------------------------------------------------------------------
+  if (!is.null(community_assignment)) {
+    comm_lookup <- community_assignment %>%
+      dplyr::mutate(community_name = as.character(community_name)) %>%
+      dplyr::select(id, community_name)
+
+    .add_community <- function(tbl) {
+      if (is.data.frame(tbl)) {
+        tbl %>%
+          dplyr::left_join(comm_lookup, by = dplyr::join_by(variable == id)) %>%
+          dplyr::relocate(community_name, .after = variable) %>%
+          dplyr::rename(community = community_name)
+      } else if (is.list(tbl)) {
+        purrr::map(tbl, .add_community)
+      } else {
+        tbl
+      }
+    }
+
+    results_max <- .add_community(results_max)
+    results_lift <- .add_community(results_lift)
+    if (!is.null(results_lift_weighted)) results_lift_weighted <- .add_community(results_lift_weighted)
+    if (!is.null(results_lift_brand)) {
+      results_lift_brand <- purrr::map(results_lift_brand, .add_community)
+    }
+    if (!is.null(results_lift_brand_weighted)) {
+      results_lift_brand_weighted <- purrr::map(results_lift_brand_weighted, .add_community)
     }
   }
 

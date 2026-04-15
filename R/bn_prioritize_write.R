@@ -16,6 +16,8 @@
 #'   defaults to \code{"Prioritization Analysis"}. Default NULL.
 #' @param variable_width Numeric. Column width for the Variable column.
 #'   Default 20.
+#' @param community_width Numeric. Column width for the Community column.
+#'   Default 20.
 #' @param label_width Numeric. Column width for the Label column. Default 20.
 #' @param combo_width Numeric. Column width for the Combo column.
 #'   Default 40.
@@ -40,6 +42,7 @@ bn_prioritize_write <- function(
     sub_title = NULL,
     title = NULL,
     variable_width = 20,
+    community_width = 20,
     label_width = 20,
     combo_width = 40,
     sig_threshold = 0.05,
@@ -51,7 +54,16 @@ bn_prioritize_write <- function(
 
   if (is.null(file_name)) file_name <- sub_title
   if (is.null(sub_title)) sub_title <- file_name
-  if (is.null(title)) title <- "Prioritization Analysis"
+
+  if (is.null(title)) {
+    dv <- result[["meta"]][["dv"]]
+    dv_display <- if (!is.null(names(dv))) names(dv) else dv
+    title <- if (!is.null(dv_display)) {
+      paste("Prioritization Analysis of", dv_display)
+    } else {
+      "Prioritization Analysis"
+    }
+  }
 
   wb <- oxl_create_workbook()
 
@@ -61,6 +73,7 @@ bn_prioritize_write <- function(
   registry <- .prioritize_build_registry(result)
 
   has_p <- any(purrr::map_lgl(registry, ~"p_value" %in% names(.x$tbl)))
+  has_community <- any(purrr::map_lgl(registry, ~"community" %in% names(.x$tbl)))
   max_rows <- max(purrr::map_int(registry, ~nrow(.x$tbl)))
   n_entries <- length(registry)
 
@@ -243,14 +256,26 @@ bn_prioritize_write <- function(
 
   # --- Data table ---
   # Prioritization columns (no combo) and their source column letters in the data sheets
-  # Source: A=priority, B=variable, C=label, D=combo(skip), E=dv_estimate,
-  #         F=marginal_gain, G=marginal_gain_pct, H=p_value
-  display_headers <- c("Step", "Variable", "Label",
-                       "DV Estimate", "Marginal Gain", "Marginal Gain %")
-  source_letters <- c("A", "B", "C", "E", "F", "G")
-  if (has_p) {
-    display_headers <- c(display_headers, "p-value")
-    source_letters <- c(source_letters, "H")
+  # Without community: A=priority, B=variable, C=label, D=combo, E=dv_estimate,
+  #   F=marginal_gain, G=marginal_gain_pct, H=p_value
+  # With community: A=priority, B=variable, C=community, D=label, E=combo,
+  #   F=dv_estimate, G=marginal_gain, H=marginal_gain_pct, I=p_value
+  if (has_community) {
+    display_headers <- c("Step", "Variable", "Community", "Label",
+                         "DV Estimate", "Marginal Gain", "Marginal Gain %")
+    source_letters <- c("A", "B", "C", "D", "F", "G", "H")
+    if (has_p) {
+      display_headers <- c(display_headers, "p-value")
+      source_letters <- c(source_letters, "I")
+    }
+  } else {
+    display_headers <- c("Step", "Variable", "Label",
+                         "DV Estimate", "Marginal Gain", "Marginal Gain %")
+    source_letters <- c("A", "B", "C", "E", "F", "G")
+    if (has_p) {
+      display_headers <- c(display_headers, "p-value")
+      source_letters <- c(source_letters, "H")
+    }
   }
 
   n_display_cols <- length(display_headers)
@@ -287,18 +312,22 @@ bn_prioritize_write <- function(
     }
   }
 
-  # --- Column widths ---
-  col_step <- col_data_start
-  col_variable <- col_data_start + 1
-  col_label <- col_data_start + 2
-  col_estimate <- col_data_start + 3
-  col_gain <- col_data_start + 4
-  col_gain_pct <- col_data_start + 5
-  col_pvalue <- if (has_p) col_data_start + 6 else NULL
+  # --- Column positions (derived from display_headers order) ---
+  col_step <- col_data_start + match("Step", display_headers) - 1
+  col_variable <- col_data_start + match("Variable", display_headers) - 1
+  col_community <- if (has_community) col_data_start + match("Community", display_headers) - 1 else NULL
+  col_label <- col_data_start + match("Label", display_headers) - 1
+  col_estimate <- col_data_start + match("DV Estimate", display_headers) - 1
+  col_gain <- col_data_start + match("Marginal Gain", display_headers) - 1
+  col_gain_pct <- col_data_start + match("Marginal Gain %", display_headers) - 1
+  col_pvalue <- if (has_p) col_data_start + match("p-value", display_headers) - 1 else NULL
 
-  # Table columns
+  # --- Column widths ---
   openxlsx::setColWidths(wb, dash, cols = col_step, widths = 6)
   openxlsx::setColWidths(wb, dash, cols = col_variable, widths = variable_width)
+  if (!is.null(col_community)) {
+    openxlsx::setColWidths(wb, dash, cols = col_community, widths = community_width)
+  }
   openxlsx::setColWidths(wb, dash, cols = col_label, widths = label_width)
   openxlsx::setColWidths(wb, dash, cols = col_estimate, widths = 14)
   openxlsx::setColWidths(wb, dash, cols = col_gain, widths = 14)
@@ -325,7 +354,7 @@ bn_prioritize_write <- function(
     rows = data_rows, cols = col_gain_pct, gridExpand = TRUE, stack = TRUE)
 
   # Left-align text columns
-  text_cols <- c(col_variable, col_label)
+  text_cols <- c(col_variable, col_community, col_label)
   openxlsx::addStyle(wb, dash, style = styles$left,
     rows = data_rows, cols = text_cols, gridExpand = TRUE, stack = TRUE)
 
@@ -337,8 +366,9 @@ bn_prioritize_write <- function(
   }
 
   # --- Conditional borders (only on rows with data) ---
+  # $column locks the reference so it doesn't shift across columns
   step_let <- num2let(col_step)
-  border_rule <- paste0(step_let, data_rows[1], "<>\"\"")
+  border_rule <- paste0("$", step_let, data_rows[1], "<>\"\"")
 
   # Left border on first column
   openxlsx::conditionalFormatting(wb, dash,
@@ -353,7 +383,7 @@ bn_prioritize_write <- function(
     type = "expression", rule = border_rule)
 
   # Bottom border only on last data row (this row has data, next row is blank)
-  bottom_rule <- paste0("AND(", step_let, data_rows[1], "<>\"\",",
+  bottom_rule <- paste0("AND($", step_let, data_rows[1], "<>\"\",$",
                          step_let, data_rows[1] + 1, "=\"\")")
   openxlsx::conditionalFormatting(wb, dash,
     cols = cols_all, rows = data_rows,
@@ -369,22 +399,23 @@ bn_prioritize_write <- function(
 
     if (length(step_rows) > 0) {
       p_let <- num2let(col_pvalue)
+      p_not_blank <- paste0(p_let, step_rows[1], "<>\"\"")
 
       openxlsx::conditionalFormatting(wb, dash,
         cols = col_pvalue, rows = step_rows,
         style = styles$p_red, type = "expression",
-        rule = paste0(p_let, step_rows[1], ">=", marginal_threshold))
+        rule = paste0("AND(", p_not_blank, ",", p_let, step_rows[1], ">=", marginal_threshold, ")"))
 
       openxlsx::conditionalFormatting(wb, dash,
         cols = col_pvalue, rows = step_rows,
         style = styles$p_orange, type = "expression",
-        rule = paste0("AND(", p_let, step_rows[1], ">=", sig_threshold,
+        rule = paste0("AND(", p_not_blank, ",", p_let, step_rows[1], ">=", sig_threshold,
                        ",", p_let, step_rows[1], "<", marginal_threshold, ")"))
 
       openxlsx::conditionalFormatting(wb, dash,
         cols = col_pvalue, rows = step_rows,
         style = styles$p_green, type = "expression",
-        rule = paste0(p_let, step_rows[1], "<", sig_threshold))
+        rule = paste0("AND(", p_not_blank, ",", p_let, step_rows[1], "<", sig_threshold, ")"))
 
       # Reset font when step is blank or 0 (last = highest priority in Excel)
       openxlsx::conditionalFormatting(wb, dash,

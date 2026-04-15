@@ -17,15 +17,15 @@ bn_impacts(
   dictionary = NULL,
   n_boot = 1,
   n_querry = 10000,
-  lift = 0,
+  lift = c(0, 0.1),
   impact_metric_type = c("proportional", "absolute"),
   brand = NULL,
   brand_names = NULL,
   min_base_for_lift = 75,
   include_base = TRUE,
-  dv_metric = c("top_box", "mean"),
+  dv_metric = c("mean", "top_box"),
   weight = NULL,
-  mi_boot = NULL,
+  mi_boot = 100,
   use_parallel = TRUE,
   seed = 1
 )

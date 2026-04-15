@@ -1,32 +1,133 @@
 #' bn_finalize_network
-#' @description Finalize a Bayesian network by re-estimating with a fixed structure,
-#'   computing subgroup models, and running impact analysis.
+#'
+#' @description Finalize a Bayesian network by re-estimating with a fixed
+#'   structure, computing subgroup models, running impact analysis, and
+#'   optionally running full impacts (attribute + community, weighted/unweighted)
+#'   and prioritization analysis.
+#'
+#' @param obj Network object. Accepts output of \code{bn_model_single()},
+#'   \code{bn_model_unsupervised()}, a bare \code{bnlearn::bn} object, or a
+#'   viz_prep list.
+#' @param df Data frame containing the DV, IV, and optionally brand/weight
+#'   columns.
+#' @param bn Optional. A \code{bnlearn::bn} object. If NULL, extracted from
+#'   \code{obj}.
+#' @param viz_prep Optional. Visualization prep object. If NULL, extracted from
+#'   \code{obj}.
+#' @param dv Character. Dependent variable name. If NULL, auto-detected from
+#'   \code{obj$meta$dv}.
+#' @param previous_dv Character or NULL. Previous DV name for node swapping.
+#' @param manual_groups Data frame or NULL. Manual community groupings.
+#' @param node_label_type Character. Label format for network nodes:
+#'   \code{"both"}, \code{"variable"}, or \code{"label"}. Default
+#'   \code{"both"}.
+#' @param subgroups Character vector or NULL. Column names in \code{df} that
+#'   define subgroups (each should be 0/1). Default NULL (single "Total"
+#'   subgroup).
+#' @param dictionary Optional. Dictionary for variable labels.
+#' @param brand Character or NULL. Brand column name. Default NULL.
+#' @param brand_names Character vector or NULL. Brand levels to include.
+#'   Default NULL (all brands).
+#' @param weight Character or NULL. Weight column name. Default NULL.
+#' @param dv_metric Character. \code{"mean"} or \code{"top_box"}.
+#'   Default \code{"mean"}.
+#' @param min_base_for_calc Integer. Minimum sample size for brand lift
+#'   calculations in \code{bn_impacts()} and for bootstrap p-values in
+#'   \code{bn_prioritizations()}. Default 75.
+#' @param n_boot_final Integer. Bootstrap replicates used for community MI
+#'   in \code{bn_impacts()} and for p-values in \code{bn_prioritizations()}.
+#'   Default 100.
+#' @param do_impacts Logical. If TRUE, run \code{bn_impacts()} to produce full
+#'   attribute/community, weighted/unweighted impact tables. Default TRUE.
+#' @param impact_type Character. Impact estimation type: \code{"gr"},
+#'   \code{"cp"}, or \code{"mi"}. Default \code{"gr"}.
+#' @param impact_index_by Character. Indexing method for impact. Default
+#'   \code{"lift_first"}.
+#' @param impact_n_boot Integer. Bootstrap replicates for impact. Default 1.
+#' @param impact_n_querry Integer. Query sample size. Default 1e4.
+#' @param impact_lift Numeric vector. Lift fractions for impact. Default
+#'   \code{c(0, 0.1)}.
+#' @param impact_metric_type Character. \code{"proportional"} or
+#'   \code{"absolute"}. Default \code{"proportional"}.
+#' @param impact_include_base Logical. Include base sizes in impact tables.
+#'   Default TRUE.
+#' @param do_prioritizations Logical. If TRUE, run \code{bn_prioritizations()}
+#'   to produce prioritization analysis. Default TRUE.
+#' @param prioritize_lift Numeric. Lift fraction for prioritization. Default
+#'   0.10.
+#' @param prioritize_ivs_excluded Character vector or NULL. Variables to exclude
+#'   from prioritization. Default NULL.
+#' @param prioritize_threshold Numeric or NULL. Early stopping threshold for
+#'   prioritization. Default 0.01.
+#' @param prioritize_max_rounds Integer or NULL. Maximum priority rounds.
+#'   Default NULL.
+#' @param prioritize_noise_tail Numeric. Fraction of tail steps for noise floor.
+#'   Default 1/3.
+#' @param tool_tip_edge_prefix Character or NULL. Prefix for edge tooltips.
+#' @param viz_size_node_by_impact Logical. Size network nodes by impact index.
+#'   Default TRUE.
+#' @param viz_include_dv Logical. Include DV node in visualization. Default
+#'   FALSE.
+#' @param model_parallel Logical. Parallelize subgroup model estimation.
+#'   Default FALSE.
+#' @param impact_parallel Logical. Parallelize impact and prioritization
+#'   estimation. Default TRUE.
+#' @param seed Integer. Random seed. Default 1.
+#'
+#' @return A list with:
+#' \describe{
+#'   \item{bn}{The finalized Bayesian network object with viz_prep.}
+#'   \item{bn_subgroups}{Named list of per-subgroup BN objects.}
+#'   \item{bn_subgroups_summary}{Summary table of subgroup model accuracy.}
+#'   \item{impacts}{Output of \code{bn_impacts()} (when \code{do_impacts = TRUE}).}
+#'   \item{prioritizations}{Output of \code{bn_prioritizations()} (when
+#'     \code{do_prioritizations = TRUE}).}
+#'   \item{edge_list}{List with \code{all}, \code{iv}, and \code{dv} edge tables.}
+#' }
+#'
+#' @seealso [bn_impact()], [bn_impacts()], [bn_prioritize()],
+#'   [bn_prioritizations()]
+#'
 #' @export
 bn_finalize_network <- function(
     obj = NULL,
     df,
+    bn = NULL,
+    viz_prep = NULL,
     dv = NULL,
+    previous_dv = NULL,
+    manual_groups = NULL,
+    node_label_type = c("both", "variable", "label"),
     subgroups = NULL,
     dictionary = NULL,
-    viz_prep = NULL,
-    bn = NULL,
-    previous_dv = NULL,
-    node_label_type = c("both", "variable", "label"),
-    manual_groups = NULL,
+    brand = NULL,
+    brand_names = NULL,
+    weight = NULL,
+    # --- Model ---
+    dv_metric = c("mean", "top_box"),
+    min_base_for_calc = 75,
+    n_boot_final = 100,
+    # --- Impact ---
+    do_impacts = TRUE,
     impact_type = c("gr", "cp", "mi"),
     impact_index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     impact_n_boot = 1,
     impact_n_querry = 1e4,
-    impact_lift = 0,
+    impact_lift = c(0, 0.1),
     impact_metric_type = c("proportional", "absolute"),
-    impact_brand = NULL,
-    impact_min_base_for_lift = 60,
     impact_include_base = TRUE,
-    impact_dv_metric = c("top_box", "mean"),
-    impact_weight = NULL,
+    # --- Prioritization ---
+    do_prioritizations = TRUE,
+    prioritize_lift = 0.10,
+    prioritize_ivs_excluded = NULL,
+    prioritize_threshold = 0.01,
+    prioritize_max_rounds = NULL,
+    prioritize_noise_tail = 1/3,
+    # --- Visualization ---
     tool_tip_edge_prefix = NULL,
     viz_size_node_by_impact = TRUE,
     viz_include_dv = FALSE,
+    # --- Parallel ---
     model_parallel = FALSE,
     impact_parallel = TRUE,
     seed = 1
@@ -35,7 +136,11 @@ bn_finalize_network <- function(
   node_label_type <- match.arg(node_label_type)
   impact_type <- match.arg(impact_type)
   impact_metric_type <- match.arg(impact_metric_type)
-  impact_dv_metric <- match.arg(impact_dv_metric)
+  dv_metric <- match.arg(dv_metric)
+
+  # Preserve named dv for display, strip for bnlearn
+  dv_original <- dv
+  dv <- unname(dv)
 
   results <- list()
   dictionary <- work::dictionary_from_named_object(dictionary)
@@ -220,66 +325,73 @@ bn_finalize_network <- function(
 
 
   ###############################
-  # Impacts attributes
+  # Impacts (bn_impacts)
   ###############################
 
   attribute_nodes <- results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]]
   community_nodes <- results[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]]
 
-  cli::cli_alert_info("Beginning impact estimation — attributes")
+  if (do_impacts) {
+    results[["impacts"]] <- work::bn_impacts(
+      obj = results[["bn_subgroups"]],
+      df = df,
+      dv = dv_original,
+      ivs = x_ivs,
+      do_community = TRUE,
+      community_assignment = attribute_nodes,
+      type = impact_type,
+      index_by = impact_index_by,
+      process_subgroups = TRUE,
+      dictionary = dictionary,
+      n_boot = impact_n_boot,
+      n_querry = impact_n_querry,
+      lift = impact_lift,
+      impact_metric_type = impact_metric_type,
+      brand = brand,
+      brand_names = brand_names,
+      min_base_for_lift = min_base_for_calc,
+      include_base = impact_include_base,
+      dv_metric = dv_metric,
+      weight = weight,
+      mi_boot = n_boot_final,
+      use_parallel = impact_parallel,
+      seed = seed
+    )
 
-  results[["impact"]] <- list()
+  }
 
-  results[["impact"]][["attribute"]] <- work::bn_impact(
-    obj = results[["bn_subgroups"]],
-    df = df,
-    dv = dv,
-    ivs = x_ivs,
-    do_community = FALSE,
-    community_assignment = attribute_nodes,
-    type = impact_type,
-    process_subgroups = TRUE,
-    index_by = impact_index_by,
-    n_boot = impact_n_boot,
-    n_querry = impact_n_querry,
-    lift = impact_lift,
-    impact_metric_type = impact_metric_type,
-    brand = impact_brand,
-    min_base_for_lift = impact_min_base_for_lift,
-    include_base = impact_include_base,
-    dv_metric = impact_dv_metric,
-    weight = impact_weight,
-    use_parallel = impact_parallel,
-    seed = seed
-  )$table
 
-  cli::cli_alert_info("Beginning impact estimation — communities")
+  ###############################
+  # Prioritizations (bn_prioritizations)
+  ###############################
 
-  results[["impact"]][["community"]] <- work::bn_impact(
-    obj = results[["bn_subgroups"]],
-    df = df,
-    dv = dv,
-    ivs = x_ivs,
-    do_community = TRUE,
-    community_assignment = attribute_nodes,
-    type = impact_type,
-    process_subgroups = TRUE,
-    index_by = impact_index_by,
-    n_boot = impact_n_boot,
-    n_querry = impact_n_querry,
-    lift = impact_lift,
-    impact_metric_type = impact_metric_type,
-    brand = impact_brand,
-    min_base_for_lift = impact_min_base_for_lift,
-    include_base = impact_include_base,
-    dv_metric = impact_dv_metric,
-    weight = impact_weight,
-    use_parallel = impact_parallel,
-    seed = seed
-  )$table
+  if (do_prioritizations) {
+    results[["prioritizations"]] <- work::bn_prioritizations(
+      obj = results,
+      df = df,
+      dv = dv_original,
+      ivs = x_ivs,
+      ivs_excluded = prioritize_ivs_excluded,
+      process_subgroups = length(subgroups) > 1 || subgroups[1] != "Total",
+      brand = brand,
+      brand_names = brand_names,
+      weight = weight,
+      impact_result = if (!is.null(results[["impacts"]])) results[["impacts"]] else NULL,
+      dv_metric = dv_metric,
+      lift = prioritize_lift,
+      impact_metric_type = impact_metric_type,
+      threshold = prioritize_threshold,
+      max_rounds = prioritize_max_rounds,
+      n_boot_final = n_boot_final,
+      noise_tail = prioritize_noise_tail,
+      min_base_for_boot = min_base_for_calc,
+      dictionary = dictionary,
+      community_assignment = attribute_nodes,
+      use_parallel = impact_parallel,
+      seed = seed
+    )
 
-  cli::cli_alert_info("Completed impact estimation")
-
+  }
 
 
   ###############################
@@ -296,7 +408,7 @@ bn_finalize_network <- function(
 
 
 
-  if(viz_size_node_by_impact){
+  if(viz_size_node_by_impact && !is.null(results[["impacts"]])){
 
     # bn_impact() prefixes index as {subgroup}_index, then gsub strips _index
     # so the index column is just the subgroup name (e.g., "Total")
@@ -311,10 +423,10 @@ bn_finalize_network <- function(
     }
 
     results[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]] <-
-      join_impact(attribute_nodes, results[["impact"]][["attribute"]], "Variable")
+      join_impact(attribute_nodes, results[["impacts"]][["table_attribute"]], "Variable")
 
     results[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]] <-
-      join_impact(community_nodes, results[["impact"]][["community"]], "Community")
+      join_impact(community_nodes, results[["impacts"]][["table_community"]], "Community")
 
   }
 

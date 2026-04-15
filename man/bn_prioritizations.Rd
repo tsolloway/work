@@ -22,7 +22,9 @@ bn_prioritizations(
   max_rounds = NULL,
   n_boot_final = 100,
   noise_tail = 1/3,
+  min_base_for_boot = 75,
   dictionary = NULL,
+  community_assignment = NULL,
   use_parallel = TRUE,
   seed = 1
 )
@@ -80,7 +82,15 @@ Default 100.}
 \item{noise_tail}{Numeric. Fraction of tail steps for noise floor.
 Default 1/3.}
 
+\item{min_base_for_boot}{Integer. Minimum sample size to run bootstrap
+p-values. Default 75.}
+
 \item{dictionary}{Optional. Dictionary for variable labels.}
+
+\item{community_assignment}{Optional. Community assignment node table (e.g.,
+\code{bn$viz_prep$attribute_viz_prep$nodes}) with \code{id} and
+\code{community_name} columns. When provided, a \code{community} column
+is added to each result tibble after \code{variable}.}
 
 \item{use_parallel}{Logical. Parallelize candidate evaluation. Default TRUE.}
 

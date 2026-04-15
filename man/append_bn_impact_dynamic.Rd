@@ -18,7 +18,8 @@ append_bn_impact_dynamic(
   community_width = 20,
   label_width = "auto",
   has_weights = FALSE,
-  weighted_results_sheet = NULL
+  weighted_results_sheet = NULL,
+  min_base_for_lift = NULL
 )
 }
 \arguments{

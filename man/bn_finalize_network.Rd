@@ -7,25 +7,34 @@
 bn_finalize_network(
   obj = NULL,
   df,
+  bn = NULL,
+  viz_prep = NULL,
   dv = NULL,
+  previous_dv = NULL,
+  manual_groups = NULL,
+  node_label_type = c("both", "variable", "label"),
   subgroups = NULL,
   dictionary = NULL,
-  viz_prep = NULL,
-  bn = NULL,
-  previous_dv = NULL,
-  node_label_type = c("both", "variable", "label"),
-  manual_groups = NULL,
+  brand = NULL,
+  brand_names = NULL,
+  weight = NULL,
+  dv_metric = c("mean", "top_box"),
+  min_base_for_calc = 75,
+  n_boot_final = 100,
+  do_impacts = TRUE,
   impact_type = c("gr", "cp", "mi"),
   impact_index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
   impact_n_boot = 1,
   impact_n_querry = 10000,
-  impact_lift = 0,
+  impact_lift = c(0, 0.1),
   impact_metric_type = c("proportional", "absolute"),
-  impact_brand = NULL,
-  impact_min_base_for_lift = 60,
   impact_include_base = TRUE,
-  impact_dv_metric = c("top_box", "mean"),
-  impact_weight = NULL,
+  do_prioritizations = TRUE,
+  prioritize_lift = 0.1,
+  prioritize_ivs_excluded = NULL,
+  prioritize_threshold = 0.01,
+  prioritize_max_rounds = NULL,
+  prioritize_noise_tail = 1/3,
   tool_tip_edge_prefix = NULL,
   viz_size_node_by_impact = TRUE,
   viz_include_dv = FALSE,
@@ -34,7 +43,130 @@ bn_finalize_network(
   seed = 1
 )
 }
+\arguments{
+\item{obj}{Network object. Accepts output of \code{bn_model_single()},
+\code{bn_model_unsupervised()}, a bare \code{bnlearn::bn} object, or a
+viz_prep list.}
+
+\item{df}{Data frame containing the DV, IV, and optionally brand/weight
+columns.}
+
+\item{bn}{Optional. A \code{bnlearn::bn} object. If NULL, extracted from
+\code{obj}.}
+
+\item{viz_prep}{Optional. Visualization prep object. If NULL, extracted from
+\code{obj}.}
+
+\item{dv}{Character. Dependent variable name. If NULL, auto-detected from
+\code{obj$meta$dv}.}
+
+\item{previous_dv}{Character or NULL. Previous DV name for node swapping.}
+
+\item{manual_groups}{Data frame or NULL. Manual community groupings.}
+
+\item{node_label_type}{Character. Label format for network nodes:
+\code{"both"}, \code{"variable"}, or \code{"label"}. Default
+\code{"both"}.}
+
+\item{subgroups}{Character vector or NULL. Column names in \code{df} that
+define subgroups (each should be 0/1). Default NULL (single "Total"
+subgroup).}
+
+\item{dictionary}{Optional. Dictionary for variable labels.}
+
+\item{brand}{Character or NULL. Brand column name. Default NULL.}
+
+\item{brand_names}{Character vector or NULL. Brand levels to include.
+Default NULL (all brands).}
+
+\item{weight}{Character or NULL. Weight column name. Default NULL.}
+
+\item{dv_metric}{Character. \code{"mean"} or \code{"top_box"}.
+Default \code{"mean"}.}
+
+\item{min_base_for_calc}{Integer. Minimum sample size for brand lift
+calculations in \code{bn_impacts()} and for bootstrap p-values in
+\code{bn_prioritizations()}. Default 75.}
+
+\item{n_boot_final}{Integer. Bootstrap replicates used for community MI
+in \code{bn_impacts()} and for p-values in \code{bn_prioritizations()}.
+Default 100.}
+
+\item{do_impacts}{Logical. If TRUE, run \code{bn_impacts()} to produce full
+attribute/community, weighted/unweighted impact tables. Default TRUE.}
+
+\item{impact_type}{Character. Impact estimation type: \code{"gr"},
+\code{"cp"}, or \code{"mi"}. Default \code{"gr"}.}
+
+\item{impact_index_by}{Character. Indexing method for impact. Default
+\code{"lift_first"}.}
+
+\item{impact_n_boot}{Integer. Bootstrap replicates for impact. Default 1.}
+
+\item{impact_n_querry}{Integer. Query sample size. Default 1e4.}
+
+\item{impact_lift}{Numeric vector. Lift fractions for impact. Default
+\code{c(0, 0.1)}.}
+
+\item{impact_metric_type}{Character. \code{"proportional"} or
+\code{"absolute"}. Default \code{"proportional"}.}
+
+\item{impact_include_base}{Logical. Include base sizes in impact tables.
+Default TRUE.}
+
+\item{do_prioritizations}{Logical. If TRUE, run \code{bn_prioritizations()}
+to produce prioritization analysis. Default TRUE.}
+
+\item{prioritize_lift}{Numeric. Lift fraction for prioritization. Default
+0.10.}
+
+\item{prioritize_ivs_excluded}{Character vector or NULL. Variables to exclude
+from prioritization. Default NULL.}
+
+\item{prioritize_threshold}{Numeric or NULL. Early stopping threshold for
+prioritization. Default 0.01.}
+
+\item{prioritize_max_rounds}{Integer or NULL. Maximum priority rounds.
+Default NULL.}
+
+\item{prioritize_noise_tail}{Numeric. Fraction of tail steps for noise floor.
+Default 1/3.}
+
+\item{tool_tip_edge_prefix}{Character or NULL. Prefix for edge tooltips.}
+
+\item{viz_size_node_by_impact}{Logical. Size network nodes by impact index.
+Default TRUE.}
+
+\item{viz_include_dv}{Logical. Include DV node in visualization. Default
+FALSE.}
+
+\item{model_parallel}{Logical. Parallelize subgroup model estimation.
+Default FALSE.}
+
+\item{impact_parallel}{Logical. Parallelize impact and prioritization
+estimation. Default TRUE.}
+
+\item{seed}{Integer. Random seed. Default 1.}
+}
+\value{
+A list with:
+\describe{
+\item{bn}{The finalized Bayesian network object with viz_prep.}
+\item{bn_subgroups}{Named list of per-subgroup BN objects.}
+\item{bn_subgroups_summary}{Summary table of subgroup model accuracy.}
+\item{impacts}{Output of \code{bn_impacts()} (when \code{do_impacts = TRUE}).}
+\item{prioritizations}{Output of \code{bn_prioritizations()} (when
+\code{do_prioritizations = TRUE}).}
+\item{edge_list}{List with \code{all}, \code{iv}, and \code{dv} edge tables.}
+}
+}
 \description{
-Finalize a Bayesian network by re-estimating with a fixed structure,
-computing subgroup models, and running impact analysis.
+Finalize a Bayesian network by re-estimating with a fixed
+structure, computing subgroup models, running impact analysis, and
+optionally running full impacts (attribute + community, weighted/unweighted)
+and prioritization analysis.
+}
+\seealso{
+\code{\link[=bn_impact]{bn_impact()}}, \code{\link[=bn_impacts]{bn_impacts()}}, \code{\link[=bn_prioritize]{bn_prioritize()}},
+\code{\link[=bn_prioritizations]{bn_prioritizations()}}
 }
