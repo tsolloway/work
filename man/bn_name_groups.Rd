@@ -6,6 +6,7 @@
 \usage{
 bn_name_groups(
   results,
+  manual_names = NULL,
   model = "claude-sonnet-4-20250514",
   max_words = 3,
   min_words = 1,
@@ -17,6 +18,13 @@ bn_name_groups(
 \item{results}{A BN results object from \code{\link[=bn_initial_networks]{bn_initial_networks()}} or
 \code{\link[=bn_engine]{bn_engine()}}. Can be a single engine result, unsupervised
 (\code{bn_initial_networks}), or supervised (\code{bn_initial_networks} with DVs).}
+
+\item{manual_names}{Character vector or list of character vectors, or NULL.
+When provided, skips the Claude API call and assigns these names directly.
+For a single engine result, pass a character vector. For multiple results,
+pass a list of character vectors in the same order as the results. Each
+vector must match the number of communities in its corresponding engine.
+Default NULL (use Claude).}
 
 \item{model}{Character. Claude model ID (default \code{"claude-sonnet-4-20250514"}).}
 

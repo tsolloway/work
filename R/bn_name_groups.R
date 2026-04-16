@@ -9,6 +9,12 @@
 #' @param results A BN results object from [bn_initial_networks()] or
 #'   [bn_engine()]. Can be a single engine result, unsupervised
 #'   (`bn_initial_networks`), or supervised (`bn_initial_networks` with DVs).
+#' @param manual_names Character vector or list of character vectors, or NULL.
+#'   When provided, skips the Claude API call and assigns these names directly.
+#'   For a single engine result, pass a character vector. For multiple results,
+#'   pass a list of character vectors in the same order as the results. Each
+#'   vector must match the number of communities in its corresponding engine.
+#'   Default NULL (use Claude).
 #' @param model Character. Claude model ID (default `"claude-sonnet-4-20250514"`).
 #' @param max_words Integer. Maximum words per group name (default 3).
 #' @param min_words Integer. Minimum words per group name (default 1).
@@ -22,21 +28,27 @@
 #'
 #' @export
 bn_name_groups <- function(results,
+                           manual_names = NULL,
                            model = "claude-sonnet-4-20250514",
                            max_words = 3,
                            min_words = 1,
                            api_key = NULL,
                            verbose = TRUE) {
 
-  if (is.null(api_key)) {
-    api_key <- get_environment_key("ANTHROPIC_API_KEY")
-  }
-
   # --- detect structure and collect all engine results ---
   engine_paths <- .bn_name_find_engines(results)
   if (length(engine_paths) == 0) {
     cli::cli_warn("No engine results with viz_prep found. Returning unchanged.")
     return(results)
+  }
+
+  # --- Manual names path (skip Claude) ---
+  if (!is.null(manual_names)) {
+    return(.bn_name_apply_manual(results, engine_paths, manual_names, verbose))
+  }
+
+  if (is.null(api_key)) {
+    api_key <- get_environment_key("ANTHROPIC_API_KEY")
   }
 
   # --- deduplicate: group engines by identical group membership ---
@@ -220,6 +232,80 @@ bn_name_groups <- function(results,
   }
 
   name_map
+}
+
+#' Validate and apply manual names to all engine results
+#' @noRd
+.bn_name_apply_manual <- function(results, engine_paths, manual_names, verbose) {
+  n_engines <- length(engine_paths)
+
+  # Normalize single char vector to list of one
+  if (n_engines == 1 && is.character(manual_names)) {
+    manual_names <- list(manual_names)
+  }
+
+  # Type check
+  if (!is.list(manual_names) || !all(purrr::map_lgl(manual_names, is.character))) {
+    cli::cli_abort(
+      "{.arg manual_names} must be a character vector (single result) or a list of character vectors (multiple results)."
+    )
+  }
+
+  # Length check: number of vectors vs number of engines
+  if (length(manual_names) != n_engines) {
+    cli::cli_abort(c(
+      "{.arg manual_names} length mismatch.",
+      "x" = "Provided {length(manual_names)} name vector{?s} but found {n_engines} result{?s}."
+    ))
+  }
+
+  # Per-engine community count check
+  mismatches <- character()
+  community_counts <- integer(n_engines)
+  for (i in seq_along(engine_paths)) {
+    engine <- .bn_name_get_engine(results, engine_paths[[i]])
+    nodes <- engine$viz_prep$attribute_viz_prep$nodes
+    n_comm <- length(unique(nodes$group))
+    community_counts[i] <- n_comm
+    n_names <- length(manual_names[[i]])
+
+    if (n_names != n_comm) {
+      path_label <- paste(engine_paths[[i]], collapse = "$")
+      if (!nzchar(path_label)) path_label <- "result"
+      mismatches <- c(
+        mismatches,
+        glue::glue("  {path_label}: has {n_comm} communit{ifelse(n_comm == 1, 'y', 'ies')}, {n_names} name{ifelse(n_names == 1, '', 's')} provided")
+      )
+    }
+  }
+
+  if (length(mismatches) > 0) {
+    cli::cli_abort(c(
+      "{.arg manual_names} community count mismatch:",
+      purrr::set_names(mismatches, "x")
+    ))
+  }
+
+  # Apply names to each engine
+  for (i in seq_along(engine_paths)) {
+    engine <- .bn_name_get_engine(results, engine_paths[[i]])
+    nodes <- engine$viz_prep$attribute_viz_prep$nodes
+    groups <- sort(unique(nodes$group))
+    name_map <- as.list(manual_names[[i]]) %>% setNames(as.character(groups))
+
+    if (verbose) {
+      path_label <- paste(engine_paths[[i]], collapse = "$")
+      if (!nzchar(path_label)) path_label <- "result"
+      cli::cli_h3("Manual names ({path_label})")
+      for (g in names(name_map)) {
+        cli::cli_bullets(c("v" = "Group {g} -> {.val {name_map[[g]]}}"))
+      }
+    }
+
+    results <- .bn_name_apply(results, engine_paths[[i]], name_map)
+  }
+
+  results
 }
 
 #' Apply group names to a single engine result within the results object

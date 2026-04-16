@@ -138,10 +138,6 @@ bn_finalize_network <- function(
   impact_metric_type <- match.arg(impact_metric_type)
   dv_metric <- match.arg(dv_metric)
 
-  # Preserve named dv for display, strip for bnlearn
-  dv_original <- dv
-  dv <- unname(dv)
-
   results <- list()
   dictionary <- work::dictionary_from_named_object(dictionary)
   df <- df %>% as.data.frame()
@@ -214,6 +210,10 @@ bn_finalize_network <- function(
 
   if(is.null(bn)) stop("Cannot find a bn object.")
   if(is.null(dv)) stop("dv is required. Supply it directly or pass an obj with meta$dv.")
+
+  # Preserve named dv for display, strip for bnlearn
+  dv_original <- dv
+  dv <- unname(dv)
 
 
   ###############################

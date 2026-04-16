@@ -11,11 +11,13 @@ means_summaries(stack_result)
 \code{dictionary_stack}, and \code{var_types}.}
 }
 \value{
-A named list with up to four tibbles:
+A named list with up to five tibbles:
 \item{means_stacked}{Unweighted means across all rows.}
 \item{means_stacked_weighted}{Weighted means across all rows.}
 \item{means_stacked_assigned}{Unweighted means filtered to assigned rows.}
 \item{means_stacked_assigned_weighted}{Weighted means filtered to assigned rows.}
+\item{subgroup_count}{Subgroup counts from the flat data (last, if
+subgroups and \code{df_flat} exist).}
 }
 \description{
 Generate four means summary tables from a \code{stack_data()} result:

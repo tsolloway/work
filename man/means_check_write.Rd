@@ -5,16 +5,18 @@
 \title{means_check_write}
 \usage{
 means_check_write(
-  means_list,
+  input,
   file_name = "ProjectName (Number)",
   sub_title = NULL,
+  variable_width = 25,
+  label_width = "auto",
   wb = NULL,
   write_file = TRUE
 )
 }
 \arguments{
-\item{means_list}{Named list of summary tibbles, as returned by
-\code{means_summaries()}.}
+\item{input}{Named list — either the output of \code{means_summaries()} or the
+output of \code{stack_data()} (which contains a \code{mean_summaries} element).}
 
 \item{file_name}{Character. Prefix for the output file name. File is saved as
 \verb{\{file_name\} - Means Check.xlsx}.}
@@ -22,17 +24,24 @@ means_check_write(
 \item{sub_title}{Character or \code{NULL}. Subtitle text displayed in each sheet
 header. If \code{NULL} (default), inherits from \code{file_name}.}
 
+\item{variable_width}{Numeric. Column width for the Variable column.
+Default 25.}
+
+\item{label_width}{Numeric or \code{"auto"}. Column width for the Label column.
+Default \code{"auto"}.}
+
 \item{wb}{An \code{openxlsx} workbook object. If \code{NULL} (default), a new one is
 created.}
 
 \item{write_file}{If \code{TRUE} (default), save the workbook to disk.}
 }
 \value{
-The \code{means_list} input (invisibly), for continued piping.
+The input (invisibly), for continued piping.
 }
 \description{
 Write means summary tables to a formatted Excel workbook.
-Accepts the output of \code{means_summaries()} as its first argument, writing
-each summary as a separate sheet. Designed for piping:
-\code{df_stack \%>\% means_summaries() \%>\% means_check_write()}.
+Accepts the output of \code{means_summaries()} or \code{stack_data()} as its first
+argument. When a \code{stack_data()} result is passed (with
+\code{include_mean_summaries = TRUE}), the pre-computed summaries are extracted
+automatically.
 }

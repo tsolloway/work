@@ -19,8 +19,9 @@ stack_data(
   weight = NULL,
   uuid_stack = "uuid_stack",
   remove_no_data = TRUE,
-  filter_to_assigned = FALSE,
-  store_flat = TRUE,
+  include_mean_summaries = TRUE,
+  filter_to_assigned = TRUE,
+  store_flat = FALSE,
   return_only_data = FALSE
 )
 }
@@ -66,11 +67,15 @@ data.}
 \item{remove_no_data}{If \code{TRUE} (default), drop rows where all instruction
 variables are \code{NA}.}
 
-\item{filter_to_assigned}{If \code{TRUE}, filter to rows where
-\code{assigner == 1}. Only applies when \code{assigner} is provided. Default \code{FALSE}.}
+\item{include_mean_summaries}{If \code{TRUE} (default), run \code{means_summaries()}
+on the unfiltered stacked data and include the result as \code{mean_summaries}
+in the output list.}
 
-\item{store_flat}{If \code{TRUE} (default), include the original flat data frame
-in the returned list as \code{df_flat}.}
+\item{filter_to_assigned}{If \code{TRUE} (default), filter to rows where
+\code{assigner == 1}. Only applies when \code{assigner} is provided.}
+
+\item{store_flat}{If \code{TRUE}, include the original flat data frame
+in the returned list as \code{df_flat}. Default \code{FALSE}.}
 
 \item{return_only_data}{If \code{TRUE}, return just the stacked data frame instead
 of the full result list. Default \code{FALSE}.}
@@ -82,6 +87,8 @@ A list with components:
 IV battery, and stacking instructions.}
 \item{var_types}{Named list of variable name vectors by type.}
 \item{df_flat}{Original flat data (only if \code{store_flat = TRUE}).}
+\item{mean_summaries}{Output of \code{means_summaries()} (only if
+\code{include_mean_summaries = TRUE}).}
 If \code{return_only_data = TRUE}, returns \code{df_stack} directly.
 }
 \description{
