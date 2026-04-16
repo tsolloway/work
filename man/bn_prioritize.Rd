@@ -7,23 +7,24 @@
 bn_prioritize(
   obj,
   df,
-  dv,
+  dictionary = NULL,
+  dv = NULL,
   ivs = NULL,
   ivs_excluded = NULL,
   strategy = c("lift", "max"),
   search = c("greedy", "exhaustive"),
-  impact_result = NULL,
-  dv_metric = c("mean", "top_box"),
   lift = 0.1,
+  min_base_for_boot = 75,
+  dv_metric = c("mean", "top_box"),
   impact_metric_type = c("proportional", "absolute"),
+  impact_result = NULL,
   threshold = 0.01,
   max_rounds = NULL,
-  n_boot_final = 100,
   noise_tail = 1/3,
-  min_base_for_boot = 75,
+  n_boot_final = 100,
   weight = NULL,
-  dictionary = NULL,
   use_parallel = TRUE,
+  verbose = TRUE,
   seed = 1
 )
 }
@@ -37,9 +38,12 @@ bn_prioritize(
 
 \item{df}{Data frame containing the DV and IV columns.}
 
-\item{dv}{Character. Dependent variable name.}
+\item{dictionary}{Optional. Dictionary for variable labels.}
 
-\item{ivs}{Character vector. Independent variable names. If NULL,
+\item{dv}{Character or NULL. Dependent variable name. If NULL, auto-detected
+from \code{obj$meta$dv}.}
+
+\item{ivs}{Character vector or NULL. Independent variable names. If NULL,
 auto-detected from \code{obj$meta$ivs}.}
 
 \item{ivs_excluded}{Character vector or NULL. Variables to exclude from the
@@ -55,19 +59,23 @@ extension at each step.
 \code{"exhaustive"} evaluates all C(n, k) combinations at each size k
 to find the globally best combo.}
 
-\item{impact_result}{Optional. Output of \code{bn_impact()} or a tibble with
-\code{Variable} and an index column. Used to seed round 1 ordering in
-greedy search.}
+\item{lift}{Numeric. Distribution shift for \code{strategy = "lift"}.
+Interpretation depends on \code{impact_metric_type}. Default 0.10.}
+
+\item{min_base_for_boot}{Integer. Minimum sample size required to run
+bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
+skipped. Default 75.}
 
 \item{dv_metric}{Character. \code{"mean"} (default) computes the expected DV
 value; \code{"top_box"} uses the probability of the highest DV level.}
 
-\item{lift}{Numeric. Distribution shift for \code{strategy = "lift"}.
-Interpretation depends on \code{impact_metric_type}. Default 0.10.}
-
 \item{impact_metric_type}{Character. How \code{lift} is interpreted:
 \code{"proportional"} (default) shifts by a fraction of the current mean;
 \code{"absolute"} shifts by a fixed number of scale points.}
+
+\item{impact_result}{Optional. Output of \code{bn_impact()} or a tibble with
+\code{Variable} and an index column. Used to seed round 1 ordering in
+greedy search.}
 
 \item{threshold}{Numeric or NULL. Stop when marginal gain drops below this
 fraction of the current DV estimate. Default 0.01 (1 percent). Set NULL
@@ -76,23 +84,20 @@ to disable.}
 \item{max_rounds}{Integer or NULL. Maximum combo size (exhaustive) or number
 of priority rounds (greedy). NULL means no limit.}
 
-\item{n_boot_final}{Integer or NULL. If set, bootstraps the final result
-to produce p-values via a noise-floor test.}
-
 \item{noise_tail}{Numeric. Fraction of tail steps used to estimate the
 noise floor for bootstrap p-values. Default 1/3.}
 
-\item{min_base_for_boot}{Integer. Minimum sample size required to run
-bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
-skipped. Default 75.}
+\item{n_boot_final}{Integer or NULL. If set, bootstraps the final result
+to produce p-values via a noise-floor test. Default 100.}
 
 \item{weight}{Character or NULL. Column name in \code{df} containing
 observation weights for the lift strategy frequency distribution. Default
 NULL (unweighted).}
 
-\item{dictionary}{Optional. Dictionary for variable labels.}
-
 \item{use_parallel}{Logical. Parallelize candidate evaluation within rounds.}
+
+\item{verbose}{Logical. Print round/step/bootstrap progress messages.
+Default TRUE.}
 
 \item{seed}{Integer. Random seed for reproducibility.}
 }

@@ -12,6 +12,7 @@
 #'   subgroup element, or a bare \code{bnlearn::bn.fit} object.
 #' @param df Data frame containing the DV, IV, and optionally brand/weight
 #'   columns.
+#' @param dictionary Optional. Dictionary for variable labels.
 #' @param dv Character. Dependent variable name. If NULL, auto-detected from
 #'   \code{obj$meta$dv}.
 #' @param ivs Character vector or NULL. Independent variable names. If NULL,
@@ -22,6 +23,24 @@
 #'   \code{bn_subgroups}, iterate over each subgroup (filtering \code{df}
 #'   to rows where \code{df[[subgroup_name]] == 1}). If FALSE, compute once
 #'   on the full data. Default TRUE.
+#' @param community_assignment Optional. Community assignment node table (e.g.,
+#'   \code{bn$viz_prep$attribute_viz_prep$nodes}) with \code{id} and
+#'   \code{community_name} columns. When provided, a \code{community} column
+#'   is added to each result tibble after \code{variable}.
+#' @param lift Numeric. Distribution shift for lift strategy. Default 0.10.
+#' @param min_base_for_boot Integer. Minimum sample size to run bootstrap
+#'   p-values and to include a brand-subgroup slice as a task. Default 75.
+#' @param dv_metric Character. \code{"mean"} (default) or \code{"top_box"}.
+#' @param impact_metric_type Character. \code{"proportional"} (default) or
+#'   \code{"absolute"}.
+#' @param impact_result Optional. Output of \code{bn_impact()} passed through
+#'   to seed greedy round 1 ordering.
+#' @param threshold Numeric or NULL. Early stopping threshold. Default 0.01.
+#' @param max_rounds Integer or NULL. Maximum priority rounds. Default NULL.
+#' @param noise_tail Numeric. Fraction of tail steps for noise floor.
+#'   Default 1/3.
+#' @param n_boot_final Integer. Bootstrap replicates for p-values.
+#'   Default 100.
 #' @param brand Character or NULL. Column name in \code{df} containing brand
 #'   labels. When provided, lift is computed separately for each brand using
 #'   brand-filtered data. Default NULL.
@@ -30,25 +49,6 @@
 #' @param weight Character or NULL. Column name in \code{df} containing
 #'   observation weights. When provided, adds weighted lift variants.
 #'   Default NULL.
-#' @param impact_result Optional. Output of \code{bn_impact()} passed through
-#'   to seed greedy round 1 ordering.
-#' @param dv_metric Character. \code{"mean"} (default) or \code{"top_box"}.
-#' @param lift Numeric. Distribution shift for lift strategy. Default 0.10.
-#' @param impact_metric_type Character. \code{"proportional"} (default) or
-#'   \code{"absolute"}.
-#' @param threshold Numeric or NULL. Early stopping threshold. Default 0.01.
-#' @param max_rounds Integer or NULL. Maximum priority rounds. Default NULL.
-#' @param n_boot_final Integer. Bootstrap replicates for p-values.
-#'   Default 100.
-#' @param noise_tail Numeric. Fraction of tail steps for noise floor.
-#'   Default 1/3.
-#' @param min_base_for_boot Integer. Minimum sample size to run bootstrap
-#'   p-values. Default 75.
-#' @param dictionary Optional. Dictionary for variable labels.
-#' @param community_assignment Optional. Community assignment node table (e.g.,
-#'   \code{bn$viz_prep$attribute_viz_prep$nodes}) with \code{id} and
-#'   \code{community_name} columns. When provided, a \code{community} column
-#'   is added to each result tibble after \code{variable}.
 #' @param use_parallel Logical. Parallelize candidate evaluation. Default TRUE.
 #' @param seed Integer. Random seed. Default 1.
 #'
@@ -74,24 +74,24 @@
 bn_prioritizations <- function(
     obj,
     df,
+    dictionary = NULL,
     dv = NULL,
     ivs = NULL,
     ivs_excluded = NULL,
     process_subgroups = TRUE,
+    community_assignment = NULL,
+    lift = 0.10,
+    min_base_for_boot = 75,
+    dv_metric = c("mean", "top_box"),
+    impact_metric_type = c("proportional", "absolute"),
+    impact_result = NULL,
+    threshold = 0.01,
+    max_rounds = NULL,
+    noise_tail = 1/3,
+    n_boot_final = 100,
     brand = NULL,
     brand_names = NULL,
     weight = NULL,
-    impact_result = NULL,
-    dv_metric = c("mean", "top_box"),
-    lift = 0.10,
-    impact_metric_type = c("proportional", "absolute"),
-    threshold = 0.01,
-    max_rounds = NULL,
-    n_boot_final = 100,
-    noise_tail = 1/3,
-    min_base_for_boot = 75,
-    dictionary = NULL,
-    community_assignment = NULL,
     use_parallel = TRUE,
     seed = 1
 ) {
@@ -160,7 +160,7 @@ bn_prioritizations <- function(
     if (!is.null(brands_to_run)) {
       for (b in brands_to_run) {
         brand_df <- sg_df[sg_df[[brand]] == b, , drop = FALSE]
-        if (nrow(brand_df) == 0) next
+        if (nrow(brand_df) < min_base_for_boot) next
 
         tasks[[paste0("brand__", b, "__", sg_name)]] <- list(
           type = "brand", sg_name = sg_name, brand_name = b,
@@ -197,7 +197,7 @@ bn_prioritizations <- function(
         n_boot_final = n_boot_final, noise_tail = noise_tail,
         min_base_for_boot = min_base_for_boot,
         weight = task$wt, dictionary = dictionary,
-        use_parallel = FALSE, seed = seed
+        use_parallel = FALSE, verbose = FALSE, seed = seed
       )
     },
     .parallel = use_parallel,
@@ -297,11 +297,15 @@ bn_prioritizations <- function(
   if (!is.null(brands_to_run)) output$greedy_lift_brand <- results_lift_brand
   if (!is.null(brands_to_run) && !is.null(weight)) output$greedy_lift_brand_weighted <- results_lift_brand_weighted
 
+  # Only report brands that actually produced results (slices meeting
+  # the min_base_for_boot threshold)
+  brands_with_results <- if (!is.null(results_lift_brand)) names(results_lift_brand) else NULL
+
   output$meta <- list(
     dv = dv,
     subgroups = if (length(sg_names) > 1) sg_names else NULL,
     brand = brand,
-    brand_names = brands_to_run,
+    brand_names = brands_with_results,
     weight = weight,
     lift = lift,
     base_sizes = base_sizes

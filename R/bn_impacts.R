@@ -8,36 +8,36 @@
 #' @param obj A named list of BN subgroup objects, as produced by
 #'   \code{bn_finalize_network()$bn_subgroups}.
 #' @param df Data frame used to fit the network.
+#' @param dictionary Optional dictionary for label lookup.
 #' @param dv Named character vector. DV column(s) in \code{df}.
 #' @param ivs Character vector or NULL. IV columns. Default NULL (all).
+#' @param process_subgroups Logical. Process subgroups. Default TRUE.
 #' @param do_community Logical. If TRUE (default), includes community-level
 #'   results. If FALSE, only attribute-level results are returned.
 #' @param community_assignment Optional. Community assignment object for
 #'   community-level analysis.
+#' @param lift Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.
+#' @param min_base_for_lift Integer. Minimum sample size for brand lift.
+#'   Default 75.
 #' @param type Character. Impact type: \code{"gr"}, \code{"cp"}, or
 #'   \code{"mi"}. Default \code{"gr"}.
-#' @param index_by Character. Indexing method. Default \code{"lift_first"}.
-#' @param process_subgroups Logical. Process subgroups. Default TRUE.
-#' @param dictionary Optional dictionary for label lookup.
-#' @param n_boot Integer. Bootstrap replicates. Default 1.
-#' @param n_querry Integer. Query sample size. Default 1e4.
-#' @param lift Numeric vector. Lift fractions. Default 0.
+#' @param dv_metric Character. \code{"mean"} or \code{"top_box"}.
+#'   Default \code{"mean"}.
 #' @param impact_metric_type Character. \code{"proportional"} or
 #'   \code{"absolute"}. Default \code{"proportional"}.
+#' @param include_base Logical. Include base sizes. Default TRUE.
+#' @param index_by Character. Indexing method. Default \code{"lift_first"}.
+#' @param n_boot Integer. Bootstrap replicates. Default 1.
+#' @param n_querry Integer. Query sample size. Default 1e4.
 #' @param brand Character or NULL. Column name in \code{df} containing a brand
 #'   variable. When provided, lift is computed separately for each brand level.
 #'   Default NULL.
 #' @param brand_names Character vector or NULL. When provided, only compute
 #'   brand-specific lift for these brand levels. Default NULL (all brands).
-#' @param min_base_for_lift Integer. Minimum sample size for brand lift.
-#'   Default 60.
-#' @param include_base Logical. Include base sizes. Default TRUE.
-#' @param dv_metric Character. \code{"top_box"} or \code{"mean"}.
-#'   Default \code{"top_box"}.
 #' @param weight Character scalar or NULL. Column name for weights. When NULL,
 #'   weighted variants are omitted from the output.
 #' @param mi_boot Integer or NULL. Bootstrap replicates for community MI.
-#'   Only applied to community variants.
+#'   Only applied to community variants. Default 100.
 #' @param use_parallel Logical. Use parallel plan if available. Default TRUE.
 #' @param seed Integer. Random seed. Default 1.
 #'
@@ -58,23 +58,23 @@
 bn_impacts <- function(
     obj,
     df,
+    dictionary = NULL,
     dv = NULL,
     ivs = NULL,
+    process_subgroups = TRUE,
     do_community = TRUE,
     community_assignment = NULL,
+    lift = c(0, 0.1),
+    min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
+    dv_metric = c("mean", "top_box"),
+    impact_metric_type = c("proportional", "absolute"),
+    include_base = TRUE,
     index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
-    process_subgroups = TRUE,
-    dictionary = NULL,
     n_boot = 1,
     n_querry = 1e4,
-    lift = c(0, 0.1),
-    impact_metric_type = c("proportional", "absolute"),
     brand = NULL,
     brand_names = NULL,
-    min_base_for_lift = 75,
-    include_base = TRUE,
-    dv_metric = c("mean", "top_box"),
     weight = NULL,
     mi_boot = 100,
     use_parallel = TRUE,
@@ -82,6 +82,7 @@ bn_impacts <- function(
 ) {
 
   # Attribute (unweighted)
+  cli::cli_alert_info("Running attribute impact (unweighted)")
   attr_result <- bn_impact(
     obj = obj, df = df, dv = dv, ivs = ivs,
     do_community = FALSE,
@@ -97,6 +98,7 @@ bn_impacts <- function(
     dv_metric = dv_metric,
     weight = NULL,
     mi_boot = NULL,
+    verbose = FALSE,
     use_parallel = use_parallel,
     seed = seed
   )
@@ -104,6 +106,7 @@ bn_impacts <- function(
   # Attribute (weighted)
   attr_weighted <- NULL
   if (!is.null(weight)) {
+    cli::cli_alert_info("Running attribute impact (weighted)")
     attr_weighted <- bn_impact(
       obj = obj, df = df, dv = dv, ivs = ivs,
       do_community = FALSE,
@@ -119,6 +122,7 @@ bn_impacts <- function(
       dv_metric = dv_metric,
       weight = weight,
       mi_boot = NULL,
+      verbose = FALSE,
       use_parallel = use_parallel,
       seed = seed
     )
@@ -129,6 +133,7 @@ bn_impacts <- function(
   comm_weighted <- NULL
 
   if (do_community) {
+    cli::cli_alert_info("Running community impact (unweighted)")
     comm_result <- bn_impact(
       obj = obj, df = df, dv = dv, ivs = ivs,
       do_community = TRUE,
@@ -144,12 +149,14 @@ bn_impacts <- function(
       dv_metric = dv_metric,
       weight = NULL,
       mi_boot = mi_boot,
+      verbose = FALSE,
       use_parallel = use_parallel,
       seed = seed
     )
 
     # Community (weighted)
     if (!is.null(weight)) {
+      cli::cli_alert_info("Running community impact (weighted)")
       comm_weighted <- bn_impact(
         obj = obj, df = df, dv = dv, ivs = ivs,
         do_community = TRUE,
@@ -165,6 +172,7 @@ bn_impacts <- function(
         dv_metric = dv_metric,
         weight = weight,
         mi_boot = mi_boot,
+        verbose = FALSE,
         use_parallel = use_parallel,
         seed = seed
       )

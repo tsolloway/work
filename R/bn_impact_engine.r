@@ -19,9 +19,22 @@
 #' @param ivs Character vector. Independent variable names. Optional if \code{obj}
 #'   is a \code{bn_engine()} result with metadata.
 #' @param do_community Logical. If \code{TRUE}, computes impact at the community
-#'   level by jointly setting all IVs within each community.
+#'   level by jointly setting all IVs within each community. Default FALSE.
 #' @param community_assignment Optional data frame with \code{id} and
 #'   \code{community_name} columns mapping IVs to communities.
+#' @param lift Numeric scalar or vector. Target percentage lift(s) for
+#'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
+#'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
+#'   then computes the resulting DV probability change. Computed when
+#'   \code{type = "gr"} (exact) or \code{type = "cp"} (Monte Carlo).
+#'   When a lift value is 0, computes symmetric sensitivity: E_(+5 percent) -
+#'   E_(-5 percent). A scalar produces a single \code{lift} column; a vector
+#'   (e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
+#'   \code{lift_10}. Default \code{c(0, 0.1)}.
+#' @param min_base_for_lift Integer. Minimum sample size (frequency count)
+#'   required to compute a lift value. If the distribution has fewer than this
+#'   many observations, the lift cell returns \code{NA}. Applied per-brand when
+#'   \code{brand} is set. Default \code{75}.
 #' @param type Character. Estimation method:
 #'   \itemize{
 #'     \item \code{"gr"} (default): exact junction-tree inference via \code{gRain}.
@@ -30,6 +43,18 @@
 #'       \code{bnlearn::cpquery()} with likelihood weighting.
 #'     \item \code{"mi"}: mutual information test only (no probability lift).
 #'   }
+#' @param dv_metric Character. What to compute from the DV distribution per
+#'   IV level: \code{"mean"} (default) uses \code{E[DV | IV=v]} — the expected
+#'   value across all DV levels (works with any scale: 3-point, 5-point,
+#'   7-point, etc.). \code{"top_box"} uses \code{P(DV_max | IV=v)} — the
+#'   probability of the highest DV level.
+#' @param impact_metric_type Character. How \code{lift} values are interpreted:
+#'   \code{"proportional"} (default) shifts the mean by a fraction of its
+#'   current value (e.g., 0.10 = 10 percent of current mean);
+#'   \code{"absolute"} shifts the mean by a fixed number of scale points
+#'   (e.g., 0.10 = add 0.10 to the mean regardless of starting value).
+#' @param include_base Logical. Whether to include base-size columns alongside
+#'   brand-specific lift columns. Default \code{TRUE}.
 #' @param index_by Character. Which metric to use for the index column:
 #'   \code{"lift_first"} (default), \code{"lift_second"}, \code{"maxVmin"},
 #'   \code{"mi"}, or \code{"none"} (no index column).
@@ -40,28 +65,6 @@
 #'   See \strong{When to bootstrap} below.
 #' @param n_querry Integer. Number of Monte Carlo samples per \code{cpquery()} call.
 #'   Only used when \code{type = "cp"}. Default \code{1e4}.
-#' @param lift Numeric scalar or vector. Target percentage lift(s) for
-#'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
-#'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
-#'   then computes the resulting DV probability change. Computed when
-#'   \code{type = "gr"} (exact) or \code{type = "cp"} (Monte Carlo).
-#'   When a lift value is 0, computes symmetric sensitivity: E_(+5 percent) -
-#'   E_(-5 percent). A scalar produces a single \code{lift} column; a vector
-#'   (e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
-#'   \code{lift_10}. Default \code{0}.
-#' @param impact_metric_type Character. How \code{lift} values are interpreted:
-#'   \code{"proportional"} (default) shifts the mean by a fraction of its
-#'   current value (e.g., 0.10 = 10 percent of current mean);
-#'   \code{"absolute"} shifts the mean by a fixed number of scale points
-#'   (e.g., 0.10 = add 0.10 to the mean regardless of starting value).
-#' @param min_base_for_lift Integer. Minimum sample size (frequency count) required
-#'   to compute a lift value. If the distribution has fewer than this many
-#'   observations, the lift cell returns \code{NA}. Applied per-brand when
-#'   \code{brand} is set. Default \code{60}.
-#' @param dv_metric Character. What to compute from the DV distribution per IV level:
-#'   \code{"top_box"} (default) uses \code{P(DV_max | IV=v)} — probability of the
-#'   highest DV level. \code{"mean"} uses \code{E[DV | IV=v]} — the expected value
-#'   across all DV levels (works with any scale: 3-point, 5-point, 7-point, etc.).
 #' @param brand Character scalar or \code{NULL}. Column name in \code{df}
 #'   containing brand (or segment) labels. When provided, the lift metric is
 #'   computed using brand-specific frequency distributions rather than the
@@ -71,6 +74,9 @@
 #' @param brand_names Character vector or NULL. When provided, only compute
 #'   brand-specific lift for these brand levels. Brands not in this vector are
 #'   skipped. Market-level lift is always computed. Default NULL (all brands).
+#' @param weight Character or NULL. Column name in \code{df} containing
+#'   observation weights. When provided, frequency distributions used for
+#'   lift calculations are weighted. Default NULL.
 #' @param mi_boot Integer or NULL. When set and \code{do_community = TRUE},
 #'   bootstraps the MI calculation this many times to derive a p-value from the
 #'   bootstrap distribution instead of the chi-squared approximation. The
@@ -184,17 +190,17 @@ bn_impact_engine <- function(
     ivs = NULL,
     do_community = FALSE,
     community_assignment = NULL,
+    lift = c(0, 0.1),
+    min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
+    dv_metric = c("mean", "top_box"),
+    impact_metric_type = c("proportional", "absolute"),
+    include_base = TRUE,
     index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     n_boot = 1,
     n_querry = 1e4,
-    lift = 0,
-    impact_metric_type = c("proportional", "absolute"),
     brand = NULL,
     brand_names = NULL,
-    min_base_for_lift = 60,
-    include_base = TRUE,
-    dv_metric = c("top_box", "mean"),
     weight = NULL,
     mi_boot = NULL,
     seed = 1
@@ -401,8 +407,8 @@ bn_impact_engine <- function(
     data, indices = NULL, bn, ivs, ivs_max, ivs_min, dv_max = NULL,
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
-    n_querry = 1e5, lift = 0, impact_metric_type = "proportional", brand = NULL,
-    min_base_for_lift = 60, include_base = TRUE, dv_metric = "top_box", weight = NULL, fit = NULL, mi_boot = NULL, seed = 1
+    n_querry = 1e5, lift = c(0, 0.1), impact_metric_type = "proportional", brand = NULL,
+    min_base_for_lift = 75, include_base = TRUE, dv_metric = "mean", weight = NULL, fit = NULL, mi_boot = NULL, seed = 1
   ){
     type <- match.arg(type)
 
@@ -678,7 +684,26 @@ bn_impact_engine <- function(
               boot_idx <- sample(n_obs, replace = TRUE)
               boot_data <- fit_data[boot_idx, , drop = FALSE]
               composite <- apply(boot_data[iv_vars], 1, paste0, collapse = "_") %>% as.factor()
-              xmi <- bnlearn::ci.test(composite, boot_data[[dv]], test = "mi")
+              # Suppress bnlearn "variable X has levels that are not observed
+              # in the data" warnings from ci.test().
+              #
+              # Why they fire: bootstrap resampling (with replacement) from a
+              # subgroup can occasionally draw samples that miss a rare factor
+              # level (e.g., DV = 1 in a low-prevalence subgroup). bnlearn's
+              # check.data() flags that the factor carries a level with zero
+              # rows, even though the underlying data is fine.
+              #
+              # Why it's safe to suppress: ci.test() still returns a valid MI
+              # statistic (levels with zero observations contribute zero to
+              # the sum). Across n_mi_boot replicates, any individual resample
+              # missing a level just shifts one draw slightly — the
+              # distribution of MI values the bootstrap CI is built from is
+              # unaffected in the aggregate. The warning is purely cosmetic
+              # at this scope, and with n_mi_boot >> 1 it fires repeatedly
+              # for the same root cause and drowns out anything meaningful.
+              xmi <- suppressWarnings(
+                bnlearn::ci.test(composite, boot_data[[dv]], test = "mi")
+              )
               xmi$statistic / (2 * n_obs)
             })
 

@@ -6,21 +6,21 @@
 \usage{
 bn_impact_write(
   bn_impact_result,
-  file_name = NULL,
-  sub_title = NULL,
-  title = NULL,
-  variable_width = 20,
-  community_width = 20,
-  label_width = "auto",
-  wb_type = c("dynamic", "standard"),
-  add_simple_simulator = FALSE,
   bn_obj = NULL,
   df = NULL,
+  dictionary = NULL,
+  title = NULL,
+  sub_title = NULL,
+  file_name = NULL,
   brand_names = NULL,
   shift_range = c(-0.5, 0.5),
   shift_step = 0.025,
+  wb_type = c("dynamic", "standard"),
+  add_simple_simulator = TRUE,
+  variable_width = 20,
+  community_width = 20,
+  label_width = "auto",
   network_type = "none",
-  dictionary = NULL,
   very_hide_all = TRUE,
   min_base_for_lift = NULL,
   path = "."
@@ -31,35 +31,6 @@ bn_impact_write(
 \code{bn_impacts()}. When from \code{bn_impacts()}, community and weighted
 tables are automatically included. When weighted tables are present, a
 Weight control is added to the dynamic dashboard.}
-
-\item{file_name}{Character or NULL. Prefix for output file name. File is
-saved as \code{{file_name} - Network Drivers of {dv}.xlsx}. If NULL,
-inherits from \code{sub_title}. If both are NULL, file is saved as
-\code{Network Drivers of {dv}.xlsx}.}
-
-\item{sub_title}{Character or NULL. Subtitle text displayed in the sheet
-header (e.g. project name). If NULL, inherits from \code{file_name}.
-Default NULL.}
-
-\item{title}{Character or NULL. Title displayed in the sheet header. If NULL,
-defaults to \code{"Network Drivers of {dv}"} using the DV display name.}
-
-\item{variable_width}{Numeric. Column width for the Variable column.
-Default 20.}
-
-\item{community_width}{Numeric. Column width for the Community column when
-community results are present. Default 20.}
-
-\item{label_width}{Numeric or \code{"auto"}. Column width for the Label
-column. Default \code{"auto"}.}
-
-\item{wb_type}{Character. Workbook format: \code{"standard"} (default)
-writes a static formatted table; \code{"dynamic"} writes an interactive
-dashboard with dropdown filters.}
-
-\item{add_simple_simulator}{Logical. If TRUE, adds a Simulator sheet with
-interactive dropdowns for exploring conditional probability distributions.
-Requires \code{bn_obj} to be provided. Default FALSE.}
 
 \item{bn_obj}{The BN object or NULL. Accepts either the full output of
 \code{bn_finalize_network()} or just the \code{bn_subgroups} element.
@@ -72,6 +43,21 @@ estimation. Passed to the simulator for frequency-based shift calculations.
 Required when \code{add_simple_simulator = TRUE} and frequency shifts are
 desired.}
 
+\item{dictionary}{Optional. A data frame or named object for variable labels.
+Passed to the simulator for labeling target variables.}
+
+\item{title}{Character or NULL. Title displayed in the sheet header. If NULL,
+defaults to \code{"Network Drivers of {dv}"} using the DV display name.}
+
+\item{sub_title}{Character or NULL. Subtitle text displayed in the sheet
+header (e.g. project name). If NULL, inherits from \code{file_name}.
+Default NULL.}
+
+\item{file_name}{Character or NULL. Prefix for output file name. File is
+saved as \code{{file_name} - Network Drivers of {dv}.xlsx}. If NULL,
+inherits from \code{sub_title}. If both are NULL, file is saved as
+\code{Network Drivers of {dv}.xlsx}.}
+
 \item{brand_names}{Character vector or NULL. Brand level names to use in the
 simulator. If NULL, auto-detected from \code{meta$brand_names} in the
 impact result.}
@@ -82,15 +68,33 @@ the simulator's frequency shift sliders. Default \code{c(-0.50, 0.50)}.}
 \item{shift_step}{Numeric. Step size for the simulator's frequency shift
 sliders. Default 0.025.}
 
+\item{wb_type}{Character. Workbook format: \code{"dynamic"} (default)
+writes an interactive dashboard with dropdown filters; \code{"standard"}
+writes a static formatted table.}
+
+\item{add_simple_simulator}{Logical. If TRUE (default), adds a Simulator
+sheet with interactive dropdowns for exploring conditional probability
+distributions. Requires \code{bn_obj} to be provided.}
+
+\item{variable_width}{Numeric. Column width for the Variable column.
+Default 20.}
+
+\item{community_width}{Numeric. Column width for the Community column when
+community results are present. Default 20.}
+
+\item{label_width}{Numeric or \code{"auto"}. Column width for the Label
+column. Default \code{"auto"}.}
+
 \item{network_type}{Character. Type of network map to include when
 \code{bn_obj} is the full \code{bn_finalize_network()} output.
 \code{"none"} (default) skips network maps.}
 
-\item{dictionary}{Optional. A data frame or named object for variable labels.
-Passed to the simulator for labeling target variables.}
-
 \item{very_hide_all}{Logical. If TRUE (default), all hidden sheets are set to
 veryHidden. If FALSE, they are simply hidden.}
+
+\item{min_base_for_lift}{Integer or NULL. Minimum sample size used for
+footnote text about when lift metrics are calculated. If NULL, inherits
+from \code{meta$min_base_for_lift} in the impact result.}
 
 \item{path}{Character. Directory to write workbook to. Default \code{"."}.}
 }

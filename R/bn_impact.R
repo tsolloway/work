@@ -65,59 +65,63 @@
 #' @param df A data frame containing variables used for impact estimation. When
 #'   \code{process_subgroups = TRUE}, it must also contain the subgroup indicator
 #'   columns matching \code{names(obj)}.
+#' @param dictionary Optional. A dictionary object (or named vector) for
+#'   variable labels. Joined to output via \code{work::dictionary_from_named_object()}.
+#'   Adds a \code{Label} column after \code{Variable}.
 #' @param dv Optional. Dependent/target variable name (character scalar). If
 #'   \code{NULL}, \code{bn_impact_engine()} determines the target.
 #' @param ivs Optional. Independent variable names (character vector). If
 #'   \code{NULL}, \code{bn_impact_engine()} determines which variables to
 #'   evaluate.
+#' @param process_subgroups Logical. If \code{TRUE}, iterate over subgroup
+#'   models and filter \code{df} to rows where \code{df[[subgroup_name]] == 1}.
+#'   If \code{FALSE}, compute once on the full \code{df}. Default TRUE.
 #' @param do_community Logical. Whether to compute community-level summaries
-#'   (passed through to the engine).
+#'   (passed through to the engine). Default FALSE.
 #' @param community_assignment Optional. Community assignment object used when
 #'   \code{do_community = TRUE}.
+#' @param lift Numeric vector. Target lift(s) for the shifted-distribution
+#'   metric. Interpretation depends on \code{impact_metric_type}. Default
+#'   \code{c(0, 0.1)}.
+#' @param min_base_for_lift Integer. Minimum sample size required for a brand
+#'   subgroup to compute lift estimates. Brands below this threshold are
+#'   excluded. Default 75.
 #' @param type Character. Engine type: \code{"gr"} (gRain exact inference,
 #'   default), \code{"cp"} (cpdist sampling), or \code{"mi"} (mutual
 #'   information).
+#' @param dv_metric Character. How the DV is summarized: \code{"mean"}
+#'   (default) computes the expected value across all DV levels;
+#'   \code{"top_box"} uses the probability of the highest DV level.
+#' @param impact_metric_type Character. How \code{lift} is interpreted:
+#'   \code{"proportional"} (default) shifts by a fraction of the current mean;
+#'   \code{"absolute"} shifts by a fixed number of scale points.
+#' @param include_base Logical. Whether to include the base (overall/unfiltered)
+#'   estimate alongside brand-specific estimates. Default \code{TRUE}.
 #' @param index_by Character. How to compute the final impact index:
 #'   \code{"lift_first"} (default) ranks by lift then breaks ties by MI,
 #'   \code{"lift_second"} ranks by MI then lift, \code{"maxVmin"} uses the
 #'   max-minus-min DV range, \code{"mi"} uses MI only, \code{"none"} omits
 #'   the index column.
-#' @param process_subgroups Logical. If \code{TRUE}, iterate over subgroup
-#'   models and filter \code{df} to rows where \code{df[[subgroup_name]] == 1}.
-#'   If \code{FALSE}, compute once on the full \code{df}.
-#' @param dictionary Optional. A dictionary object (or named vector) for
-#'   variable labels. Joined to output via \code{work::dictionary_from_named_object()}.
-#'   Adds a \code{Label} column after \code{Variable}.
 #' @param n_boot Integer. Number of bootstrap replicates for the MI
 #'   significance test (passed through to the engine). Default 1.
 #' @param n_querry Integer. Number of Monte Carlo samples used by the
 #'   \code{"cp"} engine for \code{cpdist} queries. Ignored for \code{"gr"} and
 #'   \code{"mi"} types. Default 1e4.
-#' @param lift Numeric. Target lift for the shifted-distribution metric.
-#'   Interpretation depends on \code{impact_metric_type}. Default 0.
-#' @param impact_metric_type Character. How \code{lift} is interpreted:
-#'   \code{"proportional"} (default) shifts by a fraction of the current mean;
-#'   \code{"absolute"} shifts by a fixed number of scale points.
 #' @param brand Character or NULL. Column name in \code{df} containing a brand
 #'   or group variable. When provided, impact is computed separately for each
 #'   brand level, producing brand-prefixed output columns.
 #' @param brand_names Character vector or NULL. When provided, only compute
 #'   brand-specific lift for these brand levels. Brands not in this vector are
 #'   skipped. Market-level lift is always computed. Default NULL (all brands).
-#' @param min_base_for_lift Integer. Minimum sample size required for a brand
-#'   subgroup to compute lift estimates. Brands below this threshold are
-#'   excluded. Default 60.
-#' @param include_base Logical. Whether to include the base (overall/unfiltered)
-#'   estimate alongside brand-specific estimates. Default \code{TRUE}.
-#' @param dv_metric Character. How the DV is summarized: \code{"top_box"}
-#'   (default) uses the probability of the highest DV level; \code{"mean"}
-#'   computes the expected value across all DV levels.
 #' @param weight Character or NULL. Column name in \code{df} containing
 #'   observation weights. When provided, frequency distributions used for
 #'   lift calculations are weighted. Default NULL.
 #' @param mi_boot Integer or NULL. Number of bootstrap replicates specifically
 #'   for the mutual information significance test. Overrides \code{n_boot} for
 #'   MI computation when set. Default NULL (uses \code{n_boot}).
+#' @param verbose Logical. Show a progress bar across subgroups. Default
+#'   \code{TRUE}. Set to \code{FALSE} when called from a higher-level wrapper
+#'   that provides its own progress indication.
 #' @param use_parallel Logical. Whether to parallelize subgroup processing
 #'   via \code{work::imap_progress()}. Default \code{TRUE}.
 #' @param seed Integer. Random seed passed through to the engine for
@@ -176,25 +180,26 @@
 bn_impact <- function(
     obj,
     df,
+    dictionary = NULL,
     dv = NULL,
     ivs = NULL,
+    process_subgroups = TRUE,
     do_community = FALSE,
     community_assignment = NULL,
+    lift = c(0, 0.1),
+    min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
+    dv_metric = c("mean", "top_box"),
+    impact_metric_type = c("proportional", "absolute"),
+    include_base = TRUE,
     index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
-    process_subgroups = TRUE,
-    dictionary = NULL,
     n_boot = 1,
     n_querry = 1e4,
-    lift = 0,
-    impact_metric_type = c("proportional", "absolute"),
     brand = NULL,
     brand_names = NULL,
-    min_base_for_lift = 60,
-    include_base = TRUE,
-    dv_metric = c("top_box", "mean"),
     weight = NULL,
     mi_boot = NULL,
+    verbose = TRUE,
     use_parallel = TRUE,
     seed = 1
 ){
@@ -212,38 +217,47 @@ bn_impact <- function(
 
     first_subgroup <- names(obj)[[1]]
 
-    output <- imap_progress(
-      obj,
-      function(.x, .y){
-        bn_impact_engine(
-          obj = .x,
-          df = df %>%
-            dplyr::filter(.data[[.y]] == 1) %>%
-            droplevels() %>%
-            as.data.frame(),
-          dv = dv,
-          ivs = ivs,
-          do_community = do_community,
-          community_assignment = community_assignment,
-          type = type,
-          index_by = index_by,
-          n_boot = n_boot,
-          n_querry = n_querry,
-          lift = lift,
-          impact_metric_type = impact_metric_type,
-          brand = brand,
-          brand_names = brand_names,
-          min_base_for_lift = min_base_for_lift,
-          include_base = include_base,
-          dv_metric = dv_metric,
-          weight = weight,
-          mi_boot = mi_boot,
-          seed = seed
-        ) %>%
-          setNames(glue::glue("{.y}_{names(.)}"))
-      },
-      .parallel = use_parallel
-    ) %>%
+    .engine_call <- function(.x, .y){
+      bn_impact_engine(
+        obj = .x,
+        df = df %>%
+          dplyr::filter(.data[[.y]] == 1) %>%
+          droplevels() %>%
+          as.data.frame(),
+        dv = dv,
+        ivs = ivs,
+        do_community = do_community,
+        community_assignment = community_assignment,
+        type = type,
+        index_by = index_by,
+        n_boot = n_boot,
+        n_querry = n_querry,
+        lift = lift,
+        impact_metric_type = impact_metric_type,
+        brand = brand,
+        brand_names = brand_names,
+        min_base_for_lift = min_base_for_lift,
+        include_base = include_base,
+        dv_metric = dv_metric,
+        weight = weight,
+        mi_boot = mi_boot,
+        seed = seed
+      ) %>%
+        setNames(glue::glue("{.y}_{names(.)}"))
+    }
+
+    if (verbose) {
+      output <- imap_progress(obj, .engine_call, .parallel = use_parallel)
+    } else if (use_parallel) {
+      output <- furrr::future_imap(
+        obj, .engine_call,
+        .options = furrr::furrr_options(seed = TRUE)
+      )
+    } else {
+      output <- purrr::imap(obj, .engine_call)
+    }
+
+    output <- output %>%
       dplyr::bind_cols() %>%
       dplyr::rename(Variable = !!paste0(first_subgroup, "_variable")) %>%
       dplyr::select(-dplyr::ends_with("_variable"))

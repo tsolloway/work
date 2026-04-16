@@ -12,8 +12,10 @@
 #'     \item A bare \code{bnlearn::bn.fit} object
 #'   }
 #' @param df Data frame containing the DV and IV columns.
-#' @param dv Character. Dependent variable name.
-#' @param ivs Character vector. Independent variable names. If NULL,
+#' @param dictionary Optional. Dictionary for variable labels.
+#' @param dv Character or NULL. Dependent variable name. If NULL, auto-detected
+#'   from \code{obj$meta$dv}.
+#' @param ivs Character vector or NULL. Independent variable names. If NULL,
 #'   auto-detected from \code{obj$meta$ivs}.
 #' @param ivs_excluded Character vector or NULL. Variables to exclude from the
 #'   analysis. Removed from \code{ivs} before any computation. Default NULL.
@@ -25,33 +27,34 @@
 #'   extension at each step.
 #'   \code{"exhaustive"} evaluates all C(n, k) combinations at each size k
 #'   to find the globally best combo.
-#' @param impact_result Optional. Output of \code{bn_impact()} or a tibble with
-#'   \code{Variable} and an index column. Used to seed round 1 ordering in
-#'   greedy search.
-#' @param dv_metric Character. \code{"mean"} (default) computes the expected DV
-#'   value; \code{"top_box"} uses the probability of the highest DV level.
 #' @param lift Numeric. Distribution shift for \code{strategy = "lift"}.
 #'   Interpretation depends on \code{impact_metric_type}. Default 0.10.
+#' @param min_base_for_boot Integer. Minimum sample size required to run
+#'   bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
+#'   skipped. Default 75.
+#' @param dv_metric Character. \code{"mean"} (default) computes the expected DV
+#'   value; \code{"top_box"} uses the probability of the highest DV level.
 #' @param impact_metric_type Character. How \code{lift} is interpreted:
 #'   \code{"proportional"} (default) shifts by a fraction of the current mean;
 #'   \code{"absolute"} shifts by a fixed number of scale points.
+#' @param impact_result Optional. Output of \code{bn_impact()} or a tibble with
+#'   \code{Variable} and an index column. Used to seed round 1 ordering in
+#'   greedy search.
 #' @param threshold Numeric or NULL. Stop when marginal gain drops below this
 #'   fraction of the current DV estimate. Default 0.01 (1 percent). Set NULL
 #'   to disable.
 #' @param max_rounds Integer or NULL. Maximum combo size (exhaustive) or number
 #'   of priority rounds (greedy). NULL means no limit.
-#' @param n_boot_final Integer or NULL. If set, bootstraps the final result
-#'   to produce p-values via a noise-floor test.
 #' @param noise_tail Numeric. Fraction of tail steps used to estimate the
 #'   noise floor for bootstrap p-values. Default 1/3.
-#' @param min_base_for_boot Integer. Minimum sample size required to run
-#'   bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
-#'   skipped. Default 75.
+#' @param n_boot_final Integer or NULL. If set, bootstraps the final result
+#'   to produce p-values via a noise-floor test. Default 100.
 #' @param weight Character or NULL. Column name in \code{df} containing
 #'   observation weights for the lift strategy frequency distribution. Default
 #'   NULL (unweighted).
-#' @param dictionary Optional. Dictionary for variable labels.
 #' @param use_parallel Logical. Parallelize candidate evaluation within rounds.
+#' @param verbose Logical. Print round/step/bootstrap progress messages.
+#'   Default TRUE.
 #' @param seed Integer. Random seed for reproducibility.
 #'
 #' @return A tibble with columns: \code{priority}, \code{variable},
@@ -64,23 +67,24 @@
 bn_prioritize <- function(
     obj,
     df,
-    dv,
+    dictionary = NULL,
+    dv = NULL,
     ivs = NULL,
     ivs_excluded = NULL,
     strategy = c("lift", "max"),
     search = c("greedy", "exhaustive"),
-    impact_result = NULL,
-    dv_metric = c("mean", "top_box"),
     lift = 0.10,
+    min_base_for_boot = 75,
+    dv_metric = c("mean", "top_box"),
     impact_metric_type = c("proportional", "absolute"),
+    impact_result = NULL,
     threshold = 0.01,
     max_rounds = NULL,
-    n_boot_final = 100,
     noise_tail = 1/3,
-    min_base_for_boot = 75,
+    n_boot_final = 100,
     weight = NULL,
-    dictionary = NULL,
     use_parallel = TRUE,
+    verbose = TRUE,
     seed = 1
 ) {
 
@@ -153,7 +157,7 @@ bn_prioritize <- function(
 
   # Baseline DV estimate (no evidence)
   baseline <- .query_dv(grain_bn, evidence = list())
-  cli::cli_alert_info("Baseline DV estimate: {round(baseline, 4)}")
+  if (verbose) cli::cli_alert_info("Baseline DV estimate: {round(baseline, 4)}")
 
   baseline_row <- tibble::tibble(
     priority = 0L,
@@ -219,7 +223,7 @@ bn_prioritize <- function(
         idx_cols <- grep("_index$|^Total$|^index$", names(impact_table), value = TRUE)
       }
       if (length(idx_cols) == 0) {
-        cli::cli_alert_warning("Cannot find ranking column in impact_result, computing from scratch")
+        if (verbose) cli::cli_alert_warning("Cannot find ranking column in impact_result, computing from scratch")
         impact_result <- NULL
       } else {
         round1_order <- impact_table %>%
@@ -230,7 +234,7 @@ bn_prioritize <- function(
     }
 
     if (is.null(impact_result)) {
-      cli::cli_alert_info("Round 1: Evaluating {length(ivs)} individual IVs")
+      if (verbose) cli::cli_alert_info("Round 1: Evaluating {length(ivs)} individual IVs")
       individual_estimates <- purrr::map_dbl(rlang::set_names(ivs), function(iv) {
         .eval_combo(iv)
       })
@@ -255,7 +259,7 @@ bn_prioritize <- function(
 
     round <- 2L
     while (length(remaining) > 0 && round <= max_r) {
-      cli::cli_alert_info("Round {round}: Testing {length(remaining)} candidates with {length(selected)} selected")
+      if (verbose) cli::cli_alert_info("Round {round}: Testing {length(remaining)} candidates with {length(selected)} selected")
 
       combo_base <- selected
 
@@ -280,7 +284,7 @@ bn_prioritize <- function(
       marginal_gain_pct <- if (prev_estimate != 0) marginal_gain / prev_estimate else 0
 
       if (!is.null(threshold) && marginal_gain_pct < threshold) {
-        cli::cli_alert_info("Stopping at round {round}: marginal gain {round(marginal_gain_pct * 100, 4)}% < threshold {threshold * 100}%")
+        if (verbose) cli::cli_alert_info("Stopping at round {round}: marginal gain {round(marginal_gain_pct * 100, 4)}% < threshold {threshold * 100}%")
         break
       }
 
@@ -314,7 +318,7 @@ bn_prioritize <- function(
 
     for (k in seq_len(max_k)) {
       combos <- utils::combn(ivs, k, simplify = FALSE)
-      cli::cli_alert_info("Size {k}: Evaluating {length(combos)} combinations")
+      if (verbose) cli::cli_alert_info("Size {k}: Evaluating {length(combos)} combinations")
 
       if (use_parallel && length(combos) > 1) {
         estimates <- furrr::future_map_dbl(combos, .eval_combo,
@@ -333,7 +337,7 @@ bn_prioritize <- function(
       marginal_gain_pct <- if (prev_estimate != 0) marginal_gain / prev_estimate else 0
 
       if (!is.null(threshold) && k > 1 && marginal_gain_pct < threshold) {
-        cli::cli_alert_info("Stopping at size {k}: marginal gain {round(marginal_gain_pct * 100, 4)}% < threshold {threshold * 100}%")
+        if (verbose) cli::cli_alert_info("Stopping at size {k}: marginal gain {round(marginal_gain_pct * 100, 4)}% < threshold {threshold * 100}%")
         break
       }
 
@@ -360,7 +364,7 @@ bn_prioritize <- function(
   # ---------------------------------------------------------------------------
   n_obs <- nrow(df)
   if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs >= min_base_for_boot) {
-    cli::cli_alert_info("Bootstrapping {n_boot_final} replicates for p-values (n = {n_obs})")
+    if (verbose) cli::cli_alert_info("Bootstrapping {n_boot_final} replicates for p-values (n = {n_obs})")
 
     n_steps <- nrow(result)
     bn_nodes <- bnlearn::nodes(bn)
@@ -374,19 +378,26 @@ bn_prioritize <- function(
     weight_vec <- if (!is.null(weight)) df[[weight]] else NULL
     boot_gains <- matrix(NA_real_, nrow = n_boot_final, ncol = n_steps)
 
-    cli::cli_progress_bar("Bootstrap", total = n_boot_final)
+    if (verbose) cli::cli_progress_bar("Bootstrap", total = n_boot_final)
 
     for (b in seq_len(n_boot_final)) {
-      cli::cli_progress_update()
+      if (verbose) cli::cli_progress_update()
 
       boot_idx <- sample(nrow(fit_df), replace = TRUE)
       boot_df <- fit_df[boot_idx, , drop = FALSE]
       boot_w <- if (!is.null(weight_vec)) weight_vec[boot_idx] else NULL
 
-      boot_grain <- suppressMessages(
+      # Suppress bnlearn "variable X has levels that are not observed in the
+      # data" warnings from bn.fit(). They fire when a bootstrap resample
+      # (with replacement) from a small slice happens to miss a rare factor
+      # level — a sampling artifact, not a real issue. The Bayesian fit still
+      # produces a valid grain object (unobserved levels get prior-driven
+      # non-zero probabilities), and the bootstrap aggregate is unaffected.
+      # suppressMessages is kept separately for gRain "chatty" init messages.
+      boot_grain <- suppressWarnings(suppressMessages(
         bnlearn::bn.fit(bn, boot_df, method = "bayes") %>%
           bnlearn::as.grain()
-      )
+      ))
 
       boot_baseline <- .query_dv(boot_grain, evidence = list())
 
@@ -424,7 +435,7 @@ bn_prioritize <- function(
       boot_gains[b, ] <- diff(cumulative)
     }
 
-    cli::cli_progress_done()
+    if (verbose) cli::cli_progress_done()
 
     # Noise floor: average gain of the tail Q steps per bootstrap
     if (n_steps <= 4) {
@@ -443,7 +454,7 @@ bn_prioritize <- function(
       round(mean(gains_k[valid] <= noise_k[valid]), 5)
     })
   } else if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs < min_base_for_boot) {
-    cli::cli_alert_warning("Skipping bootstrap: base too small (n = {n_obs}, minimum = {min_base_for_boot})")
+    if (verbose) cli::cli_alert_warning("Skipping bootstrap: base too small (n = {n_obs}, minimum = {min_base_for_boot})")
   }
 
   # ---------------------------------------------------------------------------
@@ -474,7 +485,7 @@ bn_prioritize <- function(
   }
   result <- result[, col_order]
 
-  cli::cli_alert_success("Prioritization complete: {nrow(result) - 1} steps (n = {n_obs})")
+  if (verbose) cli::cli_alert_success("Prioritization complete: {nrow(result) - 1} steps (n = {n_obs})")
 
   attr(result, "n_obs") <- n_obs
   result

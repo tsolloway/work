@@ -6,9 +6,9 @@
 \usage{
 bn_prioritize_write(
   result,
-  file_name = NULL,
-  sub_title = NULL,
   title = NULL,
+  sub_title = NULL,
+  file_name = NULL,
   variable_width = 20,
   community_width = 20,
   label_width = 20,
@@ -24,14 +24,16 @@ bn_prioritize_write(
 \item{result}{Output of \code{bn_prioritize()} (a single tibble) or
 \code{bn_prioritizations()} (a list of results with meta).}
 
-\item{file_name}{Character or NULL. Prefix for output file name. If NULL,
-inherits from \code{sub_title}. Default NULL.}
+\item{title}{Character or NULL. Title displayed in the sheet header. If NULL,
+defaults to \code{"Prioritization Analysis of {dv}"} using the DV display
+name from \code{result$meta$dv}. Default NULL.}
 
 \item{sub_title}{Character or NULL. Subtitle text displayed in the sheet
-header (e.g. project name). Default NULL.}
+header (e.g. project name). If NULL, inherits from \code{file_name}.
+Default NULL.}
 
-\item{title}{Character or NULL. Title displayed in the sheet header. If NULL,
-defaults to \code{"Prioritization Analysis"}. Default NULL.}
+\item{file_name}{Character or NULL. Prefix for output file name. If NULL,
+inherits from \code{sub_title}. Default NULL.}
 
 \item{variable_width}{Numeric. Column width for the Variable column.
 Default 20.}
@@ -53,8 +55,8 @@ Default 0.10.}
 \item{lift}{Numeric. The lift fraction used in the prioritization analysis,
 displayed in the footer. Default 0.10 (10 percent).}
 
-\item{very_hide_all}{Logical. If TRUE (default), all sheets except Prioritization
-are set to veryHidden. If FALSE, they are simply hidden.}
+\item{very_hide_all}{Logical. If TRUE (default), all sheets except
+Prioritization are set to veryHidden. If FALSE, they are simply hidden.}
 
 \item{path}{Character. Directory to write workbook to. Default \code{"."}.}
 }

@@ -7,24 +7,24 @@
 bn_prioritizations(
   obj,
   df,
+  dictionary = NULL,
   dv = NULL,
   ivs = NULL,
   ivs_excluded = NULL,
   process_subgroups = TRUE,
+  community_assignment = NULL,
+  lift = 0.1,
+  min_base_for_boot = 75,
+  dv_metric = c("mean", "top_box"),
+  impact_metric_type = c("proportional", "absolute"),
+  impact_result = NULL,
+  threshold = 0.01,
+  max_rounds = NULL,
+  noise_tail = 1/3,
+  n_boot_final = 100,
   brand = NULL,
   brand_names = NULL,
   weight = NULL,
-  impact_result = NULL,
-  dv_metric = c("mean", "top_box"),
-  lift = 0.1,
-  impact_metric_type = c("proportional", "absolute"),
-  threshold = 0.01,
-  max_rounds = NULL,
-  n_boot_final = 100,
-  noise_tail = 1/3,
-  min_base_for_boot = 75,
-  dictionary = NULL,
-  community_assignment = NULL,
   use_parallel = TRUE,
   seed = 1
 )
@@ -36,6 +36,8 @@ subgroup element, or a bare \code{bnlearn::bn.fit} object.}
 
 \item{df}{Data frame containing the DV, IV, and optionally brand/weight
 columns.}
+
+\item{dictionary}{Optional. Dictionary for variable labels.}
 
 \item{dv}{Character. Dependent variable name. If NULL, auto-detected from
 \code{obj$meta$dv}.}
@@ -51,6 +53,34 @@ the analysis. Default NULL.}
 to rows where \code{df[[subgroup_name]] == 1}). If FALSE, compute once
 on the full data. Default TRUE.}
 
+\item{community_assignment}{Optional. Community assignment node table (e.g.,
+\code{bn$viz_prep$attribute_viz_prep$nodes}) with \code{id} and
+\code{community_name} columns. When provided, a \code{community} column
+is added to each result tibble after \code{variable}.}
+
+\item{lift}{Numeric. Distribution shift for lift strategy. Default 0.10.}
+
+\item{min_base_for_boot}{Integer. Minimum sample size to run bootstrap
+p-values and to include a brand-subgroup slice as a task. Default 75.}
+
+\item{dv_metric}{Character. \code{"mean"} (default) or \code{"top_box"}.}
+
+\item{impact_metric_type}{Character. \code{"proportional"} (default) or
+\code{"absolute"}.}
+
+\item{impact_result}{Optional. Output of \code{bn_impact()} passed through
+to seed greedy round 1 ordering.}
+
+\item{threshold}{Numeric or NULL. Early stopping threshold. Default 0.01.}
+
+\item{max_rounds}{Integer or NULL. Maximum priority rounds. Default NULL.}
+
+\item{noise_tail}{Numeric. Fraction of tail steps for noise floor.
+Default 1/3.}
+
+\item{n_boot_final}{Integer. Bootstrap replicates for p-values.
+Default 100.}
+
 \item{brand}{Character or NULL. Column name in \code{df} containing brand
 labels. When provided, lift is computed separately for each brand using
 brand-filtered data. Default NULL.}
@@ -61,36 +91,6 @@ brand-specific lift for these brand levels. Default NULL (all brands).}
 \item{weight}{Character or NULL. Column name in \code{df} containing
 observation weights. When provided, adds weighted lift variants.
 Default NULL.}
-
-\item{impact_result}{Optional. Output of \code{bn_impact()} passed through
-to seed greedy round 1 ordering.}
-
-\item{dv_metric}{Character. \code{"mean"} (default) or \code{"top_box"}.}
-
-\item{lift}{Numeric. Distribution shift for lift strategy. Default 0.10.}
-
-\item{impact_metric_type}{Character. \code{"proportional"} (default) or
-\code{"absolute"}.}
-
-\item{threshold}{Numeric or NULL. Early stopping threshold. Default 0.01.}
-
-\item{max_rounds}{Integer or NULL. Maximum priority rounds. Default NULL.}
-
-\item{n_boot_final}{Integer. Bootstrap replicates for p-values.
-Default 100.}
-
-\item{noise_tail}{Numeric. Fraction of tail steps for noise floor.
-Default 1/3.}
-
-\item{min_base_for_boot}{Integer. Minimum sample size to run bootstrap
-p-values. Default 75.}
-
-\item{dictionary}{Optional. Dictionary for variable labels.}
-
-\item{community_assignment}{Optional. Community assignment node table (e.g.,
-\code{bn$viz_prep$attribute_viz_prep$nodes}) with \code{id} and
-\code{community_name} columns. When provided, a \code{community} column
-is added to each result tibble after \code{variable}.}
 
 \item{use_parallel}{Logical. Parallelize candidate evaluation. Default TRUE.}
 

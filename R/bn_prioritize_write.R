@@ -8,12 +8,14 @@
 #'
 #' @param result Output of \code{bn_prioritize()} (a single tibble) or
 #'   \code{bn_prioritizations()} (a list of results with meta).
+#' @param title Character or NULL. Title displayed in the sheet header. If NULL,
+#'   defaults to \code{"Prioritization Analysis of {dv}"} using the DV display
+#'   name from \code{result$meta$dv}. Default NULL.
+#' @param sub_title Character or NULL. Subtitle text displayed in the sheet
+#'   header (e.g. project name). If NULL, inherits from \code{file_name}.
+#'   Default NULL.
 #' @param file_name Character or NULL. Prefix for output file name. If NULL,
 #'   inherits from \code{sub_title}. Default NULL.
-#' @param sub_title Character or NULL. Subtitle text displayed in the sheet
-#'   header (e.g. project name). Default NULL.
-#' @param title Character or NULL. Title displayed in the sheet header. If NULL,
-#'   defaults to \code{"Prioritization Analysis"}. Default NULL.
 #' @param variable_width Numeric. Column width for the Variable column.
 #'   Default 20.
 #' @param community_width Numeric. Column width for the Community column.
@@ -27,8 +29,8 @@
 #'   Default 0.10.
 #' @param lift Numeric. The lift fraction used in the prioritization analysis,
 #'   displayed in the footer. Default 0.10 (10 percent).
-#' @param very_hide_all Logical. If TRUE (default), all sheets except Prioritization
-#'   are set to veryHidden. If FALSE, they are simply hidden.
+#' @param very_hide_all Logical. If TRUE (default), all sheets except
+#'   Prioritization are set to veryHidden. If FALSE, they are simply hidden.
 #' @param path Character. Directory to write workbook to. Default \code{"."}.
 #'
 #' @return Workbook object (invisibly).
@@ -38,9 +40,9 @@
 #' @export
 bn_prioritize_write <- function(
     result,
-    file_name = NULL,
-    sub_title = NULL,
     title = NULL,
+    sub_title = NULL,
+    file_name = NULL,
     variable_width = 20,
     community_width = 20,
     label_width = 20,

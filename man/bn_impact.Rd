@@ -7,25 +7,26 @@
 bn_impact(
   obj,
   df,
+  dictionary = NULL,
   dv = NULL,
   ivs = NULL,
+  process_subgroups = TRUE,
   do_community = FALSE,
   community_assignment = NULL,
+  lift = c(0, 0.1),
+  min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
+  dv_metric = c("mean", "top_box"),
+  impact_metric_type = c("proportional", "absolute"),
+  include_base = TRUE,
   index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
-  process_subgroups = TRUE,
-  dictionary = NULL,
   n_boot = 1,
   n_querry = 10000,
-  lift = 0,
-  impact_metric_type = c("proportional", "absolute"),
   brand = NULL,
   brand_names = NULL,
-  min_base_for_lift = 60,
-  include_base = TRUE,
-  dv_metric = c("top_box", "mean"),
   weight = NULL,
   mi_boot = NULL,
+  verbose = TRUE,
   use_parallel = TRUE,
   seed = 1
 )
@@ -40,6 +41,10 @@ subgroup.}
 \code{process_subgroups = TRUE}, it must also contain the subgroup indicator
 columns matching \code{names(obj)}.}
 
+\item{dictionary}{Optional. A dictionary object (or named vector) for
+variable labels. Joined to output via \code{work::dictionary_from_named_object()}.
+Adds a \code{Label} column after \code{Variable}.}
+
 \item{dv}{Optional. Dependent/target variable name (character scalar). If
 \code{NULL}, \code{bn_impact_engine()} determines the target.}
 
@@ -47,15 +52,38 @@ columns matching \code{names(obj)}.}
 \code{NULL}, \code{bn_impact_engine()} determines which variables to
 evaluate.}
 
+\item{process_subgroups}{Logical. If \code{TRUE}, iterate over subgroup
+models and filter \code{df} to rows where \code{df[[subgroup_name]] == 1}.
+If \code{FALSE}, compute once on the full \code{df}. Default TRUE.}
+
 \item{do_community}{Logical. Whether to compute community-level summaries
-(passed through to the engine).}
+(passed through to the engine). Default FALSE.}
 
 \item{community_assignment}{Optional. Community assignment object used when
 \code{do_community = TRUE}.}
 
+\item{lift}{Numeric vector. Target lift(s) for the shifted-distribution
+metric. Interpretation depends on \code{impact_metric_type}. Default
+\code{c(0, 0.1)}.}
+
+\item{min_base_for_lift}{Integer. Minimum sample size required for a brand
+subgroup to compute lift estimates. Brands below this threshold are
+excluded. Default 75.}
+
 \item{type}{Character. Engine type: \code{"gr"} (gRain exact inference,
 default), \code{"cp"} (cpdist sampling), or \code{"mi"} (mutual
 information).}
+
+\item{dv_metric}{Character. How the DV is summarized: \code{"mean"}
+(default) computes the expected value across all DV levels;
+\code{"top_box"} uses the probability of the highest DV level.}
+
+\item{impact_metric_type}{Character. How \code{lift} is interpreted:
+\code{"proportional"} (default) shifts by a fraction of the current mean;
+\code{"absolute"} shifts by a fixed number of scale points.}
+
+\item{include_base}{Logical. Whether to include the base (overall/unfiltered)
+estimate alongside brand-specific estimates. Default \code{TRUE}.}
 
 \item{index_by}{Character. How to compute the final impact index:
 \code{"lift_first"} (default) ranks by lift then breaks ties by MI,
@@ -63,27 +91,12 @@ information).}
 max-minus-min DV range, \code{"mi"} uses MI only, \code{"none"} omits
 the index column.}
 
-\item{process_subgroups}{Logical. If \code{TRUE}, iterate over subgroup
-models and filter \code{df} to rows where \code{df[[subgroup_name]] == 1}.
-If \code{FALSE}, compute once on the full \code{df}.}
-
-\item{dictionary}{Optional. A dictionary object (or named vector) for
-variable labels. Joined to output via \code{work::dictionary_from_named_object()}.
-Adds a \code{Label} column after \code{Variable}.}
-
 \item{n_boot}{Integer. Number of bootstrap replicates for the MI
 significance test (passed through to the engine). Default 1.}
 
 \item{n_querry}{Integer. Number of Monte Carlo samples used by the
 \code{"cp"} engine for \code{cpdist} queries. Ignored for \code{"gr"} and
 \code{"mi"} types. Default 1e4.}
-
-\item{lift}{Numeric. Target lift for the shifted-distribution metric.
-Interpretation depends on \code{impact_metric_type}. Default 0.}
-
-\item{impact_metric_type}{Character. How \code{lift} is interpreted:
-\code{"proportional"} (default) shifts by a fraction of the current mean;
-\code{"absolute"} shifts by a fixed number of scale points.}
 
 \item{brand}{Character or NULL. Column name in \code{df} containing a brand
 or group variable. When provided, impact is computed separately for each
@@ -93,17 +106,6 @@ brand level, producing brand-prefixed output columns.}
 brand-specific lift for these brand levels. Brands not in this vector are
 skipped. Market-level lift is always computed. Default NULL (all brands).}
 
-\item{min_base_for_lift}{Integer. Minimum sample size required for a brand
-subgroup to compute lift estimates. Brands below this threshold are
-excluded. Default 60.}
-
-\item{include_base}{Logical. Whether to include the base (overall/unfiltered)
-estimate alongside brand-specific estimates. Default \code{TRUE}.}
-
-\item{dv_metric}{Character. How the DV is summarized: \code{"top_box"}
-(default) uses the probability of the highest DV level; \code{"mean"}
-computes the expected value across all DV levels.}
-
 \item{weight}{Character or NULL. Column name in \code{df} containing
 observation weights. When provided, frequency distributions used for
 lift calculations are weighted. Default NULL.}
@@ -111,6 +113,10 @@ lift calculations are weighted. Default NULL.}
 \item{mi_boot}{Integer or NULL. Number of bootstrap replicates specifically
 for the mutual information significance test. Overrides \code{n_boot} for
 MI computation when set. Default NULL (uses \code{n_boot}).}
+
+\item{verbose}{Logical. Show a progress bar across subgroups. Default
+\code{TRUE}. Set to \code{FALSE} when called from a higher-level wrapper
+that provides its own progress indication.}
 
 \item{use_parallel}{Logical. Whether to parallelize subgroup processing
 via \code{work::imap_progress()}. Default \code{TRUE}.}

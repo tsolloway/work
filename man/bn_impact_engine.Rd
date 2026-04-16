@@ -11,17 +11,17 @@ bn_impact_engine(
   ivs = NULL,
   do_community = FALSE,
   community_assignment = NULL,
+  lift = c(0, 0.1),
+  min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
+  dv_metric = c("mean", "top_box"),
+  impact_metric_type = c("proportional", "absolute"),
+  include_base = TRUE,
   index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
   n_boot = 1,
   n_querry = 10000,
-  lift = 0,
-  impact_metric_type = c("proportional", "absolute"),
   brand = NULL,
   brand_names = NULL,
-  min_base_for_lift = 60,
-  include_base = TRUE,
-  dv_metric = c("top_box", "mean"),
   weight = NULL,
   mi_boot = NULL,
   seed = 1
@@ -44,10 +44,25 @@ is a \code{bn_engine()} result with metadata.}
 is a \code{bn_engine()} result with metadata.}
 
 \item{do_community}{Logical. If \code{TRUE}, computes impact at the community
-level by jointly setting all IVs within each community.}
+level by jointly setting all IVs within each community. Default FALSE.}
 
 \item{community_assignment}{Optional data frame with \code{id} and
 \code{community_name} columns mapping IVs to communities.}
+
+\item{lift}{Numeric scalar or vector. Target percentage lift(s) for
+distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
+IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
+then computes the resulting DV probability change. Computed when
+\code{type = "gr"} (exact) or \code{type = "cp"} (Monte Carlo).
+When a lift value is 0, computes symmetric sensitivity: E_(+5 percent) -
+E_(-5 percent). A scalar produces a single \code{lift} column; a vector
+(e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
+\code{lift_10}. Default \code{c(0, 0.1)}.}
+
+\item{min_base_for_lift}{Integer. Minimum sample size (frequency count)
+required to compute a lift value. If the distribution has fewer than this
+many observations, the lift cell returns \code{NA}. Applied per-brand when
+\code{brand} is set. Default \code{75}.}
 
 \item{type}{Character. Estimation method:
 \itemize{
@@ -57,6 +72,21 @@ Deterministic, fast, no Monte Carlo noise.
 \code{bnlearn::cpquery()} with likelihood weighting.
 \item \code{"mi"}: mutual information test only (no probability lift).
 }}
+
+\item{dv_metric}{Character. What to compute from the DV distribution per
+IV level: \code{"mean"} (default) uses \code{E[DV | IV=v]} — the expected
+value across all DV levels (works with any scale: 3-point, 5-point,
+7-point, etc.). \code{"top_box"} uses \code{P(DV_max | IV=v)} — the
+probability of the highest DV level.}
+
+\item{impact_metric_type}{Character. How \code{lift} values are interpreted:
+\code{"proportional"} (default) shifts the mean by a fraction of its
+current value (e.g., 0.10 = 10 percent of current mean);
+\code{"absolute"} shifts the mean by a fixed number of scale points
+(e.g., 0.10 = add 0.10 to the mean regardless of starting value).}
+
+\item{include_base}{Logical. Whether to include base-size columns alongside
+brand-specific lift columns. Default \code{TRUE}.}
 
 \item{index_by}{Character. Which metric to use for the index column:
 \code{"lift_first"} (default), \code{"lift_second"}, \code{"maxVmin"},
@@ -71,22 +101,6 @@ See \strong{When to bootstrap} below.}
 \item{n_querry}{Integer. Number of Monte Carlo samples per \code{cpquery()} call.
 Only used when \code{type = "cp"}. Default \code{1e4}.}
 
-\item{lift}{Numeric scalar or vector. Target percentage lift(s) for
-distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
-IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
-then computes the resulting DV probability change. Computed when
-\code{type = "gr"} (exact) or \code{type = "cp"} (Monte Carlo).
-When a lift value is 0, computes symmetric sensitivity: E_(+5 percent) -
-E_(-5 percent). A scalar produces a single \code{lift} column; a vector
-(e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
-\code{lift_10}. Default \code{0}.}
-
-\item{impact_metric_type}{Character. How \code{lift} values are interpreted:
-\code{"proportional"} (default) shifts the mean by a fraction of its
-current value (e.g., 0.10 = 10 percent of current mean);
-\code{"absolute"} shifts the mean by a fixed number of scale points
-(e.g., 0.10 = add 0.10 to the mean regardless of starting value).}
-
 \item{brand}{Character scalar or \code{NULL}. Column name in \code{df}
 containing brand (or segment) labels. When provided, the lift metric is
 computed using brand-specific frequency distributions rather than the
@@ -98,15 +112,9 @@ across brands; only the observed distribution changes. Default \code{NULL}.}
 brand-specific lift for these brand levels. Brands not in this vector are
 skipped. Market-level lift is always computed. Default NULL (all brands).}
 
-\item{min_base_for_lift}{Integer. Minimum sample size (frequency count) required
-to compute a lift value. If the distribution has fewer than this many
-observations, the lift cell returns \code{NA}. Applied per-brand when
-\code{brand} is set. Default \code{60}.}
-
-\item{dv_metric}{Character. What to compute from the DV distribution per IV level:
-\code{"top_box"} (default) uses \code{P(DV_max | IV=v)} — probability of the
-highest DV level. \code{"mean"} uses \code{E[DV | IV=v]} — the expected value
-across all DV levels (works with any scale: 3-point, 5-point, 7-point, etc.).}
+\item{weight}{Character or NULL. Column name in \code{df} containing
+observation weights. When provided, frequency distributions used for
+lift calculations are weighted. Default NULL.}
 
 \item{mi_boot}{Integer or NULL. When set and \code{do_community = TRUE},
 bootstraps the MI calculation this many times to derive a p-value from the
