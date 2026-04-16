@@ -8,12 +8,32 @@ append_subgroup_summary(
   df_subgroup,
   wb = NULL,
   sheet_name = NULL,
-  title = "ProjectName (Number)",
-  sub_title = "Means Check",
-  label_width = "auto",
+  title = "Subgroup Count",
+  sub_title = NULL,
+  subgroup_width = 25,
   write_file = TRUE
 )
 }
+\arguments{
+\item{df_subgroup}{Tibble with Subgroup and Count columns.}
+
+\item{wb}{Workbook object. If \code{NULL}, creates a new one.}
+
+\item{sheet_name}{Character. Sheet name (default \code{"subgroup_count"}).}
+
+\item{title}{Character. Title text above the data.}
+
+\item{sub_title}{Character. Subtitle text below the title.}
+
+\item{subgroup_width}{Numeric. Column width for the Subgroup column.
+Default 25.}
+
+\item{write_file}{If \code{TRUE} (default), save the workbook to disk.}
+}
+\value{
+Modified workbook object.
+}
 \description{
-append_subgroup_summary
+Appends a formatted subgroup count sheet to a workbook.
+Styling matches \code{append_bn_impact} / \code{append_means_check}.
 }
