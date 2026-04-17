@@ -102,9 +102,8 @@ append_bn_impact_guide <- function(
   }
 
   # -- Header (title + subtitle) — no borders --
-  dv_bit <- if (!is.null(dv_display)) paste0(" of ", dv_display) else ""
   openxlsx::writeData(wb, guide_sheet,
-    paste0("How to Read This Workbook", dv_bit),
+    "How to Read This Network Drivers Workbook",
     startRow = r, startCol = col_left)
   openxlsx::addStyle(wb, guide_sheet, s_title, rows = r,
     cols = col_left:col_end, gridExpand = TRUE, stack = TRUE)

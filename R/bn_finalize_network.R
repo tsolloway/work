@@ -33,7 +33,7 @@
 #'   Default \code{"mean"}.
 #' @param min_base_for_calc Integer. Minimum sample size for brand lift
 #'   calculations in \code{bn_impacts()} and for bootstrap p-values in
-#'   \code{bn_prioritizations()}. Default 75.
+#'   \code{bn_prioritizations()}. Default 100.
 #' @param n_boot_final Integer. Bootstrap replicates used for community MI
 #'   in \code{bn_impacts()} and for p-values in \code{bn_prioritizations()}.
 #'   Default 100.
@@ -105,7 +105,7 @@ bn_finalize_network <- function(
     weight = NULL,
     # --- Model ---
     dv_metric = c("mean", "top_box"),
-    min_base_for_calc = 75,
+    min_base_for_calc = 100,
     n_boot_final = 100,
     # --- Impact ---
     do_impacts = TRUE,

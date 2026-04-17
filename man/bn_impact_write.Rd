@@ -13,7 +13,7 @@ bn_impact_write(
   sub_title = NULL,
   file_name = NULL,
   brand_names = NULL,
-  shift_range = c(-0.5, 0.5),
+  shift_range = c(-0.25, 0.25),
   shift_step = 0.025,
   wb_type = c("dynamic", "standard"),
   add_simple_simulator = TRUE,
@@ -23,6 +23,7 @@ bn_impact_write(
   network_type = "none",
   very_hide_all = TRUE,
   min_base_for_lift = NULL,
+  min_base_for_sim = NULL,
   path = "."
 )
 }
@@ -47,23 +48,23 @@ desired.}
 Passed to the simulator for labeling target variables.}
 
 \item{title}{Character or NULL. Title displayed in the sheet header. If NULL,
-defaults to \code{"Network Drivers of {dv}"} using the DV display name.}
+defaults to \code{"Attribute Drivers of {dv}"} using the DV display name.}
 
 \item{sub_title}{Character or NULL. Subtitle text displayed in the sheet
 header (e.g. project name). If NULL, inherits from \code{file_name}.
 Default NULL.}
 
 \item{file_name}{Character or NULL. Prefix for output file name. File is
-saved as \code{{file_name} - Network Drivers of {dv}.xlsx}. If NULL,
+saved as \code{{file_name} - Attribute Drivers of {dv}.xlsx}. If NULL,
 inherits from \code{sub_title}. If both are NULL, file is saved as
-\code{Network Drivers of {dv}.xlsx}.}
+\code{Attribute Drivers of {dv}.xlsx}.}
 
 \item{brand_names}{Character vector or NULL. Brand level names to use in the
 simulator. If NULL, auto-detected from \code{meta$brand_names} in the
 impact result.}
 
 \item{shift_range}{Numeric vector of length 2. Min and max shift values for
-the simulator's frequency shift sliders. Default \code{c(-0.50, 0.50)}.}
+the simulator's frequency shift sliders. Default \code{c(-0.25, 0.25)}.}
 
 \item{shift_step}{Numeric. Step size for the simulator's frequency shift
 sliders. Default 0.025.}
@@ -95,6 +96,12 @@ veryHidden. If FALSE, they are simply hidden.}
 \item{min_base_for_lift}{Integer or NULL. Minimum sample size used for
 footnote text about when lift metrics are calculated. If NULL, inherits
 from \code{meta$min_base_for_lift} in the impact result.}
+
+\item{min_base_for_sim}{Integer or NULL. Minimum sample size required in a
+\code{brand x subgroup} slice for the simulator to compute frequency-shift
+outputs for that focus. Slices below this threshold are blanked and listed
+on a warning sheet. If NULL, inherits from \code{min_base_for_lift} (which
+itself falls back to \code{meta$min_base_for_lift} or 75).}
 
 \item{path}{Character. Directory to write workbook to. Default \code{"."}.}
 }

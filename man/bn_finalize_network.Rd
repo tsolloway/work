@@ -19,7 +19,7 @@ bn_finalize_network(
   brand_names = NULL,
   weight = NULL,
   dv_metric = c("mean", "top_box"),
-  min_base_for_calc = 75,
+  min_base_for_calc = 100,
   n_boot_final = 100,
   do_impacts = TRUE,
   impact_type = c("gr", "cp", "mi"),
@@ -86,7 +86,7 @@ Default \code{"mean"}.}
 
 \item{min_base_for_calc}{Integer. Minimum sample size for brand lift
 calculations in \code{bn_impacts()} and for bootstrap p-values in
-\code{bn_prioritizations()}. Default 75.}
+\code{bn_prioritizations()}. Default 100.}
 
 \item{n_boot_final}{Integer. Bootstrap replicates used for community MI
 in \code{bn_impacts()} and for p-values in \code{bn_prioritizations()}.

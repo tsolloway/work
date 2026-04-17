@@ -15,8 +15,9 @@ append_bn_simulator(
   brand = NULL,
   brand_names = NULL,
   add_freq_shifts = FALSE,
-  shift_range = c(-0.5, 0.5),
-  shift_step = 0.025
+  shift_range = c(-0.25, 0.25),
+  shift_step = 0.025,
+  min_base_for_sim = 75
 )
 }
 \arguments{
@@ -33,6 +34,13 @@ append_bn_simulator(
 a single model.}
 
 \item{dictionary}{Optional. A data frame or named object for variable labels.}
+
+\item{min_base_for_sim}{Integer. Minimum number of rows required in a
+\code{brand x subgroup} slice for the simulator to compute frequency-shift
+outputs for that focus. Slices below this threshold are written to the
+dashboard with NA values and surfaced on a \code{Simulator Base Warnings}
+sheet listing each offending slice's actual n. Default 75. The Market
+focus is never skipped.}
 }
 \value{
 The modified workbook object (invisibly).

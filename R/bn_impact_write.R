@@ -179,24 +179,6 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
 
     wb <- oxl_create_workbook()
 
-    # Guide tab — always first so clients see it on open
-    wb <- append_bn_impact_guide(
-      wb = wb, wb_type = "standard",
-      dv_display = dv_display,
-      has_weights = has_weights,
-      has_community = guide_has_community,
-      has_simulator = guide_has_simulator,
-      has_brands = guide_has_brands,
-      index_by = index_by,
-      type = type,
-      min_base_for_lift = min_base_for_lift,
-      min_base_for_sim = min_base_for_sim,
-      boot_applied = isTRUE(meta[["boot_applied"]]),
-      n_boot = meta[["n_boot"]],
-      mi_boot_applied = isTRUE(meta[["mi_boot_applied"]]),
-      mi_boot = meta[["mi_boot"]]
-    )
-
     wb <- append_bn_impact(
       analysis_table = table,
       subgroups = subgroups,
@@ -283,22 +265,9 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       wb <- append_bn_network_maps(wb = wb, bn_full = bn_full, network_type = network_type)
     }
 
-    openxlsx::saveWorkbook(wb, file_path, overwrite = TRUE)
-
-    # Clean up temp dirs from network map PNGs
-    for (td in attr(wb, "tmp_dirs") %||% character(0)) {
-      unlink(td, recursive = TRUE)
-    }
-
-    invisible(wb)
-
-  } else if (wb_type == "dynamic") {
-
-    wb <- oxl_create_workbook()
-
-    # Guide tab — always first so clients see it on open
+    # Guide tab — added last so it appears as the final tab
     wb <- append_bn_impact_guide(
-      wb = wb, wb_type = "dynamic",
+      wb = wb, wb_type = "standard",
       dv_display = dv_display,
       has_weights = has_weights,
       has_community = guide_has_community,
@@ -313,6 +282,19 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       mi_boot_applied = isTRUE(meta[["mi_boot_applied"]]),
       mi_boot = meta[["mi_boot"]]
     )
+
+    openxlsx::saveWorkbook(wb, file_path, overwrite = TRUE)
+
+    # Clean up temp dirs from network map PNGs
+    for (td in attr(wb, "tmp_dirs") %||% character(0)) {
+      unlink(td, recursive = TRUE)
+    }
+
+    invisible(wb)
+
+  } else if (wb_type == "dynamic") {
+
+    wb <- oxl_create_workbook()
 
     # Attribute dynamic dashboard
     wb <- append_bn_impact_dynamic(
@@ -397,6 +379,24 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     if (!is.null(bn_full)) {
       wb <- append_bn_network_maps(wb = wb, bn_full = bn_full, network_type = network_type)
     }
+
+    # Guide tab — added last so it appears as the final tab
+    wb <- append_bn_impact_guide(
+      wb = wb, wb_type = "dynamic",
+      dv_display = dv_display,
+      has_weights = has_weights,
+      has_community = guide_has_community,
+      has_simulator = guide_has_simulator,
+      has_brands = guide_has_brands,
+      index_by = index_by,
+      type = type,
+      min_base_for_lift = min_base_for_lift,
+      min_base_for_sim = min_base_for_sim,
+      boot_applied = isTRUE(meta[["boot_applied"]]),
+      n_boot = meta[["n_boot"]],
+      mi_boot_applied = isTRUE(meta[["mi_boot_applied"]]),
+      mi_boot = meta[["mi_boot"]]
+    )
 
     # Hide helper sheets
     sheet_names <- names(wb)
