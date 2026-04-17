@@ -351,7 +351,14 @@ bn_impact <- function(
       dv = dv_original,
       brand = brand,
       brand_names = brand_names_resolved,
-      min_base_for_lift = min_base_for_lift
+      min_base_for_lift = min_base_for_lift,
+      # Bootstrap tracking — set when bootstrap was actually applied so
+      # downstream writers (e.g., bn_impact_write guide) can describe what
+      # ran rather than what could have run.
+      n_boot = n_boot,
+      boot_applied = isTRUE(n_boot > 1),
+      mi_boot = mi_boot,
+      mi_boot_applied = isTRUE(!is.null(mi_boot) && do_community)
     )
   )
 }

@@ -286,6 +286,26 @@ bn_finalize_network <- function(
   # (critical for unsupervised sources where x_edges has no DV connections)
   x_edges <- results[["bn"]][["bn"]] %>% bnlearn::arcs() %>% as.data.frame()
 
+  # Report levels that will be dropped per subgroup for DV and IVs — gives
+  # visibility into data gaps without the raw bnlearn "levels not observed"
+  # warnings that droplevels() suppresses.
+  .report_dropped_levels <- function(sg_name) {
+    sg_df_raw <- df %>% dplyr::filter(.data[[sg_name]] == 1)
+    relevant_vars <- intersect(c(dv, x_ivs), names(sg_df_raw))
+    for (var in relevant_vars) {
+      col <- sg_df_raw[[var]]
+      if (!is.factor(col)) next
+      observed <- unique(as.character(col))
+      missing <- setdiff(levels(col), observed)
+      if (length(missing) > 0) {
+        cli::cli_alert_info(
+          "Subgroup {.val {sg_name}}: variable {.val {var}} lacks level{?s} {.val {missing}}"
+        )
+      }
+    }
+  }
+  for (sg in subgroups) .report_dropped_levels(sg)
+
   results[["bn_subgroups"]] <- map_progress(
     subgroups,
     function(x) {

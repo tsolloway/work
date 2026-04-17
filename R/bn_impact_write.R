@@ -20,19 +20,19 @@
 #' @param dictionary Optional. A data frame or named object for variable labels.
 #'   Passed to the simulator for labeling target variables.
 #' @param title Character or NULL. Title displayed in the sheet header. If NULL,
-#'   defaults to \code{"Network Drivers of {dv}"} using the DV display name.
+#'   defaults to \code{"Attribute Drivers of {dv}"} using the DV display name.
 #' @param sub_title Character or NULL. Subtitle text displayed in the sheet
 #'   header (e.g. project name). If NULL, inherits from \code{file_name}.
 #'   Default NULL.
 #' @param file_name Character or NULL. Prefix for output file name. File is
-#'   saved as \code{{file_name} - Network Drivers of {dv}.xlsx}. If NULL,
+#'   saved as \code{{file_name} - Attribute Drivers of {dv}.xlsx}. If NULL,
 #'   inherits from \code{sub_title}. If both are NULL, file is saved as
-#'   \code{Network Drivers of {dv}.xlsx}.
+#'   \code{Attribute Drivers of {dv}.xlsx}.
 #' @param brand_names Character vector or NULL. Brand level names to use in the
 #'   simulator. If NULL, auto-detected from \code{meta$brand_names} in the
 #'   impact result.
 #' @param shift_range Numeric vector of length 2. Min and max shift values for
-#'   the simulator's frequency shift sliders. Default \code{c(-0.50, 0.50)}.
+#'   the simulator's frequency shift sliders. Default \code{c(-0.25, 0.25)}.
 #' @param shift_step Numeric. Step size for the simulator's frequency shift
 #'   sliders. Default 0.025.
 #' @param wb_type Character. Workbook format: \code{"dynamic"} (default)
@@ -55,6 +55,11 @@
 #' @param min_base_for_lift Integer or NULL. Minimum sample size used for
 #'   footnote text about when lift metrics are calculated. If NULL, inherits
 #'   from \code{meta$min_base_for_lift} in the impact result.
+#' @param min_base_for_sim Integer or NULL. Minimum sample size required in a
+#'   \code{brand x subgroup} slice for the simulator to compute frequency-shift
+#'   outputs for that focus. Slices below this threshold are blanked and listed
+#'   on a warning sheet. If NULL, inherits from \code{min_base_for_lift} (which
+#'   itself falls back to \code{meta$min_base_for_lift} or 75).
 #' @param path Character. Directory to write workbook to. Default \code{"."}.
 #'
 #' @return Workbook object (invisibly).
@@ -69,7 +74,7 @@ bn_impact_write <- function(
     sub_title = NULL,
     file_name = NULL,
     brand_names = NULL,
-    shift_range = c(-0.50, 0.50),
+    shift_range = c(-0.25, 0.25),
     shift_step = 0.025,
     wb_type = c("dynamic", "standard"),
     add_simple_simulator = TRUE,
@@ -79,6 +84,7 @@ bn_impact_write <- function(
     network_type = "none",
     very_hide_all = TRUE,
     min_base_for_lift = NULL,
+    min_base_for_sim = NULL,
     path = "."
 ){
 
@@ -119,13 +125,15 @@ bn_impact_write <- function(
   type             <- meta[["type"]]
   dv               <- meta[["dv"]]
   if (is.null(min_base_for_lift)) min_base_for_lift <- meta[["min_base_for_lift"]]
+  # Simulator threshold: inherit from min_base_for_lift when not supplied
+  if (is.null(min_base_for_sim)) min_base_for_sim <- min_base_for_lift %||% 75
 
   # Use name of dv if named, otherwise the value itself
 dv_display <- if (!is.null(names(dv))) names(dv) else dv
 
   # Title
   if (is.null(title)) {
-    title <- if (!is.null(dv_display)) paste("Network Drivers of", dv_display) else "Network Drivers"
+    title <- if (!is.null(dv_display)) paste("Attribute Drivers of", dv_display) else "Attribute Drivers"
   }
 
   # Footer based on estimation type
@@ -157,13 +165,37 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
 
   footer <- paste(c(engine_footer, index_footer), collapse = ". ")
 
-  # Sheet name
-  sheet_name <- if (!is.null(dv_display)) paste("Network Drivers of", dv_display) else "Network Drivers"
-  if (nchar(sheet_name) > 31) sheet_name <- substr(sheet_name, 1, 31)
+  # Sheet name (tab) — kept generic; in-sheet title carries the DV
+  sheet_name <- "Attribute Drivers"
+
+  # Flags for the Guide sheet — known before any sheets are created
+  guide_has_community <- !is.null(community_result)
+  guide_has_simulator <- isTRUE(add_simple_simulator) && !is.null(bn_obj)
+  guide_has_brands <- !is.null(meta[["brand"]]) ||
+    !is.null(meta[["brand_names"]]) ||
+    !is.null(brand_names)
 
   if (wb_type == "standard") {
 
     wb <- oxl_create_workbook()
+
+    # Guide tab — always first so clients see it on open
+    wb <- append_bn_impact_guide(
+      wb = wb, wb_type = "standard",
+      dv_display = dv_display,
+      has_weights = has_weights,
+      has_community = guide_has_community,
+      has_simulator = guide_has_simulator,
+      has_brands = guide_has_brands,
+      index_by = index_by,
+      type = type,
+      min_base_for_lift = min_base_for_lift,
+      min_base_for_sim = min_base_for_sim,
+      boot_applied = isTRUE(meta[["boot_applied"]]),
+      n_boot = meta[["n_boot"]],
+      mi_boot_applied = isTRUE(meta[["mi_boot_applied"]]),
+      mi_boot = meta[["mi_boot"]]
+    )
 
     wb <- append_bn_impact(
       analysis_table = table,
@@ -181,12 +213,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     # Community sheet (optional)
     if (!is.null(community_result)) {
       comm_table <- community_result
-      comm_sheet <- if (!is.null(dv_display)) {
-        paste("Community Drivers of", dv_display)
-      } else {
-        "Community Drivers"
-      }
-      if (nchar(comm_sheet) > 31) comm_sheet <- substr(comm_sheet, 1, 31)
+      comm_sheet <- "Community Drivers"
 
       comm_title <- if (!is.null(dv_display)) {
         paste("Community Drivers of", dv_display)
@@ -208,8 +235,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       )
     }
 
-    # File name: "{file_name} - Network Drivers of {dv}.xlsx" or "Network Drivers of {dv}.xlsx"
-    dv_suffix <- if (!is.null(dv_display)) paste("Network Drivers of", dv_display) else "Network Drivers"
+    # File name: "{file_name} - Attribute Drivers of {dv}.xlsx" or "Attribute Drivers of {dv}.xlsx"
+    dv_suffix <- if (!is.null(dv_display)) paste("Attribute Drivers of", dv_display) else "Attribute Drivers"
     fname <- if (!is.null(file_name)) {
       paste0(file_name, " - ", dv_suffix, ".xlsx")
     } else {
@@ -236,12 +263,13 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
         brand = sim_brand, brand_names = sim_brand_names,
         add_freq_shifts = !is.null(sim_df),
         shift_range = shift_range,
-        shift_step = shift_step
+        shift_step = shift_step,
+        min_base_for_sim = min_base_for_sim
       )
       # _sim_data and _sim_lookup sheets added — hide them
       n_sheets <- length(names(wb))
       sheet_names <- names(wb)
-      hide_these <- c("_sim_data", "_sim_pct_data", "_sim_lookup")
+      hide_these <- c("_sim_data", "_sim_pct_data", "_sim_lookup", "_sim_base_warn")
       if (very_hide_all) {
         vis <- ifelse(sheet_names %in% hide_these, "veryHidden", TRUE)
       } else {
@@ -268,6 +296,24 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
 
     wb <- oxl_create_workbook()
 
+    # Guide tab — always first so clients see it on open
+    wb <- append_bn_impact_guide(
+      wb = wb, wb_type = "dynamic",
+      dv_display = dv_display,
+      has_weights = has_weights,
+      has_community = guide_has_community,
+      has_simulator = guide_has_simulator,
+      has_brands = guide_has_brands,
+      index_by = index_by,
+      type = type,
+      min_base_for_lift = min_base_for_lift,
+      min_base_for_sim = min_base_for_sim,
+      boot_applied = isTRUE(meta[["boot_applied"]]),
+      n_boot = meta[["n_boot"]],
+      mi_boot_applied = isTRUE(meta[["mi_boot_applied"]]),
+      mi_boot = meta[["mi_boot"]]
+    )
+
     # Attribute dynamic dashboard
     wb <- append_bn_impact_dynamic(
       wb = wb, table = table, subgroups = subgroups,
@@ -289,8 +335,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       } else {
         "Community Drivers"
       }
-      comm_sheet <- comm_title
-      if (nchar(comm_sheet) > 31) comm_sheet <- substr(comm_sheet, 1, 31)
+      comm_sheet <- "Community Drivers"
 
       wb <- append_bn_impact_dynamic(
         wb = wb, table = comm_table, subgroups = subgroups,
@@ -316,7 +361,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     }
 
     # File name
-    dv_suffix <- if (!is.null(dv_display)) paste("Network Drivers of", dv_display) else "Network Drivers"
+    dv_suffix <- if (!is.null(dv_display)) paste("Attribute Drivers of", dv_display) else "Attribute Drivers"
     fname <- if (!is.null(file_name)) {
       paste0(file_name, " - ", dv_suffix, ".xlsx")
     } else {
@@ -343,7 +388,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
         brand = sim_brand, brand_names = sim_brand_names,
         add_freq_shifts = !is.null(sim_df),
         shift_range = shift_range,
-        shift_step = shift_step
+        shift_step = shift_step,
+        min_base_for_sim = min_base_for_sim
       )
     }
 
@@ -356,7 +402,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     sheet_names <- names(wb)
     hide_sheets <- c("Results", "Results_Community", "Results_Weighted",
       "Results_Community_Weighted", "_sim_data", "_sim_pct_data",
-      "_lookup", "_lookup_community", "_sim_lookup")
+      "_lookup", "_lookup_community", "_sim_lookup", "_sim_base_warn")
 
     if (very_hide_all) {
       vis <- ifelse(sheet_names %in% hide_sheets, "veryHidden", TRUE)

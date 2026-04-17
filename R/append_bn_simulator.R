@@ -13,6 +13,12 @@
 #' @param subgroups Character vector of subgroup names. If NULL, treats obj as
 #'   a single model.
 #' @param dictionary Optional. A data frame or named object for variable labels.
+#' @param min_base_for_sim Integer. Minimum number of rows required in a
+#'   \code{brand x subgroup} slice for the simulator to compute frequency-shift
+#'   outputs for that focus. Slices below this threshold are written to the
+#'   dashboard with NA values and surfaced on a \code{Simulator Base Warnings}
+#'   sheet listing each offending slice's actual n. Default 75. The Market
+#'   focus is never skipped.
 #'
 #' @return The modified workbook object (invisibly).
 #'
@@ -28,9 +34,14 @@ append_bn_simulator <- function(
     brand = NULL,
     brand_names = NULL,
     add_freq_shifts = FALSE,
-    shift_range = c(-0.50, 0.50),
-    shift_step = 0.025
+    shift_range = c(-0.25, 0.25),
+    shift_step = 0.025,
+    min_base_for_sim = 75
 ) {
+
+  # Track brand x subgroup slices whose base falls below min_base_for_sim.
+  # Structure: list of tibbles with subgroup, focus, n_obs.
+  low_base_slices <- list()
 
   # ---------------------------------------------------------------------------
   # 1. Pre-compute posteriors for every (subgroup, evidence_var, evidence_level)
@@ -243,13 +254,38 @@ append_bn_simulator <- function(
         }) %>% dplyr::bind_rows()
       }
 
-      # Start with Market
+      # Start with Market — Market always runs (no base-size restriction)
       sg_result <- .compute_focus(sg_df, "Market")
 
-      # Join each brand
+      # Join each brand, skipping brand x subgroup slices below min_base_for_sim.
+      # Skipped focuses still appear in the workbook dropdown; their Mean_/EV_
+      # columns are all NA and surfaced in the warning sheet with actual n.
       for (focus in setdiff(focus_options, "Market")) {
         focus_df <- sg_df[sg_df[[brand]] == focus, , drop = FALSE]
-        focus_result <- .compute_focus(focus_df, focus)
+
+        if (nrow(focus_df) < min_base_for_sim) {
+          # Record for warning sheet
+          low_base_slices[[length(low_base_slices) + 1L]] <<- tibble::tibble(
+            subgroup = sg,
+            focus = focus,
+            n_obs = nrow(focus_df),
+            min_required = min_base_for_sim
+          )
+
+          # Build a NA-filled focus result so dropdown still works
+          focus_clean <- gsub(" ", "_", focus)
+          ev_col_name <- paste0("EV_", focus_clean)
+          mean_col_name <- paste0("Mean_", focus_clean)
+          focus_result <- sg_result %>%
+            dplyr::select(Key) %>%
+            dplyr::mutate(
+              !!mean_col_name := NA_real_,
+              !!ev_col_name := NA_real_
+            )
+        } else {
+          focus_result <- .compute_focus(focus_df, focus)
+        }
+
         sg_result <- sg_result %>%
           dplyr::left_join(focus_result, by = "Key")
       }
@@ -287,6 +323,12 @@ append_bn_simulator <- function(
   # Trim to Key + Expected_Value
   sim_data <- sim_data[, c("Key", "Expected_Value")]
 
+  # Round numeric cells to 4 decimals before writing. Dashboards format to 1-2
+  # decimals anyway, so the extra precision is noise that bloats the XML text
+  # representation (e.g., "0.123456789012345" vs "0.1235"). This typically
+  # shrinks the stored data sheets by ~60-70% with no visible behavior change.
+  sim_data$Expected_Value <- round(sim_data$Expected_Value, 4)
+
   sim_sheet <- "_sim_data"
   openxlsx::addWorksheet(wb, sim_sheet)
   openxlsx::writeData(wb, sim_sheet, sim_data, startRow = 1, startCol = 1)
@@ -296,10 +338,32 @@ append_bn_simulator <- function(
     # Keep Key + all EV_ and Mean_ columns
     keep_cols <- c("Key", grep("^EV_|^Mean_", names(pct_data), value = TRUE))
     pct_data <- pct_data[, keep_cols]
+
+    # Round all numeric columns (EV_ / Mean_) to 4 decimals — same rationale
+    # as sim_data above. This is the largest sheet in the workbook so rounding
+    # here is where most of the file-size reduction comes from.
+    num_cols <- setdiff(keep_cols, "Key")
+    pct_data[num_cols] <- lapply(pct_data[num_cols], round, 4)
+
     n_pct_rows <- nrow(pct_data)
     openxlsx::addWorksheet(wb, pct_sheet)
     openxlsx::writeData(wb, pct_sheet, pct_data, startRow = 1, startCol = 1)
     n_pct_rows <- nrow(pct_data)
+  }
+
+  # ---------------------------------------------------------------------------
+  # 3b. Hidden helper sheet: base-size warnings keyed by subgroup|focus
+  # ---------------------------------------------------------------------------
+  base_warn_sheet <- "_sim_base_warn"
+  if (length(low_base_slices) > 0) {
+    base_warn_df <- dplyr::bind_rows(low_base_slices) %>%
+      dplyr::mutate(key = paste(subgroup, focus, sep = "|")) %>%
+      dplyr::select(key, n_obs)
+    openxlsx::addWorksheet(wb, base_warn_sheet)
+    openxlsx::writeData(wb, base_warn_sheet, base_warn_df,
+      startRow = 1, startCol = 1)
+  } else {
+    base_warn_sheet <- NULL
   }
 
   # ---------------------------------------------------------------------------
@@ -526,6 +590,49 @@ append_bn_simulator <- function(
     sg_cell_col <- cell_col
     sg_cell_row <- current_row
     current_row <- current_row + 1L
+  }
+
+  # ---------------------------------------------------------------------------
+  # Base-size warning for Focus dropdown (matches dynamic dashboard style)
+  # ---------------------------------------------------------------------------
+  if (!is.null(base_warn_sheet) && !is.null(focus_sim_cell_col)) {
+    focus_let <- num2let(focus_sim_cell_col)
+    focus_ref <- paste0("$", focus_let, "$", focus_sim_cell_row)
+
+    if (has_subgroups) {
+      sg_let <- num2let(sg_cell_col)
+      sg_ref <- paste0("$", sg_let, "$", sg_cell_row)
+      warn_key <- paste0(sg_ref, "&\"|\"&", focus_ref)
+    } else {
+      warn_key <- paste0("\"", names(sg_list)[1], "|\"&", focus_ref)
+    }
+
+    warn_col <- focus_sim_cell_col + 1L
+    match_expr <- paste0("MATCH(", warn_key, ",",
+      base_warn_sheet, "!$A:$A,0)")
+    n_lookup <- paste0("INDEX(", base_warn_sheet, "!$B:$B,",
+      match_expr, ")")
+
+    focus_warn_formula <- paste0(
+      "IFERROR(\"Results not calculated because base is \"&", n_lookup, ",\"\")"
+    )
+    openxlsx::writeFormula(wb, dash_sheet, x = focus_warn_formula,
+      startRow = focus_sim_cell_row, startCol = warn_col)
+
+    # Conditional formatting — match dynamic dashboard (red text on warning,
+    # red bg + white text on Focus cell) when a match exists.
+    red_rule <- paste0("NOT(ISERROR(", match_expr, "))")
+    red_warning <- openxlsx::createStyle(fontColour = "#FF0000",
+      textDecoration = "bold")
+    red_cell <- openxlsx::createStyle(bgFill = "#FF0000",
+      fontColour = "#FFFFFF")
+
+    openxlsx::conditionalFormatting(wb, dash_sheet,
+      cols = warn_col, rows = focus_sim_cell_row,
+      style = red_warning, type = "expression", rule = red_rule)
+    openxlsx::conditionalFormatting(wb, dash_sheet,
+      cols = focus_sim_cell_col, rows = focus_sim_cell_row,
+      style = red_cell, type = "expression", rule = red_rule)
   }
 
   # Variable dropdown
