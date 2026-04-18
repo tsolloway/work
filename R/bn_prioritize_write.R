@@ -23,15 +23,33 @@
 #' @param label_width Numeric. Column width for the Label column. Default 20.
 #' @param combo_width Numeric. Column width for the Combo column.
 #'   Default 40.
-#' @param sig_threshold Numeric. P-value threshold for green (significant).
-#'   Default 0.05.
-#' @param marginal_threshold Numeric. P-value threshold for orange (marginal).
-#'   Default 0.10.
+#' @param sig_threshold Numeric or NULL. P-value threshold for green
+#'   (significant). If NULL, inherits from \code{result$meta$sig_threshold}
+#'   (set at \code{bn_prioritizations()} / \code{bn_finalize_network()}
+#'   time); falls back to 0.05.
+#' @param marginal_threshold Numeric or NULL. P-value threshold for orange
+#'   (marginal). If NULL, inherits from
+#'   \code{result$meta$marginal_threshold}; falls back to 0.10.
 #' @param lift Numeric. The lift fraction used in the prioritization analysis,
 #'   displayed in the footer. Default 0.10 (10 percent).
+#' @param min_base_for_boot Integer or NULL. Threshold used for the base /
+#'   warning feedback shown next to the Focus dropdown. When the current
+#'   selection's base is at or above this value, the cell reads
+#'   \code{"Base: N"}; below it the cell reads
+#'   \code{"Results not calculated because base is below N"} in red, and the Focus
+#'   dropdown cell itself turns red. If NULL, inherits from
+#'   \code{result$meta$min_base_for_boot} (falling back to 100).
 #' @param very_hide_all Logical. If TRUE (default), all sheets except
 #'   Prioritization are set to veryHidden. If FALSE, they are simply hidden.
 #' @param path Character. Directory to write workbook to. Default \code{"."}.
+#' @param wb openxlsx workbook object or NULL. When NULL (default), a new
+#'   workbook is created. When provided, prioritization sheets are appended
+#'   to the existing workbook — used by \code{bn_write()}.
+#' @param save Logical. When TRUE (default), the workbook is saved to disk.
+#'   When FALSE, the workbook is returned without saving.
+#' @param add_guide Logical. When TRUE (default), a Guide tab is appended.
+#'   When FALSE, no Guide is added — used by \code{bn_write()} which builds
+#'   a single unified Guide for the combined workbook.
 #'
 #' @return Workbook object (invisibly).
 #'
@@ -47,12 +65,29 @@ bn_prioritize_write <- function(
     community_width = 20,
     label_width = 20,
     combo_width = 40,
-    sig_threshold = 0.05,
-    marginal_threshold = 0.10,
+    sig_threshold = NULL,
+    marginal_threshold = NULL,
     lift = 0.10,
+    min_base_for_boot = NULL,
     very_hide_all = TRUE,
-    path = "."
+    path = ".",
+    wb = NULL,
+    save = TRUE,
+    add_guide = TRUE
 ) {
+
+  # Resolve min_base threshold for the base/warning display next to Focus.
+  # Pull from meta when not supplied; fall back to 100 (matches
+  # min_base_for_calc default downstream).
+  if (is.null(min_base_for_boot)) {
+    min_base_for_boot <- result[["meta"]][["min_base_for_boot"]] %||% 100L
+  }
+  if (is.null(sig_threshold)) {
+    sig_threshold <- result[["meta"]][["sig_threshold"]] %||% 0.05
+  }
+  if (is.null(marginal_threshold)) {
+    marginal_threshold <- result[["meta"]][["marginal_threshold"]] %||% 0.10
+  }
 
   if (is.null(file_name)) file_name <- sub_title
   if (is.null(sub_title)) sub_title <- file_name
@@ -67,16 +102,26 @@ bn_prioritize_write <- function(
     }
   }
 
-  wb <- oxl_create_workbook()
+  if (is.null(wb)) wb <- oxl_create_workbook()
+  pre_sheets <- names(wb)
 
   # ---------------------------------------------------------------------------
   # Build registry: flat list of tagged entries
   # ---------------------------------------------------------------------------
   registry <- .prioritize_build_registry(result)
 
-  has_p <- any(purrr::map_lgl(registry, ~"p_value" %in% names(.x$tbl)))
-  has_community <- any(purrr::map_lgl(registry, ~"community" %in% names(.x$tbl)))
-  max_rows <- max(purrr::map_int(registry, ~nrow(.x$tbl)))
+  # Phantom entries (skipped slices) have tbl = NULL — they only exist to
+  # populate _lookup for the Focus warning/base display. Guard all NULL-tbl
+  # cases in the registry scans below.
+  has_p <- any(purrr::map_lgl(registry, function(e) {
+    !is.null(e$tbl) && "p_value" %in% names(e$tbl)
+  }))
+  has_community <- any(purrr::map_lgl(registry, function(e) {
+    !is.null(e$tbl) && "community" %in% names(e$tbl)
+  }))
+  max_rows <- max(purrr::map_int(registry, function(e) {
+    if (is.null(e$tbl)) 0L else as.integer(nrow(e$tbl))
+  }))
   n_entries <- length(registry)
 
   # Determine which dimensions have multiple values
@@ -95,10 +140,13 @@ bn_prioritize_write <- function(
   openxlsx::addWorksheet(wb, "Prioritization", tabColour = "#FFFFFF", gridLines = FALSE)
 
   # ---------------------------------------------------------------------------
-  # 2. Write hidden data sheets
+  # 2. Write hidden data sheets. Phantom entries (skipped slices) have no
+  # tibble and no sheet — they only populate _lookup so the Focus dropdown
+  # can resolve base/warning lookups.
   # ---------------------------------------------------------------------------
   for (entry in registry) {
     sn <- entry$sheet_name
+    if (is.null(entry$tbl) || is.na(sn)) next
     openxlsx::addWorksheet(wb, sn, gridLines = FALSE)
     openxlsx::writeData(wb, sn, entry$tbl, startRow = 1, startCol = 1)
   }
@@ -106,25 +154,25 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   # 3. Write _lookup sheet
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, "_lookup", gridLines = FALSE)
+  openxlsx::addWorksheet(wb, "_priorit_lookup", gridLines = FALSE)
 
   # Columns: Strategy | Search | Subgroup | Focus | Weight | Sheet | Base | Key
   lookup_headers <- c("Strategy", "Search", "Subgroup", "Focus", "Weight",
                        "Sheet", "Base", "Key")
   for (ci in seq_along(lookup_headers)) {
-    openxlsx::writeData(wb, "_lookup", lookup_headers[ci], startRow = 1, startCol = ci)
+    openxlsx::writeData(wb, "_priorit_lookup", lookup_headers[ci], startRow = 1, startCol = ci)
   }
 
   for (i in seq_along(registry)) {
     r <- i + 1
     e <- registry[[i]]
-    openxlsx::writeData(wb, "_lookup", e$strategy, startRow = r, startCol = 1)
-    openxlsx::writeData(wb, "_lookup", e$search, startRow = r, startCol = 2)
-    openxlsx::writeData(wb, "_lookup", e$subgroup, startRow = r, startCol = 3)
-    openxlsx::writeData(wb, "_lookup", e$focus, startRow = r, startCol = 4)
-    openxlsx::writeData(wb, "_lookup", e$weight, startRow = r, startCol = 5)
-    openxlsx::writeData(wb, "_lookup", e$sheet_name, startRow = r, startCol = 6)
-    openxlsx::writeData(wb, "_lookup", if (!is.null(e$n_obs)) e$n_obs else NA_integer_,
+    openxlsx::writeData(wb, "_priorit_lookup", e$strategy, startRow = r, startCol = 1)
+    openxlsx::writeData(wb, "_priorit_lookup", e$search, startRow = r, startCol = 2)
+    openxlsx::writeData(wb, "_priorit_lookup", e$subgroup, startRow = r, startCol = 3)
+    openxlsx::writeData(wb, "_priorit_lookup", e$focus, startRow = r, startCol = 4)
+    openxlsx::writeData(wb, "_priorit_lookup", e$weight, startRow = r, startCol = 5)
+    openxlsx::writeData(wb, "_priorit_lookup", e$sheet_name, startRow = r, startCol = 6)
+    openxlsx::writeData(wb, "_priorit_lookup", if (!is.null(e$n_obs)) e$n_obs else NA_integer_,
       startRow = r, startCol = 7)
   }
 
@@ -132,7 +180,7 @@ bn_prioritize_write <- function(
   for (i in seq_along(registry)) {
     r <- i + 1
     key_formula <- paste0("A", r, "&\"|\"&B", r, "&\"|\"&C", r, "&\"|\"&D", r, "&\"|\"&E", r)
-    openxlsx::writeFormula(wb, "_lookup", x = key_formula, startRow = r, startCol = 8)
+    openxlsx::writeFormula(wb, "_priorit_lookup", x = key_formula, startRow = r, startCol = 8)
   }
 
   # Unique option lists for dropdowns (columns I onward)
@@ -145,9 +193,9 @@ bn_prioritize_write <- function(
     dn <- dim_names[di]
     if (dn %in% active_dims) {
       vals <- dims[[dn]]
-      openxlsx::writeData(wb, "_lookup", dim_labels[di], startRow = 1, startCol = opt_col)
+      openxlsx::writeData(wb, "_priorit_lookup", dim_labels[di], startRow = 1, startCol = opt_col)
       for (vi in seq_along(vals)) {
-        openxlsx::writeData(wb, "_lookup", vals[vi], startRow = vi + 1, startCol = opt_col)
+        openxlsx::writeData(wb, "_priorit_lookup", vals[vi], startRow = vi + 1, startCol = opt_col)
       }
       dim_opt_cols[[dn]] <- list(col = opt_col, n = length(vals))
       opt_col <- opt_col + 1L
@@ -195,6 +243,7 @@ bn_prioritize_write <- function(
 
   dropdown_refs <- list()
   current_row <- row_controls_start
+  focus_cell_row <- NULL  # captured during the loop for the warning feedback
 
   dim_display_labels <- c(
     strategy = "Strategy:",
@@ -221,13 +270,15 @@ bn_prioritize_write <- function(
       rows = current_row, cols = cell_col, stack = TRUE)
 
     # Data validation
-    opt_range <- paste0("_lookup!$", num2let(info$col), "$2:$",
+    opt_range <- paste0("_priorit_lookup!$", num2let(info$col), "$2:$",
       num2let(info$col), "$", info$n + 1)
     openxlsx::dataValidation(wb, dash,
       col = cell_col, rows = current_row,
       type = "list", value = opt_range)
 
     dropdown_refs[[dn]] <- paste0("$", num2let(cell_col), "$", current_row)
+
+    if (dn == "focus") focus_cell_row <- current_row
 
     current_row <- current_row + 1L
   }
@@ -250,11 +301,50 @@ bn_prioritize_write <- function(
 
   # Sheet lookup: INDEX(Sheet col, MATCH(key, Key col, 0))
   sheet_match <- paste0(
-    "MATCH(", key_formula, ",_lookup!$H$2:$H$", n_entries + 1, ",0)"
+    "MATCH(", key_formula, ",_priorit_lookup!$H$2:$H$", n_entries + 1, ",0)"
   )
   sheet_lookup <- paste0(
-    "INDEX(_lookup!$F$2:$F$", n_entries + 1, ",", sheet_match, ")"
+    "INDEX(_priorit_lookup!$F$2:$F$", n_entries + 1, ",", sheet_match, ")"
   )
+
+  # -------------------------------------------------------------------------
+  # Base / warning feedback next to the Focus dropdown — mirrors the simulator
+  #   n >= min_base_for_boot → "Base: N"    (default grey style)
+  #   n <  min_base_for_boot → "Results not calculated because base is below N" (red)
+  # Uses the same key_formula the sheet switcher uses, but pulls the Base
+  # column (G) from _lookup.
+  # -------------------------------------------------------------------------
+  if (!is.null(focus_cell_row)) {
+    base_lookup <- paste0(
+      "INDEX(_priorit_lookup!$G$2:$G$", n_entries + 1, ",", sheet_match, ")"
+    )
+    warn_col <- cell_col + 1L
+
+    focus_warn_formula <- paste0(
+      "IFERROR(",
+        "IF(", base_lookup, "<", min_base_for_boot, ",",
+          "\"Results not calculated because base is below ", min_base_for_boot, "\",",
+          "\"Base: \"&", base_lookup,
+        "),",
+      "\"\")"
+    )
+    openxlsx::writeFormula(wb, dash, x = focus_warn_formula,
+      startRow = focus_cell_row, startCol = warn_col)
+
+    # Red formatting only when the base is actually below threshold.
+    red_rule <- paste0("IFERROR(", base_lookup, "<", min_base_for_boot, ",FALSE)")
+    red_warning <- openxlsx::createStyle(fontColour = "#FF0000",
+      textDecoration = "bold")
+    red_cell <- openxlsx::createStyle(bgFill = "#FF0000",
+      fontColour = "#FFFFFF")
+
+    openxlsx::conditionalFormatting(wb, dash,
+      cols = warn_col, rows = focus_cell_row,
+      style = red_warning, type = "expression", rule = red_rule)
+    openxlsx::conditionalFormatting(wb, dash,
+      cols = cell_col, rows = focus_cell_row,
+      style = red_cell, type = "expression", rule = red_rule)
+  }
 
   # --- Data table ---
   # Prioritization columns (no combo) and their source column letters in the data sheets
@@ -442,9 +532,11 @@ bn_prioritize_write <- function(
   # --- Footer ---
   footer_row <- max(data_rows) + 2
 
-  # Dynamic base size
+  # Dynamic base size — always resolves: for skipped brand x subgroup slices
+  # the _lookup sheet still carries an n_obs value (via phantom entries).
   base_formula <- paste0(
-    "\"Base: \"&INDEX(_lookup!$G$2:$G$", n_entries + 1, ",", sheet_match, ")"
+    "IFERROR(\"Base: \"&INDEX(_priorit_lookup!$G$2:$G$", n_entries + 1,
+    ",", sheet_match, "),\"\")"
   )
   openxlsx::writeFormula(wb, dash, x = base_formula,
     startRow = footer_row, startCol = col_data_start)
@@ -484,11 +576,11 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   # 4b. Chart data sheet (formulas referencing dashboard for dynamic chart)
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, "_chart_data", gridLines = FALSE)
+  openxlsx::addWorksheet(wb, "_priorit_chart_data", gridLines = FALSE)
 
   chart_headers <- c("Label", "Previous", "Incremental", "Cumulative DV")
   for (ci in seq_along(chart_headers)) {
-    openxlsx::writeData(wb, "_chart_data", chart_headers[ci],
+    openxlsx::writeData(wb, "_priorit_chart_data", chart_headers[ci],
       startRow = 1, startCol = ci)
   }
 
@@ -503,40 +595,82 @@ bn_prioritize_write <- function(
     blank_check <- paste0('Prioritization!', var_let, dr, '=""')
 
     # Col A: Label ("" so category axis doesn't show #N/A text)
-    openxlsx::writeFormula(wb, "_chart_data",
+    openxlsx::writeFormula(wb, "_priorit_chart_data",
       x = paste0('IF(', blank_check, ',"",Prioritization!', var_let, dr, ')'),
       startRow = chart_r, startCol = 1)
 
     # Col B: Previous = DV Estimate - Marginal Gain (#N/A so chart gaps)
-    openxlsx::writeFormula(wb, "_chart_data",
+    openxlsx::writeFormula(wb, "_priorit_chart_data",
       x = paste0('IF(', blank_check, ',NA(),Prioritization!', est_let, dr,
                  '-Prioritization!', gain_let, dr, ')'),
       startRow = chart_r, startCol = 2)
 
     # Col C: Incremental = Marginal Gain
-    openxlsx::writeFormula(wb, "_chart_data",
+    openxlsx::writeFormula(wb, "_priorit_chart_data",
       x = paste0('IF(', blank_check, ',NA(),Prioritization!', gain_let, dr, ')'),
       startRow = chart_r, startCol = 3)
 
     # Col D: Cumulative DV = DV Estimate
-    openxlsx::writeFormula(wb, "_chart_data",
+    openxlsx::writeFormula(wb, "_priorit_chart_data",
       x = paste0('IF(', blank_check, ',NA(),Prioritization!', est_let, dr, ')'),
       startRow = chart_r, startCol = 4)
   }
 
   # ---------------------------------------------------------------------------
-  # 5. Hide data + lookup sheets
+  # 5. Hide data + lookup sheets — only touch visibility on sheets WE added.
   # ---------------------------------------------------------------------------
   sheet_names <- names(wb)
-  if (very_hide_all) {
-    vis <- ifelse(sheet_names == "Prioritization", TRUE, "veryHidden")
-  } else {
-    vis <- ifelse(sheet_names == "Prioritization", TRUE, FALSE)
+  cur_vis <- openxlsx::sheetVisibility(wb)
+  for (sn in setdiff(sheet_names, pre_sheets)) {
+    idx <- match(sn, sheet_names)
+    cur_vis[idx] <- if (sn == "Prioritization") {
+      TRUE
+    } else if (very_hide_all) {
+      "veryHidden"
+    } else {
+      FALSE
+    }
   }
-  openxlsx::sheetVisibility(wb) <- vis
+  openxlsx::sheetVisibility(wb) <- cur_vis
 
   # ---------------------------------------------------------------------------
-  # 6. Save
+  # 6. Guide tab — added last so it appears as the final tab
+  # ---------------------------------------------------------------------------
+  meta <- result[["meta"]]
+  dv_guide <- meta[["dv"]]
+  dv_display_guide <- if (!is.null(dv_guide) && !is.null(names(dv_guide))) {
+    names(dv_guide)
+  } else if (!is.null(dv_guide)) dv_guide else NULL
+
+  # Bootstrap was applied when at least one registry tibble has a p_value
+  # column with non-NA values. (has_p only checks column presence.)
+  boot_applied_guide <- any(purrr::map_lgl(registry, function(e) {
+    !is.null(e$tbl) && "p_value" %in% names(e$tbl) &&
+      any(!is.na(e$tbl$p_value))
+  }))
+
+  if (isTRUE(add_guide)) {
+    wb <- append_bn_prioritize_guide(
+      wb = wb,
+      dv_display = dv_display_guide,
+      has_brands = "focus" %in% active_dims,
+      has_weights = "weight" %in% active_dims,
+      has_subgroups = "subgroup" %in% active_dims,
+      has_strategy = "strategy" %in% active_dims,
+      has_community = has_community,
+      lift = lift,
+      sig_threshold = sig_threshold,
+      marginal_threshold = marginal_threshold,
+      min_base_for_boot = min_base_for_boot,
+      boot_applied = boot_applied_guide,
+      n_boot_final = meta[["n_boot_final"]],
+      noise_tail = meta[["noise_tail"]],
+      threshold = meta[["threshold"]]
+    )
+  }
+
+  # ---------------------------------------------------------------------------
+  # 7. Save
   # ---------------------------------------------------------------------------
   fname <- if (!is.null(file_name)) {
     paste0(file_name, " - Prioritization.xlsx")
@@ -544,7 +678,7 @@ bn_prioritize_write <- function(
     "Prioritization.xlsx"
   }
   file_path <- file.path(path, fname)
-  openxlsx::saveWorkbook(wb, file_path, overwrite = TRUE)
+  if (isTRUE(save)) openxlsx::saveWorkbook(wb, file_path, overwrite = TRUE)
 
   # ---------------------------------------------------------------------------
   # 7. Add chart via openxlsx2 (reload → insert chart XML → re-save)
@@ -566,11 +700,19 @@ bn_prioritize_write <- function(
     num2let(col_chart_start + 9), row_data_start + chart_height - 1
   )
 
-  wb2 <- openxlsx2::wb_load(file_path)
-  wb2$add_chart_xml(sheet = "Prioritization", dims = chart_dims, xml = chart_xml)
-  wb2$save(file_path, overwrite = TRUE)
-
-  cli::cli_alert_success("Prioritization workbook saved: {file_path}")
+  if (isTRUE(save)) {
+    # save + reload + inject chart + save (openxlsx doesn't support chart
+    # XML directly — openxlsx2 does).
+    wb2 <- openxlsx2::wb_load(file_path)
+    wb2$add_chart_xml(sheet = "Prioritization", dims = chart_dims, xml = chart_xml)
+    wb2$save(file_path, overwrite = TRUE)
+    cli::cli_alert_success("Prioritization workbook saved: {file_path}")
+  } else {
+    # Defer chart injection — the caller (e.g., bn_write) must do it post-save.
+    # Attach the chart metadata to the workbook so the caller can retrieve it.
+    attr(wb, "priorit_chart_xml") <- chart_xml
+    attr(wb, "priorit_chart_dims") <- chart_dims
+  }
 
   invisible(wb)
 }
@@ -585,7 +727,7 @@ bn_prioritize_write <- function(
   sheet_counter <- 1L
 
   .add <- function(tbl, strategy, search, subgroup, focus, weight) {
-    sn <- paste0("_d", sheet_counter)
+    sn <- paste0("_pd", sheet_counter)
     n_obs <- attr(tbl, "n_obs")
     registry[[length(registry) + 1]] <<- list(
       strategy = strategy,
@@ -660,6 +802,27 @@ bn_prioritize_write <- function(
     }
   }
 
+  # Phantom entries for brand x subgroup slices that were skipped during
+  # prioritization (base below min_base_for_boot). They have no tibble / no
+  # data sheet, but they populate _lookup so the user can still (a) pick the
+  # focus in the dropdown, and (b) see the base and warning next to it.
+  skipped <- meta[["skipped_slices"]]
+  if (length(skipped) > 0) {
+    for (s in skipped) {
+      wt_label <- if (isTRUE(s$weighted)) "Weighted" else "Unweighted"
+      registry[[length(registry) + 1]] <- list(
+        strategy = "Lift",
+        search = "Greedy",
+        subgroup = s$sg_name,
+        focus = s$brand_name,
+        weight = wt_label,
+        sheet_name = NA_character_,
+        tbl = NULL,
+        n_obs = s$n_obs
+      )
+    }
+  }
+
   registry
 }
 
@@ -668,14 +831,14 @@ bn_prioritize_write <- function(
 # Internal: generate OOXML chart XML for combo stacked bar + line chart
 # =============================================================================
 .prioritize_chart_xml <- function(max_rows, axis_min = 0) {
-  n <- max_rows + 1  # last data row in _chart_data (row 1 = header)
+  n <- max_rows + 1  # last data row in _priorit_chart_data (row 1 = header)
 
-  # Helper to build a cell range reference for _chart_data
+  # Helper to build a cell range reference for _priorit_chart_data
   ref <- function(col, r1 = 2, r2 = n) {
-    paste0("'_chart_data'!$", col, "$", r1, ":$", col, "$", r2)
+    paste0("'_priorit_chart_data'!$", col, "$", r1, ":$", col, "$", r2)
   }
   hdr <- function(col) {
-    paste0("'_chart_data'!$", col, "$1")
+    paste0("'_priorit_chart_data'!$", col, "$1")
   }
 
   paste0(

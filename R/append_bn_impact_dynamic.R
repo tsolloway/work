@@ -529,10 +529,11 @@ append_bn_impact_dynamic <- function(
   }
 
   # ---------------------------------------------------------------------------
-  # Separator and Total Impact
+  # Separator, Total Impact, Base
   # ---------------------------------------------------------------------------
   separator_row <- max(data_rows) + 1
   total_impact_row <- separator_row + 1
+  base_row <- total_impact_row + 1
 
   openxlsx::addStyle(wb, dash_sheet, style = styles$separator,
     rows = separator_row, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
@@ -558,8 +559,36 @@ append_bn_impact_dynamic <- function(
   openxlsx::addStyle(wb, dash_sheet, style = styles$total_impact,
     rows = total_impact_row, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
 
-  # Outer box around table (header through total impact)
-  table_rows <- seq(row_data_start, total_impact_row)
+  # Base row — sits just below Total Impact. Renders regardless of whether the
+  # selected metric produced values (bases live in the data, not derived from
+  # the lift calc). Column lookup format: "{sg}_base" for Market focus, or
+  # "{sg}_base_{focus}" for brand focuses. Value pulled from the first row of
+  # the results sheet, since base is (approximately) constant across IVs.
+  openxlsx::writeData(wb, dash_sheet, "Base",
+    startRow = base_row, startCol = col_data_start)
+
+  for (sg_i in seq_along(sgs)) {
+    sg <- sgs[sg_i]
+    base_col_name <- paste0(
+      "IF(", focus_ref, "=\"Market\",\"", sg, "_base\",",
+        "\"", sg, "_base_\"&", focus_ref, ")"
+    )
+    base_match_col <- paste0("MATCH(", base_col_name, ",",
+      results_header_range, ",0)")
+    base_formula <- paste0(
+      "IFERROR(ROUND(INDEX(", results_all_rows, ",1,", base_match_col, "),0),\"\")"
+    )
+    openxlsx::writeFormula(wb, dash_sheet, x = base_formula,
+      startRow = base_row, startCol = index_cols_pos[sg_i])
+  }
+
+  openxlsx::addStyle(wb, dash_sheet,
+    style = openxlsx::createStyle(numFmt = "0", halign = "center",
+      fontColour = "#595959"),
+    rows = base_row, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
+
+  # Outer box around table (header through Base row)
+  table_rows <- seq(row_data_start, base_row)
   openxlsx::addStyle(wb, dash_sheet,
     style = openxlsx::createStyle(border = "Left", borderStyle = "medium"),
     rows = table_rows, cols = min(all_header_cols), gridExpand = TRUE, stack = TRUE)
@@ -568,10 +597,10 @@ append_bn_impact_dynamic <- function(
     rows = table_rows, cols = max(all_header_cols), gridExpand = TRUE, stack = TRUE)
   openxlsx::addStyle(wb, dash_sheet,
     style = openxlsx::createStyle(border = "Bottom", borderStyle = "medium"),
-    rows = total_impact_row, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
+    rows = base_row, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
 
   # Dynamic footer (one blank row after table)
-  footer_start <- total_impact_row + 2
+  footer_start <- base_row + 2
   index_desc_range <- paste0(lookup_sheet, "!$E$2:$E$", length(metric_labels) + 1)
   footer_formula <- paste0(
     "\"", engine_footer, ". \"&INDEX(", index_desc_range,
@@ -624,6 +653,10 @@ append_bn_impact_dynamic <- function(
     borderStyle = "medium")
   oxl_outer_box(wb, dash_sheet,
     row_start = total_impact_row, row_end = total_impact_row,
+    col_start = min(all_header_cols), col_end = max(all_header_cols),
+    borderStyle = "medium")
+  oxl_outer_box(wb, dash_sheet,
+    row_start = base_row, row_end = base_row,
     col_start = min(all_header_cols), col_end = max(all_header_cols),
     borderStyle = "medium")
 

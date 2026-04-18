@@ -22,6 +22,8 @@ bn_prioritizations(
   max_rounds = NULL,
   noise_tail = 1/3,
   n_boot_final = 100,
+  sig_threshold = 0.05,
+  marginal_threshold = 0.1,
   brand = NULL,
   brand_names = NULL,
   weight = NULL,
@@ -80,6 +82,14 @@ Default 1/3.}
 
 \item{n_boot_final}{Integer. Bootstrap replicates for p-values.
 Default 100.}
+
+\item{sig_threshold}{Numeric. P-value threshold for the "significant"
+colour band used by downstream writers. Stored in \code{meta} so
+\code{bn_prioritize_write()} and \code{bn_report()} can apply a
+consistent threshold. Default 0.05.}
+
+\item{marginal_threshold}{Numeric. P-value threshold for the "marginal"
+colour band used by downstream writers. Default 0.10.}
 
 \item{brand}{Character or NULL. Column name in \code{df} containing brand
 labels. When provided, lift is computed separately for each brand using

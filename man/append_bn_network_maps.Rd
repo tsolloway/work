@@ -9,7 +9,8 @@ append_bn_network_maps(
   bn_full,
   network_type = "none",
   width = 10,
-  height = 8
+  height = 8,
+  defer_images = FALSE
 )
 }
 \arguments{
@@ -18,11 +19,19 @@ append_bn_network_maps(
 \item{bn_full}{The full output of \code{bn_finalize_network()}.}
 
 \item{network_type}{Character. Layout type passed to \code{bn_visual()}.
-Default \code{"none"}.}
+One of \code{"none"} (default), \code{"gravity"}, \code{"charge"}, or
+\code{"hierarchy"}.}
 
 \item{width}{Numeric. Image width in inches. Default 10.}
 
 \item{height}{Numeric. Image height in inches. Default 8.}
+
+\item{defer_images}{Logical. When FALSE (default), images are inserted
+directly via \code{openxlsx::insertImage}. When TRUE, the sheets are
+created and PNGs are rendered to a temp dir, but images are NOT
+inserted — metadata is attached to the workbook under attribute
+\code{"network_map_images"} so the caller can insert via openxlsx2
+after a save/reload. Used by \code{bn_write()}.}
 }
 \value{
 The modified workbook object (invisibly).

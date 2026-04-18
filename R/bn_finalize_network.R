@@ -63,6 +63,12 @@
 #'   Default NULL.
 #' @param prioritize_noise_tail Numeric. Fraction of tail steps for noise floor.
 #'   Default 1/3.
+#' @param prioritize_sig_threshold Numeric. P-value threshold for the
+#'   "significant" colour band stored in the prioritizations meta. Used by
+#'   downstream writers (\code{bn_prioritize_write}, \code{bn_report}) for
+#'   consistent colour coding. Default 0.05.
+#' @param prioritize_marginal_threshold Numeric. P-value threshold for the
+#'   "marginal" colour band stored in the prioritizations meta. Default 0.10.
 #' @param tool_tip_edge_prefix Character or NULL. Prefix for edge tooltips.
 #' @param viz_size_node_by_impact Logical. Size network nodes by impact index.
 #'   Default TRUE.
@@ -123,6 +129,8 @@ bn_finalize_network <- function(
     prioritize_threshold = 0.01,
     prioritize_max_rounds = NULL,
     prioritize_noise_tail = 1/3,
+    prioritize_sig_threshold = 0.05,
+    prioritize_marginal_threshold = 0.10,
     # --- Visualization ---
     tool_tip_edge_prefix = NULL,
     viz_size_node_by_impact = TRUE,
@@ -404,6 +412,8 @@ bn_finalize_network <- function(
       max_rounds = prioritize_max_rounds,
       n_boot_final = n_boot_final,
       noise_tail = prioritize_noise_tail,
+      sig_threshold = prioritize_sig_threshold,
+      marginal_threshold = prioritize_marginal_threshold,
       min_base_for_boot = min_base_for_calc,
       dictionary = dictionary,
       community_assignment = attribute_nodes,

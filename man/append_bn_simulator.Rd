@@ -16,8 +16,9 @@ append_bn_simulator(
   brand_names = NULL,
   add_freq_shifts = FALSE,
   shift_range = c(-0.25, 0.25),
-  shift_step = 0.025,
-  min_base_for_sim = 75
+  shift_step = 0.05,
+  min_base_for_sim = 75,
+  sim_dv_only = FALSE
 )
 }
 \arguments{
@@ -41,6 +42,10 @@ outputs for that focus. Slices below this threshold are written to the
 dashboard with NA values and surfaced on a \code{Simulator Base Warnings}
 sheet listing each offending slice's actual n. Default 75. The Market
 focus is never skipped.}
+
+\item{sim_dv_only}{Logical. When TRUE, the simulator only provides results
+for the dependent variable as the target. Dramatically shrinks stored
+data by removing all non-DV target columns and rows. Default FALSE.}
 }
 \value{
 The modified workbook object (invisibly).

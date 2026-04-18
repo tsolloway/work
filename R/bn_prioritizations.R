@@ -41,6 +41,12 @@
 #'   Default 1/3.
 #' @param n_boot_final Integer. Bootstrap replicates for p-values.
 #'   Default 100.
+#' @param sig_threshold Numeric. P-value threshold for the "significant"
+#'   colour band used by downstream writers. Stored in \code{meta} so
+#'   \code{bn_prioritize_write()} and \code{bn_report()} can apply a
+#'   consistent threshold. Default 0.05.
+#' @param marginal_threshold Numeric. P-value threshold for the "marginal"
+#'   colour band used by downstream writers. Default 0.10.
 #' @param brand Character or NULL. Column name in \code{df} containing brand
 #'   labels. When provided, lift is computed separately for each brand using
 #'   brand-filtered data. Default NULL.
@@ -89,6 +95,8 @@ bn_prioritizations <- function(
     max_rounds = NULL,
     noise_tail = 1/3,
     n_boot_final = 100,
+    sig_threshold = 0.05,
+    marginal_threshold = 0.10,
     brand = NULL,
     brand_names = NULL,
     weight = NULL,
@@ -124,6 +132,10 @@ bn_prioritizations <- function(
   # Build flat task list: each element is one bn_prioritize() call
   # ---------------------------------------------------------------------------
   tasks <- list()
+  # Brand x subgroup slices below min_base_for_boot that were skipped — kept
+  # around so downstream writers can still display the base (and the warning)
+  # next to the Focus dropdown for those focuses.
+  skipped_slices <- list()
 
   for (sg_name in sg_names) {
     sg_obj <- sg_list[[sg_name]]
@@ -160,7 +172,26 @@ bn_prioritizations <- function(
     if (!is.null(brands_to_run)) {
       for (b in brands_to_run) {
         brand_df <- sg_df[sg_df[[brand]] == b, , drop = FALSE]
-        if (nrow(brand_df) < min_base_for_boot) next
+
+        if (nrow(brand_df) < min_base_for_boot) {
+          # Record the slice so downstream writers can surface the base/warning
+          # even when no task actually ran for this focus.
+          skipped_slices[[length(skipped_slices) + 1L]] <- list(
+            sg_name    = sg_name,
+            brand_name = b,
+            n_obs      = nrow(brand_df),
+            weighted   = FALSE
+          )
+          if (!is.null(weight)) {
+            skipped_slices[[length(skipped_slices) + 1L]] <- list(
+              sg_name    = sg_name,
+              brand_name = b,
+              n_obs      = nrow(brand_df),
+              weighted   = TRUE
+            )
+          }
+          next
+        }
 
         tasks[[paste0("brand__", b, "__", sg_name)]] <- list(
           type = "brand", sg_name = sg_name, brand_name = b,
@@ -297,18 +328,29 @@ bn_prioritizations <- function(
   if (!is.null(brands_to_run)) output$greedy_lift_brand <- results_lift_brand
   if (!is.null(brands_to_run) && !is.null(weight)) output$greedy_lift_brand_weighted <- results_lift_brand_weighted
 
-  # Only report brands that actually produced results (slices meeting
-  # the min_base_for_boot threshold)
+  # Report every brand that either produced results OR was skipped due to
+  # insufficient base. Fully-skipped brands still belong in the Focus dropdown
+  # so the user can see the warning and the actual base next to it.
   brands_with_results <- if (!is.null(results_lift_brand)) names(results_lift_brand) else NULL
+  brands_skipped <- unique(purrr::map_chr(skipped_slices, "brand_name"))
+  brands_all <- union(brands_with_results, brands_skipped)
+  if (length(brands_all) == 0) brands_all <- NULL
 
   output$meta <- list(
     dv = dv,
     subgroups = if (length(sg_names) > 1) sg_names else NULL,
     brand = brand,
-    brand_names = brands_with_results,
+    brand_names = brands_all,
     weight = weight,
     lift = lift,
-    base_sizes = base_sizes
+    base_sizes = base_sizes,
+    min_base_for_boot = min_base_for_boot,
+    n_boot_final = n_boot_final,
+    noise_tail = noise_tail,
+    threshold = threshold,
+    sig_threshold = sig_threshold,
+    marginal_threshold = marginal_threshold,
+    skipped_slices = skipped_slices
   )
 
   cli::cli_alert_success("All {length(tasks)} prioritizations complete")

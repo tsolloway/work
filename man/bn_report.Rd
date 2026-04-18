@@ -21,7 +21,8 @@ bn_report(
   save_name = NULL,
   file = NULL,
   open = TRUE,
-  seed = 1
+  seed = 1,
+  add_additional_results = FALSE
 )
 }
 \arguments{
@@ -84,6 +85,17 @@ or \code{"Network Analysis - Feb 2026.html"}).}
 Default \code{FALSE}.}
 
 \item{seed}{Numeric. Passed through to \code{bn_visual()}. Default \code{1}.}
+
+\item{add_additional_results}{Logical. If \code{TRUE}, and a passed result
+(e.g., the output of \code{bn_finalize_network()}) contains \verb{$impacts}
+and/or \verb{$prioritizations}, those tables are rendered as extra tabs
+in each accordion section: "Attribute Impacts", "Community Impacts"
+(when community results are present), and "Prioritization". Styling
+matches the \code{bn_write()} dashboards (grey header fill, color-coded
+p-values). The Prioritization tab reads its \code{sig_threshold} and
+\code{marginal_threshold} from \code{prioritizations$meta}, so the colour bands
+stay consistent with whatever was set at \code{bn_finalize_network()} /
+\code{bn_prioritizations()} time. Default \code{FALSE}.}
 }
 \value{
 The file path (invisibly).

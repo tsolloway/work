@@ -19,6 +19,9 @@
 #'   dashboard with NA values and surfaced on a \code{Simulator Base Warnings}
 #'   sheet listing each offending slice's actual n. Default 75. The Market
 #'   focus is never skipped.
+#' @param sim_dv_only Logical. When TRUE, the simulator only provides results
+#'   for the dependent variable as the target. Dramatically shrinks stored
+#'   data by removing all non-DV target columns and rows. Default FALSE.
 #'
 #' @return The modified workbook object (invisibly).
 #'
@@ -35,13 +38,17 @@ append_bn_simulator <- function(
     brand_names = NULL,
     add_freq_shifts = FALSE,
     shift_range = c(-0.25, 0.25),
-    shift_step = 0.025,
-    min_base_for_sim = 75
+    shift_step = 0.05,
+    min_base_for_sim = 75,
+    sim_dv_only = FALSE
 ) {
 
-  # Track brand x subgroup slices whose base falls below min_base_for_sim.
-  # Structure: list of tibbles with subgroup, focus, n_obs.
-  low_base_slices <- list()
+  # Track ALL (subgroup, focus) slices and their observed base size. The
+  # Focus-adjacent cell in the dashboard uses this table to either (a)
+  # display "Base: N" when n >= min_base_for_sim, or (b) show the red
+  # "Results not calculated because base is below N" warning when n < threshold.
+  # Structure: list of tibbles with subgroup, focus, n_obs, min_required.
+  base_slices <- list()
 
   # ---------------------------------------------------------------------------
   # 1. Pre-compute posteriors for every (subgroup, evidence_var, evidence_level)
@@ -74,6 +81,11 @@ append_bn_simulator <- function(
     # Max number of levels across all nodes (for consistent column count)
     max_levels <- max(purrr::map_int(node_levels, length))
 
+    # Targets queried from the grain. When sim_dv_only, restrict to the DV
+    # only; this dramatically shrinks sim_data and pct_data. Evidence still
+    # uses all_nodes (IVs are unchanged).
+    target_nodes <- if (isTRUE(sim_dv_only)) dv else all_nodes
+
     # Helper: extract probabilities from querygrain result (simplify = FALSE)
     .extract_probs <- function(result) {
       purrr::map(result, function(x) {
@@ -84,7 +96,7 @@ append_bn_simulator <- function(
     }
 
     # Query with no evidence (marginal/prior)
-    marginal <- gRain::querygrain(grain_bn, nodes = all_nodes, simplify = FALSE)
+    marginal <- gRain::querygrain(grain_bn, nodes = target_nodes, simplify = FALSE)
     marginal <- .extract_probs(marginal)
 
     prior_rows <- purrr::imap(marginal, function(probs, nm) {
@@ -110,7 +122,7 @@ append_bn_simulator <- function(
         evidence <- rlang::set_names(list(lv), iv)
 
         posterior <- tryCatch(
-          gRain::querygrain(grain_bn, nodes = all_nodes, evidence = evidence, simplify = FALSE),
+          gRain::querygrain(grain_bn, nodes = target_nodes, evidence = evidence, simplify = FALSE),
           error = function(e) NULL
         )
 
@@ -118,11 +130,15 @@ append_bn_simulator <- function(
 
         posterior <- .extract_probs(posterior)
 
-        # Force evidence variable to point mass at selected level
-        ev_probs <- rep(0, length(node_levels[[iv]]))
-        names(ev_probs) <- node_levels[[iv]]
-        ev_probs[lv] <- 1
-        posterior[[iv]] <- ev_probs
+        # Force evidence variable to point mass at selected level. Only add
+        # it to the output when it's among the target nodes — with
+        # sim_dv_only, targets are just the DV so the IV stays out.
+        if (iv %in% target_nodes) {
+          ev_probs <- rep(0, length(node_levels[[iv]]))
+          names(ev_probs) <- node_levels[[iv]]
+          ev_probs[lv] <- 1
+          posterior[[iv]] <- ev_probs
+        }
 
         rows <- purrr::imap(posterior, function(probs, nm) {
           row <- tibble::tibble(
@@ -198,16 +214,21 @@ append_bn_simulator <- function(
         dimnames(fit[[nd]][["prob"]])[[1]]
       })
 
-      # Build EV matrix once per subgroup (shared across focus options)
+      # Targets queried as pct_data EV columns. With sim_dv_only the pivot
+      # collapses to a single target (the DV).
+      target_nodes_sg <- if (isTRUE(sim_dv_only)) dv else all_nodes_sg
+
+      # Build EV matrix once per subgroup (shared across focus options).
+      # Columns correspond to target_nodes_sg (one column per target).
       ev_mats <- purrr::map(rlang::set_names(ivs), function(iv) {
         iv_levels <- node_levels_sg[[iv]]
         n_levels <- length(iv_levels)
-        n_nodes <- length(all_nodes_sg)
+        n_nodes <- length(target_nodes_sg)
         ev_mat <- matrix(NA_real_, nrow = n_levels, ncol = n_nodes)
         for (li in seq_along(iv_levels)) {
           lv <- iv_levels[li]
-          for (ni in seq_along(all_nodes_sg)) {
-            key <- paste(sg, iv, lv, all_nodes_sg[ni], sep = "|")
+          for (ni in seq_along(target_nodes_sg)) {
+            key <- paste(sg, iv, lv, target_nodes_sg[ni], sep = "|")
             idx <- sim_key_idx[key]
             if (!is.na(idx)) {
               probs <- as.numeric(sim_data[idx, p_cols])
@@ -218,11 +239,15 @@ append_bn_simulator <- function(
         ev_mat
       })
 
-      # Process Market first to get base table with Key
+      # Build one row per (sg, iv, pct_label) with:
+      #   Mean_{focus}        — the shifted IV's own mean (per-row scalar)
+      #   EV_{focus}_{target} — one column per target node (pivot target from
+      #                         rows to columns; eliminates 28x duplication
+      #                         and dramatically shrinks the stored sheet).
       .compute_focus <- function(focus_df, focus_name) {
         focus_clean <- gsub(" ", "_", focus_name)
-        ev_col_name <- paste0("EV_", focus_clean)
         mean_col_name <- paste0("Mean_", focus_clean)
+        ev_col_names  <- paste0("EV_", focus_clean, "_", target_nodes_sg)
 
         purrr::map(ivs, function(iv) {
           iv_freq <- table(focus_df[[iv]])
@@ -245,10 +270,12 @@ append_bn_simulator <- function(
             shifted_input_mean <- sum(iv_values * shifted_probs)
             pct_label <- pct_labels[pi]
 
+            ev_cols <- rlang::set_names(as.list(weighted_evs), ev_col_names)
+
             tibble::tibble(
-              Key = paste(sg, iv, pct_label, all_nodes_sg, sep = "|"),
+              Key = paste(sg, iv, pct_label, sep = "|"),
               !!mean_col_name := shifted_input_mean,
-              !!ev_col_name := weighted_evs
+              !!!ev_cols
             )
           }) %>% dplyr::bind_rows()
         }) %>% dplyr::bind_rows()
@@ -256,31 +283,42 @@ append_bn_simulator <- function(
 
       # Start with Market — Market always runs (no base-size restriction)
       sg_result <- .compute_focus(sg_df, "Market")
+      base_slices[[length(base_slices) + 1L]] <<- tibble::tibble(
+        subgroup = sg,
+        focus = "Market",
+        n_obs = nrow(sg_df),
+        min_required = min_base_for_sim
+      )
 
       # Join each brand, skipping brand x subgroup slices below min_base_for_sim.
       # Skipped focuses still appear in the workbook dropdown; their Mean_/EV_
-      # columns are all NA and surfaced in the warning sheet with actual n.
+      # columns are all NA and the red warning shows next to the Focus cell.
       for (focus in setdiff(focus_options, "Market")) {
         focus_df <- sg_df[sg_df[[brand]] == focus, , drop = FALSE]
 
-        if (nrow(focus_df) < min_base_for_sim) {
-          # Record for warning sheet
-          low_base_slices[[length(low_base_slices) + 1L]] <<- tibble::tibble(
-            subgroup = sg,
-            focus = focus,
-            n_obs = nrow(focus_df),
-            min_required = min_base_for_sim
-          )
+        # Record base for every focus (displayed next to the Focus cell)
+        base_slices[[length(base_slices) + 1L]] <<- tibble::tibble(
+          subgroup = sg,
+          focus = focus,
+          n_obs = nrow(focus_df),
+          min_required = min_base_for_sim
+        )
 
-          # Build a NA-filled focus result so dropdown still works
+        if (nrow(focus_df) < min_base_for_sim) {
+          # Build an NA-filled focus result so the dropdown still populates —
+          # one NA EV column per target (matches the pivoted structure).
           focus_clean <- gsub(" ", "_", focus)
-          ev_col_name <- paste0("EV_", focus_clean)
           mean_col_name <- paste0("Mean_", focus_clean)
+          ev_col_names <- paste0("EV_", focus_clean, "_", target_nodes_sg)
+          na_ev_cols <- rlang::set_names(
+            as.list(rep(NA_real_, length(ev_col_names))),
+            ev_col_names
+          )
           focus_result <- sg_result %>%
             dplyr::select(Key) %>%
             dplyr::mutate(
               !!mean_col_name := NA_real_,
-              !!ev_col_name := NA_real_
+              !!!na_ev_cols
             )
         } else {
           focus_result <- .compute_focus(focus_df, focus)
@@ -352,18 +390,19 @@ append_bn_simulator <- function(
   }
 
   # ---------------------------------------------------------------------------
-  # 3b. Hidden helper sheet: base-size warnings keyed by subgroup|focus
+  # 3b. Hidden helper sheet: base sizes for every (subgroup, focus) slice.
+  # The dashboard uses this to (a) show "Base: N" next to the Focus cell,
+  # and (b) switch to the red warning style when n < min_base_for_sim.
   # ---------------------------------------------------------------------------
-  base_warn_sheet <- "_sim_base_warn"
-  if (length(low_base_slices) > 0) {
-    base_warn_df <- dplyr::bind_rows(low_base_slices) %>%
+  base_sheet <- "_sim_base"
+  if (length(base_slices) > 0) {
+    base_df <- dplyr::bind_rows(base_slices) %>%
       dplyr::mutate(key = paste(subgroup, focus, sep = "|")) %>%
       dplyr::select(key, n_obs)
-    openxlsx::addWorksheet(wb, base_warn_sheet)
-    openxlsx::writeData(wb, base_warn_sheet, base_warn_df,
-      startRow = 1, startCol = 1)
+    openxlsx::addWorksheet(wb, base_sheet)
+    openxlsx::writeData(wb, base_sheet, base_df, startRow = 1, startCol = 1)
   } else {
-    base_warn_sheet <- NULL
+    base_sheet <- NULL
   }
 
   # ---------------------------------------------------------------------------
@@ -373,10 +412,12 @@ append_bn_simulator <- function(
   sim_lookup <- "_sim_lookup"
   openxlsx::addWorksheet(wb, sim_lookup)
 
-  # Get all nodes from first subgroup for variable list
+  # Get all nodes from first subgroup for variable list. When sim_dv_only,
+  # the dashboard only shows the DV as a target row (everything else is
+  # collapsed from the lookup tables).
   first_sg <- names(sg_list)[1]
   first_fit <- obj[[first_sg]][["fit"]]
-  all_nodes <- names(first_fit)
+  all_nodes <- if (isTRUE(sim_dv_only)) dv else names(first_fit)
   node_levels <- purrr::map(rlang::set_names(all_nodes), function(nd) {
     dimnames(first_fit[[nd]][["prob"]])[[1]]
   })
@@ -593,35 +634,40 @@ append_bn_simulator <- function(
   }
 
   # ---------------------------------------------------------------------------
-  # Base-size warning for Focus dropdown (matches dynamic dashboard style)
+  # Base-size display + warning for Focus dropdown (matches dynamic dashboard)
+  #   n >= min_base_for_sim → "Base: N" (grey)
+  #   n <  min_base_for_sim → "Results not calculated because base is below N" (red)
   # ---------------------------------------------------------------------------
-  if (!is.null(base_warn_sheet) && !is.null(focus_sim_cell_col)) {
+  if (!is.null(base_sheet) && !is.null(focus_sim_cell_col)) {
     focus_let <- num2let(focus_sim_cell_col)
     focus_ref <- paste0("$", focus_let, "$", focus_sim_cell_row)
 
     if (has_subgroups) {
       sg_let <- num2let(sg_cell_col)
       sg_ref <- paste0("$", sg_let, "$", sg_cell_row)
-      warn_key <- paste0(sg_ref, "&\"|\"&", focus_ref)
+      base_key <- paste0(sg_ref, "&\"|\"&", focus_ref)
     } else {
-      warn_key <- paste0("\"", names(sg_list)[1], "|\"&", focus_ref)
+      base_key <- paste0("\"", names(sg_list)[1], "|\"&", focus_ref)
     }
 
     warn_col <- focus_sim_cell_col + 1L
-    match_expr <- paste0("MATCH(", warn_key, ",",
-      base_warn_sheet, "!$A:$A,0)")
-    n_lookup <- paste0("INDEX(", base_warn_sheet, "!$B:$B,",
-      match_expr, ")")
+    match_expr <- paste0("MATCH(", base_key, ",",
+      base_sheet, "!$A:$A,0)")
+    n_lookup <- paste0("INDEX(", base_sheet, "!$B:$B,", match_expr, ")")
 
     focus_warn_formula <- paste0(
-      "IFERROR(\"Results not calculated because base is \"&", n_lookup, ",\"\")"
+      "IFERROR(",
+        "IF(", n_lookup, "<", min_base_for_sim, ",",
+          "\"Results not calculated because base is below ", min_base_for_sim, "\",",
+          "\"Base: \"&", n_lookup,
+        "),",
+      "\"\")"
     )
     openxlsx::writeFormula(wb, dash_sheet, x = focus_warn_formula,
       startRow = focus_sim_cell_row, startCol = warn_col)
 
-    # Conditional formatting — match dynamic dashboard (red text on warning,
-    # red bg + white text on Focus cell) when a match exists.
-    red_rule <- paste0("NOT(ISERROR(", match_expr, "))")
+    # Conditional formatting — red only when base is below the threshold.
+    red_rule <- paste0("IFERROR(", n_lookup, "<", min_base_for_sim, ",FALSE)")
     red_warning <- openxlsx::createStyle(fontColour = "#FF0000",
       textDecoration = "bold")
     red_cell <- openxlsx::createStyle(bgFill = "#FF0000",
@@ -801,11 +847,11 @@ append_bn_simulator <- function(
     }
     var_ref_d <- paste0("$", num2let(var_cell_col), "$", var_cell_row)
 
-    # Base key (0 percent): subgroup|variable|0_label|variable
+    # Keys no longer include the target (target is now a column dimension
+    # after the pivot). Format: subgroup|variable|pct_label
     zero_label <- pct_labels[which(pct_steps == 0)]
-    base_mean_key <- paste0(sg_ref_d, "&\"|\"&", var_ref_d, "&\"|", zero_label, "|\"&", var_ref_d)
-    # Shifted key: subgroup|variable|selected_pct|variable
-    shifted_mean_key <- paste0(sg_ref_d, "&\"|\"&", var_ref_d, "&\"|\"&", level_ref_display, "&\"|\"&", var_ref_d)
+    base_mean_key <- paste0(sg_ref_d, "&\"|\"&", var_ref_d, "&\"|", zero_label, "\"")
+    shifted_mean_key <- paste0(sg_ref_d, "&\"|\"&", var_ref_d, "&\"|\"&", level_ref_display)
 
     # Dynamic Mean column
     mean_col_d <- paste0("\"Mean_\"&SUBSTITUTE(", focus_ref_d, ",\" \",\"_\")")
@@ -836,7 +882,8 @@ append_bn_simulator <- function(
   # Headers: Variable | Community | Label | Metric
   # ---------------------------------------------------------------------------
 
-  has_community <- !is.null(community_nodes)
+  # Community column is pointless when there's only one row (DV-only mode).
+  has_community <- !is.null(community_nodes) && !isTRUE(sim_dv_only)
 
   # Build community lookup from nodes data
   if (has_community) {
@@ -955,18 +1002,12 @@ append_bn_simulator <- function(
     }
 
     pct_key_range <- paste0(pct_sheet, "!$A$2:$A$", n_pct_rows + 1)
-
-    # Build EV column name dynamically: "EV_" & SUBSTITUTE(focus, " ", "_")
-    ev_col_formula <- paste0("\"EV_\"&SUBSTITUTE(", focus_ref, ",\" \",\"_\")")
-    mean_col_formula <- paste0("\"Mean_\"&SUBSTITUTE(", focus_ref, ",\" \",\"_\")")
-
-    # Match the column name against pct_data headers
     pct_header_range <- paste0(pct_sheet, "!$1:$1")
-    pct_ev_match <- paste0("MATCH(", ev_col_formula, ",", pct_header_range, ",0)")
-    pct_mean_match <- paste0("MATCH(", mean_col_formula, ",", pct_header_range, ",0)")
-
-    # Dynamic column INDEX
     pct_data_range <- paste0(pct_sheet, "!$A$2:$", num2let(ncol(pct_data)), "$", n_pct_rows + 1)
+
+    # EV column name depends on focus AND the target node, so it is built
+    # per-target inside the row loop below. The Mean display uses a
+    # separate mean_col_match_d defined earlier with its own focus ref.
   }
 
   # Helper: wrap raw EV + baseline EV into metric formula
@@ -1002,25 +1043,35 @@ append_bn_simulator <- function(
     level_ev <- .metric_formula(raw_level_ev, bl_level_ev)
 
     if (has_freq_shifts) {
-      # Key for Mean mode: subgroup|variable|pct_label|target (no focus — focus selects column)
+      # Key for Mean mode (post-pivot): subgroup|variable|pct_label (no target)
       if (has_subgroups) {
-        pct_key <- paste0(sg_ref, "&\"|\"&", var_ref, "&\"|\"&", pct_base_label, "&\"|", nd, "\"")
+        pct_key <- paste0(sg_ref, "&\"|\"&", var_ref, "&\"|\"&", pct_base_label)
       } else {
-        pct_key <- paste0("\"", names(sg_list)[1], "|\"&", var_ref, "&\"|\"&", pct_base_label, "&\"|", nd, "\"")
+        pct_key <- paste0("\"", names(sg_list)[1], "|\"&", var_ref, "&\"|\"&", pct_base_label)
       }
       pct_row_match <- paste0("MATCH(", pct_key, ",", pct_key_range, ",0)")
-      # INDEX into the dynamic EV column for the selected focus
-      raw_pct_ev <- paste0("IFERROR(INDEX(", pct_data_range, ",", pct_row_match, ",", pct_ev_match, "),0)")
 
-      # Baseline for Mean mode: subgroup|variable|0 percent|target
+      # EV column header = "EV_{focus}_{target}" — target is fixed for this
+      # row (`nd`), focus comes from the dropdown.
+      ev_col_formula_nd <- paste0("\"EV_\"&SUBSTITUTE(", focus_ref,
+        ",\" \",\"_\")&\"_", nd, "\"")
+      pct_ev_match_nd <- paste0("MATCH(", ev_col_formula_nd, ",",
+        pct_header_range, ",0)")
+
+      raw_pct_ev <- paste0("IFERROR(INDEX(", pct_data_range, ",",
+        pct_row_match, ",", pct_ev_match_nd, "),0)")
+
+      # Baseline key for Mean mode: subgroup|variable|0 percent (no target)
       zero_label <- pct_labels[which(pct_steps == 0)]
       if (has_subgroups) {
-        bl_pct_key <- paste0(sg_ref, "&\"|\"&", var_ref, "&\"|", zero_label, "|", nd, "\"")
+        bl_pct_key <- paste0(sg_ref, "&\"|\"&", var_ref, "&\"|", zero_label, "\"")
       } else {
-        bl_pct_key <- paste0("\"", names(sg_list)[1], "|\"&", var_ref, "&\"|", zero_label, "|", nd, "\"")
+        bl_pct_key <- paste0("\"", names(sg_list)[1], "|\"&", var_ref,
+          "&\"|", zero_label, "\"")
       }
       bl_pct_row <- paste0("MATCH(", bl_pct_key, ",", pct_key_range, ",0)")
-      bl_pct_ev <- paste0("IFERROR(INDEX(", pct_data_range, ",", bl_pct_row, ",", pct_ev_match, "),0)")
+      bl_pct_ev <- paste0("IFERROR(INDEX(", pct_data_range, ",",
+        bl_pct_row, ",", pct_ev_match_nd, "),0)")
 
       mean_ev <- .metric_formula(raw_pct_ev, bl_pct_ev)
 
@@ -1051,13 +1102,10 @@ append_bn_simulator <- function(
     col_start = min(all_header_cols), col_end = max(all_header_cols),
     borderStyle = "medium")
 
-  # Freeze panes
-  openxlsx::freezePane(wb, dash_sheet,
-    firstActiveRow = row_data_start + 1,
-    firstActiveCol = col_data_start + n_leading)
-
-  # Filter
-  openxlsx::addFilter(wb, dash_sheet, rows = row_data_start, cols = all_header_cols)
+  # Filter — skip in DV-only mode (only one data row, filter is pointless)
+  if (!isTRUE(sim_dv_only)) {
+    openxlsx::addFilter(wb, dash_sheet, rows = row_data_start, cols = all_header_cols)
+  }
 
   # Hide helper sheets — visibility set by bn_impact_write after all sheets added
 

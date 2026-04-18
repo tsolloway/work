@@ -14,9 +14,10 @@ bn_impact_write(
   file_name = NULL,
   brand_names = NULL,
   shift_range = c(-0.25, 0.25),
-  shift_step = 0.025,
+  shift_step = 0.05,
   wb_type = c("dynamic", "standard"),
   add_simple_simulator = TRUE,
+  sim_dv_only = FALSE,
   variable_width = 20,
   community_width = 20,
   label_width = "auto",
@@ -24,7 +25,11 @@ bn_impact_write(
   very_hide_all = TRUE,
   min_base_for_lift = NULL,
   min_base_for_sim = NULL,
-  path = "."
+  path = ".",
+  wb = NULL,
+  save = TRUE,
+  add_guide = TRUE,
+  add_images = TRUE
 )
 }
 \arguments{
@@ -55,9 +60,9 @@ header (e.g. project name). If NULL, inherits from \code{file_name}.
 Default NULL.}
 
 \item{file_name}{Character or NULL. Prefix for output file name. File is
-saved as \code{{file_name} - Attribute Drivers of {dv}.xlsx}. If NULL,
+saved as \code{{file_name} - Network Drivers of {dv}.xlsx}. If NULL,
 inherits from \code{sub_title}. If both are NULL, file is saved as
-\code{Attribute Drivers of {dv}.xlsx}.}
+\code{Network Drivers of {dv}.xlsx}.}
 
 \item{brand_names}{Character vector or NULL. Brand level names to use in the
 simulator. If NULL, auto-detected from \code{meta$brand_names} in the
@@ -67,7 +72,7 @@ impact result.}
 the simulator's frequency shift sliders. Default \code{c(-0.25, 0.25)}.}
 
 \item{shift_step}{Numeric. Step size for the simulator's frequency shift
-sliders. Default 0.025.}
+sliders. Default 0.05.}
 
 \item{wb_type}{Character. Workbook format: \code{"dynamic"} (default)
 writes an interactive dashboard with dropdown filters; \code{"standard"}
@@ -76,6 +81,11 @@ writes a static formatted table.}
 \item{add_simple_simulator}{Logical. If TRUE (default), adds a Simulator
 sheet with interactive dropdowns for exploring conditional probability
 distributions. Requires \code{bn_obj} to be provided.}
+
+\item{sim_dv_only}{Logical. When TRUE, the Simulator only provides results
+for the DV as the target (a single row on the dashboard). Dramatically
+reduces stored simulator data by dropping all non-DV target columns and
+rows. Default FALSE (all nodes queryable as targets).}
 
 \item{variable_width}{Numeric. Column width for the Variable column.
 Default 20.}
@@ -86,9 +96,11 @@ community results are present. Default 20.}
 \item{label_width}{Numeric or \code{"auto"}. Column width for the Label
 column. Default \code{"auto"}.}
 
-\item{network_type}{Character. Type of network map to include when
-\code{bn_obj} is the full \code{bn_finalize_network()} output.
-\code{"none"} (default) skips network maps.}
+\item{network_type}{Character. Layout type for the network map sheets
+(rendered via \code{bn_visual()}). One of \code{"none"} (default —
+skips network maps), \code{"gravity"}, \code{"charge"}, or
+\code{"hierarchy"}. Only used when \code{bn_obj} is the full
+\code{bn_finalize_network()} output.}
 
 \item{very_hide_all}{Logical. If TRUE (default), all hidden sheets are set to
 veryHidden. If FALSE, they are simply hidden.}
@@ -104,6 +116,25 @@ on a warning sheet. If NULL, inherits from \code{min_base_for_lift} (which
 itself falls back to \code{meta$min_base_for_lift} or 75).}
 
 \item{path}{Character. Directory to write workbook to. Default \code{"."}.}
+
+\item{wb}{openxlsx workbook object or NULL. When NULL (default), a new
+workbook is created. When provided, impact sheets are appended to the
+existing workbook — used by \code{bn_write()} to assemble a combined
+workbook.}
+
+\item{save}{Logical. When TRUE (default), the workbook is saved to disk.
+When FALSE, the workbook is returned without saving — used by
+\code{bn_write()}.}
+
+\item{add_guide}{Logical. When TRUE (default), a Guide tab is appended.
+When FALSE, no Guide is added — used by \code{bn_write()} which builds
+a single unified Guide for the combined workbook.}
+
+\item{add_images}{Logical. When TRUE (default), network map images are
+rendered and inserted via \code{append_bn_network_maps()}. When FALSE,
+the network map step is skipped entirely — used by \code{bn_write()},
+which calls \code{append_bn_network_maps()} separately so the tab
+ordering places network maps after the prioritization section.}
 }
 \value{
 Workbook object (invisibly).

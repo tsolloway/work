@@ -35,6 +35,8 @@ bn_finalize_network(
   prioritize_threshold = 0.01,
   prioritize_max_rounds = NULL,
   prioritize_noise_tail = 1/3,
+  prioritize_sig_threshold = 0.05,
+  prioritize_marginal_threshold = 0.1,
   tool_tip_edge_prefix = NULL,
   viz_size_node_by_impact = TRUE,
   viz_include_dv = FALSE,
@@ -131,6 +133,14 @@ Default NULL.}
 
 \item{prioritize_noise_tail}{Numeric. Fraction of tail steps for noise floor.
 Default 1/3.}
+
+\item{prioritize_sig_threshold}{Numeric. P-value threshold for the
+"significant" colour band stored in the prioritizations meta. Used by
+downstream writers (\code{bn_prioritize_write}, \code{bn_report}) for
+consistent colour coding. Default 0.05.}
+
+\item{prioritize_marginal_threshold}{Numeric. P-value threshold for the
+"marginal" colour band stored in the prioritizations meta. Default 0.10.}
 
 \item{tool_tip_edge_prefix}{Character or NULL. Prefix for edge tooltips.}
 

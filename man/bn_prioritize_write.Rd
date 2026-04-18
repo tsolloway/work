@@ -13,11 +13,15 @@ bn_prioritize_write(
   community_width = 20,
   label_width = 20,
   combo_width = 40,
-  sig_threshold = 0.05,
-  marginal_threshold = 0.1,
+  sig_threshold = NULL,
+  marginal_threshold = NULL,
   lift = 0.1,
+  min_base_for_boot = NULL,
   very_hide_all = TRUE,
-  path = "."
+  path = ".",
+  wb = NULL,
+  save = TRUE,
+  add_guide = TRUE
 )
 }
 \arguments{
@@ -46,19 +50,41 @@ Default 20.}
 \item{combo_width}{Numeric. Column width for the Combo column.
 Default 40.}
 
-\item{sig_threshold}{Numeric. P-value threshold for green (significant).
-Default 0.05.}
+\item{sig_threshold}{Numeric or NULL. P-value threshold for green
+(significant). If NULL, inherits from \code{result$meta$sig_threshold}
+(set at \code{bn_prioritizations()} / \code{bn_finalize_network()}
+time); falls back to 0.05.}
 
-\item{marginal_threshold}{Numeric. P-value threshold for orange (marginal).
-Default 0.10.}
+\item{marginal_threshold}{Numeric or NULL. P-value threshold for orange
+(marginal). If NULL, inherits from
+\code{result$meta$marginal_threshold}; falls back to 0.10.}
 
 \item{lift}{Numeric. The lift fraction used in the prioritization analysis,
 displayed in the footer. Default 0.10 (10 percent).}
+
+\item{min_base_for_boot}{Integer or NULL. Threshold used for the base /
+warning feedback shown next to the Focus dropdown. When the current
+selection's base is at or above this value, the cell reads
+\code{"Base: N"}; below it the cell reads
+\code{"Results not calculated because base is below N"} in red, and the Focus
+dropdown cell itself turns red. If NULL, inherits from
+\code{result$meta$min_base_for_boot} (falling back to 100).}
 
 \item{very_hide_all}{Logical. If TRUE (default), all sheets except
 Prioritization are set to veryHidden. If FALSE, they are simply hidden.}
 
 \item{path}{Character. Directory to write workbook to. Default \code{"."}.}
+
+\item{wb}{openxlsx workbook object or NULL. When NULL (default), a new
+workbook is created. When provided, prioritization sheets are appended
+to the existing workbook — used by \code{bn_write()}.}
+
+\item{save}{Logical. When TRUE (default), the workbook is saved to disk.
+When FALSE, the workbook is returned without saving.}
+
+\item{add_guide}{Logical. When TRUE (default), a Guide tab is appended.
+When FALSE, no Guide is added — used by \code{bn_write()} which builds
+a single unified Guide for the combined workbook.}
 }
 \value{
 Workbook object (invisibly).

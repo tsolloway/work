@@ -53,6 +53,16 @@
 #'   filename (without extension). If `NULL` (default), auto-generates from
 #'   `title` and `subtitle`.
 #' @param seed Numeric. Passed through to `bn_visual()`. Default `1`.
+#' @param add_additional_results Logical. If `TRUE`, and a passed result
+#'   (e.g., the output of `bn_finalize_network()`) contains `$impacts`
+#'   and/or `$prioritizations`, those tables are rendered as extra tabs
+#'   in each accordion section: "Attribute Impacts", "Community Impacts"
+#'   (when community results are present), and "Prioritization". Styling
+#'   matches the `bn_write()` dashboards (grey header fill, color-coded
+#'   p-values). The Prioritization tab reads its `sig_threshold` and
+#'   `marginal_threshold` from `prioritizations$meta`, so the colour bands
+#'   stay consistent with whatever was set at `bn_finalize_network()` /
+#'   `bn_prioritizations()` time. Default `FALSE`.
 #'
 #' @return The file path (invisibly).
 #'
@@ -90,7 +100,8 @@ bn_report <- function(
     save_name = NULL,
     file = NULL,
     open = TRUE,
-    seed = 1
+    seed = 1,
+    add_additional_results = FALSE
 ){
 
   # --- auto-name from title/subtitle ---
@@ -362,16 +373,76 @@ bn_report <- function(
         comm_id <- glue::glue("{panel_id}_comm")
         memb_id <- glue::glue("{panel_id}_memb")
 
+        # Optional extra tabs: Attribute Impacts, Community Impacts, Prioritization
+        extras_buttons <- character(0)
+        extras_panels  <- character(0)
+
+        if (isTRUE(add_additional_results)) {
+          impacts_res         <- result[["impacts"]]
+          prioritizations_res <- result[["prioritizations"]]
+
+          if (!is.null(impacts_res) && !is.null(impacts_res[["table_attribute"]])) {
+            impact_attr_id <- glue::glue("{panel_id}_impact_attr")
+            impact_attr_html <- .bn_report_render_attribute_impacts_dashboard(
+              impacts_res, result_name = name, dashboard_id = impact_attr_id
+            )
+            extras_buttons <- c(extras_buttons, glue::glue(
+              '    <button class="tab-btn" onclick="switchTab(this, \'{impact_attr_id}\')">Attribute Impacts</button>'
+            ))
+            extras_panels <- c(extras_panels, glue::glue(
+              '  <div id="{impact_attr_id}" class="tab-panel impact-panel" data-result="{name}" data-layout="{type}" data-view="impact_attr">{impact_attr_html}</div>'
+            ))
+          }
+
+          if (!is.null(impacts_res) && !is.null(impacts_res[["table_community"]])) {
+            impact_comm_id <- glue::glue("{panel_id}_impact_comm")
+            impact_comm_html <- .bn_report_render_attribute_impacts_dashboard(
+              impacts_res, result_name = name, dashboard_id = impact_comm_id,
+              is_community = TRUE
+            )
+            extras_buttons <- c(extras_buttons, glue::glue(
+              '    <button class="tab-btn" onclick="switchTab(this, \'{impact_comm_id}\')">Community Impacts</button>'
+            ))
+            extras_panels <- c(extras_panels, glue::glue(
+              '  <div id="{impact_comm_id}" class="tab-panel impact-panel" data-result="{name}" data-layout="{type}" data-view="impact_comm">{impact_comm_html}</div>'
+            ))
+          }
+
+          if (!is.null(prioritizations_res)) {
+            priort_id <- glue::glue("{panel_id}_priort")
+            # Pull thresholds from the prioritizations meta (set at
+            # bn_finalize_network / bn_prioritizations time). Fall back to
+            # standard defaults if absent.
+            priort_meta <- prioritizations_res[["meta"]] %||% list()
+            priort_html <- .bn_report_render_prioritization_dashboard(
+              prioritizations_res, result_name = name, dashboard_id = priort_id,
+              sig_threshold = priort_meta[["sig_threshold"]] %||% 0.05,
+              marginal_threshold = priort_meta[["marginal_threshold"]] %||% 0.10
+            )
+            extras_buttons <- c(extras_buttons, glue::glue(
+              '    <button class="tab-btn" onclick="switchTab(this, \'{priort_id}\')">Prioritization</button>'
+            ))
+            extras_panels <- c(extras_panels, glue::glue(
+              '  <div id="{priort_id}" class="tab-panel priort-panel" data-result="{name}" data-layout="{type}" data-view="prioritization">{priort_html}</div>'
+            ))
+          }
+        }
+
+        extras_buttons_str <- paste(extras_buttons, collapse = "\n")
+        extras_panels_str  <- paste(extras_panels,  collapse = "\n")
+
         glue::glue(
           '<div id="{panel_id}" class="type-panel" style="display: {visible};">',
           '  <div class="tab-bar">',
           '    <button class="tab-btn active" onclick="switchTab(this, \'{attr_id}\')">Attribute</button>',
           '    <button class="tab-btn" onclick="switchTab(this, \'{comm_id}\')">Community</button>',
           '    <button class="tab-btn" onclick="switchTab(this, \'{memb_id}\')">Community Assignments</button>',
+          '{extras_buttons_str}',
           '  </div>',
           '  <div id="{attr_id}" class="tab-panel active attr-panel" data-result="{name}" data-layout="{type}" data-view="attribute">{tab_attr}</div>',
           '  <div id="{comm_id}" class="tab-panel comm-panel" data-result="{name}" data-layout="{type}" data-view="community">{tab_comm}</div>',
           '  <div id="{memb_id}" class="tab-panel membership-panel" data-result="{name}" data-layout="{type}" data-view="membership">{tab_memb}</div>',
+          '{extras_panels_str}',
           '</div>'
         )
 
@@ -532,6 +603,600 @@ bn_report <- function(
   }
 
   results
+}
+
+
+# --- internal: full Impacts dashboard (HTML + inline JS) -------------------
+# Mirrors the bn_impact_write dynamic dashboard: Metric, Focus, and Weight
+# dropdowns; one Index column per subgroup; conditional formatting (green/
+# yellow/red color scale on index, bold-italic for negative raw metric,
+# blackout for p > 0.1, red warning next to Focus when base is below the
+# minimum). Total Impact + Base rows recompute as the dropdowns change.
+# Works for both attribute-level and community-level impact tables —
+# pass is_community = TRUE for the latter (no Variable/Label columns; the
+# leading column is "Community" instead).
+#' @noRd
+.bn_report_render_attribute_impacts_dashboard <- function(
+    impacts, result_name, dashboard_id, is_community = FALSE
+) {
+  if (isTRUE(is_community)) {
+    tbl   <- impacts[["table_community"]]
+    tbl_w <- impacts[["table_community_weighted"]]
+    id_col_name <- "Community"
+    id_col_label <- "Community"
+  } else {
+    tbl   <- impacts[["table_attribute"]]
+    tbl_w <- impacts[["table_attribute_weighted"]]
+    id_col_name <- "Variable"
+    id_col_label <- "Variable"
+  }
+
+  if (is.null(tbl) || !is.data.frame(tbl) || nrow(tbl) == 0) {
+    return('<div class="extra-empty">No impact results.</div>')
+  }
+
+  meta <- impacts[["meta"]] %||% list()
+  has_weights <- !is.null(tbl_w)
+  min_base_for_lift <- meta[["min_base_for_lift"]] %||% 75L
+
+  # --- Parse dimensions from column names (mirrors append_bn_impact_dynamic)
+  all_cols <- names(tbl)
+  sgs <- meta[["subgroups"]]
+  if (is.null(sgs) || length(sgs) == 0) sgs <- "Total"
+  sgs <- sgs[vapply(sgs, function(sg) {
+    any(startsWith(all_cols, paste0(sg, "_")))
+  }, logical(1))]
+  if (length(sgs) == 0) sgs <- "Total"
+
+  sg1 <- sgs[1]
+  sg1_cols <- all_cols[startsWith(all_cols, paste0(sg1, "_"))]
+  metric_suffixes <- sub(paste0("^", sg1, "_"), "", sg1_cols)
+
+  all_lift_suffixes    <- grep("^lift", metric_suffixes, value = TRUE)
+  market_lift_suffixes <- grep("^lift$|^lift_\\d+$", all_lift_suffixes, value = TRUE)
+  brand_lift_suffixes  <- setdiff(all_lift_suffixes, market_lift_suffixes)
+
+  brand_names <- if (length(brand_lift_suffixes) > 0) {
+    unique(sub("^lift_\\d+_|^lift_", "", brand_lift_suffixes))
+  } else character(0)
+  focus_options <- c("Market", brand_names)
+
+  metric_info <- list()
+  for (ml in market_lift_suffixes) {
+    if (ml %in% c("lift", "lift_0")) {
+      metric_info[[length(metric_info) + 1]] <- list(label = "Average Lift", key = ml)
+    } else {
+      pct <- sub("lift_", "", ml)
+      metric_info[[length(metric_info) + 1]] <- list(
+        label = paste0(pct, "% Lift"), key = ml
+      )
+    }
+  }
+  if ("maxVmin" %in% metric_suffixes) {
+    metric_info[[length(metric_info) + 1]] <- list(label = "Max vs Min", key = "maxVmin")
+  }
+  if ("mi" %in% metric_suffixes) {
+    metric_info[[length(metric_info) + 1]] <- list(label = "Mutual Information", key = "mi")
+  }
+
+  # In community mode, Community IS the id column, so no secondary Community
+  # column; there's also no Label.
+  has_community <- (!isTRUE(is_community)) && ("Community" %in% names(tbl))
+  has_label     <- (!isTRUE(is_community)) && ("Label"     %in% names(tbl))
+
+  # --- Flatten one table (unweighted or weighted) into per-row JSON lists
+  .flatten <- function(tt) {
+    lapply(seq_len(nrow(tt)), function(i) {
+      row <- list(
+        id        = as.character(tt[[id_col_name]][i]),
+        community = if (has_community) as.character(tt$Community[i]) else NULL,
+        label     = if (has_label)     as.character(tt$Label[i])     else NULL,
+        sg        = list()
+      )
+      for (sg in sgs) {
+        sg_data <- list()
+        sg_cols <- all_cols[startsWith(all_cols, paste0(sg, "_"))]
+        for (col in sg_cols) {
+          suf <- sub(paste0("^", sg, "_"), "", col)
+          v <- tt[[col]][i]
+          sg_data[[suf]] <- if (is.numeric(v) && is.finite(v)) as.numeric(v) else NA
+        }
+        row$sg[[sg]] <- sg_data
+      }
+      row
+    })
+  }
+
+  data_obj <- list(
+    subgroups         = as.list(sgs),
+    focuses           = as.list(focus_options),
+    metrics           = metric_info,
+    has_weights       = has_weights,
+    has_community     = has_community,
+    has_label         = has_label,
+    min_base_for_lift = as.integer(min_base_for_lift),
+    rows_unweighted   = .flatten(tbl),
+    rows_weighted     = if (has_weights) .flatten(tbl_w) else NULL
+  )
+
+  data_json <- jsonlite::toJSON(data_obj, auto_unbox = TRUE, null = "null", na = "null")
+
+  # --- HTML scaffold
+  # Controls row — Focus always shown. Metric always shown. Weight only if
+  # weighted data is available. Subgroup is rendered as columns (not a dropdown).
+  focus_options_html <- paste0(
+    vapply(focus_options, function(f) {
+      sprintf('<option value="%s">%s</option>',
+        htmltools::htmlEscape(f), htmltools::htmlEscape(f))
+    }, character(1)),
+    collapse = "\n"
+  )
+  metric_options_html <- paste0(
+    vapply(metric_info, function(m) {
+      sprintf('<option value="%s">%s</option>',
+        htmltools::htmlEscape(m$key), htmltools::htmlEscape(m$label))
+    }, character(1)),
+    collapse = "\n"
+  )
+  weight_options_html <- '<option value="Unweighted">Unweighted</option><option value="Weighted">Weighted</option>'
+
+  weight_ctrl <- if (has_weights) {
+    sprintf(paste0(
+      '<label>Weight:</label>',
+      '<select class="impact-ctrl" data-dim="weight">%s</select>',
+      '<span class="impact-warning" data-for="weight"></span>'
+    ), weight_options_html)
+  } else ""
+
+  # Header row: leading cols (sortable, text) + one metric column per
+  # subgroup (sortable, numeric). Subgroup label "_" -> " " for display.
+  leading_headers <- c(
+    sprintf('<th class="sortable" data-sort="text" data-col="id">%s</th>',
+      htmltools::htmlEscape(id_col_label)),
+    if (has_community) '<th class="sortable" data-sort="text" data-col="community">Community</th>' else NULL,
+    if (has_label)     '<th class="sortable" data-sort="text" data-col="label">Label</th>'         else NULL
+  )
+  subgroup_headers <- vapply(sgs, function(sg) {
+    sprintf(
+      '<th class="sg-col sortable metric-col" data-sort="num" data-sg="%s">%s</th>',
+      htmltools::htmlEscape(sg),
+      htmltools::htmlEscape(gsub("_", " ", sg, fixed = TRUE))
+    )
+  }, character(1))
+  header_row <- paste0("<tr>",
+    paste(c(leading_headers, subgroup_headers), collapse = ""),
+    "</tr>")
+
+  # Body row template — one <tr> per row; index cells populated by JS.
+  body_rows <- vapply(seq_along(data_obj$rows_unweighted), function(i) {
+    row <- data_obj$rows_unweighted[[i]]
+    leading_cells <- c(
+      sprintf('<td class="txt-col">%s</td>', htmltools::htmlEscape(row$id)),
+      if (has_community) sprintf('<td class="txt-col">%s</td>',
+        htmltools::htmlEscape(row$community %||% "")) else NULL,
+      if (has_label)     sprintf('<td class="txt-col">%s</td>',
+        htmltools::htmlEscape(row$label %||% "")) else NULL
+    )
+    sg_cells <- vapply(sgs, function(sg) {
+      sprintf('<td class="idx-cell num-col" data-sg="%s" data-row="%d"></td>',
+        htmltools::htmlEscape(sg), i - 1L)
+    }, character(1))
+    paste0("<tr>", paste(c(leading_cells, sg_cells), collapse = ""), "</tr>")
+  }, character(1))
+
+  # Footer rows: Total Impact + Base
+  ti_cells <- vapply(sgs, function(sg) {
+    sprintf('<td class="ti-cell num-col" data-sg="%s"></td>',
+      htmltools::htmlEscape(sg))
+  }, character(1))
+  base_cells <- vapply(sgs, function(sg) {
+    sprintf('<td class="base-cell num-col" data-sg="%s"></td>',
+      htmltools::htmlEscape(sg))
+  }, character(1))
+  n_leading <- length(leading_headers)
+
+  total_row <- paste0(
+    '<tr class="ti-row"><td class="txt-col" colspan="', n_leading, '">Total Impact</td>',
+    paste(ti_cells, collapse = ""), '</tr>'
+  )
+  base_row <- paste0(
+    '<tr class="base-row"><td class="txt-col" colspan="', n_leading, '">Base</td>',
+    paste(base_cells, collapse = ""), '</tr>'
+  )
+
+  # Compose
+  paste0(
+    '<div class="impact-dashboard" data-dashboard-id="', dashboard_id, '">',
+    '  <div class="impact-controls">',
+    '    <label>Metric:</label>',
+    '    <select class="impact-ctrl" data-dim="metric">', metric_options_html, '</select>',
+    '    <label>Focus:</label>',
+    '    <select class="impact-ctrl" data-dim="focus">', focus_options_html, '</select>',
+    '    <span class="impact-warning" data-for="focus"></span>',
+    '    ', weight_ctrl,
+    '  </div>',
+    '  <div class="impact-table-wrap">',
+    '    <table class="impact-table">',
+    '      <thead>', header_row, '</thead>',
+    '      <tbody>', paste(body_rows, collapse = ""), '</tbody>',
+    '      <tfoot>', total_row, base_row, '</tfoot>',
+    '    </table>',
+    '  </div>',
+    '  <div class="impact-footer">',
+    '    <p class="index-note"></p>',
+    '    <p class="muted">Bold italicized index means a negative relationship. ',
+    'Black cells mean an insignificant relationship (p &gt; 0.10). ',
+    'Lift impacts are not calculated when the base is below ', min_base_for_lift, '.</p>',
+    '  </div>',
+    '  <script type="application/json" class="impact-data">', data_json, '</script>',
+    '  <script>(function(){ initImpactDashboard("', dashboard_id, '"); })();</script>',
+    '</div>'
+  )
+}
+
+
+# --- internal: render a bn_impacts table as an HTML table ----------------
+# Consistent with bn_write's dashboard: grey header fill, bold, centered
+# numerics, color-coded p-values (green < 0.05, yellow < 0.10), "Index"
+# column bolded. Returns an HTML string.
+#' @noRd
+.bn_report_render_impacts_table <- function(tbl, is_community = FALSE) {
+  if (is.null(tbl) || !is.data.frame(tbl) || nrow(tbl) == 0) {
+    return('<div class="extra-empty">No impact results to display.</div>')
+  }
+
+  cols <- names(tbl)
+
+  # Order columns consistently: variable, label, community, then metric groups
+  first_cols <- intersect(c("Variable", "Community", "Label"), cols)
+  metric_cols <- setdiff(cols, first_cols)
+  ordered_cols <- c(first_cols, metric_cols)
+  tbl <- tbl[, ordered_cols, drop = FALSE]
+
+  # Detect p-value columns (for coloring) — anything ending in _p_val
+  pval_cols <- grep("_p_val$|^p_val$", names(tbl), value = TRUE)
+  # Detect index columns — anything ending in _index or a bare "index"
+  index_cols <- grep("_index$|^index$|^Index$", names(tbl), value = TRUE)
+  # Numeric columns (for centering / formatting)
+  num_cols <- names(tbl)[vapply(tbl, is.numeric, logical(1))]
+
+  .fmt_cell <- function(col, val) {
+    # Flatten list-column entries and normalize to a single scalar for
+    # formatting. Some impact tables carry list columns (e.g., bootstrap
+    # arrays) that would otherwise trip up is.na() / as.numeric().
+    if (is.list(val)) val <- unlist(val, use.names = FALSE)
+    if (length(val) == 0) return("")
+    if (length(val) > 1) val <- paste(format(val), collapse = ", ")
+    if (is.na(val)) return("")
+    if (col %in% pval_cols) {
+      pv <- suppressWarnings(as.numeric(val))
+      if (!is.finite(pv)) return("")
+      cls <- if (pv < 0.05) "p-sig" else if (pv < 0.10) "p-marg" else "p-nonsig"
+      sprintf('<span class="%s">%s</span>', cls, formatC(pv, format = "f", digits = 3))
+    } else if (col %in% index_cols) {
+      num <- suppressWarnings(as.numeric(val))
+      if (!is.finite(num)) return("")
+      sprintf('<strong>%s</strong>', formatC(num, format = "d"))
+    } else if (col %in% num_cols) {
+      num <- suppressWarnings(as.numeric(val))
+      if (!is.finite(num)) return("")
+      if (abs(num) < 1) formatC(num, format = "f", digits = 3)
+      else formatC(num, format = "f", digits = 2)
+    } else {
+      htmltools::htmlEscape(as.character(val))
+    }
+  }
+
+  .col_class <- function(col) {
+    if (col %in% num_cols) "num-col" else "txt-col"
+  }
+
+  header_html <- paste0(
+    "<tr>",
+    paste(
+      vapply(names(tbl), function(c) {
+        sprintf('<th class="%s">%s</th>', .col_class(c), htmltools::htmlEscape(c))
+      }, character(1)),
+      collapse = ""
+    ),
+    "</tr>"
+  )
+
+  body_rows <- vapply(seq_len(nrow(tbl)), function(i) {
+    cells <- vapply(names(tbl), function(c) {
+      sprintf('<td class="%s">%s</td>', .col_class(c), .fmt_cell(c, tbl[[c]][[i]]))
+    }, character(1))
+    paste0("<tr>", paste(cells, collapse = ""), "</tr>")
+  }, character(1))
+
+  paste0(
+    '<div class="extra-wrap">',
+    '<table class="extra-table">',
+    '<thead>', header_html, '</thead>',
+    '<tbody>', paste(body_rows, collapse = ""), '</tbody>',
+    '</table>',
+    '</div>'
+  )
+}
+
+
+# --- internal: full Prioritization dashboard (HTML + inline JS) ------------
+# Mirrors the bn_prioritize_write dynamic dashboard: Strategy, Search,
+# Subgroup, Focus, Weight dropdowns (only those with multiple values are
+# shown); one row per priority step; conditional formatting on p-values
+# (green < sig_threshold, orange < marginal_threshold, blackout otherwise)
+# and bold-italic for negative marginal gain; Base display + warning next
+# to the Focus dropdown.
+#' @noRd
+.bn_report_render_prioritization_dashboard <- function(
+    priort, result_name, dashboard_id,
+    sig_threshold = 0.05, marginal_threshold = 0.10
+) {
+  registry <- tryCatch(.prioritize_build_registry(priort),
+    error = function(e) list())
+  if (length(registry) == 0) {
+    return('<div class="extra-empty">No prioritization results.</div>')
+  }
+
+  meta <- priort[["meta"]] %||% list()
+  min_base_for_boot <- meta[["min_base_for_boot"]] %||% 100L
+  lift_pct <- meta[["lift"]] %||% 0.10
+
+  # --- Collect unique dimension values in a stable order
+  strategies <- unique(vapply(registry, function(e) e$strategy %||% "", character(1)))
+  searches   <- unique(vapply(registry, function(e) e$search   %||% "", character(1)))
+  subgroups  <- unique(vapply(registry, function(e) e$subgroup %||% "", character(1)))
+  focuses    <- unique(vapply(registry, function(e) e$focus    %||% "", character(1)))
+  weights    <- unique(vapply(registry, function(e) e$weight   %||% "", character(1)))
+
+  # as.list() on each vector prevents jsonlite::toJSON(auto_unbox = TRUE)
+  # from collapsing single-value dimensions to scalar strings (which would
+  # break data.dims[dim][0] lookups in JS).
+  dims <- list(
+    strategy = as.list(strategies),
+    search   = as.list(searches),
+    subgroup = as.list(subgroups),
+    focus    = as.list(focuses),
+    weight   = as.list(weights)
+  )
+  # A control is "active" if it has > 1 unique value (show the dropdown)
+  active_dims <- names(dims)[vapply(dims, length, integer(1)) > 1]
+
+  # --- Build lookup: key = "strategy|search|subgroup|focus|weight" -> data
+  lookup <- list()
+  for (e in registry) {
+    key <- paste(e$strategy, e$search, e$subgroup, e$focus, e$weight, sep = "|")
+    tbl <- e$tbl
+    rows <- if (is.null(tbl) || !is.data.frame(tbl) || nrow(tbl) == 0) {
+      list()
+    } else {
+      lapply(seq_len(nrow(tbl)), function(i) {
+        list(
+          priority          = if ("priority"          %in% names(tbl)) as.integer(tbl$priority[i])          else i - 1L,
+          variable          = if ("variable"          %in% names(tbl)) as.character(tbl$variable[i])        else NA_character_,
+          community         = if ("community"         %in% names(tbl)) as.character(tbl$community[i])       else NULL,
+          label             = if ("label"             %in% names(tbl)) as.character(tbl$label[i])           else NULL,
+          dv_estimate       = if ("dv_estimate"       %in% names(tbl)) as.numeric(tbl$dv_estimate[i])       else NA_real_,
+          marginal_gain     = if ("marginal_gain"     %in% names(tbl)) as.numeric(tbl$marginal_gain[i])     else NA_real_,
+          marginal_gain_pct = if ("marginal_gain_pct" %in% names(tbl)) as.numeric(tbl$marginal_gain_pct[i]) else NA_real_,
+          p_value           = if ("p_value"           %in% names(tbl)) as.numeric(tbl$p_value[i])           else NA_real_
+        )
+      })
+    }
+    lookup[[key]] <- list(
+      rows  = rows,
+      n_obs = if (is.null(e$n_obs)) NA_integer_ else as.integer(e$n_obs)
+    )
+  }
+
+  # Flag presence of optional columns across any tibble
+  has_community <- any(vapply(lookup, function(x) {
+    length(x$rows) > 0 && !is.null(x$rows[[1]]$community)
+  }, logical(1)))
+  has_label <- any(vapply(lookup, function(x) {
+    length(x$rows) > 0 && !is.null(x$rows[[1]]$label)
+  }, logical(1)))
+  # Check ANY row (not just row 1) — the baseline / priority-0 row has
+  # p_value = NA by design even when bootstrap p-values were computed.
+  has_p <- any(vapply(lookup, function(x) {
+    if (length(x$rows) == 0) return(FALSE)
+    any(vapply(x$rows, function(r) {
+      !is.null(r$p_value) && !is.na(r$p_value)
+    }, logical(1)))
+  }, logical(1)))
+
+  data_obj <- list(
+    dims              = dims,
+    active_dims       = as.list(active_dims),
+    has_community     = has_community,
+    has_label         = has_label,
+    has_p             = has_p,
+    sig_threshold     = sig_threshold,
+    marginal_threshold = marginal_threshold,
+    min_base_for_boot = as.integer(min_base_for_boot),
+    lift              = lift_pct,
+    lookup            = lookup
+  )
+
+  data_json <- jsonlite::toJSON(data_obj, auto_unbox = TRUE, null = "null", na = "null")
+
+  # --- HTML scaffold
+  dim_labels <- c(
+    strategy = "Strategy:",
+    search   = "Search:",
+    subgroup = "Subgroup:",
+    focus    = "Focus:",
+    weight   = "Weight:"
+  )
+
+  controls <- character(0)
+  for (dn in names(dims)) {
+    if (!(dn %in% active_dims)) next
+    opts <- dims[[dn]]
+    opts_html <- paste(
+      vapply(opts, function(o) {
+        sprintf('<option value="%s">%s</option>',
+          htmltools::htmlEscape(o), htmltools::htmlEscape(o))
+      }, character(1)),
+      collapse = ""
+    )
+    controls <- c(controls,
+      sprintf(
+        '<label>%s</label><select class="priort-ctrl" data-dim="%s">%s</select>',
+        htmltools::htmlEscape(dim_labels[[dn]]), dn, opts_html
+      )
+    )
+    if (dn == "focus") {
+      controls <- c(controls,
+        '<span class="priort-warning" data-for="focus"></span>')
+    }
+  }
+  controls_html <- paste(controls, collapse = "")
+
+  # Header columns (same as Excel dashboard)
+  headers <- c(
+    '<th class="sortable" data-sort="num" data-col="priority">Step</th>',
+    '<th class="sortable" data-sort="text" data-col="variable">Variable</th>',
+    if (has_community) '<th class="sortable" data-sort="text" data-col="community">Community</th>' else NULL,
+    if (has_label)     '<th class="sortable" data-sort="text" data-col="label">Label</th>'         else NULL,
+    '<th class="sortable" data-sort="num" data-col="dv_estimate">DV Estimate</th>',
+    '<th class="sortable" data-sort="num" data-col="marginal_gain">Marginal Gain</th>',
+    '<th class="sortable" data-sort="num" data-col="marginal_gain_pct">Marginal Gain %</th>',
+    if (has_p)         '<th class="sortable" data-sort="num" data-col="p_value">p-value</th>'     else NULL
+  )
+  header_row <- paste0("<tr>", paste(headers, collapse = ""), "</tr>")
+
+  paste0(
+    '<div class="priort-dashboard" data-dashboard-id="', dashboard_id, '">',
+    '  <div class="priort-controls">', controls_html, '</div>',
+    '  <div class="priort-table-wrap">',
+    '    <table class="priort-table">',
+    '      <thead>', header_row, '</thead>',
+    '      <tbody></tbody>',
+    '    </table>',
+    '  </div>',
+    '  <div class="priort-footer">',
+    '    <p class="priort-footer-base"></p>',
+    '    <p class="muted">Bold italicized numbers indicate a negative relationship. ',
+    'Green p-values are significant (&lt; ', sig_threshold, '); ',
+    'orange are marginal (&lt; ', marginal_threshold, '); ',
+    'red are insignificant. ',
+    'Lift prioritization uses a ', round(lift_pct * 100, 1), '% distribution shift.</p>',
+    '  </div>',
+    '  <script type="application/json" class="priort-data">', data_json, '</script>',
+    '  <script>(function(){ initPriortDashboard("', dashboard_id, '"); })();</script>',
+    '</div>'
+  )
+}
+
+
+# --- internal: render a bn_prioritizations result as HTML tables ---------
+# Legacy helper kept for backward compat; superseded by the dashboard above.
+#' @noRd
+.bn_report_render_prioritization <- function(priort) {
+  tbl_or_list <- priort[["greedy_lift"]] %||% priort[["greedy_max"]]
+  if (is.null(tbl_or_list)) {
+    return('<div class="extra-empty">No prioritization results to display.</div>')
+  }
+
+  .render_priort_table <- function(tbl) {
+    if (is.null(tbl) || !is.data.frame(tbl) || nrow(tbl) == 0) {
+      return('<div class="extra-empty">No data.</div>')
+    }
+
+    # Preferred display columns + order
+    display_cols <- intersect(
+      c("priority", "variable", "community", "label",
+        "dv_estimate", "marginal_gain", "marginal_gain_pct", "p_value"),
+      names(tbl)
+    )
+    tbl <- tbl[, display_cols, drop = FALSE]
+
+    # Column labels
+    col_labels <- c(
+      priority = "Step",
+      variable = "Variable",
+      community = "Community",
+      label = "Label",
+      dv_estimate = "DV Estimate",
+      marginal_gain = "Marginal Gain",
+      marginal_gain_pct = "Marginal Gain %",
+      p_value = "p-value"
+    )
+
+    # Cell formatter — robust to list columns / zero-length / multi-element
+    .fmt <- function(col, val) {
+      if (is.list(val)) val <- unlist(val, use.names = FALSE)
+      if (length(val) == 0) return("")
+      if (length(val) > 1) val <- paste(format(val), collapse = ", ")
+      if (is.na(val)) return("")
+      if (col == "p_value") {
+        pv <- suppressWarnings(as.numeric(val))
+        if (!is.finite(pv)) return("")
+        cls <- if (pv < 0.05) "p-sig" else if (pv < 0.10) "p-marg" else "p-nonsig"
+        sprintf('<span class="%s">%s</span>', cls, formatC(pv, format = "f", digits = 3))
+      } else if (col == "priority") {
+        formatC(as.integer(val))
+      } else if (col %in% c("marginal_gain_pct")) {
+        sprintf("%.2f%%", as.numeric(val) * 100)
+      } else if (col %in% c("dv_estimate", "marginal_gain")) {
+        formatC(as.numeric(val), format = "f", digits = 3)
+      } else {
+        htmltools::htmlEscape(as.character(val))
+      }
+    }
+
+    .cls <- function(col) {
+      if (col %in% c("variable", "community", "label")) "txt-col" else "num-col"
+    }
+
+    header_html <- paste0(
+      "<tr>",
+      paste(
+        vapply(display_cols, function(c) {
+          lbl <- col_labels[[c]] %||% c
+          sprintf('<th class="%s">%s</th>', .cls(c), htmltools::htmlEscape(lbl))
+        }, character(1)),
+        collapse = ""
+      ),
+      "</tr>"
+    )
+
+    body_rows <- vapply(seq_len(nrow(tbl)), function(i) {
+      cells <- vapply(display_cols, function(c) {
+        sprintf('<td class="%s">%s</td>', .cls(c), .fmt(c, tbl[[c]][[i]]))
+      }, character(1))
+      paste0("<tr>", paste(cells, collapse = ""), "</tr>")
+    }, character(1))
+
+    paste0(
+      '<table class="extra-table">',
+      '<thead>', header_html, '</thead>',
+      '<tbody>', paste(body_rows, collapse = ""), '</tbody>',
+      '</table>'
+    )
+  }
+
+  if (is.data.frame(tbl_or_list)) {
+    html <- .render_priort_table(tbl_or_list)
+    return(paste0('<div class="extra-wrap">', html, '</div>'))
+  }
+
+  # Named list: one table per subgroup
+  sections <- vapply(names(tbl_or_list), function(sg_name) {
+    paste0(
+      '<div class="extra-section">',
+      '<h4 class="extra-section-title">', htmltools::htmlEscape(sg_name), '</h4>',
+      .render_priort_table(tbl_or_list[[sg_name]]),
+      '</div>'
+    )
+  }, character(1))
+
+  paste0(
+    '<div class="extra-wrap">',
+    paste(sections, collapse = ""),
+    '</div>'
+  )
 }
 
 
@@ -726,6 +1391,194 @@ bn_report <- function(
     '  color: #444;',
     '}',
     '',
+    '/* extra tabs (impacts / prioritization) — styling matches bn_write */',
+    '.extra-wrap { padding: 20px; overflow-x: auto; }',
+    '.extra-empty { padding: 40px; text-align: center; color: #999; }',
+    '.extra-section { margin-bottom: 24px; }',
+    '.extra-section-title {',
+    '  margin: 0 0 8px 0;',
+    '  font-size: 16px;',
+    '  font-weight: 600;',
+    '  color: #333;',
+    '}',
+    '.extra-table {',
+    '  width: 100%;',
+    '  border-collapse: collapse;',
+    '  font-size: 13px;',
+    '  background: #fff;',
+    '}',
+    '.extra-table thead th {',
+    '  background: #D9D9D9;',
+    '  color: #222;',
+    '  font-weight: 700;',
+    '  padding: 8px 10px;',
+    '  text-align: center;',
+    '  border: 1px solid #BFBFBF;',
+    '}',
+    '.extra-table tbody td {',
+    '  padding: 6px 10px;',
+    '  border: 1px solid #e0e0e0;',
+    '  vertical-align: middle;',
+    '}',
+    '.extra-table tbody td.num-col { text-align: center; }',
+    '.extra-table tbody td.txt-col { text-align: left; }',
+    '.extra-table tbody tr:hover { background: #f8f8f8; }',
+    '.extra-table .p-sig { color: #2E7D32; font-weight: 700; }',
+    '.extra-table .p-marg { color: #E65100; }',
+    '.extra-table .p-nonsig { color: #777; }',
+    '',
+    '/* Attribute Impacts dashboard (mirrors bn_impact_write dynamic) */',
+    '.impact-dashboard { padding: 20px; overflow-x: auto; }',
+    '.impact-controls {',
+    '  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;',
+    '  margin-bottom: 16px; padding: 12px;',
+    '  background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px;',
+    '}',
+    '.impact-controls label {',
+    '  font-weight: 600; color: #333; font-size: 13px;',
+    '}',
+    '.impact-ctrl {',
+    '  padding: 4px 8px; font-size: 13px;',
+    '  border: 1px solid #bbb; border-radius: 3px; background: #fff;',
+    '  transition: background 0.15s, color 0.15s, border-color 0.15s;',
+    '}',
+    '.impact-ctrl.warn {',
+    '  background: #FF0000; color: #FFFFFF; border-color: #FF0000;',
+    '}',
+    '.impact-warning {',
+    '  color: #FF0000; font-weight: 700; font-size: 13px;',
+    '}',
+    '.impact-table-wrap { overflow-x: auto; }',
+    '.impact-table {',
+    '  width: 100%; border-collapse: collapse; font-size: 13px;',
+    '  background: #fff; table-layout: auto;',
+    '}',
+    '.impact-table thead th {',
+    '  background: #D9D9D9; color: #222; font-weight: 700;',
+    '  padding: 8px 10px; text-align: center; vertical-align: middle;',
+    '  border: 1px solid #BFBFBF;',
+    '  white-space: normal; word-wrap: break-word; overflow-wrap: break-word;',
+    '  position: relative;',
+    '}',
+    '.col-resize-handle {',
+    '  position: absolute; top: 0; right: 0;',
+    '  width: 6px; height: 100%;',
+    '  cursor: col-resize; user-select: none; z-index: 1;',
+    '}',
+    '.col-resize-handle:hover { background: rgba(0,0,0,0.15); }',
+    '.impact-table.resizing { cursor: col-resize; user-select: none; }',
+    '.impact-table.resizing * { cursor: col-resize !important; user-select: none !important; }',
+    '.impact-table thead th.metric-col {',
+    '  width: 100px; min-width: 100px; max-width: 100px;',
+    '}',
+    '.impact-table thead th.sortable {',
+    '  cursor: pointer; user-select: none; position: relative;',
+    '  padding-right: 18px;',  # room for the absolutely-positioned triangle
+    '}',
+    '.impact-table thead th.sortable:hover { background: #CCCCCC; }',
+    '.impact-table thead th.sortable::after {',
+    '  content: ""; position: absolute; right: 4px; top: 50%;',
+    '  transform: translateY(-50%);',
+    '  border: 4px solid transparent; opacity: 0.3;',
+    '}',
+    '.impact-table thead th.sortable.sorted-asc::after {',
+    '  border-bottom-color: #333; border-top: 0; opacity: 1;',
+    '  transform: translateY(-50%) translateY(-2px);',
+    '}',
+    '.impact-table thead th.sortable.sorted-desc::after {',
+    '  border-top-color: #333; border-bottom: 0; opacity: 1;',
+    '  transform: translateY(-50%) translateY(2px);',
+    '}',
+    '.impact-table tbody td {',
+    '  padding: 6px 10px; border: 1px solid #e0e0e0; vertical-align: middle;',
+    '}',
+    '.impact-table tbody td.num-col { text-align: center; font-variant-numeric: tabular-nums; }',
+    '.impact-table tbody td.txt-col { text-align: left; }',
+    '.impact-table td.idx-cell.neg { font-weight: 700; font-style: italic; }',
+    '.impact-table td.idx-cell.insig {',
+    '  background: #000 !important; color: #000; /* blackout */',
+    '}',
+    '.impact-table tfoot td {',
+    '  padding: 8px 10px; border: 1px solid #BFBFBF;',
+    '  background: #f5f5f5; font-weight: 600;',
+    '}',
+    '.impact-table tfoot td.num-col { text-align: center; }',
+    '.impact-table tfoot tr.ti-row td { border-top: 2px solid #333; }',
+    '.impact-table tfoot tr.base-row td {',
+    '  color: #595959; font-weight: 400;',
+    '}',
+    '.impact-footer { margin-top: 12px; font-size: 12px; color: #555; }',
+    '.impact-footer .index-note { margin: 0 0 4px 0; font-style: italic; }',
+    '.impact-footer .muted { margin: 0; color: #888; }',
+    '',
+    '/* Prioritization dashboard (mirrors bn_prioritize_write) */',
+    '.priort-dashboard { padding: 20px; overflow-x: auto; }',
+    '.priort-controls {',
+    '  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;',
+    '  margin-bottom: 16px; padding: 12px;',
+    '  background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px;',
+    '}',
+    '.priort-controls label { font-weight: 600; color: #333; font-size: 13px; }',
+    '.priort-ctrl {',
+    '  padding: 4px 8px; font-size: 13px;',
+    '  border: 1px solid #bbb; border-radius: 3px; background: #fff;',
+    '  transition: background 0.15s, color 0.15s, border-color 0.15s;',
+    '}',
+    '.priort-ctrl.warn {',
+    '  background: #FF0000; color: #FFFFFF; border-color: #FF0000;',
+    '}',
+    '.priort-warning { color: #FF0000; font-weight: 700; font-size: 13px; }',
+    '.priort-table-wrap { overflow-x: auto; }',
+    '.priort-table {',
+    '  width: 100%; border-collapse: collapse; font-size: 13px;',
+    '  background: #fff; table-layout: auto;',
+    '}',
+    '.priort-table thead th {',
+    '  background: #D9D9D9; color: #222; font-weight: 700;',
+    '  padding: 8px 10px; text-align: center; vertical-align: middle;',
+    '  border: 1px solid #BFBFBF;',
+    '  white-space: normal; word-wrap: break-word;',
+    '  cursor: pointer; user-select: none; position: relative;',
+    '}',
+    '.priort-table thead th.sortable {',
+    '  padding-right: 18px;',  # room for the absolutely-positioned triangle
+    '}',
+    '.priort-table thead th.sortable:hover { background: #CCCCCC; }',
+    '.priort-table thead th.sortable::after {',
+    '  content: ""; position: absolute; right: 4px; top: 50%;',
+    '  transform: translateY(-50%);',
+    '  border: 4px solid transparent; opacity: 0.3;',
+    '}',
+    '.priort-table thead th.sortable.sorted-asc::after {',
+    '  border-bottom-color: #333; border-top: 0; opacity: 1;',
+    '  transform: translateY(-50%) translateY(-2px);',
+    '}',
+    '.priort-table thead th.sortable.sorted-desc::after {',
+    '  border-top-color: #333; border-bottom: 0; opacity: 1;',
+    '  transform: translateY(-50%) translateY(2px);',
+    '}',
+    '.priort-table tbody td {',
+    '  padding: 6px 10px; border: 1px solid #e0e0e0; vertical-align: middle;',
+    '}',
+    '.priort-table tbody td.num-col {',
+    '  text-align: center; font-variant-numeric: tabular-nums;',
+    '}',
+    '.priort-table tbody td.txt-col { text-align: left; }',
+    '.priort-table tbody td.neg { font-weight: 700; font-style: italic; }',
+    '.priort-table .p-sig   { color: #2E7D32; font-weight: 700; }',
+    '.priort-table .p-marg  { color: #E65100; font-weight: 600; }',
+    '.priort-table .p-insig { color: #B71C1C; }',
+    '.priort-table tfoot td {',
+    '  padding: 8px 10px; border: 1px solid #BFBFBF;',
+    '  background: #f5f5f5; font-weight: 600; text-align: center;',
+    '  color: #595959;',
+    '}',
+    '.priort-footer { margin-top: 12px; font-size: 12px; color: #888; }',
+    '.priort-footer .muted { margin: 0; }',
+    '.priort-footer .priort-footer-base {',
+    '  margin: 0 0 4px 0; font-weight: 700; color: #222;',
+    '}',
+    '',
     '/* loading spinner */',
     '.iframe-wrap { position: relative; }',
     '.spinner-overlay {',
@@ -856,6 +1709,454 @@ bn_report <- function(
     '  } else {',
     '    tbl.style.display = "none"; crd.style.display = "";',
     '  }',
+    '}',
+    '',
+    '/* --- Attribute Impacts dashboard --- */',
+    'function initImpactDashboard(dashId) {',
+    '  var root = document.getElementById(dashId);',
+    '  if (!root) return;',
+    '  var dataScript = root.querySelector("script.impact-data");',
+    '  if (!dataScript) return;',
+    '  var data;',
+    '  try { data = JSON.parse(dataScript.textContent); } catch (e) { return; }',
+    '',
+    '  function currentValue(dim) {',
+    '    var sel = root.querySelector(\'.impact-ctrl[data-dim="\' + dim + \'"]\');',
+    '    return sel ? sel.value : null;',
+    '  }',
+    '',
+    '  function getRows() {',
+    '    var weight = currentValue("weight") || "Unweighted";',
+    '    if (weight === "Weighted" && data.rows_weighted) return data.rows_weighted;',
+    '    return data.rows_unweighted;',
+    '  }',
+    '',
+    '  function metricKey(focus) {',
+    '    var key = currentValue("metric");',
+    '    if (!key) return null;',
+    '    // maxVmin and mi are focus-independent',
+    '    if (key === "maxVmin" || key === "mi") return key;',
+    '    // lift metrics: brand focuses use suffixed columns',
+    '    if (focus && focus !== "Market") return key + "_" + focus;',
+    '    return key;',
+    '  }',
+    '',
+    '  function isInsignificant(sgData) {',
+    '    if (!sgData) return false;',
+    '    var pv = sgData.p_val;',
+    '    return (pv != null && pv > 0.10);',
+    '  }',
+    '',
+    '  function getRaw(row, sg, focus) {',
+    '    var sgData = row.sg[sg]; if (!sgData) return null;',
+    '    var k = metricKey(focus); if (!k) return null;',
+    '    var v = sgData[k];',
+    '    return (v == null ? null : v);',
+    '  }',
+    '',
+    '  function update() {',
+    '    var rows = getRows();',
+    '    var focus = currentValue("focus") || "Market";',
+    '    var mkey = currentValue("metric");',
+    '    var weight = currentValue("weight") || "Unweighted";',
+    '',
+    '    // 1. Compute per-subgroup mean-absolute-raw (denominator for index)',
+    '    data.subgroups.forEach(function(sg) {',
+    '      var absVals = rows.map(function(r) {',
+    '        var v = getRaw(r, sg, focus);',
+    '        return v == null ? 0 : Math.abs(v);',
+    '      });',
+    '      var sum = absVals.reduce(function(a, b) { return a + b; }, 0);',
+    '      var mean = absVals.length > 0 ? (sum / absVals.length) : 0;',
+    '',
+    '      // 2. Fill index cells + collect for color scaling',
+    '      var idxValues = [];',
+    '      rows.forEach(function(r, i) {',
+    '        var cell = root.querySelector(\'td.idx-cell[data-sg="\' + sg + \'"][data-row="\' + i + \'"]\');',
+    '        if (!cell) return;',
+    '        var raw = getRaw(r, sg, focus);',
+    '        var sgData = r.sg[sg];',
+    '        cell.classList.remove("insig", "neg");',
+    '        cell.style.background = "";',
+    '',
+    '        if (raw == null || mean === 0) { cell.textContent = ""; idxValues.push(null); return; }',
+    '        var idx = Math.abs(raw) / mean * 100;',
+    '        cell.textContent = Math.round(idx);',
+    '        idxValues.push(idx);',
+    '',
+    '        if (raw < 0) cell.classList.add("neg");',
+    '        if (isInsignificant(sgData)) cell.classList.add("insig");',
+    '      });',
+    '',
+    '      // 3. Apply 3-color scale across non-null, non-insig cells in this subgroup',
+    '      var vals = idxValues.filter(function(v) { return v != null; });',
+    '      if (vals.length > 0) {',
+    '        var minV = Math.min.apply(null, vals);',
+    '        var maxV = Math.max.apply(null, vals);',
+    '        var midV = (minV + maxV) / 2;',
+    '        rows.forEach(function(r, i) {',
+    '          var cell = root.querySelector(\'td.idx-cell[data-sg="\' + sg + \'"][data-row="\' + i + \'"]\');',
+    '          if (!cell || cell.classList.contains("insig")) return;',
+    '          var v = idxValues[i]; if (v == null) return;',
+    '          cell.style.background = interpolate3(v, minV, midV, maxV);',
+    '        });',
+    '      }',
+    '',
+    '      // 4. Total Impact = sum(|raw|) / count (only for lift-type metrics)',
+    '      var tiCell = root.querySelector(\'td.ti-cell[data-sg="\' + sg + \'"]\');',
+    '      if (tiCell) {',
+    '        if (mkey && (mkey === "maxVmin" || mkey === "mi")) {',
+    '          tiCell.textContent = "";',
+    '        } else if (sum === 0 || rows.length === 0) {',
+    '          tiCell.textContent = "";',
+    '        } else {',
+    '          var ti = sum / rows.length;',
+    '          tiCell.textContent = (ti * 100).toFixed(1) + "%";',
+    '        }',
+    '      }',
+    '',
+    '      // 5. Base cell: base or base_{focus} from the first row',
+    '      var baseCell = root.querySelector(\'td.base-cell[data-sg="\' + sg + \'"]\');',
+    '      if (baseCell && rows.length > 0) {',
+    '        var baseKey = (focus === "Market") ? "base" : ("base_" + focus);',
+    '        var b = rows[0].sg[sg] ? rows[0].sg[sg][baseKey] : null;',
+    '        baseCell.textContent = (b == null) ? "" : Math.round(b);',
+    '      }',
+    '    });',
+    '',
+    '    // 6. Focus warning: red if any subgroup base is below minimum',
+    '    var focusWarn = root.querySelector(\'.impact-warning[data-for="focus"]\');',
+    '    if (focusWarn) {',
+    '      var focusSel = root.querySelector(\'.impact-ctrl[data-dim="focus"]\');',
+    '      focusWarn.textContent = "";',
+    '      focusSel.classList.remove("warn");',
+    '      if (focus !== "Market" && mkey && mkey !== "maxVmin" && mkey !== "mi" && rows.length > 0) {',
+    '        var baseKey = "base_" + focus;',
+    '        var minBaseAll = null;',
+    '        data.subgroups.forEach(function(sg) {',
+    '          var b = rows[0].sg[sg] ? rows[0].sg[sg][baseKey] : null;',
+    '          if (b != null && (minBaseAll == null || b < minBaseAll)) minBaseAll = b;',
+    '        });',
+    '        if (minBaseAll != null && minBaseAll < data.min_base_for_lift) {',
+    '          focusWarn.textContent = "Results not calculated because base is below " + data.min_base_for_lift;',
+    '          focusSel.classList.add("warn");',
+    '        }',
+    '      }',
+    '    }',
+    '',
+    '    // 7. Weight warning: the weight control is irrelevant for maxVmin / mi',
+    '    var weightWarn = root.querySelector(\'.impact-warning[data-for="weight"]\');',
+    '    if (weightWarn) {',
+    '      if (mkey === "maxVmin" || mkey === "mi") {',
+    '        weightWarn.textContent = "Weights don\\u2019t affect this metric";',
+    '      } else {',
+    '        weightWarn.textContent = "";',
+    '      }',
+    '    }',
+    '',
+    '    // 8. Index note below the table',
+    '    var note = root.querySelector(".index-note");',
+    '    if (note) {',
+    '      var desc = metricDescription(mkey);',
+    '      note.textContent = desc;',
+    '    }',
+    '  }',
+    '',
+    '  function metricDescription(mkey) {',
+    '    if (!mkey) return "";',
+    '    if (mkey === "lift" || mkey === "lift_0") {',
+    '      return "Indexed by average market lift. Average lift measures the overall influence of each attribute on the outcome by shifting each attribute level up by 5% and averaging the resulting changes.";',
+    '    }',
+    '    if (mkey.indexOf("lift_") === 0) {',
+    '      var pct = mkey.replace("lift_", "");',
+    '      return "Indexed by " + pct + "% market lift. " + pct + "% lift measures how much the outcome changes when " + pct + "% of respondents for each attribute shift up by one level.";',
+    '    }',
+    '    if (mkey === "maxVmin") {',
+    '      return "Indexed by max vs min impact. Max vs min measures the difference in the outcome between the best-case and worst-case scenario for each attribute.";',
+    '    }',
+    '    if (mkey === "mi") {',
+    '      return "Indexed by mutual information. Mutual information measures the strength of the relationship between each attribute and the outcome.";',
+    '    }',
+    '    return "Indexed by " + mkey;',
+    '  }',
+    '',
+    '  function interpolate3(v, lo, mid, hi) {',
+    '    // 3-stop color scale: red (#f66a6e) -> yellow (#feea8a) -> green (#66bd7d).',
+    '    // Matches bn_impact_write dashboard.',
+    '    if (hi === lo) return "#feea8a";',
+    '    var c1 = [246, 106, 110];  // red',
+    '    var c2 = [254, 234, 138];  // yellow',
+    '    var c3 = [102, 189, 125];  // green',
+    '    function lerp(a, b, t) { return Math.round(a + (b - a) * t); }',
+    '    function mix(ca, cb, t) { return [lerp(ca[0], cb[0], t), lerp(ca[1], cb[1], t), lerp(ca[2], cb[2], t)]; }',
+    '    var c;',
+    '    if (v <= mid) {',
+    '      var t = (v - lo) / (mid - lo || 1);',
+    '      c = mix(c1, c2, Math.max(0, Math.min(1, t)));',
+    '    } else {',
+    '      var t2 = (v - mid) / (hi - mid || 1);',
+    '      c = mix(c2, c3, Math.max(0, Math.min(1, t2)));',
+    '    }',
+    '    return "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")";',
+    '  }',
+    '',
+    '  root.querySelectorAll(".impact-ctrl").forEach(function(sel) {',
+    '    sel.addEventListener("change", update);',
+    '  });',
+    '',
+    '  // --- Sortable headers ---',
+    '  // Click toggles asc -> desc -> original (no sort) on the clicked column.',
+    '  // Sorting operates on the <tbody> rows; <tfoot> (Total Impact + Base) is untouched.',
+    '  var tbody = root.querySelector(".impact-table tbody");',
+    '  var originalOrder = Array.from(tbody.querySelectorAll("tr"));',
+    '  root.querySelectorAll(".impact-table thead th.sortable").forEach(function(th, colIdx) {',
+    '    th.addEventListener("click", function() {',
+    '      var state = th.getAttribute("data-sort-state") || "none";',
+    '      var next = state === "none" ? "asc" : (state === "asc" ? "desc" : "none");',
+    '      // Reset state on all headers',
+    '      root.querySelectorAll(".impact-table thead th.sortable").forEach(function(x) {',
+    '        x.classList.remove("sorted-asc", "sorted-desc");',
+    '        x.setAttribute("data-sort-state", "none");',
+    '      });',
+    '      if (next === "none") {',
+    '        originalOrder.forEach(function(tr) { tbody.appendChild(tr); });',
+    '        return;',
+    '      }',
+    '      th.classList.add(next === "asc" ? "sorted-asc" : "sorted-desc");',
+    '      th.setAttribute("data-sort-state", next);',
+    '      var sortType = th.getAttribute("data-sort") || "text";',
+    '      var rows = Array.from(tbody.querySelectorAll("tr"));',
+    '      // Find actual index of this th among thead cells (stable regardless of col order)',
+    '      var headerCells = Array.from(th.parentElement.children);',
+    '      var idx = headerCells.indexOf(th);',
+    '      rows.sort(function(a, b) {',
+    '        var av = a.children[idx] ? a.children[idx].textContent.trim() : "";',
+    '        var bv = b.children[idx] ? b.children[idx].textContent.trim() : "";',
+    '        if (sortType === "num") {',
+    '          var an = parseFloat(av); var bn = parseFloat(bv);',
+    '          // Push blanks to the bottom regardless of direction',
+    '          if (isNaN(an) && isNaN(bn)) return 0;',
+    '          if (isNaN(an)) return 1;',
+    '          if (isNaN(bn)) return -1;',
+    '          return next === "asc" ? an - bn : bn - an;',
+    '        }',
+    '        var cmp = av.localeCompare(bv, undefined, { sensitivity: "base" });',
+    '        return next === "asc" ? cmp : -cmp;',
+    '      });',
+    '      rows.forEach(function(tr) { tbody.appendChild(tr); });',
+    '    });',
+    '  });',
+    '',
+    '  // --- Column resize ---',
+    '  // Drag the right edge of any header to resize. Resizing a metric',
+    '  // column resizes ALL metric columns in sync (so they stay uniform).',
+    '  var impactTable = root.querySelector(".impact-table");',
+    '  root.querySelectorAll(".impact-table thead th").forEach(function(th) {',
+    '    var handle = document.createElement("div");',
+    '    handle.className = "col-resize-handle";',
+    '    th.appendChild(handle);',
+    '    // Prevent the handle from firing sort clicks',
+    '    handle.addEventListener("click", function(e) { e.stopPropagation(); });',
+    '    handle.addEventListener("mousedown", function(e) {',
+    '      e.preventDefault(); e.stopPropagation();',
+    '      var startX = e.clientX;',
+    '      var startW = th.offsetWidth;',
+    '      var isMetric = th.classList.contains("metric-col");',
+    '      impactTable.classList.add("resizing");',
+    '      var suppressClick = function(ev) { ev.stopPropagation(); ev.preventDefault(); };',
+    '      function applyWidth(w) {',
+    '        var targets = isMetric',
+    '          ? root.querySelectorAll(".impact-table thead th.metric-col")',
+    '          : [th];',
+    '        targets.forEach(function(t) {',
+    '          t.style.width = w + "px";',
+    '          t.style.minWidth = w + "px";',
+    '          t.style.maxWidth = w + "px";',
+    '        });',
+    '      }',
+    '      function onMove(ev) {',
+    '        var newW = Math.max(40, startW + (ev.clientX - startX));',
+    '        applyWidth(newW);',
+    '      }',
+    '      function onUp() {',
+    '        document.removeEventListener("mousemove", onMove);',
+    '        document.removeEventListener("mouseup", onUp);',
+    '        impactTable.classList.remove("resizing");',
+    '        // Swallow the trailing click so sort doesn\\u2019t fire',
+    '        th.addEventListener("click", suppressClick, { once: true, capture: true });',
+    '      }',
+    '      document.addEventListener("mousemove", onMove);',
+    '      document.addEventListener("mouseup", onUp);',
+    '    });',
+    '  });',
+    '',
+    '  update();',
+    '}',
+    '',
+    '/* --- Prioritization dashboard --- */',
+    'function initPriortDashboard(dashId) {',
+    '  var root = document.getElementById(dashId);',
+    '  if (!root) return;',
+    '  var dataScript = root.querySelector("script.priort-data");',
+    '  if (!dataScript) return;',
+    '  var data;',
+    '  try { data = JSON.parse(dataScript.textContent); } catch (e) { return; }',
+    '',
+    '  function ctrl(dim) {',
+    '    return root.querySelector(\'.priort-ctrl[data-dim="\' + dim + \'"]\');',
+    '  }',
+    '  function currentValue(dim) {',
+    '    var sel = ctrl(dim);',
+    '    if (sel) return sel.value;',
+    '    // Inactive dim — use the single available value',
+    '    return (data.dims[dim] && data.dims[dim][0]) || "";',
+    '  }',
+    '',
+    '  function currentKey() {',
+    '    return [currentValue("strategy"), currentValue("search"),',
+    '            currentValue("subgroup"), currentValue("focus"),',
+    '            currentValue("weight")].join("|");',
+    '  }',
+    '',
+    '  function pvalClass(pv) {',
+    '    if (pv == null || isNaN(pv)) return "";',
+    '    if (pv < data.sig_threshold) return "p-sig";',
+    '    if (pv < data.marginal_threshold) return "p-marg";',
+    '    return "p-insig";',
+    '  }',
+    '',
+    '  var tbody = root.querySelector(".priort-table tbody");',
+    '  var footerBase = root.querySelector(".priort-footer-base");',
+    '  var focusWarn = root.querySelector(\'.priort-warning[data-for="focus"]\');',
+    '  var focusSel = root.querySelector(\'.priort-ctrl[data-dim="focus"]\');',
+    '',
+  '  function whiteToGreen(v, lo, hi) {',
+    '    // Linear interpolation white (#FFFFFF) -> green (#66bd7d)',
+    '    if (v == null || isNaN(v)) return "";',
+    '    if (hi === lo) return "#FFFFFF";',
+    '    var t = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));',
+    '    var r = Math.round(255 + (102 - 255) * t);',
+    '    var g = Math.round(255 + (189 - 255) * t);',
+    '    var b = Math.round(255 + (125 - 255) * t);',
+    '    return "rgb(" + r + "," + g + "," + b + ")";',
+    '  }',
+    '',
+    '  function render() {',
+    '    var key = currentKey();',
+    '    var entry = data.lookup[key] || { rows: [], n_obs: null };',
+    '',
+    '    // Base — bold line below the table',
+    '    var nObs = entry.n_obs;',
+    '    var baseText = (nObs != null && !isNaN(nObs)) ? ("Base: " + Math.round(nObs)) : "";',
+    '    if (footerBase) footerBase.textContent = baseText;',
+    '',
+    '    // Focus warning',
+    '    if (focusSel) focusSel.classList.remove("warn");',
+    '    if (focusWarn) focusWarn.textContent = "";',
+    '    if (nObs != null && !isNaN(nObs) && nObs < data.min_base_for_boot) {',
+    '      if (focusWarn) focusWarn.textContent = "Results not calculated because base is below " + data.min_base_for_boot;',
+    '      if (focusSel) focusSel.classList.add("warn");',
+    '    }',
+    '',
+    '    // Precompute min/max for each gradient-scaled metric column',
+    '    function rangeOf(key) {',
+    '      var vals = entry.rows.map(function(r) { return r[key]; })',
+    '        .filter(function(v) { return v != null && !isNaN(v); });',
+    '      if (vals.length === 0) return null;',
+    '      return { lo: Math.min.apply(null, vals), hi: Math.max.apply(null, vals) };',
+    '    }',
+    '    var rDV  = rangeOf("dv_estimate");',
+    '    var rMG  = rangeOf("marginal_gain");',
+    '    var rMGP = rangeOf("marginal_gain_pct");',
+    '',
+    '    // Rebuild body',
+    '    tbody.innerHTML = "";',
+    '    entry.rows.forEach(function(r) {',
+    '      var tr = document.createElement("tr");',
+    '      var cells = [];',
+    '      cells.push({cls: \'num-col\', text: r.priority});',
+    '      cells.push({cls: \'txt-col\', text: r.variable});',
+    '      if (data.has_community) cells.push({cls: \'txt-col\', text: r.community == null ? "" : r.community});',
+    '      if (data.has_label)     cells.push({cls: \'txt-col\', text: r.label     == null ? "" : r.label});',
+    '      // DV Estimate — white -> green gradient',
+    '      cells.push({',
+    '        cls: \'num-col\',',
+    '        text: r.dv_estimate == null ? "" : r.dv_estimate.toFixed(3),',
+    '        bg: rDV ? whiteToGreen(r.dv_estimate, rDV.lo, rDV.hi) : ""',
+    '      });',
+    '      // Marginal Gain — gradient + bold italic if negative',
+    '      cells.push({',
+    '        cls: \'num-col\' + (r.marginal_gain != null && r.marginal_gain < 0 ? \' neg\' : \'\'),',
+    '        text: r.marginal_gain == null ? "" : r.marginal_gain.toFixed(3),',
+    '        bg: rMG ? whiteToGreen(r.marginal_gain, rMG.lo, rMG.hi) : ""',
+    '      });',
+    '      // Marginal Gain % — gradient + bold italic if negative',
+    '      cells.push({',
+    '        cls: \'num-col\' + (r.marginal_gain_pct != null && r.marginal_gain_pct < 0 ? \' neg\' : \'\'),',
+    '        text: r.marginal_gain_pct == null ? "" : (r.marginal_gain_pct * 100).toFixed(2) + "%",',
+    '        bg: rMGP ? whiteToGreen(r.marginal_gain_pct, rMGP.lo, rMGP.hi) : ""',
+    '      });',
+    '      // p-value — green / orange / red coloring (not blackout)',
+    '      if (data.has_p) {',
+    '        var pCls = pvalClass(r.p_value);',
+    '        cells.push({',
+    '          cls: \'num-col priort-pval \' + pCls,',
+    '          text: (r.p_value == null || isNaN(r.p_value)) ? "" : r.p_value.toFixed(3)',
+    '        });',
+    '      }',
+    '      cells.forEach(function(c) {',
+    '        var td = document.createElement("td");',
+    '        td.className = c.cls;',
+    '        td.textContent = c.text;',
+    '        if (c.bg) td.style.background = c.bg;',
+    '        tr.appendChild(td);',
+    '      });',
+    '      tbody.appendChild(tr);',
+    '    });',
+    '  }',
+    '',
+    '  // Wire dropdowns',
+    '  root.querySelectorAll(".priort-ctrl").forEach(function(sel) {',
+    '    sel.addEventListener("change", render);',
+    '  });',
+    '',
+    '  // Sortable headers (resets on each render because table rebuilds)',
+    '  root.querySelectorAll(".priort-table thead th.sortable").forEach(function(th) {',
+    '    th.addEventListener("click", function() {',
+    '      var state = th.getAttribute("data-sort-state") || "none";',
+    '      var next = state === "none" ? "asc" : (state === "asc" ? "desc" : "none");',
+    '      root.querySelectorAll(".priort-table thead th.sortable").forEach(function(x) {',
+    '        x.classList.remove("sorted-asc", "sorted-desc");',
+    '        x.setAttribute("data-sort-state", "none");',
+    '      });',
+    '      if (next === "none") { render(); return; }',
+    '      th.classList.add(next === "asc" ? "sorted-asc" : "sorted-desc");',
+    '      th.setAttribute("data-sort-state", next);',
+    '      var sortType = th.getAttribute("data-sort") || "text";',
+    '      var tb = root.querySelector(".priort-table tbody");',
+    '      var rows = Array.from(tb.querySelectorAll("tr"));',
+    '      var headerCells = Array.from(th.parentElement.children);',
+    '      var idx = headerCells.indexOf(th);',
+    '      rows.sort(function(a, b) {',
+    '        var av = a.children[idx] ? a.children[idx].textContent.trim() : "";',
+    '        var bv = b.children[idx] ? b.children[idx].textContent.trim() : "";',
+    '        if (sortType === "num") {',
+    '          // Strip "%" for numeric compare',
+    '          var an = parseFloat(av.replace("%", ""));',
+    '          var bn = parseFloat(bv.replace("%", ""));',
+    '          if (isNaN(an) && isNaN(bn)) return 0;',
+    '          if (isNaN(an)) return 1;',
+    '          if (isNaN(bn)) return -1;',
+    '          return next === "asc" ? an - bn : bn - an;',
+    '        }',
+    '        var cmp = av.localeCompare(bv, undefined, { sensitivity: "base" });',
+    '        return next === "asc" ? cmp : -cmp;',
+    '      });',
+    '      rows.forEach(function(tr) { tb.appendChild(tr); });',
+    '    });',
+    '  });',
+    '',
+    '  render();',
     '}',
     '',
     'var legendEdits = {};',
