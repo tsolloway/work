@@ -21,7 +21,9 @@ bn_write(
   community_width = 20,
   label_width = "auto",
   combo_width = 40,
-  network_type = "none",
+  network_type = "gravity",
+  attribute_map_font_size = 30,
+  community_map_font_size = 30,
   very_hide_all = TRUE,
   min_base_for_lift = NULL,
   min_base_for_sim = NULL,
@@ -60,9 +62,17 @@ portion only; prioritization is always dynamic.}
 \item{variable_width, community_width, label_width, combo_width}{Column widths.}
 
 \item{network_type}{Character. Layout type for the network map sheets.
-One of \code{"none"} (default — skips network maps),
-\code{"gravity"}, \code{"charge"}, or \code{"hierarchy"}. See
-\code{bn_visual()} for layout details.}
+One of \code{"gravity"} (default), \code{"none"} (skips network maps),
+\code{"charge"}, or \code{"hierarchy"}. See \code{bn_visual()} for
+layout details.}
+
+\item{attribute_map_font_size}{Numeric or NULL. Node-label font size (in
+pixels) for the Attribute Network PNG. Default 30. Set NULL to fall
+back to vis.js's built-in 14 px.}
+
+\item{community_map_font_size}{Numeric or NULL. Node-label font size (in
+pixels) for the Community Network PNG. Default 30. Set NULL to fall
+back to vis.js's built-in 14 px.}
 
 \item{very_hide_all}{Logical. Use veryHidden (TRUE) or hidden (FALSE) for
 helper sheets.}
@@ -80,7 +90,8 @@ prioritization dashboard. If NULL, inherits from
 \item{path}{Character. Directory to write the workbook to.}
 }
 \value{
-Workbook object (invisibly). Side effect: writes the xlsx file.
+The full path of the written \code{.xlsx} file (invisibly). Side
+effect: writes the xlsx file.
 }
 \description{
 Takes the output of \code{bn_finalize_network()} and writes

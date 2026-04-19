@@ -27,7 +27,8 @@ bn_visual(
   save_file_name = "Network Visual",
   png_width = 1200,
   png_height = 900,
-  png_delay = 5,
+  png_delay = 3,
+  font_size = NULL,
   seed = 1
 )
 }
@@ -136,7 +137,13 @@ saved HTML or PNG files. Default \code{"Network Visual"}.}
 \item{png_height}{Numeric. PNG capture height in pixels. Default 900.}
 
 \item{png_delay}{Numeric. Seconds to wait for physics stabilization before
-capturing PNG. Default 5.}
+capturing PNG. Default 3. Bump if you see unsettled/unstable layouts in
+the rendered image on larger networks.}
+
+\item{font_size}{Numeric or NULL. Override the node-label font size (in
+pixels) by applying \code{visNetwork::visNodes(font = list(size = ...))}.
+Default NULL keeps vis.js's built-in 14 px. In interactive mode the
+in-iframe font slider can still adjust this afterwards.}
 
 \item{seed}{Numeric. Random seed for reproducible layout placement.}
 }

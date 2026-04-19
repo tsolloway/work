@@ -21,7 +21,9 @@ bn_impact_write(
   variable_width = 20,
   community_width = 20,
   label_width = "auto",
-  network_type = "none",
+  network_type = "gravity",
+  attribute_map_font_size = 30,
+  community_map_font_size = 30,
   very_hide_all = TRUE,
   min_base_for_lift = NULL,
   min_base_for_sim = NULL,
@@ -97,10 +99,18 @@ community results are present. Default 20.}
 column. Default \code{"auto"}.}
 
 \item{network_type}{Character. Layout type for the network map sheets
-(rendered via \code{bn_visual()}). One of \code{"none"} (default —
-skips network maps), \code{"gravity"}, \code{"charge"}, or
+(rendered via \code{bn_visual()}). One of \code{"gravity"} (default),
+\code{"none"} (skips network maps), \code{"charge"}, or
 \code{"hierarchy"}. Only used when \code{bn_obj} is the full
 \code{bn_finalize_network()} output.}
+
+\item{attribute_map_font_size}{Numeric or NULL. Node-label font size (in
+pixels) for the Attribute Network PNG. Default 30. Set NULL to fall
+back to vis.js's built-in 14 px.}
+
+\item{community_map_font_size}{Numeric or NULL. Node-label font size (in
+pixels) for the Community Network PNG. Default 30. Set NULL to fall
+back to vis.js's built-in 14 px.}
 
 \item{very_hide_all}{Logical. If TRUE (default), all hidden sheets are set to
 veryHidden. If FALSE, they are simply hidden.}

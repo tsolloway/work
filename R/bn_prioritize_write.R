@@ -137,7 +137,10 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   # 1. Prioritization sheet (created first)
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, "Prioritization", tabColour = "#FFFFFF", gridLines = FALSE)
+  # No tabColour — let Excel render the default tab strip color, matching
+  # the Network Drivers / Simulator dashboards. (Was previously "#FFFFFF",
+  # which painted the tab invisible against Excel's default tab background.)
+  openxlsx::addWorksheet(wb, "Prioritization", gridLines = FALSE)
 
   # ---------------------------------------------------------------------------
   # 2. Write hidden data sheets. Phantom entries (skipped slices) have no

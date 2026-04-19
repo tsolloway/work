@@ -18,7 +18,8 @@ append_bn_simulator(
   shift_range = c(-0.25, 0.25),
   shift_step = 0.05,
   min_base_for_sim = 75,
-  sim_dv_only = FALSE
+  sim_dv_only = FALSE,
+  weight = NULL
 )
 }
 \arguments{
@@ -46,6 +47,13 @@ focus is never skipped.}
 \item{sim_dv_only}{Logical. When TRUE, the simulator only provides results
 for the dependent variable as the target. Dramatically shrinks stored
 data by removing all non-DV target columns and rows. Default FALSE.}
+
+\item{weight}{Character or NULL. Name of a survey-weight column in
+\code{df}. When provided, the per-IV level frequencies that feed
+\code{bn_freq_prob_shift()} are computed as sums of \code{weight}
+(via \code{stats::xtabs()}) rather than raw counts — so the
+"Mean" display and the freq-shifted EVs reflect the weighted
+distribution. NULL (default) keeps the original unweighted behaviour.}
 }
 \value{
 The modified workbook object (invisibly).

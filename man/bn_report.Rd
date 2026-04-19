@@ -22,7 +22,8 @@ bn_report(
   file = NULL,
   open = TRUE,
   seed = 1,
-  add_additional_results = FALSE
+  add_additional_results = FALSE,
+  results_excel = NULL
 )
 }
 \arguments{
@@ -96,6 +97,18 @@ p-values). The Prioritization tab reads its \code{sig_threshold} and
 \code{marginal_threshold} from \code{prioritizations$meta}, so the colour bands
 stay consistent with whatever was set at \code{bn_finalize_network()} /
 \code{bn_prioritizations()} time. Default \code{FALSE}.}
+
+\item{results_excel}{Optional. Path(s) to prebaked \code{.xlsx} file(s) (e.g.
+produced by \code{bn_write()}) to embed as \strong{Download Report} buttons on
+each accordion. Accepted shapes:
+\itemize{
+\item \code{NULL} (default) — no Download Report buttons.
+\item A single string — used for the (single) result.
+\item A named list/vector — matched to \code{results} by name; missing or NULL
+slots get no button.
+\item An unnamed list/vector — matched to \code{results} by position; trailing
+unmatched slots get no button.
+}}
 }
 \value{
 The file path (invisibly).

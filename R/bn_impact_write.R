@@ -52,10 +52,16 @@
 #' @param label_width Numeric or \code{"auto"}. Column width for the Label
 #'   column. Default \code{"auto"}.
 #' @param network_type Character. Layout type for the network map sheets
-#'   (rendered via \code{bn_visual()}). One of \code{"none"} (default —
-#'   skips network maps), \code{"gravity"}, \code{"charge"}, or
+#'   (rendered via \code{bn_visual()}). One of \code{"gravity"} (default),
+#'   \code{"none"} (skips network maps), \code{"charge"}, or
 #'   \code{"hierarchy"}. Only used when \code{bn_obj} is the full
 #'   \code{bn_finalize_network()} output.
+#' @param attribute_map_font_size Numeric or NULL. Node-label font size (in
+#'   pixels) for the Attribute Network PNG. Default 30. Set NULL to fall
+#'   back to vis.js's built-in 14 px.
+#' @param community_map_font_size Numeric or NULL. Node-label font size (in
+#'   pixels) for the Community Network PNG. Default 30. Set NULL to fall
+#'   back to vis.js's built-in 14 px.
 #' @param very_hide_all Logical. If TRUE (default), all hidden sheets are set to
 #'   veryHidden. If FALSE, they are simply hidden.
 #' @param min_base_for_lift Integer or NULL. Minimum sample size used for
@@ -103,7 +109,9 @@ bn_impact_write <- function(
     variable_width = 20,
     community_width = 20,
     label_width = "auto",
-    network_type = "none",
+    network_type = "gravity",
+    attribute_map_font_size = 30,
+    community_map_font_size = 30,
     very_hide_all = TRUE,
     min_base_for_lift = NULL,
     min_base_for_sim = NULL,
@@ -274,7 +282,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
         shift_range = shift_range,
         shift_step = shift_step,
         min_base_for_sim = min_base_for_sim,
-        sim_dv_only = sim_dv_only
+        sim_dv_only = sim_dv_only,
+        weight = meta[["weight"]]
       )
       # _sim_data and _sim_lookup sheets added — hide them. Only touch
       # visibility on sheets WE added (so external callers like bn_write
@@ -296,7 +305,9 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     # prioritization section has been added.
     if (isTRUE(add_images) && !is.null(bn_full)) {
       wb <- append_bn_network_maps(wb = wb, bn_full = bn_full,
-        network_type = network_type)
+        network_type = network_type,
+        attribute_font_size = attribute_map_font_size,
+        community_font_size = community_map_font_size)
     }
 
     # Guide tab — added last so it appears as the final tab
@@ -411,7 +422,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
         shift_range = shift_range,
         shift_step = shift_step,
         min_base_for_sim = min_base_for_sim,
-        sim_dv_only = sim_dv_only
+        sim_dv_only = sim_dv_only,
+        weight = meta[["weight"]]
       )
     }
 
@@ -420,7 +432,9 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     # prioritization section has been added.
     if (isTRUE(add_images) && !is.null(bn_full)) {
       wb <- append_bn_network_maps(wb = wb, bn_full = bn_full,
-        network_type = network_type)
+        network_type = network_type,
+        attribute_font_size = attribute_map_font_size,
+        community_font_size = community_map_font_size)
     }
 
     # Guide tab — added last so it appears as the final tab

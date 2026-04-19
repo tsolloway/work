@@ -506,6 +506,23 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       });
 
       // -------------------- Snapshot Helpers (always available) --------------------
+      // Cache each node's color at first draw, before vis.js's highlightNearest
+      // can ever mutate the DataSet entries (selection fades non-neighbors to
+      // gray). We always serialize from this cache instead of reading the live
+      // node state, so a save while a node is highlighted round-trips the
+      // original palette. The cache is a deep clone so later vis.js mutations
+      // cannot bleed in by reference.
+      var originalNodeColors = {};
+      (function snapshotOriginalColors() {
+        try {
+          network.body.data.nodes.get().forEach(function(n) {
+            if (n.color !== undefined && n.color !== null) {
+              originalNodeColors[n.id] = JSON.parse(JSON.stringify(n.color));
+            }
+          });
+        } catch(e) {}
+      })();
+
       // helper: snapshot full node state (positions + edits)
       function getNodeSnapshot() {
         var nodes = network.body.data.nodes.get();
@@ -520,7 +537,8 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
           };
           if (n.value !== undefined) snap.value = n.value;
           if (n.font && n.font.size) snap.fontSize = n.font.size;
-          if (n.color) snap.color = n.color;
+          // Use the cached original color, never the (possibly faded) live one.
+          if (originalNodeColors[n.id] !== undefined) snap.color = originalNodeColors[n.id];
           return snap;
         });
       }
@@ -913,6 +931,13 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         // parent tells us to re-fit (e.g. after becoming visible)
         if (evt.data.type === 'fitNetwork') {
           network.fit();
+        }
+
+        // parent asks every iframe to deselect any active node before save,
+        // so the saved visual state matches what loads back (no stuck
+        // highlight/fade). Idempotent: harmless if nothing is selected.
+        if (evt.data.type === 'deselectAll') {
+          try { network.unselectAll(); } catch(e) {}
         }
 
         // consolidated edit sync from parent (on layout/tab switch)

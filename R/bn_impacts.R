@@ -179,11 +179,18 @@ bn_impacts <- function(
     }
   }
 
+  # The unweighted attribute run is what we borrow meta from, so its
+  # meta$weight is always NULL even if the user supplied one. Stamp the
+  # caller's weight onto the merged meta so downstream writers (e.g.
+  # append_bn_simulator) can see it.
+  merged_meta <- attr_result[["meta"]]
+  merged_meta[["weight"]] <- weight
+
   list(
     table_attribute          = attr_result[["table"]],
     table_attribute_weighted = if (!is.null(attr_weighted)) attr_weighted[["table"]] else NULL,
     table_community          = if (!is.null(comm_result)) comm_result[["table"]] else NULL,
     table_community_weighted = if (!is.null(comm_weighted)) comm_weighted[["table"]] else NULL,
-    meta                     = attr_result[["meta"]]
+    meta                     = merged_meta
   )
 }

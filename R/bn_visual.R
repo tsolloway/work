@@ -88,7 +88,12 @@
 #' @param png_width Numeric. PNG capture width in pixels. Default 1200.
 #' @param png_height Numeric. PNG capture height in pixels. Default 900.
 #' @param png_delay Numeric. Seconds to wait for physics stabilization before
-#'   capturing PNG. Default 5.
+#'   capturing PNG. Default 3. Bump if you see unsettled/unstable layouts in
+#'   the rendered image on larger networks.
+#' @param font_size Numeric or NULL. Override the node-label font size (in
+#'   pixels) by applying \code{visNetwork::visNodes(font = list(size = ...))}.
+#'   Default NULL keeps vis.js's built-in 14 px. In interactive mode the
+#'   in-iframe font slider can still adjust this afterwards.
 #' @param seed Numeric. Random seed for reproducible layout placement.
 #'
 #' @details
@@ -166,7 +171,8 @@ bn_visual <- function(
     save_file_name = "Network Visual",
     png_width = 1200,
     png_height = 900,
-    png_delay = 5,
+    png_delay = 3,
+    font_size = NULL,
     seed = 1
 ){
 
@@ -261,6 +267,13 @@ bn_visual <- function(
     height = vs_height,
     width = vs_width
   )
+
+  # Optional node-label font size override. Default (NULL) leaves vis.js's
+  # built-in 14 px in place; the iframe font slider can still adjust it
+  # afterwards in interactive mode.
+  if (!is.null(font_size)) {
+    viz <- viz %>% visNetwork::visNodes(font = list(size = font_size))
+  }
 
   # ensure reproducibility
   if (!is.null(seed)) viz <- viz %>% visNetwork::visLayout(randomSeed = seed)

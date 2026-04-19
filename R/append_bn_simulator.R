@@ -22,6 +22,12 @@
 #' @param sim_dv_only Logical. When TRUE, the simulator only provides results
 #'   for the dependent variable as the target. Dramatically shrinks stored
 #'   data by removing all non-DV target columns and rows. Default FALSE.
+#' @param weight Character or NULL. Name of a survey-weight column in
+#'   \code{df}. When provided, the per-IV level frequencies that feed
+#'   \code{bn_freq_prob_shift()} are computed as sums of \code{weight}
+#'   (via \code{stats::xtabs()}) rather than raw counts — so the
+#'   "Mean" display and the freq-shifted EVs reflect the weighted
+#'   distribution. NULL (default) keeps the original unweighted behaviour.
 #'
 #' @return The modified workbook object (invisibly).
 #'
@@ -40,7 +46,8 @@ append_bn_simulator <- function(
     shift_range = c(-0.25, 0.25),
     shift_step = 0.05,
     min_base_for_sim = 75,
-    sim_dv_only = FALSE
+    sim_dv_only = FALSE,
+    weight = NULL
 ) {
 
   # Track ALL (subgroup, focus) slices and their observed base size. The
@@ -62,6 +69,15 @@ append_bn_simulator <- function(
   }
 
   all_posteriors <- list()
+
+  # Helper: extract probabilities from querygrain result (simplify = FALSE)
+  .extract_probs <- function(result) {
+    purrr::map(result, function(x) {
+      p <- as.numeric(x)
+      names(p) <- dimnames(x)[[1]]
+      p
+    })
+  }
 
   for (sg in names(sg_list)) {
 
@@ -85,77 +101,87 @@ append_bn_simulator <- function(
     # only; this dramatically shrinks sim_data and pct_data. Evidence still
     # uses all_nodes (IVs are unchanged).
     target_nodes <- if (isTRUE(sim_dv_only)) dv else all_nodes
+    n_targets <- length(target_nodes)
 
-    # Helper: extract probabilities from querygrain result (simplify = FALSE)
-    .extract_probs <- function(result) {
-      purrr::map(result, function(x) {
-        p <- as.numeric(x)
-        names(p) <- dimnames(x)[[1]]
-        p
-      })
+    # Global P_ column set for this subgroup = union of every target node's
+    # level names. We preallocate a matrix this wide and fill per-row by
+    # name-matching into column indices — avoids the old per-row tibble
+    # construction that created thousands of tiny tibbles per subgroup.
+    all_level_names <- unique(unlist(node_levels[target_nodes], use.names = FALSE))
+    all_p_cols <- paste0("P_", all_level_names)
+
+    total_combos <- 1L + sum(purrr::map_int(ivs, ~ length(node_levels[[.x]])))
+    total_rows <- total_combos * n_targets
+
+    ev_var_vec     <- character(total_rows)
+    ev_lev_vec     <- character(total_rows)
+    target_var_vec <- character(total_rows)
+    prob_mat <- matrix(NA_real_, nrow = total_rows, ncol = length(all_p_cols),
+                       dimnames = list(NULL, all_p_cols))
+
+    # Fill a block of n_targets rows starting at `start_idx` from a posterior
+    # list (named list: target_name -> named-numeric-vector of probabilities).
+    # Modifies the enclosing-frame vectors/matrix by name — scoped to the
+    # subgroup loop, so the side-effect is bounded.
+    fill_block <- function(start_idx, posterior, ev_var, ev_lev) {
+      for (ni in seq_len(n_targets)) {
+        nm <- target_nodes[ni]
+        probs <- posterior[[nm]]
+        if (is.null(probs)) next
+        idx <- start_idx + ni - 1L
+        ev_var_vec[idx]     <<- ev_var
+        ev_lev_vec[idx]     <<- ev_lev
+        target_var_vec[idx] <<- nm
+        col_idx <- match(paste0("P_", names(probs)), all_p_cols)
+        prob_mat[idx, col_idx] <<- probs
+      }
     }
 
-    # Query with no evidence (marginal/prior)
-    marginal <- gRain::querygrain(grain_bn, nodes = target_nodes, simplify = FALSE)
-    marginal <- .extract_probs(marginal)
+    # Prior (no evidence)
+    marginal <- gRain::querygrain(grain_bn, nodes = target_nodes, simplify = FALSE) %>%
+      .extract_probs()
+    fill_block(1L, marginal, "(None)", "(Prior)")
 
-    prior_rows <- purrr::imap(marginal, function(probs, nm) {
-      row <- tibble::tibble(
-        Subgroup = sg,
-        Evidence_Variable = "(None)",
-        Evidence_Level = "(Prior)",
-        Target_Variable = nm
-      )
-      for (li in seq_along(probs)) {
-        row[[paste0("P_", names(probs)[li])]] <- probs[li]
-      }
-      row
-    }) %>% dplyr::bind_rows()
-
-    all_posteriors[[paste0(sg, "_prior")]] <- prior_rows
-
-    # Query for each IV x each level
+    # Each IV x each level
+    cursor <- n_targets + 1L
     for (iv in ivs) {
       iv_levels <- node_levels[[iv]]
-
       for (lv in iv_levels) {
         evidence <- rlang::set_names(list(lv), iv)
-
         posterior <- tryCatch(
-          gRain::querygrain(grain_bn, nodes = target_nodes, evidence = evidence, simplify = FALSE),
+          gRain::querygrain(grain_bn, nodes = target_nodes,
+            evidence = evidence, simplify = FALSE) %>% .extract_probs(),
           error = function(e) NULL
         )
-
-        if (is.null(posterior)) next
-
-        posterior <- .extract_probs(posterior)
-
-        # Force evidence variable to point mass at selected level. Only add
-        # it to the output when it's among the target nodes — with
-        # sim_dv_only, targets are just the DV so the IV stays out.
-        if (iv %in% target_nodes) {
-          ev_probs <- rep(0, length(node_levels[[iv]]))
-          names(ev_probs) <- node_levels[[iv]]
-          ev_probs[lv] <- 1
-          posterior[[iv]] <- ev_probs
-        }
-
-        rows <- purrr::imap(posterior, function(probs, nm) {
-          row <- tibble::tibble(
-            Subgroup = sg,
-            Evidence_Variable = iv,
-            Evidence_Level = lv,
-            Target_Variable = nm
-          )
-          for (li in seq_along(probs)) {
-            row[[paste0("P_", names(probs)[li])]] <- probs[li]
+        if (!is.null(posterior)) {
+          # Force evidence variable to point mass at selected level. Only
+          # add it to the output when it's among the target nodes — with
+          # sim_dv_only, targets are just the DV so the IV stays out.
+          if (iv %in% target_nodes) {
+            ev_probs <- rep(0, length(node_levels[[iv]]))
+            names(ev_probs) <- node_levels[[iv]]
+            ev_probs[lv] <- 1
+            posterior[[iv]] <- ev_probs
           }
-          row
-        }) %>% dplyr::bind_rows()
-
-        all_posteriors[[paste0(sg, "_", iv, "_", lv)]] <- rows
+          fill_block(cursor, posterior, iv, lv)
+        }
+        cursor <- cursor + n_targets
       }
     }
+
+    # Collapse to rows actually filled (failed tryCatch calls leave empty
+    # target_var_vec entries).
+    filled <- nzchar(target_var_vec)
+    sg_tbl <- tibble::tibble(
+      Subgroup          = rep(sg, sum(filled)),
+      Evidence_Variable = ev_var_vec[filled],
+      Evidence_Level    = ev_lev_vec[filled],
+      Target_Variable   = target_var_vec[filled]
+    ) %>% dplyr::bind_cols(
+      tibble::as_tibble(prob_mat[filled, , drop = FALSE])
+    )
+
+    all_posteriors[[sg]] <- sg_tbl
   }
 
   sim_data <- dplyr::bind_rows(all_posteriors)
@@ -185,6 +211,10 @@ append_bn_simulator <- function(
     paste0(round(pct_steps * 100, 1), " percent")
   )
   has_freq_shifts <- add_freq_shifts && !is.null(df)
+
+  # Whether to expose a Weight (Weighted/Unweighted) dropdown on the dashboard.
+  # We only precompute the weighted variant of pct_data when this is TRUE.
+  has_weight <- !is.null(weight) && !is.null(df) && (weight %in% names(df))
 
   if (has_freq_shifts) {
 
@@ -244,91 +274,132 @@ append_bn_simulator <- function(
       #   EV_{focus}_{target} — one column per target node (pivot target from
       #                         rows to columns; eliminates 28x duplication
       #                         and dramatically shrinks the stored sheet).
-      .compute_focus <- function(focus_df, focus_name) {
+      .compute_focus <- function(focus_df, focus_name, use_weight) {
         focus_clean <- gsub(" ", "_", focus_name)
         mean_col_name <- paste0("Mean_", focus_clean)
         ev_col_names  <- paste0("EV_", focus_clean, "_", target_nodes_sg)
 
-        purrr::map(ivs, function(iv) {
-          iv_freq <- table(focus_df[[iv]])
+        # For each IV, build one matrix of shifted probabilities (rows =
+        # pct_steps, cols = iv levels), then do ONE matrix multiply against
+        # ev_mat to get weighted EVs for every step at once. Replaces the
+        # old "build a tibble per pct_step" pattern (thousands of tibbles)
+        # with a single per-IV matrix assembly.
+        per_iv <- purrr::map(ivs, function(iv) {
+          iv_vals <- focus_df[[iv]]
+          # Use the survey-weight column ONLY when this run is the weighted
+          # version AND the column actually exists on focus_df. Otherwise
+          # fall back to raw counts. Returns a named numeric vector whose
+          # names are level strings, which is what bn_freq_prob_shift expects.
+          if (isTRUE(use_weight) && !is.null(weight) &&
+              weight %in% names(focus_df)) {
+            w <- focus_df[[weight]]
+            ok <- !is.na(iv_vals) & !is.na(w)
+            iv_freq <- tapply(w[ok], iv_vals[ok], sum)
+          } else {
+            iv_freq <- table(iv_vals)
+          }
           iv_levels <- node_levels_sg[[iv]]
           iv_values <- as.numeric(iv_levels)
           ev_mat <- ev_mats[[iv]]
 
-          shifted_list <- purrr::map(pct_steps, function(pct) {
-            tryCatch(
-              as.numeric(bn_freq_prob_shift(freq = iv_freq, lift = pct,
+          shifted_mat <- matrix(NA_real_, nrow = length(pct_steps),
+            ncol = length(iv_levels))
+          for (pi in seq_along(pct_steps)) {
+            sp <- tryCatch(
+              as.numeric(bn_freq_prob_shift(freq = iv_freq, lift = pct_steps[pi],
                 impact_metric_type = "proportional")),
               error = function(e) NULL
             )
-          })
+            if (!is.null(sp) && !anyNA(sp)) shifted_mat[pi, ] <- sp
+          }
 
-          purrr::imap(shifted_list, function(shifted_probs, pi) {
-            if (is.null(shifted_probs) || anyNA(shifted_probs)) return(NULL)
+          # Drop rows where the shift failed (any NA in that pct_step's row).
+          good <- !is.na(shifted_mat[, 1])
+          if (!any(good)) return(NULL)
+          shifted_mat <- shifted_mat[good, , drop = FALSE]
+          good_labels <- pct_labels[good]
 
-            weighted_evs <- as.numeric(shifted_probs %*% ev_mat)
-            shifted_input_mean <- sum(iv_values * shifted_probs)
-            pct_label <- pct_labels[pi]
+          # Single matrix multiply: (n_good x n_levels) %*% (n_levels x n_targets)
+          # -> (n_good x n_targets) of weighted EVs.
+          weighted_evs <- shifted_mat %*% ev_mat
+          colnames(weighted_evs) <- ev_col_names
+          mean_vals <- as.numeric(shifted_mat %*% iv_values)
 
-            ev_cols <- rlang::set_names(as.list(weighted_evs), ev_col_names)
+          keys <- paste(sg, iv, good_labels, sep = "|")
+          tibble::tibble(Key = keys, !!mean_col_name := mean_vals) %>%
+            dplyr::bind_cols(tibble::as_tibble(weighted_evs))
+        })
 
-            tibble::tibble(
-              Key = paste(sg, iv, pct_label, sep = "|"),
-              !!mean_col_name := shifted_input_mean,
-              !!!ev_cols
-            )
-          }) %>% dplyr::bind_rows()
-        }) %>% dplyr::bind_rows()
+        dplyr::bind_rows(purrr::compact(per_iv))
       }
 
-      # Start with Market — Market always runs (no base-size restriction)
-      sg_result <- .compute_focus(sg_df, "Market")
-      base_slices[[length(base_slices) + 1L]] <<- tibble::tibble(
-        subgroup = sg,
-        focus = "Market",
-        n_obs = nrow(sg_df),
-        min_required = min_base_for_sim
-      )
+      # When a weight column was provided we precompute BOTH the unweighted
+      # and weighted variants and tag each row's Key with the mode suffix —
+      # the dashboard's Weight dropdown picks which set of rows to read at
+      # runtime. Without a weight we only compute Unweighted.
+      weight_modes <- if (has_weight) c("Unweighted", "Weighted") else "Unweighted"
 
-      # Join each brand, skipping brand x subgroup slices below min_base_for_sim.
-      # Skipped focuses still appear in the workbook dropdown; their Mean_/EV_
-      # columns are all NA and the red warning shows next to the Focus cell.
-      for (focus in setdiff(focus_options, "Market")) {
-        focus_df <- sg_df[sg_df[[brand]] == focus, , drop = FALSE]
+      per_wmode <- purrr::map(weight_modes, function(wm) {
+        use_weight_now <- (wm == "Weighted")
 
-        # Record base for every focus (displayed next to the Focus cell)
-        base_slices[[length(base_slices) + 1L]] <<- tibble::tibble(
-          subgroup = sg,
-          focus = focus,
-          n_obs = nrow(focus_df),
-          min_required = min_base_for_sim
-        )
-
-        if (nrow(focus_df) < min_base_for_sim) {
-          # Build an NA-filled focus result so the dropdown still populates —
-          # one NA EV column per target (matches the pivoted structure).
-          focus_clean <- gsub(" ", "_", focus)
-          mean_col_name <- paste0("Mean_", focus_clean)
-          ev_col_names <- paste0("EV_", focus_clean, "_", target_nodes_sg)
-          na_ev_cols <- rlang::set_names(
-            as.list(rep(NA_real_, length(ev_col_names))),
-            ev_col_names
+        # Market always runs (no base-size restriction)
+        sg_result <- .compute_focus(sg_df, "Market", use_weight = use_weight_now)
+        if (wm == "Unweighted") {
+          # Base sample sizes don't depend on weighting — record once, on the
+          # unweighted pass, to avoid duplicating rows in the _sim_base sheet.
+          base_slices[[length(base_slices) + 1L]] <<- tibble::tibble(
+            subgroup = sg,
+            focus = "Market",
+            n_obs = nrow(sg_df),
+            min_required = min_base_for_sim
           )
-          focus_result <- sg_result %>%
-            dplyr::select(Key) %>%
-            dplyr::mutate(
-              !!mean_col_name := NA_real_,
-              !!!na_ev_cols
-            )
-        } else {
-          focus_result <- .compute_focus(focus_df, focus)
         }
 
-        sg_result <- sg_result %>%
-          dplyr::left_join(focus_result, by = "Key")
-      }
+        # Join each brand, skipping brand x subgroup slices below
+        # min_base_for_sim. Skipped focuses still appear in the workbook
+        # dropdown; their Mean_/EV_ columns are NA and a red warning shows.
+        for (focus in setdiff(focus_options, "Market")) {
+          focus_df <- sg_df[sg_df[[brand]] == focus, , drop = FALSE]
 
-      sg_result
+          if (wm == "Unweighted") {
+            base_slices[[length(base_slices) + 1L]] <<- tibble::tibble(
+              subgroup = sg,
+              focus = focus,
+              n_obs = nrow(focus_df),
+              min_required = min_base_for_sim
+            )
+          }
+
+          if (nrow(focus_df) < min_base_for_sim) {
+            focus_clean <- gsub(" ", "_", focus)
+            mean_col_name <- paste0("Mean_", focus_clean)
+            ev_col_names <- paste0("EV_", focus_clean, "_", target_nodes_sg)
+            na_ev_cols <- rlang::set_names(
+              as.list(rep(NA_real_, length(ev_col_names))),
+              ev_col_names
+            )
+            focus_result <- sg_result %>%
+              dplyr::select(Key) %>%
+              dplyr::mutate(
+                !!mean_col_name := NA_real_,
+                !!!na_ev_cols
+              )
+          } else {
+            focus_result <- .compute_focus(focus_df, focus,
+              use_weight = use_weight_now)
+          }
+
+          sg_result <- sg_result %>%
+            dplyr::left_join(focus_result, by = "Key")
+        }
+
+        # Tag every Key with the weight-mode suffix so the dashboard formulas
+        # can disambiguate. Format: subgroup|variable|pct_label|<mode>
+        sg_result$Key <- paste0(sg_result$Key, "|", wm)
+        sg_result
+      })
+
+      dplyr::bind_rows(per_wmode)
     }) %>% dplyr::bind_rows()
 
     pct_data <- pct_data_list
@@ -426,40 +497,38 @@ append_bn_simulator <- function(
   # Sequential column counter for _sim_lookup
   lk_col <- 1L
 
+  # Small helper: write a header at (row 1, startCol) and a values vector
+  # starting at row 2 — single-call, avoids per-cell writeData overhead.
+  .write_lookup_col <- function(startCol, header, values) {
+    openxlsx::writeData(wb, sim_lookup, header,
+      startRow = 1, startCol = startCol)
+    if (length(values) > 0) {
+      openxlsx::writeData(wb, sim_lookup, values,
+        startRow = 2, startCol = startCol, colNames = FALSE)
+    }
+  }
+
   # Subgroup options
   sg_col <- lk_col
-  openxlsx::writeData(wb, sim_lookup, "Subgroup", startRow = 1, startCol = lk_col)
-  for (si in seq_along(names(sg_list))) {
-    openxlsx::writeData(wb, sim_lookup, names(sg_list)[si], startRow = si + 1, startCol = lk_col)
-  }
+  .write_lookup_col(lk_col, "Subgroup", names(sg_list))
   lk_col <- lk_col + 1L
 
   # Variable options (all IVs)
   first_ivs <- obj[[first_sg]][["meta"]][["ivs"]]
   var_col <- lk_col
-  openxlsx::writeData(wb, sim_lookup, "Variable", startRow = 1, startCol = lk_col)
-  for (vi in seq_along(first_ivs)) {
-    openxlsx::writeData(wb, sim_lookup, first_ivs[vi], startRow = vi + 1, startCol = lk_col)
-  }
+  .write_lookup_col(lk_col, "Variable", first_ivs)
   lk_col <- lk_col + 1L
 
   # Variable labels
   label_lk_col <- lk_col
-  openxlsx::writeData(wb, sim_lookup, "Label", startRow = 1, startCol = lk_col)
-  for (vi in seq_along(first_ivs)) {
-    openxlsx::writeData(wb, sim_lookup, .get_label(first_ivs[vi]), startRow = vi + 1, startCol = lk_col)
-  }
+  .write_lookup_col(lk_col, "Label", vapply(first_ivs, .get_label, character(1)))
   lk_col <- lk_col + 1L
 
   # Levels per variable (one column per variable, rows = levels)
   levels_start_col <- lk_col
   for (vi in seq_along(first_ivs)) {
     iv <- first_ivs[vi]
-    lvls <- node_levels[[iv]]
-    openxlsx::writeData(wb, sim_lookup, iv, startRow = 1, startCol = lk_col)
-    for (li in seq_along(lvls)) {
-      openxlsx::writeData(wb, sim_lookup, as.numeric(lvls[li]), startRow = li + 1, startCol = lk_col)
-    }
+    .write_lookup_col(lk_col, iv, as.numeric(node_levels[[iv]]))
     lk_col <- lk_col + 1L
   }
   levels_end_col <- lk_col - 1L
@@ -468,20 +537,14 @@ append_bn_simulator <- function(
   # Mode options
   mode_options <- if (has_freq_shifts) c("Level", "Mean") else "Level"
   mode_col <- lk_col
-  openxlsx::writeData(wb, sim_lookup, "Mode", startRow = 1, startCol = lk_col)
-  for (mi in seq_along(mode_options)) {
-    openxlsx::writeData(wb, sim_lookup, mode_options[mi], startRow = mi + 1, startCol = lk_col)
-  }
+  .write_lookup_col(lk_col, "Mode", mode_options)
   lk_col <- lk_col + 1L
 
   # Percent change steps — base labels (used for key matching)
   pct_col <- NULL
   if (has_freq_shifts) {
     pct_col <- lk_col
-    openxlsx::writeData(wb, sim_lookup, "Mean", startRow = 1, startCol = lk_col)
-    for (pi in seq_along(pct_labels)) {
-      openxlsx::writeData(wb, sim_lookup, pct_labels[pi], startRow = pi + 1, startCol = lk_col)
-    }
+    .write_lookup_col(lk_col, "Mean", pct_labels)
     lk_col <- lk_col + 1L
   }
 
@@ -490,21 +553,26 @@ append_bn_simulator <- function(
   if (has_freq_shifts && !is.null(brand) && !is.null(brand_names)) {
     focus_opt_col <- lk_col
     sim_focus_options <- c("Market", brand_names)
-    openxlsx::writeData(wb, sim_lookup, "Focus", startRow = 1, startCol = lk_col)
-    for (fi in seq_along(sim_focus_options)) {
-      openxlsx::writeData(wb, sim_lookup, sim_focus_options[fi], startRow = fi + 1, startCol = lk_col)
-    }
+    .write_lookup_col(lk_col, "Focus", sim_focus_options)
     lk_col <- lk_col + 1L
   }
 
   # Metric options
   metric_options <- c("Absolute", "Percent Change", "Absolute Change")
   metric_opt_col <- lk_col
-  openxlsx::writeData(wb, sim_lookup, "Metric", startRow = 1, startCol = lk_col)
-  for (moi in seq_along(metric_options)) {
-    openxlsx::writeData(wb, sim_lookup, metric_options[moi], startRow = moi + 1, startCol = lk_col)
-  }
+  .write_lookup_col(lk_col, "Metric", metric_options)
   lk_col <- lk_col + 1L
+
+  # Weight Mode options (only when a weight column was provided so the
+  # dashboard has a real Weighted/Unweighted choice to switch between).
+  weight_opt_col <- NULL
+  weight_options <- character(0)
+  if (has_weight) {
+    weight_options <- c("Unweighted", "Weighted")
+    weight_opt_col <- lk_col
+    .write_lookup_col(lk_col, "Weight", weight_options)
+    lk_col <- lk_col + 1L
+  }
 
   # ---------------------------------------------------------------------------
   # 5. Build Simulator dashboard sheet
@@ -614,6 +682,31 @@ append_bn_simulator <- function(
     col = cell_col, rows = current_row,
     type = "list", value = metric_sim_range)
   current_row <- current_row + 1L
+
+  # Weight dropdown (only appears when a weight column was provided).
+  # Affects Mean mode only; Level mode reads from _sim_data (gRain posteriors)
+  # which aren't reshaped by this control.
+  weight_sim_cell_col <- NULL
+  weight_sim_cell_row <- NULL
+  if (has_weight) {
+    weight_sim_cell_col <- cell_col
+    weight_sim_cell_row <- current_row
+    openxlsx::writeData(wb, dash_sheet, "Weight: ",
+      startRow = current_row, startCol = label_col)
+    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
+      rows = current_row, cols = label_col, stack = TRUE)
+    openxlsx::writeData(wb, dash_sheet, "Weighted",
+      startRow = current_row, startCol = cell_col)
+    openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
+      rows = current_row, cols = cell_col, stack = TRUE)
+
+    weight_sim_range <- paste0(sim_lookup, "!$", num2let(weight_opt_col),
+      "$2:$", num2let(weight_opt_col), "$", length(weight_options) + 1)
+    openxlsx::dataValidation(wb, dash_sheet,
+      col = cell_col, rows = current_row,
+      type = "list", value = weight_sim_range)
+    current_row <- current_row + 1L
+  }
 
   if (has_subgroups) {
     openxlsx::writeData(wb, dash_sheet, "Subgroup: ", startRow = current_row, startCol = label_col)
@@ -733,16 +826,19 @@ append_bn_simulator <- function(
   levels_end_let <- num2let(levels_end_col)
 
   openxlsx::writeData(wb, sim_lookup, "Active Levels", startRow = 1, startCol = active_level_col)
-  for (li in seq_len(max_levels)) {
-    level_formula <- paste0(
+  # Build all max_levels formulas as a single character vector, then write
+  # once — openxlsx::writeFormula accepts vectors and is dramatically faster
+  # than per-cell calls.
+  level_formulas <- vapply(seq_len(max_levels), function(li) {
+    paste0(
       "IFERROR(INDEX(", sim_lookup, "!$", levels_start_let, "$", li + 1,
       ":$", levels_end_let, "$", li + 1,
       ",1,MATCH(", var_ref_from_lookup, ",", sim_lookup, "!$", levels_start_let,
       "$1:$", levels_end_let, "$1,0)),\"\")"
     )
-    openxlsx::writeFormula(wb, sim_lookup, x = level_formula,
-      startRow = li + 1, startCol = active_level_col)
-  }
+  }, character(1))
+  openxlsx::writeFormula(wb, sim_lookup, x = level_formulas,
+    startRow = 2, startCol = active_level_col)
 
   active_level_let <- num2let(active_level_col)
   level_count_col <- lk_col
@@ -780,25 +876,25 @@ append_bn_simulator <- function(
     }
 
     n_option_rows <- max(length(pct_labels), max_levels)
-    for (oi in seq_len(n_option_rows)) {
+    # Build all option formulas as a vector, write once.
+    opt_formulas <- vapply(seq_len(n_option_rows), function(oi) {
       level_cell <- paste0("$", active_level_let, "$", oi + 1)
       if (oi <= length(pct_labels)) {
         # Base pct label from the Percent Change column (no mean suffix)
         base_pct <- paste0("$", pct_let, "$", oi + 1)
-
-        opt_formula <- paste0(
+        paste0(
           "IF(", mode_ref_from_lookup, "=\"Mean\",", base_pct, ",",
           "IF(", level_cell, "=\"\",\"\",", level_cell, "))"
         )
       } else {
-        opt_formula <- paste0(
+        paste0(
           "IF(", mode_ref_from_lookup, "=\"Mean\",\"\",",
           "IF(", level_cell, "=\"\",\"\",", level_cell, "))"
         )
       }
-      openxlsx::writeFormula(wb, sim_lookup, x = opt_formula,
-        startRow = oi + 1, startCol = active_options_col)
-    }
+    }, character(1))
+    openxlsx::writeFormula(wb, sim_lookup, x = opt_formulas,
+      startRow = 2, startCol = active_options_col)
 
     # Count non-blank active options
     options_count_col <- lk_col
@@ -846,12 +942,21 @@ append_bn_simulator <- function(
       focus_ref_d <- "\"Market\""
     }
     var_ref_d <- paste0("$", num2let(var_cell_col), "$", var_cell_row)
+    # Weight mode ref: live cell when the dropdown exists, otherwise a
+    # constant "Unweighted" literal (matching how pct_data was built).
+    if (has_weight) {
+      weight_ref_d <- paste0("$", num2let(weight_sim_cell_col), "$", weight_sim_cell_row)
+      weight_suffix_d <- paste0("&\"|\"&", weight_ref_d)
+    } else {
+      weight_suffix_d <- "&\"|Unweighted\""
+    }
 
-    # Keys no longer include the target (target is now a column dimension
-    # after the pivot). Format: subgroup|variable|pct_label
+    # Keys: subgroup|variable|pct_label|weight_mode
     zero_label <- pct_labels[which(pct_steps == 0)]
-    base_mean_key <- paste0(sg_ref_d, "&\"|\"&", var_ref_d, "&\"|", zero_label, "\"")
-    shifted_mean_key <- paste0(sg_ref_d, "&\"|\"&", var_ref_d, "&\"|\"&", level_ref_display)
+    base_mean_key    <- paste0(sg_ref_d, "&\"|\"&", var_ref_d,
+      "&\"|", zero_label, "\"", weight_suffix_d)
+    shifted_mean_key <- paste0(sg_ref_d, "&\"|\"&", var_ref_d,
+      "&\"|\"&", level_ref_display, weight_suffix_d)
 
     # Dynamic Mean column
     mean_col_d <- paste0("\"Mean_\"&SUBSTITUTE(", focus_ref_d, ",\" \",\"_\")")
@@ -917,10 +1022,12 @@ append_bn_simulator <- function(
 
   header_names <- c(leading_cols, "Metric")
 
-  for (hi in seq_along(header_names)) {
-    openxlsx::writeData(wb, dash_sheet, header_names[hi],
-      startRow = row_data_start, startCol = col_data_start + hi - 1)
-  }
+  # Write the whole header row in one call (1-row data frame -> horizontal
+  # strip starting at startCol). Faster than looping one writeData per header.
+  header_row_df <- as.data.frame(matrix(header_names, nrow = 1),
+    stringsAsFactors = FALSE)
+  openxlsx::writeData(wb, dash_sheet, header_row_df,
+    startRow = row_data_start, startCol = col_data_start, colNames = FALSE)
   all_header_cols <- seq(col_data_start, col_data_start + length(header_names) - 1)
   openxlsx::addStyle(wb, dash_sheet, style = styles$header,
     rows = row_data_start, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
@@ -937,28 +1044,34 @@ append_bn_simulator <- function(
 
   data_rows <- seq(row_data_start + 1, row_data_start + n_targets)
 
-  for (ri in seq_along(all_nodes)) {
-    nd <- all_nodes[ri]
-    row <- data_rows[ri]
-    ci <- 0
-    openxlsx::writeData(wb, dash_sheet, nd, startRow = row, startCol = col_data_start + ci)
-    ci <- ci + 1
-    if (has_community) {
-      comm_name <- if (nd %in% names(community_lookup)) as.character(community_lookup[[nd]]) else ""
-      openxlsx::writeData(wb, dash_sheet, comm_name, startRow = row, startCol = col_data_start + ci)
-      ci <- ci + 1
+  # Build the full leading-column block (Variable [, Community], Label) as
+  # a single data frame and write it once. Styling passes (community colors)
+  # still loop per-row because the colours are per-target.
+  leading_block <- data.frame(Variable = all_nodes, stringsAsFactors = FALSE)
+  if (has_community) {
+    leading_block$Community <- vapply(all_nodes, function(nd) {
+      if (nd %in% names(community_lookup)) as.character(community_lookup[[nd]]) else ""
+    }, character(1))
+  }
+  leading_block$Label <- vapply(all_nodes, .get_label, character(1))
+  openxlsx::writeData(wb, dash_sheet, leading_block,
+    startRow = row_data_start + 1L, startCol = col_data_start,
+    colNames = FALSE)
 
-      # Apply community color as background fill across the row
+  # Apply per-target community colors (styling must stay per-row).
+  if (has_community) {
+    for (ri in seq_along(all_nodes)) {
+      nd <- all_nodes[ri]
       if (nd %in% names(community_color)) {
         fill_color <- as.character(community_color[[nd]])
         if (grepl("^#[0-9A-Fa-f]{6}$", fill_color)) {
           comm_style <- openxlsx::createStyle(fgFill = fill_color)
           openxlsx::addStyle(wb, dash_sheet, style = comm_style,
-            rows = row, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
+            rows = data_rows[ri], cols = all_header_cols,
+            gridExpand = TRUE, stack = TRUE)
         }
       }
     }
-    openxlsx::writeData(wb, dash_sheet, .get_label(nd), startRow = row, startCol = col_data_start + ci)
   }
 
   # Left-align leading columns
@@ -1019,40 +1132,51 @@ append_bn_simulator <- function(
     )
   }
 
-  for (ri in seq_along(all_nodes)) {
-    nd <- all_nodes[ri]
-    row <- data_rows[ri]
+  # Build every target node's metric formula as one character vector, then
+  # write all formulas in a single openxlsx::writeFormula call starting at
+  # data_rows[1]. Replaces a per-target writeFormula loop — same output,
+  # one call to openxlsx instead of n_targets calls.
+  sg_prefix <- if (has_subgroups) {
+    paste0(sg_ref, "&\"|\"&")
+  } else {
+    paste0("\"", names(sg_list)[1], "|\"&")
+  }
+  bl_sg_prefix_str <- if (has_subgroups) {
+    paste0(sg_ref, "&\"")
+  } else {
+    paste0("\"", names(sg_list)[1])
+  }
 
-    # Key for Level mode
-    if (has_subgroups) {
-      key_formula <- paste0(sg_ref, "&\"|\"&", var_ref, "&\"|\"&\"\"&", level_ref, "&\"|", nd, "\"")
-    } else {
-      key_formula <- paste0("\"", names(sg_list)[1], "|\"&", var_ref, "&\"|\"&\"\"&", level_ref, "&\"|", nd, "\"")
-    }
+  # Mean-mode keys include a weight-mode suffix: subgroup|variable|pct_label|<mode>.
+  # When the dashboard has a Weight dropdown we reference that cell; otherwise
+  # the suffix is a literal "Unweighted" (the only variant we precomputed).
+  if (has_weight) {
+    weight_ref_fmla <- paste0("$", num2let(weight_sim_cell_col), "$", weight_sim_cell_row)
+    weight_suffix_fmla <- paste0("&\"|\"&", weight_ref_fmla)
+  } else {
+    weight_suffix_fmla <- "&\"|Unweighted\""
+  }
+
+  ev_formulas <- vapply(all_nodes, function(nd) {
+    # --- Level mode ---
+    key_formula  <- paste0(sg_prefix, var_ref, "&\"|\"&\"\"&", level_ref, "&\"|", nd, "\"")
     match_formula <- paste0("MATCH(", key_formula, ",", sim_key_range, ",0)")
     raw_level_ev <- paste0("IFERROR(INDEX(", sim_ev_range, ",", match_formula, "),0)")
 
     # Baseline for Level mode: prior key = subgroup|(None)|(Prior)|target
-    if (has_subgroups) {
-      bl_level_key <- paste0(sg_ref, "&\"|(None)|(Prior)|", nd, "\"")
-    } else {
-      bl_level_key <- paste0("\"", names(sg_list)[1], "|(None)|(Prior)|", nd, "\"")
-    }
-    bl_level_ev <- paste0("IFERROR(INDEX(", sim_ev_range, ",MATCH(", bl_level_key, ",", sim_key_range, ",0)),0)")
+    bl_level_key <- paste0(bl_sg_prefix_str, "|(None)|(Prior)|", nd, "\"")
+    bl_level_ev <- paste0("IFERROR(INDEX(", sim_ev_range, ",MATCH(",
+      bl_level_key, ",", sim_key_range, ",0)),0)")
 
     level_ev <- .metric_formula(raw_level_ev, bl_level_ev)
 
     if (has_freq_shifts) {
-      # Key for Mean mode (post-pivot): subgroup|variable|pct_label (no target)
-      if (has_subgroups) {
-        pct_key <- paste0(sg_ref, "&\"|\"&", var_ref, "&\"|\"&", pct_base_label)
-      } else {
-        pct_key <- paste0("\"", names(sg_list)[1], "|\"&", var_ref, "&\"|\"&", pct_base_label)
-      }
+      # Key for Mean mode: subgroup|variable|pct_label|weight_mode
+      pct_key <- paste0(sg_prefix, var_ref, "&\"|\"&", pct_base_label,
+        weight_suffix_fmla)
       pct_row_match <- paste0("MATCH(", pct_key, ",", pct_key_range, ",0)")
 
-      # EV column header = "EV_{focus}_{target}" — target is fixed for this
-      # row (`nd`), focus comes from the dropdown.
+      # EV column header = "EV_{focus}_{target}" — target fixed, focus dynamic.
       ev_col_formula_nd <- paste0("\"EV_\"&SUBSTITUTE(", focus_ref,
         ",\" \",\"_\")&\"_", nd, "\"")
       pct_ev_match_nd <- paste0("MATCH(", ev_col_formula_nd, ",",
@@ -1061,28 +1185,24 @@ append_bn_simulator <- function(
       raw_pct_ev <- paste0("IFERROR(INDEX(", pct_data_range, ",",
         pct_row_match, ",", pct_ev_match_nd, "),0)")
 
-      # Baseline key for Mean mode: subgroup|variable|0 percent (no target)
+      # Baseline Mean key: subgroup|variable|0 percent|weight_mode
       zero_label <- pct_labels[which(pct_steps == 0)]
-      if (has_subgroups) {
-        bl_pct_key <- paste0(sg_ref, "&\"|\"&", var_ref, "&\"|", zero_label, "\"")
-      } else {
-        bl_pct_key <- paste0("\"", names(sg_list)[1], "|\"&", var_ref,
-          "&\"|", zero_label, "\"")
-      }
+      bl_pct_key <- paste0(sg_prefix, var_ref, "&\"|", zero_label, "\"",
+        weight_suffix_fmla)
       bl_pct_row <- paste0("MATCH(", bl_pct_key, ",", pct_key_range, ",0)")
       bl_pct_ev <- paste0("IFERROR(INDEX(", pct_data_range, ",",
         bl_pct_row, ",", pct_ev_match_nd, "),0)")
 
       mean_ev <- .metric_formula(raw_pct_ev, bl_pct_ev)
 
-      ev_formula <- paste0("IFERROR(IF(", is_mean_mode, ",", mean_ev, ",", level_ev, "),\"\")")
+      paste0("IFERROR(IF(", is_mean_mode, ",", mean_ev, ",", level_ev, "),\"\")")
     } else {
-      ev_formula <- paste0("IFERROR(", level_ev, ",\"\")")
+      paste0("IFERROR(", level_ev, ",\"\")")
     }
+  }, character(1))
 
-    openxlsx::writeFormula(wb, dash_sheet, x = ev_formula,
-      startRow = row, startCol = ev_col)
-  }
+  openxlsx::writeFormula(wb, dash_sheet, x = ev_formulas,
+    startRow = data_rows[1], startCol = ev_col)
 
   openxlsx::addStyle(wb, dash_sheet, style = openxlsx::createStyle(numFmt = "0.0", halign = "center"),
     rows = data_rows, cols = ev_col, gridExpand = TRUE, stack = TRUE)

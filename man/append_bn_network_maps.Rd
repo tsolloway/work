@@ -10,7 +10,9 @@ append_bn_network_maps(
   network_type = "none",
   width = 10,
   height = 8,
-  defer_images = FALSE
+  defer_images = FALSE,
+  attribute_font_size = NULL,
+  community_font_size = NULL
 )
 }
 \arguments{
@@ -32,6 +34,12 @@ created and PNGs are rendered to a temp dir, but images are NOT
 inserted — metadata is attached to the workbook under attribute
 \code{"network_map_images"} so the caller can insert via openxlsx2
 after a save/reload. Used by \code{bn_write()}.}
+
+\item{attribute_font_size}{Numeric or NULL. Node-label font size (in pixels)
+for the Attribute Network PNG. NULL leaves vis.js's default 14 px.}
+
+\item{community_font_size}{Numeric or NULL. Node-label font size (in pixels)
+for the Community Network PNG. NULL leaves vis.js's default 14 px.}
 }
 \value{
 The modified workbook object (invisibly).

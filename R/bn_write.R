@@ -27,9 +27,15 @@
 #' @param sim_dv_only Logical. Restricts simulator to DV-only targets.
 #' @param variable_width,community_width,label_width,combo_width Column widths.
 #' @param network_type Character. Layout type for the network map sheets.
-#'   One of \code{"none"} (default — skips network maps),
-#'   \code{"gravity"}, \code{"charge"}, or \code{"hierarchy"}. See
-#'   \code{bn_visual()} for layout details.
+#'   One of \code{"gravity"} (default), \code{"none"} (skips network maps),
+#'   \code{"charge"}, or \code{"hierarchy"}. See \code{bn_visual()} for
+#'   layout details.
+#' @param attribute_map_font_size Numeric or NULL. Node-label font size (in
+#'   pixels) for the Attribute Network PNG. Default 30. Set NULL to fall
+#'   back to vis.js's built-in 14 px.
+#' @param community_map_font_size Numeric or NULL. Node-label font size (in
+#'   pixels) for the Community Network PNG. Default 30. Set NULL to fall
+#'   back to vis.js's built-in 14 px.
 #' @param very_hide_all Logical. Use veryHidden (TRUE) or hidden (FALSE) for
 #'   helper sheets.
 #' @param min_base_for_lift,min_base_for_sim,min_base_for_boot Base-size
@@ -41,7 +47,8 @@
 #' @param lift Lift fraction used in the prioritization analysis (for footer).
 #' @param path Character. Directory to write the workbook to.
 #'
-#' @return Workbook object (invisibly). Side effect: writes the xlsx file.
+#' @return The full path of the written `.xlsx` file (invisibly). Side
+#'   effect: writes the xlsx file.
 #'
 #' @seealso [bn_finalize_network()], [bn_impact_write()],
 #'   [bn_prioritize_write()]
@@ -64,7 +71,9 @@ bn_write <- function(
     community_width = 20,
     label_width = "auto",
     combo_width = 40,
-    network_type = "none",
+    network_type = "gravity",
+    attribute_map_font_size = 30,
+    community_map_font_size = 30,
     very_hide_all = TRUE,
     min_base_for_lift = NULL,
     min_base_for_sim = NULL,
@@ -152,6 +161,8 @@ bn_write <- function(
       community_width    = community_width,
       label_width        = label_width,
       network_type       = network_type,
+      attribute_map_font_size = attribute_map_font_size,
+      community_map_font_size = community_map_font_size,
       very_hide_all      = very_hide_all,
       min_base_for_lift  = min_base_for_lift,
       min_base_for_sim   = min_base_for_sim,
@@ -196,7 +207,9 @@ bn_write <- function(
   if (has_impacts && !is.null(obj) && "bn_subgroups" %in% names(obj)) {
     wb <- append_bn_network_maps(
       wb = wb, bn_full = obj, network_type = network_type,
-      defer_images = TRUE
+      defer_images = TRUE,
+      attribute_font_size = attribute_map_font_size,
+      community_font_size = community_map_font_size
     )
   }
 
@@ -228,106 +241,63 @@ bn_write <- function(
   }
 
   # ---------------------------------------------------------------------------
-  # 6. Save + chart XML + images — all handled through openxlsx2 so nothing
-  # gets dropped on a round-trip. Flow:
-  #   a. openxlsx saves wb to a temp file (contains impact, prioritize,
-  #      guide, empty network map sheets — no images, no chart).
-  #   b. openxlsx2 loads the temp file.
-  #   c. openxlsx2 injects the chart XML (if any).
-  #   d. openxlsx2 inserts each deferred network map image via wb_add_image.
-  #   e. openxlsx2 saves once to the final destination.
-  # openxlsx2's native load/save preserves sheet visibility, so hidden
-  # helper sheets stay hidden in the final output.
+  # 6. Save — two paths depending on whether we need openxlsx2's capabilities.
+  #
+  # The only reasons we ever route through openxlsx2 are (a) to inject the
+  # prioritization waterfall chart XML, and (b) to attach deferred network
+  # map images (we defer them because openxlsx2's wb_load drops images that
+  # openxlsx embedded). When neither is present — e.g. network_type = "none"
+  # AND no prioritization chart — we can save straight through openxlsx and
+  # skip the wb_load/wb2$save round-trip (saves ~3-10 s for medium sheets).
   # ---------------------------------------------------------------------------
   chart_xml  <- attr(wb, "priorit_chart_xml")
   chart_dims <- attr(wb, "priorit_chart_dims")
   net_images <- attr(wb, "network_map_images")
 
-  tmp_path <- tempfile(fileext = ".xlsx")
-  openxlsx::saveWorkbook(wb, tmp_path, overwrite = TRUE)
+  needs_openxlsx2 <- (!is.null(chart_xml) && !is.null(chart_dims)) ||
+                    (length(net_images) > 0)
 
-  wb2 <- openxlsx2::wb_load(tmp_path)
+  if (needs_openxlsx2) {
+    # openxlsx -> temp file -> openxlsx2 -> add chart/images -> final file.
+    # openxlsx2's native load/save preserves sheet visibility, so hidden
+    # helper sheets stay hidden in the final output.
+    tmp_path <- tempfile(fileext = ".xlsx")
+    openxlsx::saveWorkbook(wb, tmp_path, overwrite = TRUE)
 
-  # Images go in BEFORE the chart XML so openxlsx2 gives them the natural
-  # rId sequence. (It doesn't eliminate the "orig_rId" bug, but keeps the
-  # blip references predictable before we post-process them below.)
-  for (img in net_images) {
-    if (!file.exists(img$file)) next
-    wb2$add_image(
-      sheet = img$sheet,
-      file  = img$file,
-      dims  = paste0(num2let(img$start_col), img$start_row),
-      width = img$width,
-      height = img$height,
-      units = "in"
-    )
-  }
+    wb2 <- openxlsx2::wb_load(tmp_path)
 
-  if (!is.null(chart_xml) && !is.null(chart_dims)) {
-    wb2$add_chart_xml(sheet = "Prioritization",
-      dims = chart_dims, xml = chart_xml)
-  }
-
-  wb2$save(file_path, overwrite = TRUE)
-
-  # --- Post-process: fix openxlsx2 image-rId bug ---------------------------
-  # openxlsx2 < 1.26 wrote drawing XML with r:embed="orig_rId1" while the
-  # rels file used Id="rId1", so Excel rendered "picture can't be displayed".
-  # The fix below unzips, replaces "orig_rId" with "rId" in every drawing
-  # XML, and rezips. See https://github.com/JanMarvin/openxlsx2/issues/1598.
-  # Skipped automatically on openxlsx2 >= 1.26 where the bug is fixed
-  # upstream. Once the floor on the package's openxlsx2 dependency is
-  # bumped to 1.26+, this block can be deleted.
-  .fix_drawing_rids <- function(xlsx_path) {
-    xlsx_path <- normalizePath(xlsx_path, mustWork = TRUE)
-
-    work_dir <- tempfile("xlsx_fix_")
-    dir.create(work_dir, recursive = TRUE)
-    on.exit(unlink(work_dir, recursive = TRUE), add = TRUE)
-
-    utils::unzip(xlsx_path, exdir = work_dir)
-
-    drawing_dir <- file.path(work_dir, "xl", "drawings")
-    if (!dir.exists(drawing_dir)) return(invisible(NULL))
-
-    drawing_xmls <- list.files(drawing_dir, pattern = "\\.xml$",
-      full.names = TRUE)
-    patched_any <- FALSE
-    for (fp in drawing_xmls) {
-      txt <- readLines(fp, warn = FALSE, encoding = "UTF-8")
-      full <- paste(txt, collapse = "\n")
-      if (grepl("orig_rId", full, fixed = TRUE)) {
-        full <- gsub("orig_rId", "rId", full, fixed = TRUE)
-        writeLines(full, fp, useBytes = TRUE)
-        patched_any <- TRUE
-      }
-    }
-    if (!patched_any) return(invisible(NULL))
-
-    file_list <- list.files(work_dir, recursive = TRUE, all.files = TRUE,
-      no.. = TRUE)
-    unlink(xlsx_path)
-    zip::zip(zipfile = xlsx_path, files = file_list,
-      root = work_dir, mode = "mirror")
-
-    if (!file.exists(xlsx_path)) {
-      cli::cli_abort(
-        "rId patch failed to rewrite {.path {xlsx_path}} — original file was removed."
+    # Images go in BEFORE the chart XML so openxlsx2 gives them the natural
+    # rId sequence.
+    for (img in net_images) {
+      if (!file.exists(img$file)) next
+      wb2$add_image(
+        sheet = img$sheet,
+        file  = img$file,
+        dims  = paste0(num2let(img$start_col), img$start_row),
+        width = img$width,
+        height = img$height,
+        units = "in"
       )
     }
-    invisible(NULL)
-  }
-  if (utils::packageVersion("openxlsx2") < "1.26") {
-    .fix_drawing_rids(file_path)
+
+    if (!is.null(chart_xml) && !is.null(chart_dims)) {
+      wb2$add_chart_xml(sheet = "Prioritization",
+        dims = chart_dims, xml = chart_xml)
+    }
+
+    wb2$save(file_path, overwrite = TRUE)
+    if (file.exists(tmp_path)) unlink(tmp_path)
+  } else {
+    # Fast path: no images, no chart — just save openxlsx directly.
+    openxlsx::saveWorkbook(wb, file_path, overwrite = TRUE)
   }
 
   # Cleanup
-  if (file.exists(tmp_path)) unlink(tmp_path)
   for (td in attr(wb, "tmp_dirs") %||% character(0)) {
     unlink(td, recursive = TRUE)
   }
 
   cli::cli_alert_success("Combined workbook saved: {file_path}")
 
-  invisible(wb)
+  invisible(file_path)
 }

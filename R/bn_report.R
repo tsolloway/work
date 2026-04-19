@@ -63,6 +63,15 @@
 #'   `marginal_threshold` from `prioritizations$meta`, so the colour bands
 #'   stay consistent with whatever was set at `bn_finalize_network()` /
 #'   `bn_prioritizations()` time. Default `FALSE`.
+#' @param results_excel Optional. Path(s) to prebaked `.xlsx` file(s) (e.g.
+#'   produced by `bn_write()`) to embed as **Download Report** buttons on
+#'   each accordion. Accepted shapes:
+#'   * `NULL` (default) — no Download Report buttons.
+#'   * A single string — used for the (single) result.
+#'   * A named list/vector — matched to `results` by name; missing or NULL
+#'     slots get no button.
+#'   * An unnamed list/vector — matched to `results` by position; trailing
+#'     unmatched slots get no button.
 #'
 #' @return The file path (invisibly).
 #'
@@ -101,7 +110,8 @@ bn_report <- function(
     file = NULL,
     open = TRUE,
     seed = 1,
-    add_additional_results = FALSE
+    add_additional_results = FALSE,
+    results_excel = NULL
 ){
 
   # --- auto-name from title/subtitle ---
@@ -142,6 +152,27 @@ bn_report <- function(
   tmp_dir <- tempfile("bn_report_")
   dir.create(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+
+  # --- normalize results_excel to a list aligned with `results` ---
+  # Result: a named list of length(results); each slot is either a file path
+  # (character) or NULL (no Download Report button for that accordion).
+  results_excel <- .bn_report_normalize_results_excel(results_excel, results)
+
+  # Read a prebaked .xlsx from disk and return base64 + filename. Returns
+  # NULL when path is NULL or the file is missing — caller omits the button.
+  .read_xlsx_b64 <- function(path) {
+    if (is.null(path) || !nzchar(path)) return(NULL)
+    if (!file.exists(path)) {
+      warning("results_excel: file not found, skipping Download Report: ",
+              path, call. = FALSE)
+      return(NULL)
+    }
+    bytes <- readBin(path, what = "raw", n = file.info(path)$size)
+    list(
+      b64      = base64enc::base64encode(bytes),
+      filename = basename(path)
+    )
+  }
 
   widget_counter <- 0L
 
@@ -350,23 +381,48 @@ bn_report <- function(
     result_counter <<- result_counter + 1L
     rid <- glue::glue("r{result_counter}")
 
-    # build dropdown options
-    options_html <- purrr::map2_chr(types, type_labels, function(type, label) {
-      sel <- if (type == default_type) " selected" else ""
-      glue::glue('<option value="{rid}_{type}"{sel}>{label}</option>')
-    })
-    options_str <- paste(options_html, collapse = "\n          ")
-
     # build type panels — each contains tabs (or single view)
     type_panels <- purrr::map2_chr(types, type_labels, function(type, label) {
 
       panel_id <- glue::glue("{rid}_{type}")
       visible <- if (type == default_type) "block" else "none"
 
+      # Per-type layout dropdown — each type-panel carries its own copy with
+      # its own type pre-selected, so when switchType swaps to this panel the
+      # dropdown already reads the right value (no JS sync needed).
+      type_options <- purrr::map2_chr(types, type_labels, function(t, l) {
+        sel <- if (t == type) " selected" else ""
+        glue::glue('<option value="{rid}_{t}"{sel}>{l}</option>')
+      })
+      type_options_str <- paste(type_options, collapse = "\n            ")
+      layout_ctrl_html <- glue::glue(
+        '<div class="layout-controls">',
+        '<label for="{panel_id}_layout">Layout</label>',
+        '<select id="{panel_id}_layout" class="layout-select" ',
+        'onchange="switchType(\'{rid}\', this.value)">',
+        '{type_options_str}',
+        '</select>',
+        '</div>'
+      )
+
       if (has_tabs) {
 
-        tab_attr <- render_widget(result, type, FALSE, result_name = name)
-        tab_comm <- render_widget(result, type, TRUE, result_name = name)
+        # Wrap the network views in .network-dashboard so they get the same
+        # 20px outer padding as .impact-dashboard / .priort-dashboard /
+        # .membership-wrap — keeps every tab\\u2019s controls box visually
+        # identical (same edge spacing, same gap below to the content).
+        tab_attr <- paste0(
+          '<div class="network-dashboard">',
+          layout_ctrl_html,
+          render_widget(result, type, FALSE, result_name = name),
+          '</div>'
+        )
+        tab_comm <- paste0(
+          '<div class="network-dashboard">',
+          layout_ctrl_html,
+          render_widget(result, type, TRUE,  result_name = name),
+          '</div>'
+        )
         tab_memb <- render_membership(result, name)
 
         attr_id <- glue::glue("{panel_id}_attr")
@@ -452,7 +508,7 @@ bn_report <- function(
 
         glue::glue(
           '<div id="{panel_id}" class="type-panel" style="display: {visible};">',
-          '  <div style="padding: 12px;">{panel_content}</div>',
+          '  <div class="network-dashboard">{layout_ctrl_html}{panel_content}</div>',
           '</div>'
         )
       }
@@ -462,16 +518,37 @@ bn_report <- function(
 
     open_attr <- if (result_counter == 1L) " open" else ""
 
+    # If the user supplied a prebaked .xlsx for this result via results_excel,
+    # embed its bytes (base64) in a hidden <script> and add a Download Report
+    # button to the accordion summary. NULL slot = no button.
+    prebake <- .read_xlsx_b64(results_excel[[name]])
+    if (!is.null(prebake)) {
+      xlsx_id <- glue::glue("xlsx_{rid}")
+      esc_filename <- htmltools::htmlEscape(prebake$filename, attribute = TRUE)
+      download_btn_html <- glue::glue(
+        '<button class="report-btn accordion-download-btn" ',
+        'onclick="event.stopPropagation();event.preventDefault();',
+        'downloadAccordionReport(this);" ',
+        'data-xlsx-id="{xlsx_id}" data-filename="{esc_filename}">',
+        'Download Report</button>'
+      )
+      xlsx_script_html <- glue::glue(
+        '<script type="application/octet-stream" id="{xlsx_id}" ',
+        'class="prebake-xlsx">{prebake$b64}</script>'
+      )
+    } else {
+      download_btn_html <- ""
+      xlsx_script_html  <- ""
+    }
+
     glue::glue(
       '<details class="result-accordion"{open_attr}>',
-      '  <summary>{name}</summary>',
+      '  <summary>',
+      '    <span class="accordion-title">{name}</span>',
+      '    {download_btn_html}',
+      '  </summary>',
+      '  {xlsx_script_html}',
       '  <div class="accordion-body">',
-      '    <div class="controls-bar">',
-      '      <label for="{rid}_select">Layout</label>',
-      '      <select id="{rid}_select" onchange="switchType(\'{rid}\', this.value)">',
-      '        {options_str}',
-      '      </select>',
-      '    </div>',
       '    {type_panels_str}',
       '  </div>',
       '</details>'
@@ -565,8 +642,14 @@ bn_report <- function(
   }
 
   # helper: does this object look like an engine result?
+  # Mirrors the top-level wrap check above: an engine has either a top-level
+  # $meta (bn_engine output) or a top-level $bn (bn_finalize_network output,
+  # whose $meta lives inside $bn). Without the $bn check, a user-supplied
+  # named list like list("My Label" = bn_final) gets misclassified as a
+  # nested-engine container and explodes into separate bn / impacts /
+  # prioritizations accordions.
   .is_engine <- function(x) {
-    is.list(x) && !is.null(x[["meta"]])
+    is.list(x) && (!is.null(x[["meta"]]) || !is.null(x[["bn"]]))
   }
 
   # bn_initial_networks output: mixed bare engines (unsupervised) and
@@ -603,6 +686,52 @@ bn_report <- function(
   }
 
   results
+}
+
+
+# Internal: align a user-supplied results_excel argument with the (already
+# normalized) results list. Returns a named list of length(results); each
+# slot holds either a file path (character, length 1) or NULL.
+#
+# Accepted shapes for results_excel:
+#   * NULL                     — every slot NULL.
+#   * single character string  — used as the path for the one (and only)
+#                                 result; if length(results) > 1, only the
+#                                 first slot is filled.
+#   * named list / vector      — matched to results by name.
+#   * unnamed list / vector    — matched to results by position.
+#
+# Slot values can themselves be NULL or NA; both are treated as "no button".
+.bn_report_normalize_results_excel <- function(results_excel, results) {
+
+  empty <- setNames(rep(list(NULL), length(results)), names(results))
+
+  if (is.null(results_excel)) return(empty)
+
+  # Coerce a bare character vector to a list so [[i]] returns a single string.
+  if (is.character(results_excel)) results_excel <- as.list(results_excel)
+
+  # Drop NA slots — treat them as "no button".
+  results_excel <- purrr::map(results_excel, function(x) {
+    if (length(x) == 0 || (length(x) == 1 && is.na(x))) NULL else x
+  })
+
+  out <- empty
+  if (!is.null(names(results_excel)) && all(nzchar(names(results_excel)))) {
+    # Named — match by name; warn on unmatched names.
+    matched   <- intersect(names(results_excel), names(results))
+    unmatched <- setdiff(names(results_excel), names(results))
+    if (length(unmatched) > 0) {
+      warning("results_excel: name(s) not present in results: ",
+              paste(unmatched, collapse = ", "), call. = FALSE)
+    }
+    for (nm in matched) out[[nm]] <- results_excel[[nm]]
+  } else {
+    # Unnamed — positional, padded / truncated to length(results).
+    n <- min(length(out), length(results_excel))
+    if (n > 0) for (i in seq_len(n)) out[[i]] <- results_excel[[i]]
+  }
+  out
 }
 
 
@@ -1257,31 +1386,36 @@ bn_report <- function(
     '  user-select: none;',
     '  background: #f7f7f7;',
     '  border-bottom: 1px solid #eee;',
+    '  display: flex; align-items: center; gap: 12px;',
     '}',
     '.result-accordion summary:hover { background: #f0f0f0; }',
+    '/* Title takes the leftover space so the download button hugs the right. */',
+    '.accordion-title { flex: 1 1 auto; min-width: 0; }',
+    '/* Download button sits on the right, normal-weight, smaller. */',
+    '.accordion-download-btn {',
+    '  flex: 0 0 auto;',
+    '  font-size: 13px; font-weight: 500;',
+    '}',
     '.accordion-body { padding: 0; }',
     '',
-    '/* dropdown controls */',
-    '.controls-bar {',
-    '  display: flex;',
-    '  align-items: center;',
-    '  gap: 10px;',
-    '  padding: 12px 20px;',
-    '  background: #fafafa;',
-    '  border-bottom: 1px solid #eee;',
+    '/* Wrapper for the Attribute / Community network tabs — matches the 20px',
+    '   outer padding used by .impact-dashboard / .priort-dashboard /',
+    '   .membership-wrap so the controls box has identical spacing on every tab. */',
+    '.network-dashboard { padding: 20px; }',
+    '/* Layout dropdown — sits as a card at the top of each Attribute /',
+    '   Community panel, styled to match .impact-controls so it visually reads',
+    '   as a per-tab control. */',
+    '.layout-controls {',
+    '  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;',
+    '  margin: 0 0 16px 0; padding: 12px;',
+    '  background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px;',
     '}',
-    '.controls-bar label {',
-    '  font-size: 14px;',
-    '  font-weight: 600;',
-    '  color: #555;',
+    '.layout-controls label {',
+    '  font-weight: 600; color: #333; font-size: 13px;',
     '}',
-    '.controls-bar select {',
-    '  padding: 6px 12px;',
-    '  font-size: 14px;',
-    '  border: 1px solid #ccc;',
-    '  border-radius: 4px;',
-    '  background: #fff;',
-    '  color: #333;',
+    '.layout-select {',
+    '  padding: 4px 8px; font-size: 13px; width: 180px;',
+    '  border: 1px solid #bbb; border-radius: 3px; background: #fff;',
     '  cursor: pointer;',
     '}',
     '.report-btn {',
@@ -1973,41 +2107,46 @@ bn_report <- function(
     '  // Sorting operates on the <tbody> rows; <tfoot> (Total Impact + Base) is untouched.',
     '  var tbody = root.querySelector(".impact-table tbody");',
     '  var originalOrder = Array.from(tbody.querySelectorAll("tr"));',
-    '  root.querySelectorAll(".impact-table thead th.sortable").forEach(function(th, colIdx) {',
+    '',
+    '  // Apply a sort direction ("asc" | "desc" | "none") to a header. Extracted',
+    '  // so both the click handler and the init code path below can reuse it.',
+    '  function applySort(th, direction) {',
+    '    root.querySelectorAll(".impact-table thead th.sortable").forEach(function(x) {',
+    '      x.classList.remove("sorted-asc", "sorted-desc");',
+    '      x.setAttribute("data-sort-state", "none");',
+    '    });',
+    '    if (direction === "none" || !th) {',
+    '      originalOrder.forEach(function(tr) { tbody.appendChild(tr); });',
+    '      return;',
+    '    }',
+    '    th.classList.add(direction === "asc" ? "sorted-asc" : "sorted-desc");',
+    '    th.setAttribute("data-sort-state", direction);',
+    '    var sortType = th.getAttribute("data-sort") || "text";',
+    '    var rows = Array.from(tbody.querySelectorAll("tr"));',
+    '    var headerCells = Array.from(th.parentElement.children);',
+    '    var idx = headerCells.indexOf(th);',
+    '    rows.sort(function(a, b) {',
+    '      var av = a.children[idx] ? a.children[idx].textContent.trim() : "";',
+    '      var bv = b.children[idx] ? b.children[idx].textContent.trim() : "";',
+    '      if (sortType === "num") {',
+    '        var an = parseFloat(av); var bn = parseFloat(bv);',
+    '        // Push blanks to the bottom regardless of direction',
+    '        if (isNaN(an) && isNaN(bn)) return 0;',
+    '        if (isNaN(an)) return 1;',
+    '        if (isNaN(bn)) return -1;',
+    '        return direction === "asc" ? an - bn : bn - an;',
+    '      }',
+    '      var cmp = av.localeCompare(bv, undefined, { sensitivity: "base" });',
+    '      return direction === "asc" ? cmp : -cmp;',
+    '    });',
+    '    rows.forEach(function(tr) { tbody.appendChild(tr); });',
+    '  }',
+    '',
+    '  root.querySelectorAll(".impact-table thead th.sortable").forEach(function(th) {',
     '    th.addEventListener("click", function() {',
     '      var state = th.getAttribute("data-sort-state") || "none";',
     '      var next = state === "none" ? "asc" : (state === "asc" ? "desc" : "none");',
-    '      // Reset state on all headers',
-    '      root.querySelectorAll(".impact-table thead th.sortable").forEach(function(x) {',
-    '        x.classList.remove("sorted-asc", "sorted-desc");',
-    '        x.setAttribute("data-sort-state", "none");',
-    '      });',
-    '      if (next === "none") {',
-    '        originalOrder.forEach(function(tr) { tbody.appendChild(tr); });',
-    '        return;',
-    '      }',
-    '      th.classList.add(next === "asc" ? "sorted-asc" : "sorted-desc");',
-    '      th.setAttribute("data-sort-state", next);',
-    '      var sortType = th.getAttribute("data-sort") || "text";',
-    '      var rows = Array.from(tbody.querySelectorAll("tr"));',
-    '      // Find actual index of this th among thead cells (stable regardless of col order)',
-    '      var headerCells = Array.from(th.parentElement.children);',
-    '      var idx = headerCells.indexOf(th);',
-    '      rows.sort(function(a, b) {',
-    '        var av = a.children[idx] ? a.children[idx].textContent.trim() : "";',
-    '        var bv = b.children[idx] ? b.children[idx].textContent.trim() : "";',
-    '        if (sortType === "num") {',
-    '          var an = parseFloat(av); var bn = parseFloat(bv);',
-    '          // Push blanks to the bottom regardless of direction',
-    '          if (isNaN(an) && isNaN(bn)) return 0;',
-    '          if (isNaN(an)) return 1;',
-    '          if (isNaN(bn)) return -1;',
-    '          return next === "asc" ? an - bn : bn - an;',
-    '        }',
-    '        var cmp = av.localeCompare(bv, undefined, { sensitivity: "base" });',
-    '        return next === "asc" ? cmp : -cmp;',
-    '      });',
-    '      rows.forEach(function(tr) { tbody.appendChild(tr); });',
+    '      applySort(th, next);',
     '    });',
     '  });',
     '',
@@ -2055,6 +2194,13 @@ bn_report <- function(
     '  });',
     '',
     '  update();',
+    '',
+    '  // Default sort: the first metric (subgroup) column, descending — not',
+    '  // the Variable/ID column. update() only refills cell values (not row',
+    '  // order), so this sort sticks across subsequent metric/focus/weight',
+    '  // changes.',
+    '  var defaultSortTh = root.querySelector(".impact-table thead th.metric-col");',
+    '  if (defaultSortTh) applySort(defaultSortTh, "desc");',
     '}',
     '',
     '/* --- Prioritization dashboard --- */',
@@ -2595,8 +2741,95 @@ bn_report <- function(
     '  return r + "|" + l + "|" + v;',
     '}',
     '',
+    '// Walk every Impact and Prioritization dashboard and snapshot the value of',
+    '// each dropdown (keyed by data-dim) under the dashboard\\u2019s data-dashboard-id.',
+    '// Dashboards live in the same DOM regardless of which tab is active, so this',
+    '// captures all of them in one pass.',
+    'function captureDashboardStates() {',
+    '  var states = {};',
+    '  document.querySelectorAll(".impact-dashboard, .priort-dashboard").forEach(function(d) {',
+    '    var id = d.getAttribute("data-dashboard-id");',
+    '    if (!id) return;',
+    '    var s = {};',
+    '    d.querySelectorAll(".impact-ctrl, .priort-ctrl").forEach(function(sel) {',
+    '      var dim = sel.getAttribute("data-dim");',
+    '      if (dim) s[dim] = sel.value;',
+    '    });',
+    '    states[id] = s;',
+    '  });',
+    '  return states;',
+    '}',
+    '',
+    '// Inverse of captureDashboardStates: set each dropdown\\u2019s value and',
+    '// dispatch a "change" event so the dashboard\\u2019s render() runs and the',
+    '// table + chart update to match the restored selections.',
+    'function restoreDashboardStates(saved) {',
+    '  if (!saved) return;',
+    '  Object.keys(saved).forEach(function(id) {',
+    '    var d = document.querySelector(\'[data-dashboard-id="\' + id + \'"]\');',
+    '    if (!d) return;',
+    '    var s = saved[id] || {};',
+    '    var changedAny = false;',
+    '    Object.keys(s).forEach(function(dim) {',
+    '      var sel = d.querySelector(\'[data-dim="\' + dim + \'"]\');',
+    '      if (!sel) return;',
+    '      // Only set if the option exists — otherwise leave the default.',
+    '      var has = Array.from(sel.options).some(function(o) { return o.value === s[dim]; });',
+    '      if (!has) return;',
+    '      if (sel.value !== s[dim]) { sel.value = s[dim]; changedAny = true; }',
+    '    });',
+    '    // One change event triggers the dashboard\\u2019s render() once. Dispatch',
+    '    // on any select that exists so the dashboard re-renders end-to-end.',
+    '    if (changedAny) {',
+    '      var anySel = d.querySelector(".impact-ctrl, .priort-ctrl");',
+    '      if (anySel) anySel.dispatchEvent(new Event("change", { bubbles: true }));',
+    '    }',
+    '  });',
+    '}',
+    '',
+    '// Per-accordion Download Report button. Reads the prebaked .xlsx bytes',
+    '// from a sibling <script type="application/octet-stream"> element inside',
+    '// the accordion, decodes base64 to a Blob, and triggers a download.',
+    'function downloadAccordionReport(btn) {',
+    '  var id = btn.getAttribute("data-xlsx-id");',
+    '  var filename = btn.getAttribute("data-filename") || "report.xlsx";',
+    '  var script = document.getElementById(id);',
+    '  if (!script) { alert("Embedded report not found."); return; }',
+    '  var b64 = (script.textContent || "").trim();',
+    '  if (!b64) { alert("Embedded report is empty."); return; }',
+    '  try {',
+    '    var binStr = atob(b64);',
+    '    var len = binStr.length;',
+    '    var bytes = new Uint8Array(len);',
+    '    for (var i = 0; i < len; i++) bytes[i] = binStr.charCodeAt(i);',
+    '    var blob = new Blob([bytes], {',
+    '      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"',
+    '    });',
+    '    var url = URL.createObjectURL(blob);',
+    '    var a = document.createElement("a");',
+    '    a.href = url; a.download = filename;',
+    '    document.body.appendChild(a); a.click(); document.body.removeChild(a);',
+    '    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);',
+    '  } catch(e) {',
+    '    alert("Could not download report: " + e.message);',
+    '  }',
+    '}',
+    '',
     'function saveAllLayouts() {',
-    '  var json = JSON.stringify({ panels: snapshotStore, legendEdits: legendEdits, nodeLabelEdits: nodeLabelEdits }, null, 2);',
+    '  // Tell every network iframe to deselect any active node before we',
+    '  // serialize. Selection-time color mutations from highlightNearest are',
+    '  // already filtered out in the iframe (originalNodeColors cache), but',
+    '  // this also makes the loaded-back visual state match what was saved.',
+    '  document.querySelectorAll(".tab-panel iframe").forEach(function(iframe) {',
+    '    try { iframe.contentWindow.postMessage({ type: "deselectAll" }, "*"); } catch(e) {}',
+    '  });',
+    '  var payload = {',
+    '    panels: snapshotStore,',
+    '    legendEdits: legendEdits,',
+    '    nodeLabelEdits: nodeLabelEdits,',
+    '    dashboards: captureDashboardStates()',
+    '  };',
+    '  var json = JSON.stringify(payload, null, 2);',
     '  var blob = new Blob([json], { type: "application/json" });',
     paste0('  ', save_download),
     '}',
@@ -2651,6 +2884,10 @@ bn_report <- function(
     '      document.querySelectorAll(".tab-panel[data-result]").forEach(function(panel) {',
     '        sendSnapshotToPanel(panel);',
     '      });',
+    '',
+    '      // Restore dashboard control state for Impact and Prioritization tabs.',
+    '      // Tolerant of older save files: missing key just leaves dashboards alone.',
+    '      restoreDashboardStates(parsed.dashboards);',
     '',
     '    } catch(err) {',
     '      alert("Invalid layout file.");',

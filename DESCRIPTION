@@ -46,7 +46,7 @@ Imports:
     lubridate,
     matrixStats,
     openxlsx,
-    openxlsx2,
+    openxlsx2 (>= 1.26),
     parallelly,
     plotly,
     psych,

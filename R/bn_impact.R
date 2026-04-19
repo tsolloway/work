@@ -352,6 +352,10 @@ bn_impact <- function(
       brand = brand,
       brand_names = brand_names_resolved,
       min_base_for_lift = min_base_for_lift,
+      # Survey-weight column name (or NULL). Retained so downstream writers
+      # (e.g. append_bn_simulator) can use the same weight without having
+      # to re-thread it through every caller.
+      weight = weight,
       # Bootstrap tracking — set when bootstrap was actually applied so
       # downstream writers (e.g., bn_impact_write guide) can describe what
       # ran rather than what could have run.
