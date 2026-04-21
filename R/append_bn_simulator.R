@@ -195,12 +195,71 @@ append_bn_simulator <- function(
     as.matrix(sim_data[, p_cols]) %*% nd_levels_numeric
   )
 
-  # Add concatenated key for simple MATCH lookup
-  sim_data <- sim_data %>%
-    dplyr::mutate(
-      Key = paste(Subgroup, Evidence_Variable, Evidence_Level, Target_Variable, sep = "|"),
-      .before = 1
-    )
+  # ---------------------------------------------------------------------------
+  # 1a. Factored storage: pivot long → wide + prior
+  # ---------------------------------------------------------------------------
+  # Instead of a long "{sg}|{ev_var}|{ev_level}|{target}" table with per-row
+  # Expected_Value, we now emit:
+  #   * sim_data_wide:  Key = "{sg}|{iv}|{target}", cols EV_L1..EV_L{max}
+  #   * sim_data_prior: Key = "{sg}|{target}",      col Prior_EV
+  # This halves the row count of the evidence table (one row per iv x target
+  # instead of per level x iv x target) and lets Mean mode use SUMPRODUCT
+  # against a shared shifted-probs sheet (see Phase 2) — factoring out the
+  # focus/pct/weight combos that previously exploded per target.
+
+  # Per-subgroup node level lookup (for level-position resolution)
+  nl_by_sg <- purrr::map(rlang::set_names(names(sg_list)), function(sg) {
+    fit_sg <- obj[[sg]][["fit"]]
+    purrr::map(rlang::set_names(names(fit_sg)), function(nd) {
+      dimnames(fit_sg[[nd]][["prob"]])[[1]]
+    })
+  })
+
+  # Global max IV levels (column count for both sim_data_wide EV_L* and
+  # Phase 2 shifted_probs P_L* — must align so Mean-mode SUMPRODUCT works).
+  max_iv_levels_all <- max(purrr::map_int(names(sg_list), function(sg) {
+    ivs_sg <- obj[[sg]][["meta"]][["ivs"]]
+    max(purrr::map_int(ivs_sg, function(iv) length(nl_by_sg[[sg]][[iv]])))
+  }))
+  ev_col_names <- paste0("EV_L", seq_len(max_iv_levels_all))
+
+  # Split prior vs evidence rows
+  prior_rows <- sim_data$Evidence_Variable == "(None)"
+
+  sim_data_prior <- tibble::tibble(
+    Key      = paste(sim_data$Subgroup[prior_rows],
+                     sim_data$Target_Variable[prior_rows], sep = "|"),
+    Prior_EV = round(sim_data$Expected_Value[prior_rows], 4)
+  )
+
+  # Resolve level position for every evidence row: which index in the IV's
+  # level vector does Evidence_Level correspond to?
+  ev_sg  <- sim_data$Subgroup[!prior_rows]
+  ev_iv  <- sim_data$Evidence_Variable[!prior_rows]
+  ev_lv  <- sim_data$Evidence_Level[!prior_rows]
+  ev_tg  <- sim_data$Target_Variable[!prior_rows]
+  ev_val <- round(sim_data$Expected_Value[!prior_rows], 4)
+
+  level_pos <- integer(length(ev_sg))
+  for (i in seq_along(ev_sg)) {
+    level_pos[i] <- match(ev_lv[i], nl_by_sg[[ ev_sg[i] ]][[ ev_iv[i] ]])
+  }
+
+  # Pivot to wide: one row per (sg, iv, target), columns = EV_L{position}
+  # Build composite key and a keyed matrix fill. Faster than tidyr for this
+  # small pivot (and avoids adding tidyr to package deps).
+  wide_keys <- paste(ev_sg, ev_iv, ev_tg, sep = "|")
+  unique_wide_keys <- unique(wide_keys)
+  n_wide <- length(unique_wide_keys)
+
+  ev_mat <- matrix(0, nrow = n_wide, ncol = max_iv_levels_all,
+                   dimnames = list(NULL, ev_col_names))
+  row_idx <- match(wide_keys, unique_wide_keys)
+  cell_idx <- cbind(row_idx, level_pos)
+  ev_mat[cell_idx] <- ev_val
+
+  sim_data_wide <- tibble::tibble(Key = unique_wide_keys) %>%
+    dplyr::bind_cols(tibble::as_tibble(ev_mat))
 
   # ---------------------------------------------------------------------------
   # 1b. Pre-compute percent change (freq shift) expected values
@@ -218,11 +277,6 @@ append_bn_simulator <- function(
 
   if (has_freq_shifts) {
 
-    nd_levels_numeric <- as.numeric(gsub("^P_", "", p_cols))
-
-    # Build key index for fast lookup
-    sim_key_idx <- rlang::set_names(seq_len(nrow(sim_data)), sim_data$Key)
-
     # Focus options: "Market" + brand names
     focus_options <- "Market"
     if (!is.null(brand) && !is.null(brand_names)) {
@@ -239,57 +293,22 @@ append_bn_simulator <- function(
       # Filter df to subgroup
       sg_df <- if (length(sg_list) > 1) df[df[[sg]] == 1, , drop = FALSE] else df
 
-      all_nodes_sg <- names(fit)
-      node_levels_sg <- purrr::map(rlang::set_names(all_nodes_sg), function(nd) {
-        dimnames(fit[[nd]][["prob"]])[[1]]
-      })
+      node_levels_sg <- nl_by_sg[[sg]]
 
-      # Targets queried as pct_data EV columns. With sim_dv_only the pivot
-      # collapses to a single target (the DV).
-      target_nodes_sg <- if (isTRUE(sim_dv_only)) dv else all_nodes_sg
+      # Factored storage (Option 1): emit SHIFTED PROBABILITIES directly.
+      # The dashboard computes EV at render time via SUMPRODUCT of the
+      # shifted_probs row and the matching row of _sim_data_wide (per-level
+      # posterior EVs from Phase 1). This cuts the stored sheet by ~5-10x
+      # vs pre-multiplying every (target, pct, focus, weight) combination.
+      #
+      # Output shape: one row per (iv, pct_label), columns P_L1..P_L{max}
+      # aligned globally to max_iv_levels_all. Shorter IVs pad trailing
+      # P_L* columns with 0 — SUMPRODUCT contributions are 0 there.
+      p_col_names_sg <- paste0("P_L", seq_len(max_iv_levels_all))
 
-      # Build EV matrix once per subgroup (shared across focus options).
-      # Columns correspond to target_nodes_sg (one column per target).
-      ev_mats <- purrr::map(rlang::set_names(ivs), function(iv) {
-        iv_levels <- node_levels_sg[[iv]]
-        n_levels <- length(iv_levels)
-        n_nodes <- length(target_nodes_sg)
-        ev_mat <- matrix(NA_real_, nrow = n_levels, ncol = n_nodes)
-        for (li in seq_along(iv_levels)) {
-          lv <- iv_levels[li]
-          for (ni in seq_along(target_nodes_sg)) {
-            key <- paste(sg, iv, lv, target_nodes_sg[ni], sep = "|")
-            idx <- sim_key_idx[key]
-            if (!is.na(idx)) {
-              probs <- as.numeric(sim_data[idx, p_cols])
-              ev_mat[li, ni] <- sum(nd_levels_numeric * probs, na.rm = TRUE)
-            }
-          }
-        }
-        ev_mat
-      })
-
-      # Build one row per (sg, iv, pct_label) with:
-      #   Mean_{focus}        — the shifted IV's own mean (per-row scalar)
-      #   EV_{focus}_{target} — one column per target node (pivot target from
-      #                         rows to columns; eliminates 28x duplication
-      #                         and dramatically shrinks the stored sheet).
       .compute_focus <- function(focus_df, focus_name, use_weight) {
-        focus_clean <- gsub(" ", "_", focus_name)
-        mean_col_name <- paste0("Mean_", focus_clean)
-        ev_col_names  <- paste0("EV_", focus_clean, "_", target_nodes_sg)
-
-        # For each IV, build one matrix of shifted probabilities (rows =
-        # pct_steps, cols = iv levels), then do ONE matrix multiply against
-        # ev_mat to get weighted EVs for every step at once. Replaces the
-        # old "build a tibble per pct_step" pattern (thousands of tibbles)
-        # with a single per-IV matrix assembly.
         per_iv <- purrr::map(ivs, function(iv) {
           iv_vals <- focus_df[[iv]]
-          # Use the survey-weight column ONLY when this run is the weighted
-          # version AND the column actually exists on focus_df. Otherwise
-          # fall back to raw counts. Returns a named numeric vector whose
-          # names are level strings, which is what bn_freq_prob_shift expects.
           if (isTRUE(use_weight) && !is.null(weight) &&
               weight %in% names(focus_df)) {
             w <- focus_df[[weight]]
@@ -299,11 +318,10 @@ append_bn_simulator <- function(
             iv_freq <- table(iv_vals)
           }
           iv_levels <- node_levels_sg[[iv]]
-          iv_values <- as.numeric(iv_levels)
-          ev_mat <- ev_mats[[iv]]
+          n_iv_levels <- length(iv_levels)
 
           shifted_mat <- matrix(NA_real_, nrow = length(pct_steps),
-            ncol = length(iv_levels))
+            ncol = n_iv_levels)
           for (pi in seq_along(pct_steps)) {
             sp <- tryCatch(
               as.numeric(bn_freq_prob_shift(freq = iv_freq, lift = pct_steps[pi],
@@ -313,96 +331,130 @@ append_bn_simulator <- function(
             if (!is.null(sp) && !anyNA(sp)) shifted_mat[pi, ] <- sp
           }
 
-          # Drop rows where the shift failed (any NA in that pct_step's row).
           good <- !is.na(shifted_mat[, 1])
           if (!any(good)) return(NULL)
           shifted_mat <- shifted_mat[good, , drop = FALSE]
           good_labels <- pct_labels[good]
 
-          # Single matrix multiply: (n_good x n_levels) %*% (n_levels x n_targets)
-          # -> (n_good x n_targets) of weighted EVs.
-          weighted_evs <- shifted_mat %*% ev_mat
-          colnames(weighted_evs) <- ev_col_names
-          mean_vals <- as.numeric(shifted_mat %*% iv_values)
+          # Pad to global max_iv_levels_all columns (0 for levels beyond
+          # the IV's own range) so every row is rectangular and aligned
+          # across subgroups AND with sim_data_wide's EV_L* columns.
+          padded <- matrix(0, nrow = nrow(shifted_mat), ncol = max_iv_levels_all)
+          padded[, seq_len(n_iv_levels)] <- shifted_mat
+          colnames(padded) <- p_col_names_sg
 
-          keys <- paste(sg, iv, good_labels, sep = "|")
-          tibble::tibble(Key = keys, !!mean_col_name := mean_vals) %>%
-            dplyr::bind_cols(tibble::as_tibble(weighted_evs))
+          # Precompute the weighted mean of the IV's shifted distribution.
+          # (Used by the dashboard's "mean from X to Y" display — avoids
+          # SUMPRODUCT+TRANSPOSE contortions in Excel.)
+          iv_level_num <- suppressWarnings(as.numeric(iv_levels))
+          mean_vec <- as.numeric(shifted_mat %*% iv_level_num)
+
+          tibble::tibble(
+            Subgroup    = sg,
+            IV          = iv,
+            pct_label   = good_labels,
+            Focus       = focus_name,
+            n_iv_levels = n_iv_levels,
+            Mean        = mean_vec
+          ) %>%
+            dplyr::bind_cols(tibble::as_tibble(padded))
         })
 
         dplyr::bind_rows(purrr::compact(per_iv))
       }
 
-      # When a weight column was provided we precompute BOTH the unweighted
-      # and weighted variants and tag each row's Key with the mode suffix —
-      # the dashboard's Weight dropdown picks which set of rows to read at
-      # runtime. Without a weight we only compute Unweighted.
+      # When a weight column was provided we precompute BOTH unweighted and
+      # weighted shifted-probs tables. Stack instead of join (focus is now
+      # a row dimension, not a column dimension).
       weight_modes <- if (has_weight) c("Unweighted", "Weighted") else "Unweighted"
 
       per_wmode <- purrr::map(weight_modes, function(wm) {
         use_weight_now <- (wm == "Weighted")
 
-        # Market always runs (no base-size restriction)
-        sg_result <- .compute_focus(sg_df, "Market", use_weight = use_weight_now)
+        # Market always runs (no base-size restriction).
+        sg_rows <- .compute_focus(sg_df, "Market", use_weight = use_weight_now)
         if (wm == "Unweighted") {
-          # Base sample sizes don't depend on weighting — record once, on the
-          # unweighted pass, to avoid duplicating rows in the _sim_base sheet.
           base_slices[[length(base_slices) + 1L]] <<- tibble::tibble(
-            subgroup = sg,
-            focus = "Market",
-            n_obs = nrow(sg_df),
-            min_required = min_base_for_sim
+            subgroup = sg, focus = "Market",
+            n_obs = nrow(sg_df), min_required = min_base_for_sim
           )
         }
 
-        # Join each brand, skipping brand x subgroup slices below
-        # min_base_for_sim. Skipped focuses still appear in the workbook
-        # dropdown; their Mean_/EV_ columns are NA and a red warning shows.
+        # Each brand focus. Below-min_base_for_sim focuses still get rows
+        # (NA-filled) so the dropdown resolves; the Focus warning fires.
         for (focus in setdiff(focus_options, "Market")) {
           focus_df <- sg_df[sg_df[[brand]] == focus, , drop = FALSE]
-
           if (wm == "Unweighted") {
             base_slices[[length(base_slices) + 1L]] <<- tibble::tibble(
-              subgroup = sg,
-              focus = focus,
-              n_obs = nrow(focus_df),
-              min_required = min_base_for_sim
+              subgroup = sg, focus = focus,
+              n_obs = nrow(focus_df), min_required = min_base_for_sim
             )
           }
 
           if (nrow(focus_df) < min_base_for_sim) {
-            focus_clean <- gsub(" ", "_", focus)
-            mean_col_name <- paste0("Mean_", focus_clean)
-            ev_col_names <- paste0("EV_", focus_clean, "_", target_nodes_sg)
-            na_ev_cols <- rlang::set_names(
-              as.list(rep(NA_real_, length(ev_col_names))),
-              ev_col_names
-            )
-            focus_result <- sg_result %>%
-              dplyr::select(Key) %>%
-              dplyr::mutate(
-                !!mean_col_name := NA_real_,
-                !!!na_ev_cols
-              )
+            # NA-fill one row per IV per pct to keep the dropdown shape.
+            na_rows <- purrr::map(ivs, function(iv) {
+              iv_levels <- node_levels_sg[[iv]]
+              tibble::tibble(
+                Subgroup    = sg,
+                IV          = iv,
+                pct_label   = pct_labels,
+                Focus       = focus,
+                n_iv_levels = length(iv_levels),
+                Mean        = NA_real_
+              ) %>%
+                dplyr::bind_cols(
+                  matrix(NA_real_, nrow = length(pct_labels),
+                    ncol = max_iv_levels_all,
+                    dimnames = list(NULL, p_col_names_sg)) %>%
+                  tibble::as_tibble()
+                )
+            }) %>% dplyr::bind_rows()
+            sg_rows <- dplyr::bind_rows(sg_rows, na_rows)
           } else {
-            focus_result <- .compute_focus(focus_df, focus,
-              use_weight = use_weight_now)
+            sg_rows <- dplyr::bind_rows(
+              sg_rows,
+              .compute_focus(focus_df, focus, use_weight = use_weight_now)
+            )
           }
-
-          sg_result <- sg_result %>%
-            dplyr::left_join(focus_result, by = "Key")
         }
 
-        # Tag every Key with the weight-mode suffix so the dashboard formulas
-        # can disambiguate. Format: subgroup|variable|pct_label|<mode>
-        sg_result$Key <- paste0(sg_result$Key, "|", wm)
-        sg_result
+        sg_rows$WeightMode <- wm
+        sg_rows
       })
 
       dplyr::bind_rows(per_wmode)
     }) %>% dplyr::bind_rows()
 
-    pct_data <- pct_data_list
+    # Build the shifted_probs sheet: Key = {sg}|{iv}|{pct_label}|{focus}|{wm},
+    # columns P_L1..P_Lmax. Max-levels across all subgroups determines column
+    # count; pad shorter-IV rows with 0 via dplyr::bind_rows (fills missing
+    # cols with NA, which we replace below).
+    shifted_probs_data <- pct_data_list %>%
+      dplyr::mutate(
+        Key = paste(Subgroup, IV, pct_label, Focus, WeightMode, sep = "|"),
+        .before = 1
+      )
+
+    # Align P_L columns to the global max (in case different subgroups have
+    # different IV level counts).
+    all_p_cols_sp <- grep("^P_L\\d+$", names(shifted_probs_data), value = TRUE)
+    all_p_cols_sp <- all_p_cols_sp[
+      order(as.integer(sub("^P_L", "", all_p_cols_sp)))
+    ]
+    # NA → 0 for padding columns (IV had fewer levels than the global max).
+    for (col in all_p_cols_sp) {
+      v <- shifted_probs_data[[col]]
+      # Only replace NA where it's a padding-position NA (column index >
+      # n_iv_levels for that row). Keep NAs from failed shifts intact.
+      pad_na <- is.na(v) & (as.integer(sub("^P_L", "", col)) >
+        shifted_probs_data[["n_iv_levels"]])
+      v[pad_na] <- 0
+      shifted_probs_data[[col]] <- v
+    }
+
+    # Keep Key, Mean (for "mean from X to Y" display), and P_L* columns.
+    shifted_probs_data <- shifted_probs_data[, c("Key", "Mean", all_p_cols_sp)]
 
   }
 
@@ -426,38 +478,38 @@ append_bn_simulator <- function(
   }
 
   # ---------------------------------------------------------------------------
-  # 3. Write hidden data sheet
+  # 3. Write hidden data sheets (factored storage — see Phase 1a + Phase 2)
   # ---------------------------------------------------------------------------
+  #   _sim_data_wide   rows: Key="{sg}|{iv}|{target}", cols EV_L1..EV_L{max}
+  #   _sim_data_prior  rows: Key="{sg}|{target}",      col  Prior_EV
+  #   _sim_shifted_probs (Mean mode only): Key="{sg}|{iv}|{pct}|{focus}|{wm}",
+  #                    cols P_L1..P_L{max} — shifted probability vectors
+  # Mean-mode EV is computed in-dashboard as SUMPRODUCT(P_L row, EV_L row).
 
-  # Trim to Key + Expected_Value
-  sim_data <- sim_data[, c("Key", "Expected_Value")]
+  wide_sheet  <- "_sim_data_wide"
+  prior_sheet <- "_sim_data_prior"
 
-  # Round numeric cells to 4 decimals before writing. Dashboards format to 1-2
-  # decimals anyway, so the extra precision is noise that bloats the XML text
-  # representation (e.g., "0.123456789012345" vs "0.1235"). This typically
-  # shrinks the stored data sheets by ~60-70% with no visible behavior change.
-  sim_data$Expected_Value <- round(sim_data$Expected_Value, 4)
+  openxlsx::addWorksheet(wb, wide_sheet)
+  openxlsx::writeData(wb, wide_sheet, sim_data_wide, startRow = 1, startCol = 1)
 
-  sim_sheet <- "_sim_data"
-  openxlsx::addWorksheet(wb, sim_sheet)
-  openxlsx::writeData(wb, sim_sheet, sim_data, startRow = 1, startCol = 1)
+  openxlsx::addWorksheet(wb, prior_sheet)
+  openxlsx::writeData(wb, prior_sheet, sim_data_prior, startRow = 1, startCol = 1)
 
-  pct_sheet <- "_sim_pct_data"
+  n_wide_rows  <- nrow(sim_data_wide)
+  n_prior_rows <- nrow(sim_data_prior)
+
+  probs_sheet <- "_sim_shifted_probs"
   if (has_freq_shifts) {
-    # Keep Key + all EV_ and Mean_ columns
-    keep_cols <- c("Key", grep("^EV_|^Mean_", names(pct_data), value = TRUE))
-    pct_data <- pct_data[, keep_cols]
+    # Round P_L* columns to 6 decimals — probabilities, so more precision
+    # needed than EVs. Still much smaller than default ~15-digit XML.
+    prob_cols <- setdiff(names(shifted_probs_data), "Key")
+    shifted_probs_data[prob_cols] <- lapply(shifted_probs_data[prob_cols],
+      round, 6)
 
-    # Round all numeric columns (EV_ / Mean_) to 4 decimals — same rationale
-    # as sim_data above. This is the largest sheet in the workbook so rounding
-    # here is where most of the file-size reduction comes from.
-    num_cols <- setdiff(keep_cols, "Key")
-    pct_data[num_cols] <- lapply(pct_data[num_cols], round, 4)
-
-    n_pct_rows <- nrow(pct_data)
-    openxlsx::addWorksheet(wb, pct_sheet)
-    openxlsx::writeData(wb, pct_sheet, pct_data, startRow = 1, startCol = 1)
-    n_pct_rows <- nrow(pct_data)
+    openxlsx::addWorksheet(wb, probs_sheet)
+    openxlsx::writeData(wb, probs_sheet, shifted_probs_data,
+      startRow = 1, startCol = 1)
+    n_probs_rows <- nrow(shifted_probs_data)
   }
 
   # ---------------------------------------------------------------------------
@@ -684,8 +736,8 @@ append_bn_simulator <- function(
   current_row <- current_row + 1L
 
   # Weight dropdown (only appears when a weight column was provided).
-  # Affects Mean mode only; Level mode reads from _sim_data (gRain posteriors)
-  # which aren't reshaped by this control.
+  # Affects Mean mode only; Level mode reads from _sim_data_wide (gRain
+  # posteriors), which are weight-independent and aren't reshaped by this control.
   weight_sim_cell_col <- NULL
   weight_sim_cell_row <- NULL
   if (has_weight) {
@@ -841,6 +893,7 @@ append_bn_simulator <- function(
     startRow = 2, startCol = active_level_col)
 
   active_level_let <- num2let(active_level_col)
+
   level_count_col <- lk_col
   lk_col <- lk_col + 1L
   openxlsx::writeData(wb, sim_lookup, "Level Count", startRow = 1, startCol = level_count_col)
@@ -857,10 +910,6 @@ append_bn_simulator <- function(
     lk_col <- lk_col + 1L
     openxlsx::writeData(wb, sim_lookup, "Active Options", startRow = 1, startCol = active_options_col)
 
-    # References for dynamic mean lookup from _sim_pct_data
-    pct_sim_key_range <- paste0(pct_sheet, "!$A$2:$A$", n_pct_rows + 1)
-    pct_sim_data_range <- paste0(pct_sheet, "!$A$2:$", num2let(ncol(pct_data)), "$", n_pct_rows + 1)
-    pct_sim_header_range <- paste0(pct_sheet, "!$1:$1")
     pct_let <- num2let(pct_col)
 
     # Subgroup and focus refs from lookup sheet
@@ -951,24 +1000,30 @@ append_bn_simulator <- function(
       weight_suffix_d <- "&\"|Unweighted\""
     }
 
-    # Keys: subgroup|variable|pct_label|weight_mode
+    # Keys: subgroup|variable|pct_label|focus|weight_mode  → _sim_shifted_probs
     zero_label <- pct_labels[which(pct_steps == 0)]
-    base_mean_key    <- paste0(sg_ref_d, "&\"|\"&", var_ref_d,
-      "&\"|", zero_label, "\"", weight_suffix_d)
-    shifted_mean_key <- paste0(sg_ref_d, "&\"|\"&", var_ref_d,
-      "&\"|\"&", level_ref_display, weight_suffix_d)
+    base_probs_key    <- paste0(sg_ref_d, "&\"|\"&", var_ref_d,
+      "&\"|", zero_label, "\"&\"|\"&", focus_ref_d, weight_suffix_d)
+    shifted_probs_key <- paste0(sg_ref_d, "&\"|\"&", var_ref_d,
+      "&\"|\"&", level_ref_display, "&\"|\"&", focus_ref_d, weight_suffix_d)
 
-    # Dynamic Mean column
-    mean_col_d <- paste0("\"Mean_\"&SUBSTITUTE(", focus_ref_d, ",\" \",\"_\")")
-    mean_col_match_d <- paste0("MATCH(", mean_col_d, ",", pct_sheet, "!$1:$1,0)")
-    pct_key_range_d <- paste0(pct_sheet, "!$A$2:$A$", n_pct_rows + 1)
-    pct_data_range_d <- paste0(pct_sheet, "!$A$2:$", num2let(ncol(pct_data)), "$", n_pct_rows + 1)
+    # _sim_shifted_probs: Mean column (B) is precomputed per row, so the
+    # display is a plain INDEX/MATCH — no array-formula contortions.
+    probs_key_range_d  <- paste0(probs_sheet, "!$A$2:$A$", n_probs_rows + 1)
+    probs_mean_range_d <- paste0(probs_sheet, "!$B$2:$B$", n_probs_rows + 1)
 
-    base_mean_val <- paste0("ROUND(INDEX(", pct_data_range_d, ",MATCH(", base_mean_key, ",", pct_key_range_d, ",0),", mean_col_match_d, "),2)")
-    shifted_mean_val <- paste0("ROUND(INDEX(", pct_data_range_d, ",MATCH(", shifted_mean_key, ",", pct_key_range_d, ",0),", mean_col_match_d, "),2)")
+    base_mean_val <- paste0(
+      "ROUND(INDEX(", probs_mean_range_d, ",MATCH(",
+      base_probs_key, ",", probs_key_range_d, ",0)),2)"
+    )
+    shifted_mean_val <- paste0(
+      "ROUND(INDEX(", probs_mean_range_d, ",MATCH(",
+      shifted_probs_key, ",", probs_key_range_d, ",0)),2)"
+    )
 
     mean_display_formula <- paste0(
-      "IF(", mode_ref_display, "=\"Mean\",IFERROR(\"mean from \"&", base_mean_val, "&\" to \"&", shifted_mean_val, ",\"\"),\"\")"
+      "IF(", mode_ref_display, "=\"Mean\",IFERROR(\"mean from \"&",
+      base_mean_val, "&\" to \"&", shifted_mean_val, ",\"\"),\"\")"
     )
 
     openxlsx::writeFormula(wb, dash_sheet, x = mean_display_formula,
@@ -1081,8 +1136,17 @@ append_bn_simulator <- function(
   }
 
   # ---------------------------------------------------------------------------
-  # Metric formulas: INDEX/MATCH against _sim_data or _sim_pct_data
+  # Metric formulas: INDEX/MATCH against factored sheets
   # ---------------------------------------------------------------------------
+  # Level mode raw EV : INDEX(_sim_data_wide EV cols, row="{sg}|{iv}|{target}",
+  #                     col=position of selected level in active levels)
+  # Level mode prior   : INDEX(_sim_data_prior, row="{sg}|{target}")
+  # Mean  mode raw EV  : SUMPRODUCT(
+  #                       INDEX(_sim_shifted_probs P cols,
+  #                             row="{sg}|{iv}|{pct}|{focus}|{wm}", 0),
+  #                       INDEX(_sim_data_wide EV cols,
+  #                             row="{sg}|{iv}|{target}", 0))
+  # Mean  mode baseline: Same with pct set to 0-label.
 
   var_ref <- paste0("$", num2let(var_cell_col), "$", var_cell_row)
   level_ref <- paste0("$", num2let(level_cell_col), "$", level_cell_row)
@@ -1090,52 +1154,25 @@ append_bn_simulator <- function(
     sg_ref <- paste0("$", num2let(sg_cell_col), "$", sg_cell_row)
   }
 
-  n_sim_rows <- nrow(sim_data)
   ev_col <- col_data_start + n_leading
   metric_sim_ref <- paste0("$", num2let(metric_sim_cell_col), "$", metric_sim_cell_row)
 
-  # sim_data: Key, Expected_Value
-  sim_key_range <- paste0(sim_sheet, "!$A$2:$A$", n_sim_rows + 1)
-  sim_ev_col_pos <- which(names(sim_data) == "Expected_Value")
-  sim_ev_range <- paste0(sim_sheet, "!$", num2let(sim_ev_col_pos), "$2:$",
-    num2let(sim_ev_col_pos), "$", n_sim_rows + 1)
+  # _sim_data_wide ranges (Key + EV_L1..EV_Lmax)
+  wide_last_col_let <- num2let(1 + max_iv_levels_all)
+  wide_key_range <- paste0(wide_sheet, "!$A$2:$A$", n_wide_rows + 1)
+  wide_ev_range  <- paste0(wide_sheet, "!$B$2:$", wide_last_col_let,
+    "$", n_wide_rows + 1)
 
-  if (has_freq_shifts) {
-    mode_ref <- paste0("$", num2let(mode_cell_col), "$", mode_cell_row)
-    is_mean_mode <- paste0(mode_ref, "=\"Mean\"")
+  # _sim_data_prior ranges (Key + Prior_EV)
+  prior_key_range <- paste0(prior_sheet, "!$A$2:$A$", n_prior_rows + 1)
+  prior_ev_range  <- paste0(prior_sheet, "!$B$2:$B$", n_prior_rows + 1)
 
-    # level_ref now contains the base pct label directly (no mean suffix to strip)
-    pct_base_label <- paste0("\"\"&", level_ref)
+  # Position lookup range (active levels, string form) — for Level mode
+  # col-index resolution. Uses the original Active Levels column so the
+  # match is on the user-visible string form, not the numeric-padded form.
+  active_levels_range <- paste0(sim_lookup, "!$", active_level_let,
+    "$2:$", active_level_let, "$", max_levels + 1)
 
-    # Focus reference for dynamic column selection
-    if (!is.null(focus_sim_cell_col)) {
-      focus_ref <- paste0("$", num2let(focus_sim_cell_col), "$", focus_sim_cell_row)
-    } else {
-      focus_ref <- "\"Market\""
-    }
-
-    pct_key_range <- paste0(pct_sheet, "!$A$2:$A$", n_pct_rows + 1)
-    pct_header_range <- paste0(pct_sheet, "!$1:$1")
-    pct_data_range <- paste0(pct_sheet, "!$A$2:$", num2let(ncol(pct_data)), "$", n_pct_rows + 1)
-
-    # EV column name depends on focus AND the target node, so it is built
-    # per-target inside the row loop below. The Mean display uses a
-    # separate mean_col_match_d defined earlier with its own focus ref.
-  }
-
-  # Helper: wrap raw EV + baseline EV into metric formula
-  .metric_formula <- function(raw_ev, baseline_ev) {
-    paste0(
-      "IF(", metric_sim_ref, "=\"Absolute\",", raw_ev, ",",
-      "IF(", metric_sim_ref, "=\"Absolute Change\",", raw_ev, "-", baseline_ev, ",",
-      "TEXT(ROUND((", raw_ev, "-", baseline_ev, ")/", baseline_ev, "*100,1),\"0.0\")&\"%\"))"
-    )
-  }
-
-  # Build every target node's metric formula as one character vector, then
-  # write all formulas in a single openxlsx::writeFormula call starting at
-  # data_rows[1]. Replaces a per-target writeFormula loop — same output,
-  # one call to openxlsx instead of n_targets calls.
   sg_prefix <- if (has_subgroups) {
     paste0(sg_ref, "&\"|\"&")
   } else {
@@ -1147,51 +1184,88 @@ append_bn_simulator <- function(
     paste0("\"", names(sg_list)[1])
   }
 
-  # Mean-mode keys include a weight-mode suffix: subgroup|variable|pct_label|<mode>.
-  # When the dashboard has a Weight dropdown we reference that cell; otherwise
-  # the suffix is a literal "Unweighted" (the only variant we precomputed).
-  if (has_weight) {
-    weight_ref_fmla <- paste0("$", num2let(weight_sim_cell_col), "$", weight_sim_cell_row)
-    weight_suffix_fmla <- paste0("&\"|\"&", weight_ref_fmla)
-  } else {
-    weight_suffix_fmla <- "&\"|Unweighted\""
+  if (has_freq_shifts) {
+    mode_ref <- paste0("$", num2let(mode_cell_col), "$", mode_cell_row)
+    is_mean_mode <- paste0(mode_ref, "=\"Mean\"")
+
+    if (!is.null(focus_sim_cell_col)) {
+      focus_ref <- paste0("$", num2let(focus_sim_cell_col), "$", focus_sim_cell_row)
+    } else {
+      focus_ref <- "\"Market\""
+    }
+
+    # _sim_shifted_probs ranges. Layout: Key (A), Mean (B), P_L1..P_Lmax
+    # (C onward). P_L width matches max_iv_levels_all so Mean-mode
+    # SUMPRODUCT against _sim_data_wide EV_L* is elementwise.
+    probs_last_col_let <- num2let(2 + max_iv_levels_all) # A + Mean + P_L1..P_Lmax
+    probs_key_range  <- paste0(probs_sheet, "!$A$2:$A$", n_probs_rows + 1)
+    probs_mean_range <- paste0(probs_sheet, "!$B$2:$B$", n_probs_rows + 1)
+    probs_p_range    <- paste0(probs_sheet, "!$C$2:$", probs_last_col_let,
+      "$", n_probs_rows + 1)
+
+    if (has_weight) {
+      weight_ref_fmla <- paste0("$", num2let(weight_sim_cell_col), "$", weight_sim_cell_row)
+      weight_suffix_fmla <- paste0("&\"|\"&", weight_ref_fmla)
+    } else {
+      weight_suffix_fmla <- "&\"|Unweighted\""
+    }
+  }
+
+  .metric_formula <- function(raw_ev, baseline_ev) {
+    paste0(
+      "IF(", metric_sim_ref, "=\"Absolute\",", raw_ev, ",",
+      "IF(", metric_sim_ref, "=\"Absolute Change\",", raw_ev, "-", baseline_ev, ",",
+      "TEXT(ROUND((", raw_ev, "-", baseline_ev, ")/", baseline_ev, "*100,1),\"0.0\")&\"%\"))"
+    )
   }
 
   ev_formulas <- vapply(all_nodes, function(nd) {
     # --- Level mode ---
-    key_formula  <- paste0(sg_prefix, var_ref, "&\"|\"&\"\"&", level_ref, "&\"|", nd, "\"")
-    match_formula <- paste0("MATCH(", key_formula, ",", sim_key_range, ",0)")
-    raw_level_ev <- paste0("IFERROR(INDEX(", sim_ev_range, ",", match_formula, "),0)")
+    # Row: MATCH("{sg}|{var}|{target}", wide_key_range)
+    # Col: MATCH(level_ref, active_levels_range, 0)  — position of user's
+    #      level choice within the active variable's level list.
+    level_wide_key <- paste0(sg_prefix, var_ref, "&\"|", nd, "\"")
+    level_row_match <- paste0("MATCH(", level_wide_key, ",", wide_key_range, ",0)")
+    level_col_match <- paste0("MATCH(", level_ref, ",", active_levels_range, ",0)")
+    raw_level_ev <- paste0("IFERROR(INDEX(", wide_ev_range, ",",
+      level_row_match, ",", level_col_match, "),0)")
 
-    # Baseline for Level mode: prior key = subgroup|(None)|(Prior)|target
-    bl_level_key <- paste0(bl_sg_prefix_str, "|(None)|(Prior)|", nd, "\"")
-    bl_level_ev <- paste0("IFERROR(INDEX(", sim_ev_range, ",MATCH(",
-      bl_level_key, ",", sim_key_range, ",0)),0)")
+    # Level baseline: prior EV for (sg, target)
+    bl_prior_key <- paste0(bl_sg_prefix_str, "|", nd, "\"")
+    bl_level_ev <- paste0("IFERROR(INDEX(", prior_ev_range, ",MATCH(",
+      bl_prior_key, ",", prior_key_range, ",0)),0)")
 
     level_ev <- .metric_formula(raw_level_ev, bl_level_ev)
 
     if (has_freq_shifts) {
-      # Key for Mean mode: subgroup|variable|pct_label|weight_mode
-      pct_key <- paste0(sg_prefix, var_ref, "&\"|\"&", pct_base_label,
-        weight_suffix_fmla)
-      pct_row_match <- paste0("MATCH(", pct_key, ",", pct_key_range, ",0)")
+      # Shared wide row lookup (per target) — sim_data_wide key is the same
+      # for Mean mode as for Level mode.
+      mean_wide_row <- paste0("MATCH(", level_wide_key, ",",
+        wide_key_range, ",0)")
 
-      # EV column header = "EV_{focus}_{target}" — target fixed, focus dynamic.
-      ev_col_formula_nd <- paste0("\"EV_\"&SUBSTITUTE(", focus_ref,
-        ",\" \",\"_\")&\"_", nd, "\"")
-      pct_ev_match_nd <- paste0("MATCH(", ev_col_formula_nd, ",",
-        pct_header_range, ",0)")
+      # Shift row: "{sg}|{iv}|{pct}|{focus}|{wm}"
+      shift_key <- paste0(sg_prefix, var_ref, "&\"|\"&", level_ref,
+        "&\"|\"&", focus_ref, weight_suffix_fmla)
+      shift_row_match <- paste0("MATCH(", shift_key, ",", probs_key_range, ",0)")
 
-      raw_pct_ev <- paste0("IFERROR(INDEX(", pct_data_range, ",",
-        pct_row_match, ",", pct_ev_match_nd, "),0)")
+      raw_pct_ev <- paste0(
+        "IFERROR(SUMPRODUCT(",
+          "INDEX(", probs_p_range, ",", shift_row_match, ",0),",
+          "INDEX(", wide_ev_range, ",", mean_wide_row, ",0)",
+        "),0)"
+      )
 
-      # Baseline Mean key: subgroup|variable|0 percent|weight_mode
+      # Mean-mode baseline: same SUMPRODUCT but with the 0-pct key.
       zero_label <- pct_labels[which(pct_steps == 0)]
-      bl_pct_key <- paste0(sg_prefix, var_ref, "&\"|", zero_label, "\"",
-        weight_suffix_fmla)
-      bl_pct_row <- paste0("MATCH(", bl_pct_key, ",", pct_key_range, ",0)")
-      bl_pct_ev <- paste0("IFERROR(INDEX(", pct_data_range, ",",
-        bl_pct_row, ",", pct_ev_match_nd, "),0)")
+      bl_shift_key <- paste0(sg_prefix, var_ref, "&\"|", zero_label,
+        "\"&\"|\"&", focus_ref, weight_suffix_fmla)
+      bl_shift_row <- paste0("MATCH(", bl_shift_key, ",", probs_key_range, ",0)")
+      bl_pct_ev <- paste0(
+        "IFERROR(SUMPRODUCT(",
+          "INDEX(", probs_p_range, ",", bl_shift_row, ",0),",
+          "INDEX(", wide_ev_range, ",", mean_wide_row, ",0)",
+        "),0)"
+      )
 
       mean_ev <- .metric_formula(raw_pct_ev, bl_pct_ev)
 

@@ -285,11 +285,12 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
         sim_dv_only = sim_dv_only,
         weight = meta[["weight"]]
       )
-      # _sim_data and _sim_lookup sheets added — hide them. Only touch
+      # Simulator helper sheets added — hide them. Only touch
       # visibility on sheets WE added (so external callers like bn_write
       # don't see their own sheets' visibility clobbered).
       sheet_names <- names(wb)
-      hide_these <- c("_sim_data", "_sim_pct_data", "_sim_lookup", "_sim_base")
+      hide_these <- c("_sim_data_wide", "_sim_data_prior", "_sim_shifted_probs",
+                      "_sim_lookup", "_sim_base")
       cur_vis <- openxlsx::sheetVisibility(wb)
       for (sn in setdiff(sheet_names, pre_sheets)) {
         idx <- match(sn, sheet_names)
@@ -460,7 +461,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     # Hide helper sheets — only touch visibility on sheets WE added.
     sheet_names <- names(wb)
     hide_sheets <- c("Results", "Results_Community", "Results_Weighted",
-      "Results_Community_Weighted", "_sim_data", "_sim_pct_data",
+      "Results_Community_Weighted",
+      "_sim_data_wide", "_sim_data_prior", "_sim_shifted_probs",
       "_lookup", "_lookup_community", "_sim_lookup", "_sim_base")
     cur_vis <- openxlsx::sheetVisibility(wb)
     for (sn in setdiff(sheet_names, pre_sheets)) {
