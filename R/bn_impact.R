@@ -81,8 +81,8 @@
 #' @param community_assignment Optional. Community assignment object used when
 #'   \code{do_community = TRUE}.
 #' @param lift Numeric vector. Target lift(s) for the shifted-distribution
-#'   metric. Interpretation depends on \code{impact_metric_type}. Default
-#'   \code{c(0, 0.1)}.
+#'   metric (both proportional and absolute shift variants are precomputed).
+#'   Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size required for a brand
 #'   subgroup to compute lift estimates. Brands below this threshold are
 #'   excluded. Default 75.
@@ -92,9 +92,22 @@
 #' @param dv_metric Character. How the DV is summarized: \code{"mean"}
 #'   (default) computes the expected value across all DV levels;
 #'   \code{"top_box"} uses the probability of the highest DV level.
-#' @param impact_metric_type Character. How \code{lift} is interpreted:
-#'   \code{"proportional"} (default) shifts by a fraction of the current mean;
-#'   \code{"absolute"} shifts by a fixed number of scale points.
+#' @section Shift-type variants:
+#'   Both proportional and absolute IV-shift variants are always precomputed
+#'   as separate columns in the returned table. Lift columns carry
+#'   `_propshift_` or `_absshift_` tags that interact with the outcome-
+#'   display variants (`_propdisplay` / `_absdisplay`). The dashboard built
+#'   by \code{bn_impact_write()} exposes runtime dropdowns for both. No
+#'   parameter controls this any longer — both shifts are always emitted.
+#'   maxVmin / mi columns are shift-independent and only emit the outcome-
+#'   display variants.
+#' @section Outcome-display variants:
+#'   Both proportional and absolute outcome-display variants of every DV-change
+#'   metric (\code{lift}, \code{maxVmin}) are always precomputed and stored
+#'   as separate columns in the returned table. The dashboard built by
+#'   \code{bn_impact_write()} exposes a runtime Outcome Display dropdown to
+#'   switch between them. No parameter controls this — both are always
+#'   emitted.
 #' @param include_base Logical. Whether to include the base (overall/unfiltered)
 #'   estimate alongside brand-specific estimates. Default \code{TRUE}.
 #' @param index_by Character. How to compute the final impact index:
@@ -190,7 +203,6 @@ bn_impact <- function(
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
     dv_metric = c("mean", "top_box"),
-    impact_metric_type = c("proportional", "absolute"),
     include_base = TRUE,
     index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     n_boot = 1,
@@ -206,19 +218,60 @@ bn_impact <- function(
 
   type <- match.arg(type)
   index_by <- match.arg(index_by)
-  impact_metric_type <- match.arg(impact_metric_type)
   dv_metric <- match.arg(dv_metric)
 
   # Preserve named dv for meta, strip for bnlearn
   dv_original <- dv
   dv <- unname(dv)
 
+  # Helper: insert a shift-type tag (propshift / absshift) into lift column
+  # names, right before the trailing `_propdisplay` / `_absdisplay` suffix.
+  # maxVmin / mi / p_val / dv_max_value / dv_min_value / index are shift-
+  # independent and are NOT renamed.
+  .insert_shift_suffix <- function(cols, shift_key) {
+    sub("^(lift.*)_(propdisplay|absdisplay)$",
+        paste0("\\1_", shift_key, "_\\2"), cols)
+  }
+
+  # Helper: merge two engine outputs produced with impact_shift_type =
+  # "proportional" and "absolute". Keep everything from the prop run; from
+  # the abs run take only the renamed lift columns and bind alongside.
+  # Result has 2× lift columns (shift × display) and 1× of everything else.
+  .merge_shift_variants <- function(prop_tbl, abs_tbl) {
+    # Rename lift columns in the prop run to include _propshift_ tag.
+    prop_names <- names(prop_tbl)
+    renamed_prop <- .insert_shift_suffix(prop_names, "propshift")
+    names(prop_tbl) <- renamed_prop
+
+    # From abs run, extract lift columns only and tag them _absshift_.
+    abs_lift_cols <- grep("^lift.*_(propdisplay|absdisplay)$",
+      names(abs_tbl), value = TRUE)
+    if (length(abs_lift_cols) == 0) return(prop_tbl)
+    abs_lift_only <- abs_tbl[, abs_lift_cols, drop = FALSE]
+    names(abs_lift_only) <- .insert_shift_suffix(
+      names(abs_lift_only), "absshift"
+    )
+
+    dplyr::bind_cols(prop_tbl, abs_lift_only)
+  }
+
+  # Run the engine once per shift_type (proportional + absolute). maxVmin /
+  # mi / index values don't depend on shift_type and would be duplicates, so
+  # only the lift columns are retained from the absolute run.
+  .dual_engine_call <- function(engine_args) {
+    prop_tbl <- do.call(bn_impact_engine,
+      c(engine_args, list(impact_shift_type = "proportional")))
+    abs_tbl  <- do.call(bn_impact_engine,
+      c(engine_args, list(impact_shift_type = "absolute")))
+    .merge_shift_variants(prop_tbl, abs_tbl)
+  }
+
   if(process_subgroups){
 
     first_subgroup <- names(obj)[[1]]
 
     .engine_call <- function(.x, .y){
-      bn_impact_engine(
+      .dual_engine_call(list(
         obj = .x,
         df = df %>%
           dplyr::filter(.data[[.y]] == 1) %>%
@@ -233,7 +286,6 @@ bn_impact <- function(
         n_boot = n_boot,
         n_querry = n_querry,
         lift = lift,
-        impact_metric_type = impact_metric_type,
         brand = brand,
         brand_names = brand_names,
         min_base_for_lift = min_base_for_lift,
@@ -242,7 +294,7 @@ bn_impact <- function(
         weight = weight,
         mi_boot = mi_boot,
         seed = seed
-      ) %>%
+      )) %>%
         setNames(glue::glue("{.y}_{names(.)}"))
     }
 
@@ -266,7 +318,7 @@ bn_impact <- function(
 
   }else{
 
-    output <- bn_impact_engine(
+    output <- .dual_engine_call(list(
       obj = obj,
       df = df,
       dv = dv,
@@ -278,7 +330,6 @@ bn_impact <- function(
       n_boot = n_boot,
       n_querry = n_querry,
       lift = lift,
-      impact_metric_type = impact_metric_type,
       brand = brand,
       brand_names = brand_names,
       min_base_for_lift = min_base_for_lift,
@@ -287,7 +338,7 @@ bn_impact <- function(
       weight = weight,
       mi_boot = mi_boot,
       seed = seed
-    ) %>%
+    )) %>%
       dplyr::rename(Variable = variable)
 
   }
@@ -339,6 +390,21 @@ bn_impact <- function(
     if (!is.null(brand_names)) intersect(all_brands, brand_names) else all_brands
   } else {
     NULL
+  }
+
+  # Round numeric metric columns to 6 decimals so both output paths (Excel
+  # data sheet + bn_report JSON) carry identical floats. Without this, the
+  # Excel SUMPRODUCT and the JS Array.reduce paths can return means that
+  # differ by a single ULP, which pushes some index values across an integer
+  # rounding boundary and produces ±1 discrepancies between the two outputs.
+  # 6 decimals is ample precision for impact values (typically ~0.01 range)
+  # and doesn't affect any downstream computation meaningfully.
+  .num_metric_cols <- setdiff(
+    names(output)[vapply(output, is.numeric, logical(1))],
+    c("index")  # engine-level index is already integer-scale, leave alone
+  )
+  if (length(.num_metric_cols) > 0) {
+    output[.num_metric_cols] <- lapply(output[.num_metric_cols], round, digits = 6)
   }
 
   list(

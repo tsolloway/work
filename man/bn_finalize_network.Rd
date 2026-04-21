@@ -27,7 +27,7 @@ bn_finalize_network(
   impact_n_boot = 1,
   impact_n_querry = 10000,
   impact_lift = c(0, 0.1),
-  impact_metric_type = c("proportional", "absolute"),
+  prioritize_shift_type = c("proportional", "absolute"),
   impact_include_base = TRUE,
   do_prioritizations = TRUE,
   prioritize_lift = 0.1,
@@ -110,8 +110,11 @@ attribute/community, weighted/unweighted impact tables. Default TRUE.}
 \item{impact_lift}{Numeric vector. Lift fractions for impact. Default
 \code{c(0, 0.1)}.}
 
-\item{impact_metric_type}{Character. \code{"proportional"} or
-\code{"absolute"}. Default \code{"proportional"}.}
+\item{prioritize_shift_type}{Character. IV shift interpretation for the
+greedy prioritization path only: \code{"proportional"} (default) shifts
+the IV mean by a fraction of its current value; \code{"absolute"} shifts
+by a fixed number of scale points. (Impacts always precompute BOTH
+variants — no parameter needed there.)}
 
 \item{impact_include_base}{Logical. Include base sizes in impact tables.
 Default TRUE.}
@@ -176,6 +179,14 @@ structure, computing subgroup models, running impact analysis, and
 optionally running full impacts (attribute + community, weighted/unweighted)
 and prioritization analysis.
 }
+\section{Impact-metric variants}{
+
+Impacts always precompute the full cross-product of IV-shift and
+DV-outcome-display variants (4 lift columns × 2 maxVmin columns + mi).
+The dashboards built by \code{bn_impact_write()} expose runtime
+dropdowns for both Shift Type and Outcome Display.
+}
+
 \seealso{
 \code{\link[=bn_impact]{bn_impact()}}, \code{\link[=bn_impacts]{bn_impacts()}}, \code{\link[=bn_prioritize]{bn_prioritize()}},
 \code{\link[=bn_prioritizations]{bn_prioritizations()}}

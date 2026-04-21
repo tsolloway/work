@@ -23,7 +23,8 @@ bn_report(
   open = TRUE,
   seed = 1,
   add_additional_results = FALSE,
-  results_excel = NULL
+  results_excel = NULL,
+  qc_mode = FALSE
 )
 }
 \arguments{
@@ -109,6 +110,14 @@ slots get no button.
 \item An unnamed list/vector — matched to \code{results} by position; trailing
 unmatched slots get no button.
 }}
+
+\item{qc_mode}{Logical. Enables QC-mode affordances in the HTML report
+— currently: hover tooltips on Impact dashboard cells that expose the
+underlying raw metric value and unrounded index (useful for validating
+that computed values line up with expectations, spotting outliers,
+cross-referencing Excel). Intentionally off for client-facing reports
+so the displayed integer indices aren't shadowed by scientific-notation
+hover text. Default \code{FALSE}.}
 }
 \value{
 The file path (invisibly).

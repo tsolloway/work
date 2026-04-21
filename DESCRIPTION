@@ -38,6 +38,7 @@ Imports:
     haven,
     highcharter,
     htmltools,
+    httr2,
     Hmisc,
     igraph,
     janitor,

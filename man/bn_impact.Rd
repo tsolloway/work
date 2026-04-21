@@ -17,7 +17,6 @@ bn_impact(
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
   dv_metric = c("mean", "top_box"),
-  impact_metric_type = c("proportional", "absolute"),
   include_base = TRUE,
   index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
   n_boot = 1,
@@ -63,8 +62,8 @@ If \code{FALSE}, compute once on the full \code{df}. Default TRUE.}
 \code{do_community = TRUE}.}
 
 \item{lift}{Numeric vector. Target lift(s) for the shifted-distribution
-metric. Interpretation depends on \code{impact_metric_type}. Default
-\code{c(0, 0.1)}.}
+metric (both proportional and absolute shift variants are precomputed).
+Default \code{c(0, 0.1)}.}
 
 \item{min_base_for_lift}{Integer. Minimum sample size required for a brand
 subgroup to compute lift estimates. Brands below this threshold are
@@ -77,10 +76,6 @@ information).}
 \item{dv_metric}{Character. How the DV is summarized: \code{"mean"}
 (default) computes the expected value across all DV levels;
 \code{"top_box"} uses the probability of the highest DV level.}
-
-\item{impact_metric_type}{Character. How \code{lift} is interpreted:
-\code{"proportional"} (default) shifts by a fraction of the current mean;
-\code{"absolute"} shifts by a fixed number of scale points.}
 
 \item{include_base}{Logical. Whether to include the base (overall/unfiltered)
 estimate alongside brand-specific estimates. Default \code{TRUE}.}
@@ -204,6 +199,28 @@ relationship is real and not noise. We prioritize drivers that are both \strong{
 \item Validate reliability using MI significance (captures non-linear relationships).
 \item Prioritize using an Impact × Evidence framework to guide investment decisions.
 }
+}
+
+\section{Shift-type variants}{
+
+Both proportional and absolute IV-shift variants are always precomputed
+as separate columns in the returned table. Lift columns carry
+\verb{_propshift_} or \verb{_absshift_} tags that interact with the outcome-
+display variants (\verb{_propdisplay} / \verb{_absdisplay}). The dashboard built
+by \code{bn_impact_write()} exposes runtime dropdowns for both. No
+parameter controls this any longer — both shifts are always emitted.
+maxVmin / mi columns are shift-independent and only emit the outcome-
+display variants.
+}
+
+\section{Outcome-display variants}{
+
+Both proportional and absolute outcome-display variants of every DV-change
+metric (\code{lift}, \code{maxVmin}) are always precomputed and stored
+as separate columns in the returned table. The dashboard built by
+\code{bn_impact_write()} exposes a runtime Outcome Display dropdown to
+switch between them. No parameter controls this — both are always
+emitted.
 }
 
 \examples{

@@ -57,10 +57,20 @@ append_bn_impact_dynamic <- function(
     metric_suffixes <- setdiff(all_cols, c("Variable", "Label", "Community"))
   }
 
-  # Focus options: Market + any brand names found in lift columns
-  all_lift_suffixes <- grep("^lift", metric_suffixes, value = TRUE)
-  market_lift_suffixes <- grep("^lift$|^lift_\\d+$", all_lift_suffixes, value = TRUE)
-  brand_lift_suffixes <- setdiff(all_lift_suffixes, market_lift_suffixes)
+  # The impact engine now emits both outcome-display variants per lift / maxVmin
+  # (columns end in "_propdisplay" or "_absdisplay"). Pass B also adds
+  # "_propshift_" / "_absshift_" tags on lift columns. For dropdown /
+  # metric-key construction, collapse ALL variant tags first so each metric
+  # appears once in the Metric dropdown.
+  .strip_display <- function(x) gsub("_(propdisplay|absdisplay)$", "", x)
+  .strip_shift   <- function(x) gsub("_(propshift|absshift)", "", x)
+  base_suffixes <- unique(.strip_display(.strip_shift(metric_suffixes)))
+
+  # Focus options: Market + any brand names found in lift columns. Operate on
+  # the stripped base so brand detection doesn't see the display suffix.
+  all_lift_base_suffixes <- grep("^lift", base_suffixes, value = TRUE)
+  market_lift_suffixes <- grep("^lift$|^lift_\\d+$", all_lift_base_suffixes, value = TRUE)
+  brand_lift_suffixes <- setdiff(all_lift_base_suffixes, market_lift_suffixes)
 
   if (length(brand_lift_suffixes) > 0) {
     brand_names <- unique(gsub("^lift_\\d+_|^lift_", "", brand_lift_suffixes))
@@ -69,7 +79,7 @@ append_bn_impact_dynamic <- function(
     focus_options <- "Market"
   }
 
-  # Metric options
+  # Metric options (base keys — display suffix appended at formula time)
   metric_labels <- character(0)
   metric_keys <- character(0)
 
@@ -83,13 +93,36 @@ append_bn_impact_dynamic <- function(
       metric_keys <- c(metric_keys, ml)
     }
   }
-  if ("maxVmin" %in% metric_suffixes) {
+  if ("maxVmin" %in% base_suffixes) {
     metric_labels <- c(metric_labels, "Max vs Min")
     metric_keys <- c(metric_keys, "maxVmin")
   }
-  if ("mi" %in% metric_suffixes) {
+  if ("mi" %in% base_suffixes) {
     metric_labels <- c(metric_labels, "Mutual Information")
     metric_keys <- c(metric_keys, "mi")
+  }
+
+  # Outcome-display options. Always offered when any display-variant column
+  # exists (which is always, now that the engine always emits both).
+  has_outcome_display <- any(grepl("_(propdisplay|absdisplay)$", metric_suffixes))
+  outcome_display_labels <- c("Proportional", "Absolute")
+  outcome_display_keys   <- c("propdisplay", "absdisplay")
+
+  # Shift-type options. Offered when the impact table has columns with
+  # _propshift_ / _absshift_ tags (bn_impact Pass B). If not present (older
+  # builds or engine-only output), the dashboard falls back to not injecting
+  # the shift tag and column-name formulas won't include it.
+  has_shift_type <- any(grepl("_(propshift|absshift)_", metric_suffixes))
+  shift_type_labels <- c("Proportional", "Absolute")
+  shift_type_keys   <- c("propshift", "absshift")
+
+  # Collapse base metric suffixes so the Metric dropdown shows one entry per
+  # base (e.g. "lift_0", "maxVmin", "mi") even though the underlying columns
+  # are multiplied by shift × display variants.
+  .strip_variant_suffix <- function(x) {
+    # Order matters: strip display first (it's the innermost suffix), then shift.
+    sub("_(propshift|absshift)", "",
+      sub("_(propdisplay|absdisplay)$", "", x))
   }
 
   # ---------------------------------------------------------------------------
@@ -159,6 +192,51 @@ append_bn_impact_dynamic <- function(
     openxlsx::writeData(wb, lookup_sheet, "Weight", startRow = 1, startCol = lk_col)
     for (wi in seq_along(weight_options)) {
       openxlsx::writeData(wb, lookup_sheet, weight_options[wi], startRow = wi + 1, startCol = lk_col)
+    }
+    lk_col <- lk_col + 1L
+  }
+
+  # Outcome-display options (always offered when any display-variant column
+  # was detected). Labels in one column, storage keys in the next.
+  outcome_display_opt_col <- NULL
+  outcome_display_key_col <- NULL
+  if (has_outcome_display) {
+    outcome_display_opt_col <- lk_col
+    openxlsx::writeData(wb, lookup_sheet, "Outcome Display", startRow = 1, startCol = lk_col)
+    for (oi in seq_along(outcome_display_labels)) {
+      openxlsx::writeData(wb, lookup_sheet, outcome_display_labels[oi],
+        startRow = oi + 1, startCol = lk_col)
+    }
+    lk_col <- lk_col + 1L
+
+    outcome_display_key_col <- lk_col
+    openxlsx::writeData(wb, lookup_sheet, "Outcome Display Key",
+      startRow = 1, startCol = lk_col)
+    for (oi in seq_along(outcome_display_keys)) {
+      openxlsx::writeData(wb, lookup_sheet, outcome_display_keys[oi],
+        startRow = oi + 1, startCol = lk_col)
+    }
+    lk_col <- lk_col + 1L
+  }
+
+  # Shift-type options (Pass B). Labels column + keys column.
+  shift_type_opt_col <- NULL
+  shift_type_key_col <- NULL
+  if (has_shift_type) {
+    shift_type_opt_col <- lk_col
+    openxlsx::writeData(wb, lookup_sheet, "Shift Type", startRow = 1, startCol = lk_col)
+    for (oi in seq_along(shift_type_labels)) {
+      openxlsx::writeData(wb, lookup_sheet, shift_type_labels[oi],
+        startRow = oi + 1, startCol = lk_col)
+    }
+    lk_col <- lk_col + 1L
+
+    shift_type_key_col <- lk_col
+    openxlsx::writeData(wb, lookup_sheet, "Shift Type Key",
+      startRow = 1, startCol = lk_col)
+    for (oi in seq_along(shift_type_keys)) {
+      openxlsx::writeData(wb, lookup_sheet, shift_type_keys[oi],
+        startRow = oi + 1, startCol = lk_col)
     }
     lk_col <- lk_col + 1L
   }
@@ -292,6 +370,63 @@ append_bn_impact_dynamic <- function(
     current_row <- current_row + 1L
   }
 
+  # Outcome Display dropdown (always offered when the engine emits both
+  # outcome-display variants, which it always does now). Controls whether the
+  # lift / maxVmin columns pull their proportional or absolute variant.
+  outcome_display_cell_col <- NULL
+  outcome_display_cell_row <- NULL
+  if (has_outcome_display) {
+    outcome_display_cell_col <- cell_col
+    outcome_display_cell_row <- current_row
+    openxlsx::writeData(wb, dash_sheet, "Outcome Display: ",
+      startRow = current_row, startCol = label_col)
+    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
+      rows = current_row, cols = label_col, stack = TRUE)
+    openxlsx::writeData(wb, dash_sheet, "Proportional",
+      startRow = current_row, startCol = cell_col)
+    openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
+      rows = current_row, cols = cell_col, stack = TRUE)
+
+    outcome_display_range <- paste0(lookup_sheet, "!$",
+      num2let(outcome_display_opt_col), "$2:$",
+      num2let(outcome_display_opt_col), "$",
+      length(outcome_display_labels) + 1)
+    openxlsx::dataValidation(wb, dash_sheet,
+      col = cell_col, rows = current_row,
+      type = "list", value = outcome_display_range)
+    current_row <- current_row + 1L
+  }
+
+  # Shift Type dropdown (Pass B). Controls whether lift columns pull their
+  # proportional-shift or absolute-shift variant. Mathematically equivalent
+  # to Outcome Display for maxVmin (affects nothing there — maxVmin is
+  # shift-independent) and for MI (no variants at all); so grey-out logic
+  # below suppresses the warning only when it's truly active for a given
+  # metric + focus + weight combination.
+  shift_type_cell_col <- NULL
+  shift_type_cell_row <- NULL
+  if (has_shift_type) {
+    shift_type_cell_col <- cell_col
+    shift_type_cell_row <- current_row
+    openxlsx::writeData(wb, dash_sheet, "Shift Type: ",
+      startRow = current_row, startCol = label_col)
+    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
+      rows = current_row, cols = label_col, stack = TRUE)
+    openxlsx::writeData(wb, dash_sheet, "Proportional",
+      startRow = current_row, startCol = cell_col)
+    openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
+      rows = current_row, cols = cell_col, stack = TRUE)
+
+    shift_type_range <- paste0(lookup_sheet, "!$",
+      num2let(shift_type_opt_col), "$2:$",
+      num2let(shift_type_opt_col), "$",
+      length(shift_type_labels) + 1)
+    openxlsx::dataValidation(wb, dash_sheet,
+      col = cell_col, rows = current_row,
+      type = "list", value = shift_type_range)
+    current_row <- current_row + 1L
+  }
+
   # Build metric key lookup formula
   dash_sheet_escaped <- gsub("'", "''", dash_sheet)
   metric_cell_abs <- paste0("'", dash_sheet_escaped, "'!$", num2let(metric_cell_col), "$", metric_cell_row)
@@ -303,44 +438,109 @@ append_bn_impact_dynamic <- function(
   # Warning column = next column after the dropdown cell
   warning_col <- cell_col + 1L
 
-  # Focus warning — to the right of the Focus control (same row)
+  # Pass-B grey-out rule: when Shift Type = Absolute AND metric is a lift,
+  # focus AND weight have no mathematical effect on the lift value (the
+  # shift magnitude is fixed to `lift` regardless of focus / weighting).
+  # We surface this as a grey italic note on both dropdowns so users
+  # don't expect changes when toggling.
+  shift_is_abs_and_lift <- if (has_shift_type) {
+    shift_cell_let <- num2let(shift_type_cell_col)
+    paste0(
+      "AND(", shift_cell_let, shift_type_cell_row, "=\"Absolute\",",
+      "LEFT(", mk_lookup, ",4)=\"lift\")"
+    )
+  } else {
+    "FALSE"
+  }
+
+  # Focus warning — to the right of the Focus control (same row).
+  # Priority: red error for brand+maxVmin/mi (invalid lookup), then grey
+  # italic note for absolute-shift + lift (valid but unaffected by focus).
   focus_cell_let <- num2let(focus_cell_col)
   red_warning <- openxlsx::createStyle(fontColour = "#FF0000", textDecoration = "bold")
+  grey_italic <- openxlsx::createStyle(fontColour = "#888888", textDecoration = "italic")
   red_rule <- paste0(
     "AND(", focus_cell_let, focus_cell_row, "<>\"Market\",",
     "OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\"))"
   )
+  focus_grey_rule <- paste0(
+    "AND(NOT(", red_rule, "),", shift_is_abs_and_lift, ")"
+  )
 
   focus_warning_formula <- paste0(
-    "IF(AND(", focus_cell_let, focus_cell_row, "<>\"Market\",",
-    "OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\")),",
-    num2let(metric_cell_col), metric_cell_row, "&\" must have a Market focus\",\"\")"
+    "IF(", red_rule, ",",
+      num2let(metric_cell_col), metric_cell_row, "&\" must have a Market focus\",",
+    "IF(", shift_is_abs_and_lift, ",",
+      "\"Focus does not affect this metric when shift is absolute\",",
+      "\"\"))"
   )
   openxlsx::writeFormula(wb, dash_sheet, x = focus_warning_formula,
     startRow = focus_cell_row, startCol = warning_col)
   openxlsx::conditionalFormatting(wb, dash_sheet,
     cols = warning_col, rows = focus_cell_row,
     style = red_warning, type = "expression", rule = red_rule)
+  openxlsx::conditionalFormatting(wb, dash_sheet,
+    cols = warning_col, rows = focus_cell_row,
+    style = grey_italic, type = "expression", rule = focus_grey_rule)
 
-  # Red background on Focus dropdown cell itself
+  # Red background on Focus dropdown cell itself (only when the red rule fires)
   red_cell <- openxlsx::createStyle(bgFill = "#FF0000", fontColour = "#FFFFFF")
   openxlsx::conditionalFormatting(wb, dash_sheet,
     cols = focus_cell_col, rows = focus_cell_row,
     style = red_cell, type = "expression", rule = red_rule)
 
-  # Weight warning — to the right of the Weight control (same row)
+  # Weight warning — to the right of the Weight control (same row). Same
+  # priority logic: maxVmin/mi already-grey note, then absolute-shift-lift
+  # grey note.
   if (has_weights) {
+    weight_existing_rule <- paste0("OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\")")
+    weight_grey_rule <- paste0(
+      "OR(", weight_existing_rule, ",", shift_is_abs_and_lift, ")"
+    )
     weight_warning_formula <- paste0(
-      "IF(OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\"),",
-      "\"Weights don't affect this metric\",\"\")"
+      "IF(", weight_existing_rule, ",",
+        "\"Weights don't affect this metric\",",
+      "IF(", shift_is_abs_and_lift, ",",
+        "\"Weights don't affect this metric when shift is absolute\",",
+        "\"\"))"
     )
     openxlsx::writeFormula(wb, dash_sheet, x = weight_warning_formula,
       startRow = weight_cell_row, startCol = warning_col)
-    weight_warn_rule <- paste0("OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\")")
     openxlsx::conditionalFormatting(wb, dash_sheet,
       cols = warning_col, rows = weight_cell_row,
-      style = openxlsx::createStyle(fontColour = "#888888", textDecoration = "italic"),
-      type = "expression", rule = weight_warn_rule)
+      style = grey_italic, type = "expression", rule = weight_grey_rule)
+  }
+
+  # Outcome Display warning — grey italic "doesn't affect this metric"
+  # when metric = mi (mi has no display variants).
+  if (has_outcome_display) {
+    display_warn_rule <- paste0(mk_lookup, "=\"mi\"")
+    display_warning_formula <- paste0(
+      "IF(", display_warn_rule, ",",
+        "\"Outcome display doesn't affect this metric\",\"\")"
+    )
+    openxlsx::writeFormula(wb, dash_sheet, x = display_warning_formula,
+      startRow = outcome_display_cell_row, startCol = warning_col)
+    openxlsx::conditionalFormatting(wb, dash_sheet,
+      cols = warning_col, rows = outcome_display_cell_row,
+      style = grey_italic, type = "expression", rule = display_warn_rule)
+  }
+
+  # Shift Type warning — grey italic "doesn't affect this metric" when
+  # metric = maxVmin or mi (neither is computed via bn_freq_prob_shift).
+  if (has_shift_type) {
+    shift_warn_rule <- paste0(
+      "OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\")"
+    )
+    shift_warning_formula <- paste0(
+      "IF(", shift_warn_rule, ",",
+        "\"Shift type doesn't affect this metric\",\"\")"
+    )
+    openxlsx::writeFormula(wb, dash_sheet, x = shift_warning_formula,
+      startRow = shift_type_cell_row, startCol = warning_col)
+    openxlsx::conditionalFormatting(wb, dash_sheet,
+      cols = warning_col, rows = shift_type_cell_row,
+      style = grey_italic, type = "expression", rule = shift_warn_rule)
   }
 
   # Dynamic Focus column in _lookup
@@ -443,13 +643,83 @@ append_bn_impact_dynamic <- function(
   # Write INDEX/MATCH formulas
   data_rows <- seq(row_data_start + 1, row_data_start + n_results_rows)
 
+  # Build the fully-qualified column name that corresponds to the current
+  # Metric / Focus / Outcome-Display selection.
+  #
+  # Engine's column shape:
+  #   Market:  {sg}_{mk}                 for mi
+  #            {sg}_{mk}_{display}       for lift* and maxVmin
+  #   Brand:   {sg}_{mk}_{focus}         for mi (mi is brand-invariant —
+  #                                      falls back to Market)
+  #            {sg}_{mk}_{focus}_{display} for lift* brand-specific
+  #            {sg}_{mk}_{display}       for maxVmin (maxVmin is not brand-
+  #                                      specific — falls back to Market)
+  #
+  # Because mi and maxVmin fall back to Market (no brand-specific columns),
+  # we nest: focus=Market OR metric=mi OR metric=maxVmin use the Market
+  # shape; brand lift uses the brand shape.
+  if (has_outcome_display) {
+    display_ref <- paste0("$", num2let(outcome_display_cell_col), "$", outcome_display_cell_row)
+    # Map "Proportional"/"Absolute" (the label shown to the user) → "propdisplay"/"absdisplay".
+    display_key <- paste0(
+      "INDEX(", lookup_sheet, "!$", num2let(outcome_display_key_col), "$2:$",
+      num2let(outcome_display_key_col), "$", length(outcome_display_keys) + 1,
+      ",MATCH(", display_ref, ",",
+      lookup_sheet, "!$", num2let(outcome_display_opt_col), "$2:$",
+      num2let(outcome_display_opt_col), "$", length(outcome_display_labels) + 1, ",0))"
+    )
+    display_suffix <- paste0("&\"_\"&", display_key)
+  } else {
+    display_suffix <- "\"\""
+  }
+
+  # Shift tag resolves to "propshift" or "absshift" based on the Shift Type
+  # dropdown — only used for lift columns (maxVmin and mi are shift-invariant).
+  if (has_shift_type) {
+    shift_ref <- paste0("$", num2let(shift_type_cell_col), "$", shift_type_cell_row)
+    shift_key <- paste0(
+      "INDEX(", lookup_sheet, "!$", num2let(shift_type_key_col), "$2:$",
+      num2let(shift_type_key_col), "$", length(shift_type_keys) + 1,
+      ",MATCH(", shift_ref, ",",
+      lookup_sheet, "!$", num2let(shift_type_opt_col), "$2:$",
+      num2let(shift_type_opt_col), "$", length(shift_type_labels) + 1, ",0))"
+    )
+    lift_shift_suffix <- paste0("&\"_\"&", shift_key)
+  } else {
+    lift_shift_suffix <- "\"\""
+  }
+
+  # Build the fully-qualified column name that corresponds to the current
+  # Metric / Focus / Outcome-Display / Shift-Type selection.
+  #
+  # Column shapes (post Pass B):
+  #   Market lift:      {sg}_{lift_N}_{shift}_{display}
+  #   Brand lift:       {sg}_{lift_N}_{brand}_{shift}_{display}
+  #   maxVmin (Market): {sg}_maxVmin_{display}            (shift-invariant)
+  #   maxVmin (Brand):  falls back to Market (no brand-specific maxVmin)
+  #   mi:               {sg}_mi                          (no variants)
   .col_name_formula <- function(sg, mk) {
     paste0(
       "IF(", focus_ref, "=\"Market\",",
-        "\"", sg, "_\"&", mk, ",",
-        "IF(OR(", mk, "=\"maxVmin\",", mk, "=\"mi\"),",
+        # --- Market focus ---
+        "IF(", mk, "=\"mi\",",
           "\"", sg, "_\"&", mk, ",",
-          "\"", sg, "_\"&", mk, "&\"_\"&", focus_ref,
+          "IF(", mk, "=\"maxVmin\",",
+            # maxVmin: shift-independent, only display suffix
+            "\"", sg, "_\"&", mk, display_suffix, ",",
+            # lift: shift + display
+            "\"", sg, "_\"&", mk, lift_shift_suffix, display_suffix,
+          ")",
+        "),",
+        # --- Non-Market (brand) focus ---
+        "IF(OR(", mk, "=\"maxVmin\",", mk, "=\"mi\"),",
+          # maxVmin/mi are brand-invariant — fall back to Market shape
+          "IF(", mk, "=\"mi\",",
+            "\"", sg, "_\"&", mk, ",",
+            "\"", sg, "_\"&", mk, display_suffix,
+          "),",
+          # Brand lift: {sg}_lift_N_{brand}_{shift}_{display}
+          "\"", sg, "_\"&", mk, "&\"_\"&", focus_ref, lift_shift_suffix, display_suffix,
         ")",
       ")"
     )

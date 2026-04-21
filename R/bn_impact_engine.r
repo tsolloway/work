@@ -48,11 +48,28 @@
 #'   value across all DV levels (works with any scale: 3-point, 5-point,
 #'   7-point, etc.). \code{"top_box"} uses \code{P(DV_max | IV=v)} — the
 #'   probability of the highest DV level.
-#' @param impact_metric_type Character. How \code{lift} values are interpreted:
-#'   \code{"proportional"} (default) shifts the mean by a fraction of its
+#' @param impact_shift_type Character. How \code{lift} values are interpreted
+#'   when shifting IV distributions:
+#'   \code{"proportional"} (default) shifts the IV's mean by a fraction of its
 #'   current value (e.g., 0.10 = 10 percent of current mean);
-#'   \code{"absolute"} shifts the mean by a fixed number of scale points
+#'   \code{"absolute"} shifts the IV's mean by a fixed number of scale points
 #'   (e.g., 0.10 = add 0.10 to the mean regardless of starting value).
+#' @section Outcome-display variants:
+#'   Both proportional and absolute variants of the DV-outcome metrics are
+#'   always emitted as separate columns, so downstream writers (e.g., the
+#'   dashboard built by \code{bn_impact_write()}) can switch between them
+#'   at runtime without re-running the engine. Column names:
+#'   \itemize{
+#'     \item \code{maxVmin_propdisplay} = \code{(p1 - p0) / p0} (relative
+#'       ratio, unbounded above for binary DVs)
+#'     \item \code{maxVmin_absdisplay} = \code{p1 - p0} (probability-point
+#'       difference, bounded in \code{[-1, 1]} for binary DVs)
+#'     \item \code{lift_<N>_propdisplay} = lift shifted / observed
+#'     \item \code{lift_<N>_absdisplay} = lift (raw probability-point change)
+#'   }
+#'   (Previously one \code{impact_outcome_display_type} parameter controlled
+#'   which variant was emitted; it has been retired in favor of emitting
+#'   both unconditionally.)
 #' @param include_base Logical. Whether to include base-size columns alongside
 #'   brand-specific lift columns. Default \code{TRUE}.
 #' @param index_by Character. Which metric to use for the index column:
@@ -194,7 +211,7 @@ bn_impact_engine <- function(
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
     dv_metric = c("mean", "top_box"),
-    impact_metric_type = c("proportional", "absolute"),
+    impact_shift_type = c("proportional", "absolute"),
     include_base = TRUE,
     index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     n_boot = 1,
@@ -208,7 +225,7 @@ bn_impact_engine <- function(
 
   type <- match.arg(type)
   index_by <- match.arg(index_by)
-  impact_metric_type <- match.arg(impact_metric_type)
+  impact_shift_type <- match.arg(impact_shift_type)
   dv_metric <- match.arg(dv_metric)
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
@@ -342,7 +359,7 @@ bn_impact_engine <- function(
   # ---------------------------
   engine_diff_single_attribute <- function(
     fit_boot, grain_bn = NULL, dv = NULL, iv, attr_iv_boot_max, attr_iv_boot_min, attr_dv_boot_max = NULL,
-    type = c("cp", "gr"), n_querry = 1e5, dv_metric = "top_box", impact_metric_type = "proportional", seed = NULL
+    type = c("cp", "gr"), n_querry = 1e5, dv_metric = "top_box", seed = NULL
   ){
 
     if(type == "gr"){
@@ -388,13 +405,19 @@ bn_impact_engine <- function(
       }
     }
 
-    if (impact_metric_type == "proportional") {
-      maxVmin_val <- (p1 - p0) / p0
-    } else {
-      maxVmin_val <- p1 - p0
-    }
+    # Emit both outcome-display variants. Both are trivial derivations of
+    # p1 and p0, so we always compute and store both — the dashboard's
+    # Outcome Display dropdown then picks which one to read.
+    maxVmin_propdisplay <- (p1 - p0) / p0
+    maxVmin_absdisplay  <- p1 - p0
 
-    data.frame(variable = iv, dv_max_value = p1, dv_min_value = p0, maxVmin = maxVmin_val)
+    data.frame(
+      variable            = iv,
+      dv_max_value        = p1,
+      dv_min_value        = p0,
+      maxVmin_propdisplay = maxVmin_propdisplay,
+      maxVmin_absdisplay  = maxVmin_absdisplay
+    )
   }
 
 
@@ -407,7 +430,9 @@ bn_impact_engine <- function(
     data, indices = NULL, bn, ivs, ivs_max, ivs_min, dv_max = NULL,
     community_assignment = NULL,
     add_mi = TRUE, type = c("cp", "gr", "mi"),
-    n_querry = 1e5, lift = c(0, 0.1), impact_metric_type = "proportional", brand = NULL,
+    n_querry = 1e5, lift = c(0, 0.1),
+    impact_shift_type = "proportional",
+    brand = NULL,
     min_base_for_lift = 75, include_base = TRUE, dv_metric = "mean", weight = NULL, fit = NULL, mi_boot = NULL, seed = 1
   ){
     type <- match.arg(type)
@@ -479,7 +504,6 @@ bn_impact_engine <- function(
             type = type,
             n_querry = n_querry,
             dv_metric = dv_metric,
-            impact_metric_type = impact_metric_type,
             seed = seed
           )
         ) %>%
@@ -502,20 +526,26 @@ bn_impact_engine <- function(
       if(!is.null(community_assignment)) temp_ivs_r <- community_assignment else temp_ivs_r <- ivs %>% setNames(ivs)
 
       multi_lift <- length(lift) > 1
-      lift_labels <- if (multi_lift) paste0("lift_", round(lift * 100)) else "lift"
+      lift_labels_base <- if (multi_lift) paste0("lift_", round(lift * 100)) else "lift"
+      # Emit both outcome-display variants per lift percent. Order per lift
+      # percent is (propdisplay, absdisplay); this must line up with the
+      # interleaved output of compute_lift_vals below.
+      lift_labels <- as.vector(rbind(
+        paste0(lift_labels_base, "_propdisplay"),
+        paste0(lift_labels_base, "_absdisplay")
+      ))
       brand_levels <- if (!is.null(brand)) sort(unique(as.character(dat_boot[[brand]]))) else NULL
       if (!is.null(brand_levels) && !is.null(brand_names)) {
         brand_levels <- intersect(brand_levels, brand_names)
         if (length(brand_levels) == 0) brand_levels <- NULL
       }
 
-      # Build column names — market lift always included
+      # Build column names — market lift always included.
       market_lift_col_names <- lift_labels
       if (is.null(brand_levels)) {
         lift_col_names <- lift_labels
-      } else if (!multi_lift) {
-        lift_col_names <- c(lift_labels, paste0("lift_", brand_levels))
       } else {
+        # Per-brand columns follow the same 2× outcome-display expansion.
         brand_lift_col_names <- expand.grid(
           lift_label = lift_labels,
           brand = brand_levels,
@@ -532,21 +562,34 @@ bn_impact_engine <- function(
         tapply(w, x, sum) %>% { ifelse(is.na(.), 0, .) }
       }
 
-      # Helper: compute lift values for a single freq distribution
+      # Helper: compute lift values for a single freq distribution.
+      # Returns a numeric vector of length 2 * length(lift), interleaved as
+      # (propdisplay, absdisplay) for each lift percent. Order must match
+      # `lift_labels` above so the final column naming lines up.
       compute_lift_vals <- function(freq, dv_probs) {
-        if (sum(freq) < min_base_for_lift) return(rep(NA_real_, length(lift)))
+        if (sum(freq) < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
         p_observed <- as.numeric(freq) / sum(freq)
-        purrr::map_dbl(lift, function(l) {
+        observed_expected <- sum(dv_probs * p_observed)
+        purrr::map(lift, function(l) {
           use_sym <- (l == 0)
           if (use_sym) {
-            p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05, impact_metric_type = impact_metric_type)
-            p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05, impact_metric_type = impact_metric_type)
-            sum(dv_probs * p_up) - sum(dv_probs * p_down)
+            p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05, impact_shift_type = impact_shift_type)
+            p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05, impact_shift_type = impact_shift_type)
+            lift_abs <- sum(dv_probs * p_up) - sum(dv_probs * p_down)
           } else {
-            p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l, impact_metric_type = impact_metric_type)
-            sum(dv_probs * p_shifted) - sum(dv_probs * p_observed)
+            p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l, impact_shift_type = impact_shift_type)
+            lift_abs <- sum(dv_probs * p_shifted) - observed_expected
           }
-        })
+          # Proportional display = absolute lift scaled by the observed
+          # baseline expectation. NA when the baseline is zero to avoid
+          # division blow-up.
+          lift_prop <- if (is.finite(observed_expected) && observed_expected != 0) {
+            lift_abs / observed_expected
+          } else {
+            NA_real_
+          }
+          c(lift_prop, lift_abs)   # (propdisplay, absdisplay)
+        }) %>% unlist()
       }
 
       lift_results <- temp_ivs_r %>%
@@ -755,7 +798,8 @@ bn_impact_engine <- function(
           bn = bn,
           ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
           add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
-          impact_metric_type = impact_metric_type, brand = brand, min_base_for_lift = min_base_for_lift,
+          impact_shift_type = impact_shift_type,
+          brand = brand, min_base_for_lift = min_base_for_lift,
           include_base = include_base, dv_metric = dv_metric, weight = weight, fit = NULL, mi_boot = mi_boot, community_assignment = community_assignment
         ) %>%
           dplyr::select(-dplyr::any_of("p_val"))
@@ -788,7 +832,7 @@ bn_impact_engine <- function(
         tidyselect::matches("^dv_max_value"),
         tidyselect::matches("^dv_min_value"),
         tidyselect::matches("^mi"),
-        tidyselect::matches("^maxVmin"),
+        tidyselect::matches("^maxVmin_"),
         tidyselect::matches("^lift")
       )
 
@@ -800,7 +844,8 @@ bn_impact_engine <- function(
       bn = bn,
       ivs = ivs, ivs_max = ivs_max, ivs_min = ivs_min, dv_max = dv_max,
       add_mi = TRUE, type = type, n_querry = n_querry, lift = lift,
-      impact_metric_type = impact_metric_type, brand = brand, min_base_for_lift = min_base_for_lift,
+      impact_shift_type = impact_shift_type,
+      brand = brand, min_base_for_lift = min_base_for_lift,
       include_base = include_base, dv_metric = dv_metric, weight = weight, fit = fit, mi_boot = mi_boot, community_assignment = community_assignment
     )
 
@@ -809,12 +854,16 @@ bn_impact_engine <- function(
 
   if(index_by != "none"){
 
-    # Resolve lift_first / lift_second to market lift columns (bare lift / lift_0 / lift_10)
+    # Resolve lift_first / lift_second to market lift columns. After the
+    # outcome-display expansion, market lift columns look like
+    # `lift_absdisplay`, `lift_0_absdisplay`, `lift_10_absdisplay`, etc. Use
+    # the absolute-display variant for indexing (raw probability-point
+    # change — the natural scale for ranking drivers).
     if (index_by %in% c("lift_first", "lift_second")) {
       lift_cols <- grep("^lift", names(result), value = TRUE)
       lift_cols <- lift_cols[!grepl("_mean$|_sd$|_ci_lo$|_ci_hi$", lift_cols)]
-      # Use market lift only (bare names without brand suffix)
-      market_lift_cols <- lift_cols[grep("^lift$|^lift_\\d+$", lift_cols)]
+      # Market lift only (no brand suffix), absolute-display variant.
+      market_lift_cols <- lift_cols[grep("^lift(_\\d+)?_absdisplay$", lift_cols)]
       if (length(market_lift_cols) == 0) market_lift_cols <- lift_cols
       if (length(market_lift_cols) == 0) {
         warning("index_by = '", index_by, "': no lift columns found. Skipping index.")
@@ -822,6 +871,13 @@ bn_impact_engine <- function(
       }
       idx <- if (index_by == "lift_first") 1L else min(2L, length(market_lift_cols))
       resolved_col <- market_lift_cols[idx]
+    } else if (index_by == "maxVmin") {
+      # Prefer the absolute-display maxVmin (bounded, natural for indexing).
+      resolved_col <- if ("maxVmin_absdisplay" %in% names(result)) {
+        "maxVmin_absdisplay"
+      } else {
+        "maxVmin"  # legacy — shouldn't occur after the split
+      }
     } else {
       resolved_col <- index_by
     }

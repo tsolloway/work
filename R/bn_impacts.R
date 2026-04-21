@@ -23,8 +23,10 @@
 #'   \code{"mi"}. Default \code{"gr"}.
 #' @param dv_metric Character. \code{"mean"} or \code{"top_box"}.
 #'   Default \code{"mean"}.
-#' @param impact_metric_type Character. \code{"proportional"} or
-#'   \code{"absolute"}. Default \code{"proportional"}.
+#' @section Outcome-display variants:
+#'   Both proportional and absolute outcome-display variants of every
+#'   DV-change metric are always precomputed and stored. The dashboard's
+#'   Outcome Display dropdown switches between them at runtime.
 #' @param include_base Logical. Include base sizes. Default TRUE.
 #' @param index_by Character. Indexing method. Default \code{"lift_first"}.
 #' @param n_boot Integer. Bootstrap replicates. Default 1.
@@ -68,7 +70,6 @@ bn_impacts <- function(
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
     dv_metric = c("mean", "top_box"),
-    impact_metric_type = c("proportional", "absolute"),
     include_base = TRUE,
     index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     n_boot = 1,
@@ -91,7 +92,7 @@ bn_impacts <- function(
     process_subgroups = process_subgroups,
     dictionary = dictionary,
     n_boot = n_boot, n_querry = n_querry,
-    lift = lift, impact_metric_type = impact_metric_type,
+    lift = lift,
     brand = brand, brand_names = brand_names,
     min_base_for_lift = min_base_for_lift,
     include_base = include_base,
@@ -115,7 +116,7 @@ bn_impacts <- function(
       process_subgroups = process_subgroups,
       dictionary = dictionary,
       n_boot = n_boot, n_querry = n_querry,
-      lift = lift, impact_metric_type = impact_metric_type,
+      lift = lift,
       brand = brand, brand_names = brand_names,
       min_base_for_lift = min_base_for_lift,
       include_base = include_base,
@@ -142,7 +143,7 @@ bn_impacts <- function(
       process_subgroups = process_subgroups,
       dictionary = dictionary,
       n_boot = n_boot, n_querry = n_querry,
-      lift = lift, impact_metric_type = impact_metric_type,
+      lift = lift,
       brand = brand, brand_names = brand_names,
       min_base_for_lift = min_base_for_lift,
       include_base = include_base,
@@ -165,7 +166,7 @@ bn_impacts <- function(
         process_subgroups = process_subgroups,
         dictionary = dictionary,
         n_boot = n_boot, n_querry = n_querry,
-        lift = lift, impact_metric_type = impact_metric_type,
+        lift = lift,
         brand = brand, brand_names = brand_names,
         min_base_for_lift = min_base_for_lift,
         include_base = include_base,

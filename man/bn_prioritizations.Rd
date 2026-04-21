@@ -16,7 +16,7 @@ bn_prioritizations(
   lift = 0.1,
   min_base_for_boot = 75,
   dv_metric = c("mean", "top_box"),
-  impact_metric_type = c("proportional", "absolute"),
+  impact_shift_type = c("proportional", "absolute"),
   impact_result = NULL,
   threshold = 0.01,
   max_rounds = NULL,
@@ -67,7 +67,8 @@ p-values and to include a brand-subgroup slice as a task. Default 75.}
 
 \item{dv_metric}{Character. \code{"mean"} (default) or \code{"top_box"}.}
 
-\item{impact_metric_type}{Character. \code{"proportional"} (default) or
+\item{impact_shift_type}{Character. How \code{lift} is interpreted when
+shifting IV distributions: \code{"proportional"} (default) or
 \code{"absolute"}.}
 
 \item{impact_result}{Optional. Output of \code{bn_impact()} passed through

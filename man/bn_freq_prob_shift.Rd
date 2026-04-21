@@ -8,7 +8,7 @@ bn_freq_prob_shift(
   freq = NULL,
   type = c("exponential", "linear", "quadratic"),
   lift = 0.1,
-  impact_metric_type = c("proportional", "absolute"),
+  impact_shift_type = c("proportional", "absolute"),
   return_actual_lift = FALSE,
   p_orig = NULL,
   values = NULL
@@ -23,12 +23,15 @@ Names are interpreted as numeric scale values. Either \code{freq} or both
 \code{"linear"}, or \code{"quadratic"}.}
 
 \item{lift}{Numeric. Target lift for the mean. Interpretation depends on
-\code{impact_metric_type}: proportional (0.1 = 10 percent of current mean) or
+\code{impact_shift_type}: proportional (0.1 = 10 percent of current mean) or
 absolute (0.1 = add 0.1 scale points to mean).}
 
-\item{impact_metric_type}{Character. How \code{lift} is interpreted:
+\item{impact_shift_type}{Character. How \code{lift} is interpreted:
 \code{"proportional"} (default) shifts by a fraction of the current mean;
-\code{"absolute"} shifts by a fixed number of scale points.}
+\code{"absolute"} shifts by a fixed number of scale points. (Formerly
+\code{impact_metric_type}, which was retired because it conflated this
+IV-shift choice with the DV-outcome display choice in
+\code{bn_impact_engine}.)}
 
 \item{return_actual_lift}{Logical. If \code{TRUE}, returns a list with the shifted
 probabilities plus diagnostic info (original/new/target means, actual lift).

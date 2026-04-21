@@ -307,7 +307,7 @@ append_bn_simulator <- function(
           for (pi in seq_along(pct_steps)) {
             sp <- tryCatch(
               as.numeric(bn_freq_prob_shift(freq = iv_freq, lift = pct_steps[pi],
-                impact_metric_type = "proportional")),
+                impact_shift_type = "proportional")),
               error = function(e) NULL
             )
             if (!is.null(sp) && !anyNA(sp)) shifted_mat[pi, ] <- sp

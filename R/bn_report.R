@@ -72,6 +72,13 @@
 #'     slots get no button.
 #'   * An unnamed list/vector — matched to `results` by position; trailing
 #'     unmatched slots get no button.
+#' @param qc_mode Logical. Enables QC-mode affordances in the HTML report
+#'   — currently: hover tooltips on Impact dashboard cells that expose the
+#'   underlying raw metric value and unrounded index (useful for validating
+#'   that computed values line up with expectations, spotting outliers,
+#'   cross-referencing Excel). Intentionally off for client-facing reports
+#'   so the displayed integer indices aren't shadowed by scientific-notation
+#'   hover text. Default `FALSE`.
 #'
 #' @return The file path (invisibly).
 #'
@@ -111,7 +118,8 @@ bn_report <- function(
     open = TRUE,
     seed = 1,
     add_additional_results = FALSE,
-    results_excel = NULL
+    results_excel = NULL,
+    qc_mode = FALSE
 ){
 
   # --- auto-name from title/subtitle ---
@@ -440,7 +448,8 @@ bn_report <- function(
           if (!is.null(impacts_res) && !is.null(impacts_res[["table_attribute"]])) {
             impact_attr_id <- glue::glue("{panel_id}_impact_attr")
             impact_attr_html <- .bn_report_render_attribute_impacts_dashboard(
-              impacts_res, result_name = name, dashboard_id = impact_attr_id
+              impacts_res, result_name = name, dashboard_id = impact_attr_id,
+              qc_mode = qc_mode
             )
             extras_buttons <- c(extras_buttons, glue::glue(
               '    <button class="tab-btn" onclick="switchTab(this, \'{impact_attr_id}\')">Attribute Impacts</button>'
@@ -454,7 +463,7 @@ bn_report <- function(
             impact_comm_id <- glue::glue("{panel_id}_impact_comm")
             impact_comm_html <- .bn_report_render_attribute_impacts_dashboard(
               impacts_res, result_name = name, dashboard_id = impact_comm_id,
-              is_community = TRUE
+              is_community = TRUE, qc_mode = qc_mode
             )
             extras_buttons <- c(extras_buttons, glue::glue(
               '    <button class="tab-btn" onclick="switchTab(this, \'{impact_comm_id}\')">Community Impacts</button>'
@@ -708,8 +717,23 @@ bn_report <- function(
 
   if (is.null(results_excel)) return(empty)
 
+  # If the user passed a single bn_write() result (S3 bn_write_result, which
+  # is a list with $path), unwrap to the path.
+  if (inherits(results_excel, "bn_write_result")) {
+    results_excel <- as.character(results_excel)
+  }
+
   # Coerce a bare character vector to a list so [[i]] returns a single string.
   if (is.character(results_excel)) results_excel <- as.list(results_excel)
+
+  # Map any bn_write_result entries (or lists with a $path slot) down to their
+  # path strings. Leaves plain strings / NULL / NA alone.
+  results_excel <- purrr::map(results_excel, function(x) {
+    if (is.null(x)) return(NULL)
+    if (inherits(x, "bn_write_result")) return(as.character(x))
+    if (is.list(x) && !is.null(x[["path"]])) return(x[["path"]])
+    x
+  })
 
   # Drop NA slots — treat them as "no button".
   results_excel <- purrr::map(results_excel, function(x) {
@@ -746,7 +770,8 @@ bn_report <- function(
 # leading column is "Community" instead).
 #' @noRd
 .bn_report_render_attribute_impacts_dashboard <- function(
-    impacts, result_name, dashboard_id, is_community = FALSE
+    impacts, result_name, dashboard_id, is_community = FALSE,
+    qc_mode = FALSE
 ) {
   if (isTRUE(is_community)) {
     tbl   <- impacts[["table_community"]]
@@ -781,32 +806,48 @@ bn_report <- function(
   sg1_cols <- all_cols[startsWith(all_cols, paste0(sg1, "_"))]
   metric_suffixes <- sub(paste0("^", sg1, "_"), "", sg1_cols)
 
-  all_lift_suffixes    <- grep("^lift", metric_suffixes, value = TRUE)
-  market_lift_suffixes <- grep("^lift$|^lift_\\d+$", all_lift_suffixes, value = TRUE)
-  brand_lift_suffixes  <- setdiff(all_lift_suffixes, market_lift_suffixes)
+  # After the Pass-A outcome-display split, lift / maxVmin columns carry a
+  # "_propdisplay" or "_absdisplay" suffix in the engine output. For the
+  # HTML dashboard we expose the variant choice via an Outcome Display
+  # dropdown; metric_info carries the BASE metric names (e.g. "lift_0",
+  # "maxVmin", "mi") and JS composes the full column name at render time
+  # from base + focus + display.
+  .strip_display <- function(x) sub("_(propdisplay|absdisplay)$", "", x)
+  .strip_shift   <- function(x) sub("_(propshift|absshift)", "", x)
+  base_suffixes <- unique(.strip_display(.strip_shift(metric_suffixes)))
 
-  brand_names <- if (length(brand_lift_suffixes) > 0) {
-    unique(sub("^lift_\\d+_|^lift_", "", brand_lift_suffixes))
+  all_lift_bases    <- grep("^lift", base_suffixes, value = TRUE)
+  market_lift_bases <- grep("^lift$|^lift_\\d+$", all_lift_bases, value = TRUE)
+  brand_lift_bases  <- setdiff(all_lift_bases, market_lift_bases)
+
+  brand_names <- if (length(brand_lift_bases) > 0) {
+    unique(sub("^lift_\\d+_|^lift_", "", brand_lift_bases))
   } else character(0)
   focus_options <- c("Market", brand_names)
 
   metric_info <- list()
-  for (ml in market_lift_suffixes) {
-    if (ml %in% c("lift", "lift_0")) {
-      metric_info[[length(metric_info) + 1]] <- list(label = "Average Lift", key = ml)
-    } else {
-      pct <- sub("lift_", "", ml)
-      metric_info[[length(metric_info) + 1]] <- list(
-        label = paste0(pct, "% Lift"), key = ml
-      )
-    }
+  for (ml in market_lift_bases) {
+    label <- if (ml %in% c("lift", "lift_0")) "Average Lift"
+             else paste0(sub("lift_", "", ml), "% Lift")
+    metric_info[[length(metric_info) + 1]] <- list(label = label, key = ml)
   }
-  if ("maxVmin" %in% metric_suffixes) {
-    metric_info[[length(metric_info) + 1]] <- list(label = "Max vs Min", key = "maxVmin")
+  if ("maxVmin" %in% base_suffixes) {
+    metric_info[[length(metric_info) + 1]] <- list(
+      label = "Max vs Min", key = "maxVmin"
+    )
   }
-  if ("mi" %in% metric_suffixes) {
-    metric_info[[length(metric_info) + 1]] <- list(label = "Mutual Information", key = "mi")
+  if ("mi" %in% base_suffixes) {
+    metric_info[[length(metric_info) + 1]] <- list(
+      label = "Mutual Information", key = "mi"
+    )
   }
+
+  # Outcome Display is offered whenever any _propdisplay / _absdisplay
+  # column exists (which is always, post-Pass-A) — matches Excel.
+  has_outcome_display <- any(grepl("_(propdisplay|absdisplay)$", metric_suffixes))
+
+  # Shift Type (Pass B) offered when _propshift / _absshift tags exist.
+  has_shift_type <- any(grepl("_(propshift|absshift)_", metric_suffixes))
 
   # In community mode, Community IS the id column, so no secondary Community
   # column; there's also no Label.
@@ -841,14 +882,22 @@ bn_report <- function(
     focuses           = as.list(focus_options),
     metrics           = metric_info,
     has_weights       = has_weights,
+    has_outcome_display = has_outcome_display,
+    has_shift_type    = has_shift_type,
     has_community     = has_community,
     has_label         = has_label,
     min_base_for_lift = as.integer(min_base_for_lift),
+    qc_mode           = isTRUE(qc_mode),
     rows_unweighted   = .flatten(tbl),
     rows_weighted     = if (has_weights) .flatten(tbl_w) else NULL
   )
 
-  data_json <- jsonlite::toJSON(data_obj, auto_unbox = TRUE, null = "null", na = "null")
+  # digits = NA preserves full numeric precision (default is 4 decimals,
+  # which truncates lift values around 0.01 into 0.01 — losing 3+
+  # significant digits and producing off-by-one index discrepancies vs
+  # the Excel dashboard which reads the full-precision stored values).
+  data_json <- jsonlite::toJSON(data_obj, auto_unbox = TRUE,
+    null = "null", na = "null", digits = NA)
 
   # --- HTML scaffold
   # Controls row — Focus always shown. Metric always shown. Weight only if
@@ -875,6 +924,35 @@ bn_report <- function(
       '<select class="impact-ctrl" data-dim="weight">%s</select>',
       '<span class="impact-warning" data-for="weight"></span>'
     ), weight_options_html)
+  } else ""
+
+  # Outcome Display dropdown — offered when both display variants exist.
+  # Proportional = (p1-p0)/p0 for maxVmin and shifted/observed for lift.
+  # Absolute = p1-p0 for maxVmin and raw DV probability shift for lift.
+  # MI is unaffected (no display variant in the data).
+  display_ctrl <- if (has_outcome_display) {
+    paste0(
+      '<label>Outcome Display:</label>',
+      '<select class="impact-ctrl" data-dim="display">',
+        '<option value="propdisplay">Proportional</option>',
+        '<option value="absdisplay">Absolute</option>',
+      '</select>',
+      '<span class="impact-warning" data-for="display"></span>'
+    )
+  } else ""
+
+  # Shift Type dropdown (Pass B). Controls how the lift metric interprets
+  # the IV distribution shift. MaxVmin/mi are shift-invariant; JS suppresses
+  # the effect when those metrics are selected.
+  shift_ctrl <- if (has_shift_type) {
+    paste0(
+      '<label>Shift Type:</label>',
+      '<select class="impact-ctrl" data-dim="shift">',
+        '<option value="propshift">Proportional</option>',
+        '<option value="absshift">Absolute</option>',
+      '</select>',
+      '<span class="impact-warning" data-for="shift"></span>'
+    )
   } else ""
 
   # Header row: leading cols (sortable, text) + one metric column per
@@ -943,6 +1021,8 @@ bn_report <- function(
     '    <select class="impact-ctrl" data-dim="focus">', focus_options_html, '</select>',
     '    <span class="impact-warning" data-for="focus"></span>',
     '    ', weight_ctrl,
+    '    ', display_ctrl,
+    '    ', shift_ctrl,
     '  </div>',
     '  <div class="impact-table-wrap">',
     '    <table class="impact-table">',
@@ -1147,7 +1227,12 @@ bn_report <- function(
     lookup            = lookup
   )
 
-  data_json <- jsonlite::toJSON(data_obj, auto_unbox = TRUE, null = "null", na = "null")
+  # digits = NA preserves full numeric precision (default is 4 decimals,
+  # which truncates lift values around 0.01 into 0.01 — losing 3+
+  # significant digits and producing off-by-one index discrepancies vs
+  # the Excel dashboard which reads the full-precision stored values).
+  data_json <- jsonlite::toJSON(data_obj, auto_unbox = TRUE,
+    null = "null", na = "null", digits = NA)
 
   # --- HTML scaffold
   dim_labels <- c(
@@ -1593,6 +1678,12 @@ bn_report <- function(
     '.impact-warning {',
     '  color: #FF0000; font-weight: 700; font-size: 13px;',
     '}',
+    '/* Grey italic variant for advisory notes (not errors) — used for the',
+    '   Weight/Focus "metric invariant to this control" notes. Overrides',
+    '   the red base style above. */',
+    '.impact-warning.warn-grey {',
+    '  color: #888888; font-weight: 400; font-style: italic;',
+    '}',
     '.impact-table-wrap { overflow-x: auto; }',
     '.impact-table {',
     '  width: 100%; border-collapse: collapse; font-size: 13px;',
@@ -1706,7 +1797,8 @@ bn_report <- function(
     '  background: #fff; border: 1px solid #d8d8d8; border-radius: 8px;',
     '  padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);',
     '}',
-    '.priort-tooltip {',
+    '.priort-tooltip,',
+    '.impact-tooltip {',
     '  position: fixed; pointer-events: none; z-index: 1000;',
     '  background: rgba(0, 0, 0, 0.55); color: #fff;',
     '  padding: 8px 12px; border-radius: 6px;',
@@ -1932,11 +2024,17 @@ bn_report <- function(
     '  function metricKey(focus) {',
     '    var key = currentValue("metric");',
     '    if (!key) return null;',
-    '    // maxVmin and mi are focus-independent',
-    '    if (key === "maxVmin" || key === "mi") return key;',
-    '    // lift metrics: brand focuses use suffixed columns',
-    '    if (focus && focus !== "Market") return key + "_" + focus;',
-    '    return key;',
+    '    // MI has no outcome-display or shift variant — bare key.',
+    '    if (key === "mi") return key;',
+    '    var display = currentValue("display") || "propdisplay";',
+    '    // maxVmin is shift-independent: base + display.',
+    '    if (key === "maxVmin") return key + "_" + display;',
+    '    // lift metrics: shift tag is inserted between the base (or base+focus)',
+    '    // and the display tag. Market lift: base_shift_display.',
+    '    // Brand lift:  base_focus_shift_display.',
+    '    var shift = (data.has_shift_type ? currentValue("shift") : null) || "propshift";',
+    '    if (focus && focus !== "Market") return key + "_" + focus + "_" + shift + "_" + display;',
+    '    return key + "_" + shift + "_" + display;',
     '  }',
     '',
     '  function isInsignificant(sgData) {',
@@ -1976,11 +2074,23 @@ bn_report <- function(
     '        var sgData = r.sg[sg];',
     '        cell.classList.remove("insig", "neg");',
     '        cell.style.background = "";',
+    '        cell.removeAttribute("data-qc-tip");',
     '',
     '        if (raw == null || mean === 0) { cell.textContent = ""; idxValues.push(null); return; }',
     '        var idx = Math.abs(raw) / mean * 100;',
     '        cell.textContent = Math.round(idx);',
     '        idxValues.push(idx);',
+    '',
+    '        // QC-mode hover: surface the raw metric value (the hidden column',
+    '        // in the Excel equivalent) plus the unrounded index. We use a',
+    '        // custom tooltip (see initTooltip below) instead of the native',
+    '        // `title=` attribute — native tooltips have unreliable rendering',
+    '        // on some browser/OS combos and long appearance delays.',
+    '        if (data.qc_mode) {',
+    '          var rawFmt = Math.abs(raw) >= 0.01 ? raw.toFixed(4) : raw.toExponential(3);',
+    '          cell.setAttribute("data-qc-tip",',
+    '            "Raw metric: " + rawFmt + "\\nIndex: " + idx.toFixed(2));',
+    '        }',
     '',
     '        if (raw < 0) cell.classList.add("neg");',
     '        if (isInsignificant(sgData)) cell.classList.add("insig");',
@@ -2022,11 +2132,20 @@ bn_report <- function(
     '      }',
     '    });',
     '',
-    '    // 6. Focus warning: red if any subgroup base is below minimum',
+    '    // Pass-B shift-type grey-out: when the shift toggle exists and is',
+    '    // set to "absshift", and the current metric is a lift, focus/weight',
+    '    // have no mathematical effect on the lift value.',
+    '    var shiftVal = data.has_shift_type ? currentValue("shift") : "propshift";',
+    '    var isLiftMetric = mkey && mkey !== "maxVmin" && mkey !== "mi";',
+    '    var shiftAbsAndLift = (shiftVal === "absshift") && isLiftMetric;',
+    '',
+    '    // 6. Focus warning: red if any subgroup base is below minimum.',
+    '    // Grey italic note when shift=absolute + lift (focus does not affect).',
     '    var focusWarn = root.querySelector(\'.impact-warning[data-for="focus"]\');',
     '    if (focusWarn) {',
     '      var focusSel = root.querySelector(\'.impact-ctrl[data-dim="focus"]\');',
     '      focusWarn.textContent = "";',
+    '      focusWarn.classList.remove("warn-grey");',
     '      focusSel.classList.remove("warn");',
     '      if (focus !== "Market" && mkey && mkey !== "maxVmin" && mkey !== "mi" && rows.length > 0) {',
     '        var baseKey = "base_" + focus;',
@@ -2040,15 +2159,50 @@ bn_report <- function(
     '          focusSel.classList.add("warn");',
     '        }',
     '      }',
+    '      if (!focusWarn.textContent && shiftAbsAndLift) {',
+    '        focusWarn.textContent = "Focus does not affect this metric when shift is absolute";',
+    '        focusWarn.classList.add("warn-grey");',
+    '      }',
     '    }',
     '',
-    '    // 7. Weight warning: the weight control is irrelevant for maxVmin / mi',
+    '    // 7. Weight warning: grey italic for maxVmin/mi OR shift=absolute+lift.',
     '    var weightWarn = root.querySelector(\'.impact-warning[data-for="weight"]\');',
     '    if (weightWarn) {',
+    '      weightWarn.classList.remove("warn-grey");',
     '      if (mkey === "maxVmin" || mkey === "mi") {',
     '        weightWarn.textContent = "Weights don\\u2019t affect this metric";',
+    '        weightWarn.classList.add("warn-grey");',
+    '      } else if (shiftAbsAndLift) {',
+    '        weightWarn.textContent = "Weights don\\u2019t affect this metric when shift is absolute";',
+    '        weightWarn.classList.add("warn-grey");',
     '      } else {',
     '        weightWarn.textContent = "";',
+    '      }',
+    '    }',
+    '',
+    '    // 7b. Outcome Display warning: grey italic "doesn\\u2019t affect this metric"',
+    '    // when metric = mi (mi has no display variants).',
+    '    var displayWarn = root.querySelector(\'.impact-warning[data-for="display"]\');',
+    '    if (displayWarn) {',
+    '      displayWarn.classList.remove("warn-grey");',
+    '      if (mkey === "mi") {',
+    '        displayWarn.textContent = "Outcome display doesn\\u2019t affect this metric";',
+    '        displayWarn.classList.add("warn-grey");',
+    '      } else {',
+    '        displayWarn.textContent = "";',
+    '      }',
+    '    }',
+    '',
+    '    // 7c. Shift Type warning: grey italic for maxVmin/mi (neither is',
+    '    // computed via bn_freq_prob_shift, so shift type has no effect).',
+    '    var shiftWarn = root.querySelector(\'.impact-warning[data-for="shift"]\');',
+    '    if (shiftWarn) {',
+    '      shiftWarn.classList.remove("warn-grey");',
+    '      if (mkey === "maxVmin" || mkey === "mi") {',
+    '        shiftWarn.textContent = "Shift type doesn\\u2019t affect this metric";',
+    '        shiftWarn.classList.add("warn-grey");',
+    '      } else {',
+    '        shiftWarn.textContent = "";',
     '      }',
     '    }',
     '',
@@ -2194,6 +2348,28 @@ bn_report <- function(
     '  });',
     '',
     '  update();',
+    '',
+    '  // QC-mode tooltip: create a single floating .impact-tooltip div and',
+    '  // wire it via event delegation on the dashboard root. We install ONCE',
+    '  // (idempotent) — re-invoking update() does not re-attach handlers.',
+    '  if (data.qc_mode && !root.dataset.qcTooltipInstalled) {',
+    '    root.dataset.qcTooltipInstalled = "1";',
+    '    var qcTip = document.createElement("div");',
+    '    qcTip.className = "impact-tooltip";',
+    '    qcTip.style.display = "none";',
+    '    document.body.appendChild(qcTip);',
+    '    root.addEventListener("mousemove", function(e) {',
+    '      var t = e.target.closest(".idx-cell[data-qc-tip]");',
+    '      if (!t) { qcTip.style.display = "none"; return; }',
+    '      qcTip.textContent = t.getAttribute("data-qc-tip");',
+    '      qcTip.style.display = "block";',
+    '      qcTip.style.left = (e.clientX + 12) + "px";',
+    '      qcTip.style.top  = (e.clientY + 12) + "px";',
+    '    });',
+    '    root.addEventListener("mouseleave", function() {',
+    '      qcTip.style.display = "none";',
+    '    });',
+    '  }',
     '',
     '  // Default sort: the first metric (subgroup) column, descending — not',
     '  // the Variable/ID column. update() only refills cell values (not row',

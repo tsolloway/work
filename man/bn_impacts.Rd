@@ -17,7 +17,6 @@ bn_impacts(
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
   dv_metric = c("mean", "top_box"),
-  impact_metric_type = c("proportional", "absolute"),
   include_base = TRUE,
   index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
   n_boot = 1,
@@ -60,9 +59,6 @@ Default 75.}
 
 \item{dv_metric}{Character. \code{"mean"} or \code{"top_box"}.
 Default \code{"mean"}.}
-
-\item{impact_metric_type}{Character. \code{"proportional"} or
-\code{"absolute"}. Default \code{"proportional"}.}
 
 \item{include_base}{Logical. Include base sizes. Default TRUE.}
 
@@ -107,6 +103,13 @@ four variants (attribute, attribute weighted, community, community weighted)
 and returns them in a single list. Shares all parameters with
 \code{bn_impact()}.
 }
+\section{Outcome-display variants}{
+
+Both proportional and absolute outcome-display variants of every
+DV-change metric are always precomputed and stored. The dashboard's
+Outcome Display dropdown switches between them at runtime.
+}
+
 \seealso{
 \code{\link[=bn_impact]{bn_impact()}}, \code{\link[=bn_impact_engine]{bn_impact_engine()}}, \code{\link[=bn_impact_write]{bn_impact_write()}}
 }

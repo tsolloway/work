@@ -16,7 +16,7 @@ bn_prioritize(
   lift = 0.1,
   min_base_for_boot = 75,
   dv_metric = c("mean", "top_box"),
-  impact_metric_type = c("proportional", "absolute"),
+  impact_shift_type = c("proportional", "absolute"),
   impact_result = NULL,
   threshold = 0.01,
   max_rounds = NULL,
@@ -60,7 +60,7 @@ extension at each step.
 to find the globally best combo.}
 
 \item{lift}{Numeric. Distribution shift for \code{strategy = "lift"}.
-Interpretation depends on \code{impact_metric_type}. Default 0.10.}
+Interpretation depends on \code{impact_shift_type}. Default 0.10.}
 
 \item{min_base_for_boot}{Integer. Minimum sample size required to run
 bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
@@ -69,9 +69,10 @@ skipped. Default 75.}
 \item{dv_metric}{Character. \code{"mean"} (default) computes the expected DV
 value; \code{"top_box"} uses the probability of the highest DV level.}
 
-\item{impact_metric_type}{Character. How \code{lift} is interpreted:
-\code{"proportional"} (default) shifts by a fraction of the current mean;
-\code{"absolute"} shifts by a fixed number of scale points.}
+\item{impact_shift_type}{Character. How \code{lift} is interpreted when
+shifting IV distributions: \code{"proportional"} (default) shifts by a
+fraction of the current mean; \code{"absolute"} shifts by a fixed
+number of scale points.}
 
 \item{impact_result}{Optional. Output of \code{bn_impact()} or a tibble with
 \code{Variable} and an index column. Used to seed round 1 ordering in

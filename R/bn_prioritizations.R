@@ -31,7 +31,8 @@
 #' @param min_base_for_boot Integer. Minimum sample size to run bootstrap
 #'   p-values and to include a brand-subgroup slice as a task. Default 75.
 #' @param dv_metric Character. \code{"mean"} (default) or \code{"top_box"}.
-#' @param impact_metric_type Character. \code{"proportional"} (default) or
+#' @param impact_shift_type Character. How \code{lift} is interpreted when
+#'   shifting IV distributions: \code{"proportional"} (default) or
 #'   \code{"absolute"}.
 #' @param impact_result Optional. Output of \code{bn_impact()} passed through
 #'   to seed greedy round 1 ordering.
@@ -89,7 +90,7 @@ bn_prioritizations <- function(
     lift = 0.10,
     min_base_for_boot = 75,
     dv_metric = c("mean", "top_box"),
-    impact_metric_type = c("proportional", "absolute"),
+    impact_shift_type = c("proportional", "absolute"),
     impact_result = NULL,
     threshold = 0.01,
     max_rounds = NULL,
@@ -105,7 +106,7 @@ bn_prioritizations <- function(
 ) {
 
   dv_metric <- match.arg(dv_metric)
-  impact_metric_type <- match.arg(impact_metric_type)
+  impact_shift_type <- match.arg(impact_shift_type)
 
   # ---------------------------------------------------------------------------
   # Resolve subgroups
@@ -223,7 +224,7 @@ bn_prioritizations <- function(
         strategy = task$strategy, search = "greedy",
         impact_result = impact_result,
         dv_metric = dv_metric, lift = lift,
-        impact_metric_type = impact_metric_type,
+        impact_shift_type = impact_shift_type,
         threshold = threshold, max_rounds = max_rounds,
         n_boot_final = n_boot_final, noise_tail = noise_tail,
         min_base_for_boot = min_base_for_boot,

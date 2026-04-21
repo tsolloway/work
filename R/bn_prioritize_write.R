@@ -246,7 +246,8 @@ bn_prioritize_write <- function(
 
   dropdown_refs <- list()
   current_row <- row_controls_start
-  focus_cell_row <- NULL  # captured during the loop for the warning feedback
+  focus_cell_row <- NULL   # captured during the loop for the base/focus warning
+  weight_cell_row <- NULL  # captured for the "Weights don't affect this strategy" warning
 
   dim_display_labels <- c(
     strategy = "Strategy:",
@@ -281,7 +282,8 @@ bn_prioritize_write <- function(
 
     dropdown_refs[[dn]] <- paste0("$", num2let(cell_col), "$", current_row)
 
-    if (dn == "focus") focus_cell_row <- current_row
+    if (dn == "focus")  focus_cell_row  <- current_row
+    if (dn == "weight") weight_cell_row <- current_row
 
     current_row <- current_row + 1L
   }
@@ -347,6 +349,31 @@ bn_prioritize_write <- function(
     openxlsx::conditionalFormatting(wb, dash,
       cols = cell_col, rows = focus_cell_row,
       style = red_cell, type = "expression", rule = red_rule)
+  }
+
+  # -------------------------------------------------------------------------
+  # Weight warning — mirrors the impact dashboard's "Weights don't affect
+  # this metric" note. Fires when Strategy = "Max", since the Max strategy
+  # uses exact gRain inference (no frequency-shift distribution) so toggling
+  # the Weight dropdown has no effect on the result. Shown in grey italic
+  # to the right of the Weight control cell.
+  # -------------------------------------------------------------------------
+  if (!is.null(weight_cell_row) && "strategy" %in% names(dropdown_refs)) {
+    strategy_ref <- paste0("Prioritization!", dropdown_refs[["strategy"]])
+    weight_warn_col <- cell_col + 1L
+    weight_warn_formula <- paste0(
+      "IF(", strategy_ref, "=\"Max\",",
+      "\"Weights don't affect this strategy\",\"\")"
+    )
+    openxlsx::writeFormula(wb, dash, x = weight_warn_formula,
+      startRow = weight_cell_row, startCol = weight_warn_col)
+
+    weight_warn_rule <- paste0(strategy_ref, "=\"Max\"")
+    openxlsx::conditionalFormatting(wb, dash,
+      cols = weight_warn_col, rows = weight_cell_row,
+      style = openxlsx::createStyle(fontColour = "#888888",
+        textDecoration = "italic"),
+      type = "expression", rule = weight_warn_rule)
   }
 
   # --- Data table ---

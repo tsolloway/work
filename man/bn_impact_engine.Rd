@@ -15,7 +15,7 @@ bn_impact_engine(
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
   dv_metric = c("mean", "top_box"),
-  impact_metric_type = c("proportional", "absolute"),
+  impact_shift_type = c("proportional", "absolute"),
   include_base = TRUE,
   index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
   n_boot = 1,
@@ -79,10 +79,11 @@ value across all DV levels (works with any scale: 3-point, 5-point,
 7-point, etc.). \code{"top_box"} uses \code{P(DV_max | IV=v)} — the
 probability of the highest DV level.}
 
-\item{impact_metric_type}{Character. How \code{lift} values are interpreted:
-\code{"proportional"} (default) shifts the mean by a fraction of its
+\item{impact_shift_type}{Character. How \code{lift} values are interpreted
+when shifting IV distributions:
+\code{"proportional"} (default) shifts the IV's mean by a fraction of its
 current value (e.g., 0.10 = 10 percent of current mean);
-\code{"absolute"} shifts the mean by a fixed number of scale points
+\code{"absolute"} shifts the IV's mean by a fixed number of scale points
 (e.g., 0.10 = add 0.10 to the mean regardless of starting value).}
 
 \item{include_base}{Logical. Whether to include base-size columns alongside
@@ -206,6 +207,25 @@ zero (conceptually different from MI's test of \emph{association}).
 (via overlapping confidence intervals).
 }
 }
+\section{Outcome-display variants}{
+
+Both proportional and absolute variants of the DV-outcome metrics are
+always emitted as separate columns, so downstream writers (e.g., the
+dashboard built by \code{bn_impact_write()}) can switch between them
+at runtime without re-running the engine. Column names:
+\itemize{
+\item \code{maxVmin_propdisplay} = \code{(p1 - p0) / p0} (relative
+ratio, unbounded above for binary DVs)
+\item \code{maxVmin_absdisplay} = \code{p1 - p0} (probability-point
+difference, bounded in \code{[-1, 1]} for binary DVs)
+\item \code{lift_<N>_propdisplay} = lift shifted / observed
+\item \code{lift_<N>_absdisplay} = lift (raw probability-point change)
+}
+(Previously one \code{impact_outcome_display_type} parameter controlled
+which variant was emitted; it has been retired in favor of emitting
+both unconditionally.)
+}
+
 \examples{
 \dontrun{
 # --- From a bn_engine() result ---

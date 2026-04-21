@@ -36,6 +36,12 @@
 #' @param community_map_font_size Numeric or NULL. Node-label font size (in
 #'   pixels) for the Community Network PNG. Default 30. Set NULL to fall
 #'   back to vis.js's built-in 14 px.
+#' @param include_network_images Logical. When \code{TRUE} (default), renders
+#'   Attribute Network and Community Network PNG sheets via
+#'   \code{append_bn_network_maps()}. When \code{FALSE}, skips the render
+#'   entirely — saves ~10-30 seconds per call when users don't need the
+#'   embedded maps (e.g., iterating on impacts/prioritizations wording, or
+#'   building a leaner file for email distribution).
 #' @param very_hide_all Logical. Use veryHidden (TRUE) or hidden (FALSE) for
 #'   helper sheets.
 #' @param min_base_for_lift,min_base_for_sim,min_base_for_boot Base-size
@@ -47,8 +53,17 @@
 #' @param lift Lift fraction used in the prioritization analysis (for footer).
 #' @param path Character. Directory to write the workbook to.
 #'
-#' @return The full path of the written `.xlsx` file (invisibly). Side
-#'   effect: writes the xlsx file.
+#' @return A list (invisibly) with:
+#'   * `path` — full path of the written `.xlsx` file.
+#'   * `obj` — the `bn_finalize_network()` object that was passed in (pass-through
+#'     so downstream functions like `bn_insights()` don't need it re-specified).
+#'   * `title`, `sub_title`, `dv_display` — the resolved header strings used in
+#'     the workbook.
+#'
+#'   Backwards compatibility: this object has class `"bn_write_result"` with a
+#'   built-in character coercion, so `as.character(x)`, `print(x)`, and
+#'   `paste0(x)` all return the path. That keeps callsites like
+#'   `results_excel = bn_final %>% bn_write(...)` working.
 #'
 #' @seealso [bn_finalize_network()], [bn_impact_write()],
 #'   [bn_prioritize_write()]
@@ -74,6 +89,7 @@ bn_write <- function(
     network_type = "gravity",
     attribute_map_font_size = 30,
     community_map_font_size = 30,
+    include_network_images = TRUE,
     very_hide_all = TRUE,
     min_base_for_lift = NULL,
     min_base_for_sim = NULL,
@@ -137,10 +153,11 @@ bn_write <- function(
   # ---------------------------------------------------------------------------
   # 2. Impacts (when present) — always first
   # ---------------------------------------------------------------------------
-  # Whether each portion gets its OWN guide or not: when both are present we
-  # build a single unified guide at the end; when only one is present we let
-  # that portion's standalone guide render.
-  unified_guide <- has_impacts && has_prioritizations
+  # Guide emission is ALWAYS deferred here (add_guide = FALSE) so we can place
+  # it at the very end of the workbook, AFTER the network map sheets. If we
+  # let the sub-writers emit their guide inline, network maps would end up
+  # after the guide in the impacts-only or priort-only cases — we want Guide
+  # to always be the final tab regardless of which portions are present.
 
   if (has_impacts) {
     wb <- bn_impact_write(
@@ -169,8 +186,8 @@ bn_write <- function(
       path               = path,
       wb                 = wb,
       save               = FALSE,
-      add_guide          = !unified_guide,
-      add_images         = FALSE     # deferred — added post-prioritize below
+      add_guide          = FALSE,      # deferred — see end of bn_write
+      add_images         = FALSE       # deferred — added post-prioritize below
     )
   }
 
@@ -195,7 +212,7 @@ bn_write <- function(
       path               = path,
       wb                 = wb,
       save               = FALSE,
-      add_guide          = !unified_guide
+      add_guide          = FALSE       # deferred — see end of bn_write
     )
   }
 
@@ -203,8 +220,10 @@ bn_write <- function(
   # 4. Network maps — build sheets + render PNGs, but DEFER image insertion.
   # Images are actually inserted by openxlsx2 in the post-save step so they
   # survive openxlsx2's save step (which drops openxlsx-embedded images).
+  # Skipped entirely when include_network_images = FALSE.
   # ---------------------------------------------------------------------------
-  if (has_impacts && !is.null(obj) && "bn_subgroups" %in% names(obj)) {
+  if (isTRUE(include_network_images) && has_impacts &&
+      !is.null(obj) && "bn_subgroups" %in% names(obj)) {
     wb <- append_bn_network_maps(
       wb = wb, bn_full = obj, network_type = network_type,
       defer_images = TRUE,
@@ -214,9 +233,14 @@ bn_write <- function(
   }
 
   # ---------------------------------------------------------------------------
-  # 5. Unified Guide (only when both portions present)
+  # 5. Guide — ALWAYS emitted as the final tab in the workbook.
+  # Picks which guide appender to call based on which portions are present.
   # ---------------------------------------------------------------------------
-  if (unified_guide) {
+  impact_meta <- impacts[["meta"]] %||% list()
+  priort_meta <- prioritizations[["meta"]] %||% list()
+
+  if (has_impacts && has_prioritizations) {
+    # Both present — unified guide covering everything.
     wb <- append_bn_unified_guide(
       wb = wb,
       impacts = impacts,
@@ -225,18 +249,71 @@ bn_write <- function(
       has_weights = !is.null(impacts[["table_attribute_weighted"]]),
       has_community = !is.null(impacts[["table_community"]]),
       has_simulator = isTRUE(add_simple_simulator) && !is.null(obj[["bn_subgroups"]]),
-      has_brands = !is.null(impacts[["meta"]][["brand"]]) ||
-        !is.null(impacts[["meta"]][["brand_names"]]),
+      has_brands = !is.null(impact_meta[["brand"]]) ||
+        !is.null(impact_meta[["brand_names"]]),
       wb_type = wb_type,
       sim_dv_only = sim_dv_only,
       sig_threshold = sig_threshold,
       marginal_threshold = marginal_threshold,
       lift = lift,
-      min_base_for_lift = min_base_for_lift %||% impacts[["meta"]][["min_base_for_lift"]] %||% 100L,
-      min_base_for_sim = min_base_for_sim %||% min_base_for_lift %||%
-        impacts[["meta"]][["min_base_for_lift"]] %||% 100L,
+      min_base_for_lift = min_base_for_lift %||% impact_meta[["min_base_for_lift"]] %||% 100L,
+      min_base_for_sim  = min_base_for_sim %||% min_base_for_lift %||%
+        impact_meta[["min_base_for_lift"]] %||% 100L,
       min_base_for_boot = min_base_for_boot %||%
-        prioritizations[["meta"]][["min_base_for_boot"]] %||% 100L
+        priort_meta[["min_base_for_boot"]] %||% 100L
+    )
+  } else if (has_impacts) {
+    # Impacts only — mirror the arg extraction done by bn_impact_write.
+    wb <- append_bn_impact_guide(
+      wb = wb,
+      wb_type = "standard",
+      dv_display = dv_display,
+      has_weights = !is.null(impacts[["table_attribute_weighted"]]),
+      has_community = !is.null(impacts[["table_community"]]),
+      has_simulator = isTRUE(add_simple_simulator) && !is.null(obj[["bn_subgroups"]]),
+      has_brands = !is.null(impact_meta[["brand"]]) ||
+        !is.null(impact_meta[["brand_names"]]),
+      index_by = impact_meta[["index_by"]] %||% "lift_first",
+      type     = impact_meta[["type"]]     %||% "gr",
+      min_base_for_lift = min_base_for_lift %||%
+        impact_meta[["min_base_for_lift"]] %||% 100L,
+      min_base_for_sim  = min_base_for_sim %||%
+        impact_meta[["min_base_for_lift"]] %||% 100L,
+      boot_applied    = isTRUE(impact_meta[["boot_applied"]]),
+      n_boot          = impact_meta[["n_boot"]],
+      mi_boot_applied = isTRUE(impact_meta[["mi_boot_applied"]]),
+      mi_boot         = impact_meta[["mi_boot"]]
+    )
+  } else if (has_prioritizations) {
+    # Prioritizations only — mirror bn_prioritize_write's arg extraction.
+    # "has_strategy" fires whenever both lift AND max strategies are present
+    # (i.e., the dashboard exposes a Strategy dropdown).
+    has_strategy_g <- !is.null(prioritizations[["greedy_lift"]]) &&
+                      !is.null(prioritizations[["greedy_max"]])
+    # has_community: any row of any greedy path carries a Community column.
+    has_community_g <- any(purrr::map_lgl(
+      c(prioritizations[["greedy_lift"]], prioritizations[["greedy_max"]],
+        prioritizations[["greedy_lift_weighted"]]),
+      function(x) is.data.frame(x) && "community" %in% names(x)
+    ))
+    wb <- append_bn_prioritize_guide(
+      wb = wb,
+      dv_display = dv_display,
+      has_brands = !is.null(priort_meta[["brand"]]),
+      has_weights = !is.null(priort_meta[["weight"]]),
+      has_subgroups = length(priort_meta[["subgroups"]] %||% character(0)) > 0 &&
+        !identical(priort_meta[["subgroups"]], "Total"),
+      has_strategy = has_strategy_g,
+      has_community = has_community_g,
+      lift = lift,
+      sig_threshold = sig_threshold %||% priort_meta[["sig_threshold"]] %||% 0.05,
+      marginal_threshold = marginal_threshold %||% priort_meta[["marginal_threshold"]] %||% 0.10,
+      min_base_for_boot = min_base_for_boot %||% priort_meta[["min_base_for_boot"]] %||% 100L,
+      boot_applied = !is.null(priort_meta[["n_boot_final"]]) &&
+        isTRUE(priort_meta[["n_boot_final"]] > 1),
+      n_boot_final = priort_meta[["n_boot_final"]],
+      noise_tail = priort_meta[["noise_tail"]],
+      threshold = priort_meta[["threshold"]]
     )
   }
 
@@ -299,5 +376,29 @@ bn_write <- function(
 
   cli::cli_alert_success("Combined workbook saved: {file_path}")
 
-  invisible(file_path)
+  # Return the path + the pass-through object + resolved metadata. Wrapped in
+  # an S3 class so `as.character()` / `print()` / `paste0()` still return the
+  # path string — keeps backwards-compatible with callsites that treat the
+  # return value as a path (e.g. bn_report's `results_excel` argument).
+  out <- list(
+    path       = file_path,
+    obj        = obj,
+    title      = title,
+    sub_title  = sub_title,
+    dv_display = dv_display
+  )
+  class(out) <- c("bn_write_result", "list")
+  invisible(out)
 }
+
+#' @export
+as.character.bn_write_result <- function(x, ...) x[["path"]]
+
+#' @export
+print.bn_write_result <- function(x, ...) {
+  cat(x[["path"]], "\n")
+  invisible(x)
+}
+
+#' @export
+format.bn_write_result <- function(x, ...) x[["path"]]

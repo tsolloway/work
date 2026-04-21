@@ -23,11 +23,14 @@
 #' @param type Character. Shift method: \code{"exponential"} (default),
 #'   \code{"linear"}, or \code{"quadratic"}.
 #' @param lift Numeric. Target lift for the mean. Interpretation depends on
-#'   \code{impact_metric_type}: proportional (0.1 = 10 percent of current mean) or
+#'   \code{impact_shift_type}: proportional (0.1 = 10 percent of current mean) or
 #'   absolute (0.1 = add 0.1 scale points to mean).
-#' @param impact_metric_type Character. How \code{lift} is interpreted:
+#' @param impact_shift_type Character. How \code{lift} is interpreted:
 #'   \code{"proportional"} (default) shifts by a fraction of the current mean;
-#'   \code{"absolute"} shifts by a fixed number of scale points.
+#'   \code{"absolute"} shifts by a fixed number of scale points. (Formerly
+#'   \code{impact_metric_type}, which was retired because it conflated this
+#'   IV-shift choice with the DV-outcome display choice in
+#'   \code{bn_impact_engine}.)
 #' @param return_actual_lift Logical. If \code{TRUE}, returns a list with the shifted
 #'   probabilities plus diagnostic info (original/new/target means, actual lift).
 #'   If \code{FALSE} (default), returns just the shifted probability vector.
@@ -70,14 +73,14 @@ bn_freq_prob_shift <- function(
     freq = NULL,
     type = c("exponential", "linear", "quadratic"),
     lift = 0.1,
-    impact_metric_type = c("proportional", "absolute"),
+    impact_shift_type = c("proportional", "absolute"),
     return_actual_lift = FALSE,
     p_orig = NULL,
     values = NULL
 ){
 
   type <- match.arg(type)
-  impact_metric_type <- match.arg(impact_metric_type)
+  impact_shift_type <- match.arg(impact_shift_type)
   normalize <- function(x) x / sum(x)
 
 
@@ -98,15 +101,55 @@ bn_freq_prob_shift <- function(
 
   # Original and target means
   orig_mean <- sum(values * p_orig)
-  if (impact_metric_type == "proportional") {
+  if (impact_shift_type == "proportional") {
     target_mean <- orig_mean * (1 + lift)
   } else {
     target_mean <- orig_mean + lift
   }
 
-  # Clamp target to feasible range (can't exceed min/max of scale)
   val_min <- min(values)
   val_max <- max(values)
+
+  # Absolute-shift saturation: when the requested shift would push the mean
+  # past the scale's boundary, return a point-mass distribution at that
+  # boundary instead of the near-boundary clamped distribution the optimizer
+  # would otherwise produce. Matches the natural interpretation of "+0.5
+  # absolute shift" on a saturated IV — if everyone would have to be at the
+  # highest level for the requested mean to be reached, return exactly that.
+  if (impact_shift_type == "absolute") {
+    if (target_mean >= val_max) {
+      p_sat <- numeric(length(values))
+      p_sat[which.max(values)] <- 1
+      names(p_sat) <- names(p_orig)
+      if (isTRUE(return_actual_lift)) {
+        return(list(
+          p_new_val = p_sat, p_orig_val = p_orig,
+          mean_orig = orig_mean, mean_new = val_max, target_mean = val_max,
+          actual_lift = val_max - orig_mean, saturated = "max"
+        ))
+      }
+      return(p_sat)
+    }
+    if (target_mean <= val_min) {
+      p_sat <- numeric(length(values))
+      p_sat[which.min(values)] <- 1
+      names(p_sat) <- names(p_orig)
+      if (isTRUE(return_actual_lift)) {
+        return(list(
+          p_new_val = p_sat, p_orig_val = p_orig,
+          mean_orig = orig_mean, mean_new = val_min, target_mean = val_min,
+          actual_lift = val_min - orig_mean, saturated = "min"
+        ))
+      }
+      return(p_sat)
+    }
+  }
+
+  # Clamp target to feasible range (can't exceed min/max of scale).
+  # Proportional shifts keep the old clamp — optimizer still runs toward
+  # near-boundary target rather than pure point-mass, since proportional
+  # shifts more rarely hit the boundary at all and the smooth distribution
+  # is more informative when they don't.
   target_mean <- max(val_min + 1e-6, min(val_max - 1e-6, target_mean))
 
 

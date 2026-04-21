@@ -47,8 +47,16 @@
 #' @param impact_n_querry Integer. Query sample size. Default 1e4.
 #' @param impact_lift Numeric vector. Lift fractions for impact. Default
 #'   \code{c(0, 0.1)}.
-#' @param impact_metric_type Character. \code{"proportional"} or
-#'   \code{"absolute"}. Default \code{"proportional"}.
+#' @param prioritize_shift_type Character. IV shift interpretation for the
+#'   greedy prioritization path only: \code{"proportional"} (default) shifts
+#'   the IV mean by a fraction of its current value; \code{"absolute"} shifts
+#'   by a fixed number of scale points. (Impacts always precompute BOTH
+#'   variants — no parameter needed there.)
+#' @section Impact-metric variants:
+#'   Impacts always precompute the full cross-product of IV-shift and
+#'   DV-outcome-display variants (4 lift columns × 2 maxVmin columns + mi).
+#'   The dashboards built by \code{bn_impact_write()} expose runtime
+#'   dropdowns for both Shift Type and Outcome Display.
 #' @param impact_include_base Logical. Include base sizes in impact tables.
 #'   Default TRUE.
 #' @param do_prioritizations Logical. If TRUE, run \code{bn_prioritizations()}
@@ -120,7 +128,7 @@ bn_finalize_network <- function(
     impact_n_boot = 1,
     impact_n_querry = 1e4,
     impact_lift = c(0, 0.1),
-    impact_metric_type = c("proportional", "absolute"),
+    prioritize_shift_type = c("proportional", "absolute"),
     impact_include_base = TRUE,
     # --- Prioritization ---
     do_prioritizations = TRUE,
@@ -143,7 +151,7 @@ bn_finalize_network <- function(
 
   node_label_type <- match.arg(node_label_type)
   impact_type <- match.arg(impact_type)
-  impact_metric_type <- match.arg(impact_metric_type)
+  prioritize_shift_type <- match.arg(prioritize_shift_type)
   dv_metric <- match.arg(dv_metric)
 
   results <- list()
@@ -374,7 +382,6 @@ bn_finalize_network <- function(
       n_boot = impact_n_boot,
       n_querry = impact_n_querry,
       lift = impact_lift,
-      impact_metric_type = impact_metric_type,
       brand = brand,
       brand_names = brand_names,
       min_base_for_lift = min_base_for_calc,
@@ -407,7 +414,7 @@ bn_finalize_network <- function(
       impact_result = if (!is.null(results[["impacts"]])) results[["impacts"]] else NULL,
       dv_metric = dv_metric,
       lift = prioritize_lift,
-      impact_metric_type = impact_metric_type,
+      impact_shift_type = prioritize_shift_type,
       threshold = prioritize_threshold,
       max_rounds = prioritize_max_rounds,
       n_boot_final = n_boot_final,

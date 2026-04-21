@@ -28,15 +28,16 @@
 #'   \code{"exhaustive"} evaluates all C(n, k) combinations at each size k
 #'   to find the globally best combo.
 #' @param lift Numeric. Distribution shift for \code{strategy = "lift"}.
-#'   Interpretation depends on \code{impact_metric_type}. Default 0.10.
+#'   Interpretation depends on \code{impact_shift_type}. Default 0.10.
 #' @param min_base_for_boot Integer. Minimum sample size required to run
 #'   bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
 #'   skipped. Default 75.
 #' @param dv_metric Character. \code{"mean"} (default) computes the expected DV
 #'   value; \code{"top_box"} uses the probability of the highest DV level.
-#' @param impact_metric_type Character. How \code{lift} is interpreted:
-#'   \code{"proportional"} (default) shifts by a fraction of the current mean;
-#'   \code{"absolute"} shifts by a fixed number of scale points.
+#' @param impact_shift_type Character. How \code{lift} is interpreted when
+#'   shifting IV distributions: \code{"proportional"} (default) shifts by a
+#'   fraction of the current mean; \code{"absolute"} shifts by a fixed
+#'   number of scale points.
 #' @param impact_result Optional. Output of \code{bn_impact()} or a tibble with
 #'   \code{Variable} and an index column. Used to seed round 1 ordering in
 #'   greedy search.
@@ -76,7 +77,7 @@ bn_prioritize <- function(
     lift = 0.10,
     min_base_for_boot = 75,
     dv_metric = c("mean", "top_box"),
-    impact_metric_type = c("proportional", "absolute"),
+    impact_shift_type = c("proportional", "absolute"),
     impact_result = NULL,
     threshold = 0.01,
     max_rounds = NULL,
@@ -91,7 +92,7 @@ bn_prioritize <- function(
   strategy <- match.arg(strategy)
   search <- match.arg(search)
   dv_metric <- match.arg(dv_metric)
-  impact_metric_type <- match.arg(impact_metric_type)
+  impact_shift_type <- match.arg(impact_shift_type)
 
   # Preserve named dv for display, strip for bnlearn
   dv <- unname(dv)
@@ -189,7 +190,7 @@ bn_prioritize <- function(
       freq <- .get_freq(df[[iv]], w)
       shifted <- bn_freq_prob_shift(
         freq = freq, type = "exponential",
-        lift = lift, impact_metric_type = impact_metric_type
+        lift = lift, impact_shift_type = impact_shift_type
       )
       as.numeric(shifted) / as.numeric(prior)
     })
@@ -380,6 +381,35 @@ bn_prioritize <- function(
 
     if (verbose) cli::cli_progress_bar("Bootstrap", total = n_boot_final)
 
+    # ---- Lift-strategy precomputation (fixed-grain bootstrap) ---------------
+    # The lift-strategy bootstrap holds the ORIGINAL full-sample grain fixed
+    # across iterations. The only quantity that varies per bootstrap is the
+    # IV frequency distribution (from resampling df's rows). This matches
+    # what the non-bootstrap original run actually does: it applies brand
+    # (or focus) IV frequencies as virtual evidence against a fixed BN.
+    #
+    # Priors for likelihood ratios come from the ORIGINAL grain, so they are
+    # constant across bootstraps (precompute once, out of the loop).
+    #
+    # The previous implementation refit the BN on each bootstrap-of-df —
+    # which for brand-focus prioritization (where df is brand-filtered) was
+    # fitting a DIFFERENT BN than the original run used, producing chaotic
+    # non-monotone p-values. See
+    # https://github.com/... (bn_prioritize p-value fix) for history.
+    if (strategy != "max") {
+      all_ivs_in_combos <- unique(unlist(final_combos))
+      # Original-grain prior for each IV — fixed across bootstraps.
+      orig_priors <- purrr::map(rlang::set_names(all_ivs_in_combos), function(iv) {
+        as.numeric(
+          suppressMessages(
+            gRain::querygrain(grain_bn, nodes = iv, simplify = TRUE)
+          )
+        )
+      })
+      # Original baseline — fixed across bootstraps.
+      orig_baseline <- baseline
+    }
+
     for (b in seq_len(n_boot_final)) {
       if (verbose) cli::cli_progress_update()
 
@@ -387,40 +417,45 @@ bn_prioritize <- function(
       boot_df <- fit_df[boot_idx, , drop = FALSE]
       boot_w <- if (!is.null(weight_vec)) weight_vec[boot_idx] else NULL
 
-      # Suppress bnlearn "variable X has levels that are not observed in the
-      # data" warnings from bn.fit(). They fire when a bootstrap resample
-      # (with replacement) from a small slice happens to miss a rare factor
-      # level — a sampling artifact, not a real issue. The Bayesian fit still
-      # produces a valid grain object (unobserved levels get prior-driven
-      # non-zero probabilities), and the bootstrap aggregate is unaffected.
-      # suppressMessages is kept separately for gRain "chatty" init messages.
-      boot_grain <- suppressWarnings(suppressMessages(
-        bnlearn::bn.fit(bn, boot_df, method = "bayes") %>%
-          bnlearn::as.grain()
-      ))
-
-      boot_baseline <- .query_dv(boot_grain, evidence = list())
-
       if (strategy == "max") {
+        # Max-strategy bootstrap still refits on the resampled df. At the
+        # subgroup level this is the full subgroup data (same population the
+        # grain was fit on), so a refit samples the legitimate fit
+        # uncertainty. Unlike the lift case, hard-evidence combos against a
+        # fixed grain would produce identical results across bootstraps and
+        # degenerate p-values — so refit is the correct design for max.
+        # Suppress bnlearn's "variable X has levels not observed" warnings;
+        # Bayesian smoothing keeps probabilities finite when rare levels
+        # drop out of a resample, so the aggregate is unaffected.
+        boot_grain <- suppressWarnings(suppressMessages(
+          bnlearn::bn.fit(bn, boot_df, method = "bayes") %>%
+            bnlearn::as.grain()
+        ))
+        boot_baseline <- .query_dv(boot_grain, evidence = list())
         combo_estimates <- purrr::map_dbl(final_combos, function(combo) {
           ev <- ivs_max[combo]
           .query_dv(boot_grain, evidence = ev)
         })
       } else {
-        all_ivs_in_combos <- unique(unlist(final_combos))
+        # Lift strategy: bootstrap only the IV frequency distribution. Use
+        # the ORIGINAL grain (and its priors) — don't refit. This isolates
+        # the only empirical thing the focus actually contributes (the
+        # brand's / subgroup's row-level IV distribution) and produces p-
+        # values that reflect uncertainty in that distribution, not BN-
+        # refit chaos.
         boot_likelihoods <- purrr::map(rlang::set_names(all_ivs_in_combos), function(iv) {
-          prior <- suppressMessages(gRain::querygrain(boot_grain, nodes = iv, simplify = TRUE))
           freq <- .get_freq(boot_df[[iv]], boot_w)
           shifted <- bn_freq_prob_shift(
             freq = freq, type = "exponential",
-            lift = lift, impact_metric_type = impact_metric_type
+            lift = lift, impact_shift_type = impact_shift_type
           )
-          as.numeric(shifted) / as.numeric(prior)
+          as.numeric(shifted) / orig_priors[[iv]]
         })
 
+        boot_baseline <- orig_baseline
         combo_estimates <- purrr::map_dbl(final_combos, function(combo) {
           ev <- purrr::map(combo, ~boot_likelihoods[[.x]]) %>% stats::setNames(combo)
-          updated <- suppressMessages(gRain::setEvidence(boot_grain, evidence = ev))
+          updated <- suppressMessages(gRain::setEvidence(grain_bn, evidence = ev))
           dist <- suppressMessages(gRain::querygrain(updated, nodes = dv, simplify = TRUE))
           if (dv_metric == "top_box") {
             dist %>% dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)

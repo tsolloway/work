@@ -24,6 +24,7 @@ bn_write(
   network_type = "gravity",
   attribute_map_font_size = 30,
   community_map_font_size = 30,
+  include_network_images = TRUE,
   very_hide_all = TRUE,
   min_base_for_lift = NULL,
   min_base_for_sim = NULL,
@@ -74,6 +75,13 @@ back to vis.js's built-in 14 px.}
 pixels) for the Community Network PNG. Default 30. Set NULL to fall
 back to vis.js's built-in 14 px.}
 
+\item{include_network_images}{Logical. When \code{TRUE} (default), renders
+Attribute Network and Community Network PNG sheets via
+\code{append_bn_network_maps()}. When \code{FALSE}, skips the render
+entirely — saves ~10-30 seconds per call when users don't need the
+embedded maps (e.g., iterating on impacts/prioritizations wording, or
+building a leaner file for email distribution).}
+
 \item{very_hide_all}{Logical. Use veryHidden (TRUE) or hidden (FALSE) for
 helper sheets.}
 
@@ -90,8 +98,19 @@ prioritization dashboard. If NULL, inherits from
 \item{path}{Character. Directory to write the workbook to.}
 }
 \value{
-The full path of the written \code{.xlsx} file (invisibly). Side
-effect: writes the xlsx file.
+A list (invisibly) with:
+\itemize{
+\item \code{path} — full path of the written \code{.xlsx} file.
+\item \code{obj} — the \code{bn_finalize_network()} object that was passed in (pass-through
+so downstream functions like \code{bn_insights()} don't need it re-specified).
+\item \code{title}, \code{sub_title}, \code{dv_display} — the resolved header strings used in
+the workbook.
+}
+
+Backwards compatibility: this object has class \code{"bn_write_result"} with a
+built-in character coercion, so \code{as.character(x)}, \code{print(x)}, and
+\code{paste0(x)} all return the path. That keeps callsites like
+\code{results_excel = bn_final \%>\% bn_write(...)} working.
 }
 \description{
 Takes the output of \code{bn_finalize_network()} and writes
