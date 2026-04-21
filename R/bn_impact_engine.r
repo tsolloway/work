@@ -546,12 +546,27 @@ bn_impact_engine <- function(
         lift_col_names <- lift_labels
       } else {
         # Per-brand columns follow the same 2× outcome-display expansion.
+        # Name format: "lift_N_{brand}_{display}" — brand goes BEFORE the
+        # display tag so that (a) Pass-B's `.insert_shift_suffix` regex
+        # (anchored to trailing `_propdisplay`/`_absdisplay`) also renames
+        # brand cols, and (b) the Excel / HTML dashboards' column-name
+        # formulas (which assume `{sg}_{lift_N}_{brand}_{shift}_{display}`)
+        # resolve correctly. Do NOT change to `_{display}_{brand}` — it
+        # silently breaks both dashboards.
+        #
+        # Build the name by explicit split-and-concatenate (no sub backref)
+        # so we sidestep R's `\1` / `\\1` string-escape subtlety entirely.
         brand_lift_col_names <- expand.grid(
           lift_label = lift_labels,
           brand = brand_levels,
           stringsAsFactors = FALSE
         ) %>%
-          with(paste(lift_label, brand, sep = "_"))
+          with(mapply(function(ll, b) {
+            # ll is always "...<base>_propdisplay" or "...<base>_absdisplay"
+            disp <- if (endsWith(ll, "_propdisplay")) "propdisplay" else "absdisplay"
+            base <- substr(ll, 1, nchar(ll) - nchar(disp) - 1L)  # drop "_<disp>"
+            paste0(base, "_", b, "_", disp)
+          }, lift_label, brand, USE.NAMES = FALSE))
         lift_col_names <- c(lift_labels, brand_lift_col_names)
       }
 

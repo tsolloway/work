@@ -812,8 +812,12 @@ bn_report <- function(
   # dropdown; metric_info carries the BASE metric names (e.g. "lift_0",
   # "maxVmin", "mi") and JS composes the full column name at render time
   # from base + focus + display.
-  .strip_display <- function(x) sub("_(propdisplay|absdisplay)$", "", x)
-  .strip_shift   <- function(x) sub("_(propshift|absshift)", "", x)
+  # Display tag can appear mid-string on brand lift columns
+  # ("lift_0_propdisplay_Bing") or at the end on market lift columns
+  # ("lift_0_propdisplay"). Strip in both positions so brand name
+  # extraction below sees a clean "lift_N_<brand>" form.
+  .strip_display <- function(x) gsub("_(propdisplay|absdisplay)(_|$)", "\\2", x)
+  .strip_shift   <- function(x) gsub("_(propshift|absshift)(_|$)", "\\2", x)
   base_suffixes <- unique(.strip_display(.strip_shift(metric_suffixes)))
 
   all_lift_bases    <- grep("^lift", base_suffixes, value = TRUE)
