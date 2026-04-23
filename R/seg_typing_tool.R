@@ -1,5 +1,43 @@
 #' seg_typing_tool
-#' @description seg_typing_tool
+#'
+#' @description Builds a 3-sheet "Typing Tool" Excel workbook for a given LDA
+#'   solution: an interactive Individual UI sheet with a scoring engine, a
+#'   printable Documentation sheet (qualification instructions, solution
+#'   questions, coefficient function, step-by-step calculation guide), and a
+#'   Bulk sheet for scoring many respondents at once. The Individual UI and
+#'   Bulk sheets pull Survey Variable / Side A / Side B labels and the
+#'   coefficient function from the Documentation sheet via cross-sheet
+#'   formulas, so edits to the Documentation sheet propagate.
+#'
+#' @param seg A seg object with `solutions`, `data$with_solutions`, and
+#'   `spec` populated.
+#' @param solution_name Character. The `lda_name` of the solution to build the
+#'   typing tool for.
+#' @param survey_respondent_id Character. Column name of the respondent ID in
+#'   `seg$data$with_solutions`. Default `"uuid"`.
+#' @param qualification_instructions Character vector. Qualification bullet
+#'   lines shown on the Documentation sheet.
+#' @param overwrite_left_label,overwrite_right_label Optional character vectors
+#'   to override the polar side A / side B labels pulled from the spec.
+#' @param segment_names Optional character vector of segment display names. If
+#'   `NULL`, placeholder names (`"Segment Name 1"`, ...) are used.
+#' @param file_name Character. Output file basename (no extension).
+#' @param where Optional character. Directory to save into. If `NULL`, uses
+#'   `seg$paths$folders$solution`, else the working directory.
+#' @param start_row,start_col Integers. Top-left anchor for content on each
+#'   sheet. Default `(2, 2)`.
+#' @param polar_label_width Numeric. Column width for the side-A / side-B
+#'   label columns on the Individual UI sheet.
+#' @param additional_questions Optional named list of post-LDA reassignment
+#'   rules. Each element's name is the survey variable, and each element is a
+#'   tibble with columns `from_seg`, `value`, `to_seg`. For each respondent,
+#'   after the LDA picks an initial segment, any matching rule reassigns the
+#'   respondent to `to_seg`. Only equality comparisons are supported. A
+#'   respondent may match at most one rule across all variables; violations
+#'   raise an error at build time.
+#'
+#' @return Invisibly writes the workbook to disk. Returns `NULL`.
+#'
 #' @export
 seg_typing_tool <- function(
     seg,
@@ -14,26 +52,17 @@ seg_typing_tool <- function(
     start_row = 2,
     start_col = 2,
     polar_label_width = 65,
-    doc_label_cell_merge = 6
+    additional_questions = NULL
 ){
-
-  # survey_respondent_id = "uuid"
-  # qualification_instructions = rep("qualification goes here", 8)
-  # overwrite_left_label = NULL
-  # overwrite_right_label = NULL
-  # segment_names = NULL
-  # file_name = "Typing Tool"
-  # where = NULL
-  # start_row = 2
-  # start_col = 2
-  # polar_label_width = 65
-  # doc_label_cell_merge = 6
 
   row_title <- start_row
 
   where <- seg[["paths"]][["folders"]][["solution"]]
 
   df <- seg[["data"]][["with_solutions"]]
+
+  doc_label_cell_merge <- 6
+  doc_row_gap          <- 2
 
 
   #######################
@@ -163,7 +192,8 @@ seg_typing_tool <- function(
     dplyr::filter(lda_name == !!solution_name) %>%
     dplyr::pull(lda_predict) %>%
     purrr::pluck(1) %>%
-    dplyr::select(-dplyr::any_of("seg_uuid"))
+    dplyr::select(-dplyr::any_of("seg_uuid")) %>%
+    dplyr::mutate(seg = as.numeric(as.character(seg)))
 
 
   segments <- seg[["solutions"]][["summary_table"]] %>%
@@ -181,6 +211,23 @@ seg_typing_tool <- function(
 
 
   data_inputs <- seg[["data"]][["with_solutions"]] %>% select(all_of(c(survey_respondent_id, inputs_raw)))
+
+
+  polar_info <- seg %>% seg_get_vars_polars()
+
+  has_recoding <- inputs[1] %in% polar_info$rs_var
+
+  if(has_recoding){
+    first_polar_row <- polar_info %>% dplyr::filter(rs_var == inputs[1])
+    recode_source_col <- first_polar_row$source_var[1]
+    recode_rs_col     <- first_polar_row$rs_var[1]
+
+    recode_mapping <- seg[["data"]][["with_solutions"]] %>%
+      dplyr::select(dplyr::all_of(c(recode_source_col, recode_rs_col))) %>%
+      dplyr::distinct() %>%
+      dplyr::filter(!is.na(.data[[recode_source_col]]), !is.na(.data[[recode_rs_col]])) %>%
+      dplyr::arrange(.data[[recode_source_col]])
+  }
 
 
   polar_points <- data_inputs %>% select(-!!survey_respondent_id) %>% unlist() %>% unique() %>% dplyr::setdiff(NA) %>% length() %>% seq()
@@ -211,6 +258,36 @@ seg_typing_tool <- function(
   clean_variable_names <- glue("Q{seq(nrow(inputs_table))}")
 
 
+  #######################
+  # build ind_ui (shared by individual and documentation tools)
+  #######################
+
+  ind_ui <- tibble(
+    "Question" = clean_variable_names,
+    "Survey Variable" = inputs_table %>% select(source_var) %>% flatten_chr() %>% stringr::str_squish(),
+    "Side A" = inputs_table %>% select(left_label) %>% flatten_chr() %>% stringr::str_squish(),
+    matrix(nrow = nrow(inputs_table), ncol = length(polar_points)) %>% data.frame(),
+    "Side B" = inputs_table %>% select(right_label) %>% flatten_chr() %>% stringr::str_squish()
+  ) %>%
+    setNames(c("Question", "Survey Variable", "Side A", rep("", length(polar_points)), "Side B"))
+
+  if(length(polar_points) == 4){
+    ind_ui <- ind_ui %>%
+      setNames(c(
+        "Question", "Survey Variable", "Side A",
+        "Agree Much \nMore \n<<", "Agree Somewhat \nMore \n<<",
+        "Agree Somewhat \nMore \n>>", "Agree Much \nMore \n>>",
+        "Side B"
+      ))
+  }else if(length(polar_points) == 2){
+    ind_ui <- ind_ui %>%
+      setNames(c(
+        "Question", "Survey Variable", "Side A",
+        "Agree \nMore \n<<", "Agree \nMore \n>>",
+        "Side B"
+      ))
+  }
+
 
   #######################
   # internal functions
@@ -218,7 +295,7 @@ seg_typing_tool <- function(
 
   ## creating individual ui
 
-  individual_typing_tool <- function(
+  individual_ui_tool <- function(
     wb = wb,
     sheet_name = sheet_name,
     row_title = start_row,
@@ -227,52 +304,15 @@ seg_typing_tool <- function(
   ){
 
     ind_ui_response_instructions <- "Please read each pair of statements and decide which side you agree with more. Indicate your response with an x"
-    ind_doc_response_instructions <- "Please read each pair of statements and decide which side you agree with more."
 
     #######################
     # create objects
     #######################
 
-    recode_values <- table(
-      df[, inputs_raw] %>% unlist(),
-      df[, inputs] %>% unlist()) %>%
-      colnames() %>%
-      as.numeric() %>%
-      matrix(nrow = 1)
-
-
-    ind_ui <- tibble(
-      "Question" = clean_variable_names,
-      "Survey Variable" = inputs_table %>% select(source_var) %>% flatten_chr() %>% stringr::str_squish(),
-      "Side A" = inputs_table %>% select(left_label) %>% flatten_chr() %>% stringr::str_squish(),
-      matrix(nrow = nrow(inputs_table), ncol = length(polar_points)) %>% data.frame(),
-      "Side B" = inputs_table %>% select(right_label) %>% flatten_chr() %>% stringr::str_squish()
-    ) %>%
-      setNames(c("Side A", rep("", length(polar_points)), "Side B"))
-
-
-    if(length(polar_points) == 4){
-      ind_ui <- ind_ui %>%
-        setNames(
-          c(
-            "Question", "Survey Variable",
-            "Side A",
-            "Agree Much \nMore \n<<", "Agree Somewhat \nMore \n<<",
-            "Agree Somewhat \nMore \n>>", "Agree Much \nMore \n>>",
-            "Side B"
-          )
-        )
-    }else if(length(polar_points) == 2){
-      ind_ui <- ind_ui %>%
-        setNames(
-          c(
-            "Question", "Survey Variable",
-            "Side A",
-            "Agree \nMore \n<<",
-            "Agree \nMore \n>>",
-            "Side B"
-          )
-        )
+    if(has_recoding){
+      recode_values <- recode_mapping[[2]] %>% as.numeric() %>% matrix(nrow = 1)
+    }else{
+      recode_values <- polar_points %>% matrix(nrow = 1)
     }
 
 
@@ -322,50 +362,6 @@ seg_typing_tool <- function(
     col_ind_engine_controls_number <- col_ind_engine_clean_var_number + 4
 
     range_ind_prob <- glue('${num2let(col_ind_engine_survey_var_number + 1)}${row_ind_engine_prob}:${num2let(col_ind_engine_answer_number - 1)}${row_ind_engine_prob}')
-
-
-    row_doc_intro <- row_title + 3
-    row_doc_qualification <- row_doc_intro + 3
-    row_doc_qualification_last <- row_doc_qualification + length(qualification_instructions)
-
-    row_doc_seg_name_header <- row_doc_qualification
-    row_doc_seg_name_first <- row_doc_seg_name_header + 1
-    row_doc_seg_name_last <- row_doc_seg_name_header + length(segments)
-
-
-    if(row_doc_qualification_last >= row_doc_seg_name_last){
-      row_doc_questions_header <- row_doc_qualification_last + 5
-    }else{
-      row_doc_questions_header <- row_doc_seg_name_last + 5
-    }
-
-
-    doc_row_gap <- 2
-
-    row_doc_questions_first <- row_doc_questions_header + doc_row_gap + 1
-    row_doc_questions_last <- row_doc_questions_first + nrow(coef_func) - 2
-
-    row_doc_function_header <- row_doc_questions_last + 4
-    row_doc_function_last <- row_doc_function_header + nrow(coef_func) + 1
-
-
-    row_doc_steps <- row_doc_function_last + 2
-
-
-    col_doc_start <- col_ind_engine_qc_number + 2
-    col_doc_qualification_last <- col_doc_start + doc_label_cell_merge + 2
-
-    col_doc_seg_name_header <- col_doc_start + ncol(ind_ui) + doc_label_cell_merge - 2
-    col_doc_seg_name_value <- col_doc_seg_name_header + 1
-
-    row_diff_ind_ui_doc <- row_doc_questions_header - row_header
-    col_diff_ind_ui_doc <- col_doc_start - col_ind_clean_var_number
-
-    row_diff_ind_eng_doc <- row_doc_function_header - row_ind_engine_header
-    col_diff_ind_eng_doc <- col_doc_start - col_ind_engine_clean_var_number
-
-    col_last <- col_doc_start + ncol(ind_ui) + (doc_label_cell_merge * 2) - 1
-
 
 
     #######################
@@ -420,294 +416,135 @@ seg_typing_tool <- function(
     )
 
 
-    diff_question <- function(
-    place = c("ui", "doc"),
-    type = c("row", "col"),
-    add_doc_row_gap = FALSE,
-    doc_label_cell_merge = 0
-    ){
-      place <- match.arg(place)
-      type <- match.arg(type)
+    openxlsx::setColWidths(wb, sheet_name, cols = seq(col_ind_clean_var_number, col_ind_label_point_last_number), widths = 10)
+    openxlsx::setColWidths(wb, sheet_name, cols = col_ind_survey_var_number, hidden = TRUE)
+    openxlsx::groupRows(wb, sheet_name, rows = row_ind_recode, hidden = TRUE)
 
-      if(place == "ui" && type == "row") return(0)
-      if(place == "ui" && type == "col") return(0)
-      if(place == "doc" && type == "row" && !add_doc_row_gap) return(row_diff_ind_ui_doc)
-      if(place == "doc" && type == "row" && add_doc_row_gap) return(row_diff_ind_ui_doc + doc_row_gap)
-      if(place == "doc" && type == "col") return(col_diff_ind_ui_doc + doc_label_cell_merge)
-    }
+    openxlsx::setColWidths(wb, sheet_name, cols = c(col_ind_label_left_number, col_ind_label_right_number), widths = polar_label_width)
 
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = ind_ui,
+      startRow = row_header,
+      startCol = col_ind_clean_var_number,
+      colNames = TRUE,
+      headerStyle = style_header,
+      borders = "all",
+    )
 
-    for(i in c("ui", "doc")){
-
-      openxlsx::setColWidths(wb, sheet_name, cols = seq(col_ind_clean_var_number, col_ind_label_point_last_number) + diff_question(i, "col"), widths = 10)
-      openxlsx::setColWidths(wb, sheet_name, cols = col_ind_survey_var_number + diff_question(i, "col"), hidden = TRUE)
-      openxlsx::groupRows(wb, sheet_name, rows = row_ind_recode, hidden = TRUE)
-
-
-      if(i == "ui"){
-
-        openxlsx::setColWidths(wb, sheet_name, cols = c(col_ind_label_left_number, col_ind_label_right_number) + diff_question(i, "col"), widths = polar_label_width)
-
-        openxlsx::writeData(
-          wb, sheet_name,
-          x = ind_ui,
-          startRow = row_header + diff_question(i, "row"),
-          startCol = col_ind_clean_var_number + diff_question(i, "col"),
-          colNames = TRUE,
-          headerStyle = style_header,
-          borders = "all",
-        )
-
-        openxlsx::writeData(
-          wb, sheet_name,
-          x = ind_response,
-          startRow = row_ind_first,
-          startCol = col_ind_label_point_first_number,
-          colNames = FALSE
-        )
-
-      }else if(i == "doc"){
-
-        for(y in seq(col_ind_clean_var_number, col_ind_label_right_number + (doc_label_cell_merge * 2)) + diff_question(i, "col")){
-
-          if(
-            (
-              y %in% seq(
-                col_ind_clean_var_number + diff_question(i, "col") + 2,
-                col_ind_clean_var_number + diff_question(i, "col") + 2 + doc_label_cell_merge
-              )
-            ) ||
-            (
-              y %in% seq(
-                col_ind_label_right_number + diff_question(i, "col") + doc_label_cell_merge,
-                col_ind_label_right_number + diff_question(i, "col") + (doc_label_cell_merge * 2)
-              )
-            )
-          ){
-
-            if(y %in% c(
-              col_ind_clean_var_number + diff_question(i, "col") + 2,
-              col_ind_label_right_number + diff_question(i, "col") + doc_label_cell_merge
-            )){
-
-              openxlsx::mergeCells(
-                wb, sheet_name,
-                rows = seq(row_header + diff_question(i, "row"), row_header + diff_question(i, "row") + doc_row_gap),
-                cols = seq(y, y + doc_label_cell_merge)
-              )
-            }
-
-          }else{
-            openxlsx::mergeCells(
-              wb, sheet_name,
-              rows = seq(row_header + diff_question(i, "row"), row_header + diff_question(i, "row") + doc_row_gap),
-              cols = y
-            )
-          }
-        }
-
-        for(tc in c(col_ind_label_left_number, col_ind_label_right_number + doc_label_cell_merge) + diff_question(i, "col")){
-          for(tr in seq(row_ind_first, row_ind_last) + diff_question(i, "row", TRUE)){
-            openxlsx::mergeCells(
-              wb, sheet_name,
-              rows = tr,
-              cols = seq(tc, tc + doc_label_cell_merge)
-            )
-          }
-        }
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = ind_response,
+      startRow = row_ind_first,
+      startCol = col_ind_label_point_first_number,
+      colNames = FALSE
+    )
 
 
-        temp_doc_ui <- ind_ui %>%
-          bind_rows(create_NA_rows(., doc_row_gap), .) %>%
-          mutate(" " = NA) %>%
-          setNames(., names(.) %>% trimws())
+    # pull Survey Variable, Side A, Side B from Documentation sheet
+    doc_q_row_qualification_last <- row_title + 6 + length(qualification_instructions)
+    doc_q_row_seg_name_last      <- row_title + 6 + length(segments)
+    doc_q_row_questions_header   <- max(doc_q_row_qualification_last, doc_q_row_seg_name_last) + 5
+    doc_q_row_first              <- doc_q_row_questions_header + doc_row_gap + 1
 
-        temp_doc_ui <- temp_doc_ui[
-          ,
-          c(
-            1:3,
-            rep(ncol(temp_doc_ui), doc_label_cell_merge),
-            4:ncol(temp_doc_ui),
-            rep(ncol(temp_doc_ui), doc_label_cell_merge - 1)
-          )]
+    doc_q_rows <- seq(doc_q_row_first, doc_q_row_first + nrow(ind_ui) - 1)
+    doc_col_sv <- num2let(start_col + 1)
+    doc_col_sa <- num2let(start_col + 2)
+    doc_col_sb <- num2let(start_col + 3 + length(polar_points) + doc_label_cell_merge)
 
-        openxlsx::writeData(
-          wb, sheet_name,
-          x = temp_doc_ui,
-          startRow = row_header + diff_question(i, "row"),
-          startCol = col_ind_clean_var_number + diff_question(i, "col"),
-          colNames = TRUE,
-          headerStyle = style_header,
-          borders = "all",
-        )
+    openxlsx::writeFormula(
+      wb, sheet_name,
+      x = glue("'{sheet_name_doc}'!{doc_col_sv}{doc_q_rows}"),
+      startRow = row_ind_first,
+      startCol = col_ind_survey_var_number
+    )
 
+    openxlsx::writeFormula(
+      wb, sheet_name,
+      x = glue("'{sheet_name_doc}'!{doc_col_sa}{doc_q_rows}"),
+      startRow = row_ind_first,
+      startCol = col_ind_label_left_number
+    )
 
-        # write values into questionaire doc instructions
-
-        openxlsx::writeData(
-          wb, sheet_name,
-          x = map(
-            ind_response %>%
-              nrow() %>%
-              seq(),
-            ~ recode_values %>%
-              length() %>%
-              seq() %>%
-              matrix(nrow = 1) %>%
-              data.frame()
-          ) %>%
-            bind_rows(),
-          startRow = row_header + diff_question(i, "row") + 3,
-          startCol = col_ind_clean_var_number + diff_question(i, "col") + doc_label_cell_merge + 3,
-          colNames = FALSE
-        )
+    openxlsx::writeFormula(
+      wb, sheet_name,
+      x = glue("'{sheet_name_doc}'!{doc_col_sb}{doc_q_rows}"),
+      startRow = row_ind_first,
+      startCol = col_ind_label_right_number
+    )
 
 
-        openxlsx::addStyle(
-          wb, sheet_name,
-          style = style_header,
-          rows = seq(
-            row_header + diff_question(i, "row"),
-            row_header + diff_question(i, "row") + doc_row_gap
-          ),
-          cols = seq(
-            col_ind_clean_var_number + diff_question(i, "col"),
-            col_ind_label_right_number + diff_question(i, "col", doc_label_cell_merge = doc_label_cell_merge)
-          ),
-          gridExpand = TRUE, stack = FALSE
-        )
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = openxlsx::createStyle(fontSize = 8),
+      rows = row_header,
+      cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number),
+      gridExpand = TRUE, stack = TRUE
+    )
 
 
-        openxlsx::mergeCells(
-          wb, sheet_name,
-          rows = row_header + diff_question(i, "row") - 2,
-          cols = seq(col_doc_start, col_last)
-        )
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_table,
+      rows = seq(row_ind_first, row_ind_last),
+      cols = seq(col_ind_clean_var_number, col_ind_label_right_number),
+      gridExpand = TRUE, stack = TRUE
+    )
 
 
-        openxlsx::writeData(
-          wb, sheet_name,
-          x = "Solution Questions",
-          startRow = row_header + diff_question(i, "row") - 2,
-          startCol = col_doc_start,
-          colNames = FALSE
-        )
+    oxl_outer_box(
+      wb, sheet_name,
+      borderStyle = "medium",
+      row_start = row_header,
+      row_end = row_ind_last,
+      col_start = col_ind_clean_var_number,
+      col_end = col_ind_label_right_number
+    )
 
 
-        openxlsx::addStyle(
-          wb, sheet_name,
-          style = style_header2,
-          rows = row_header + diff_question(i, "row") - 2,
-          cols = seq(col_doc_start, col_last),
-          gridExpand = TRUE, stack = TRUE
-        )
+    oxl_outer_box(
+      wb, sheet_name,
+      borderStyle = "medium",
+      row_start = row_ind_first,
+      row_end = row_ind_last,
+      col_start = col_ind_clean_var_number,
+      col_end = col_ind_label_right_number
+    )
 
 
-        oxl_outer_box(
-          wb, sheet_name,
-          borderStyle = "medium",
-          row_start = row_header + diff_question(i, "row") - 2,
-          row_end = row_header + diff_question(i, "row") - 2,
-          col_start = col_doc_start,
-          col_end = col_last
-        )
+    openxlsx::mergeCells(
+      wb, sheet_name,
+      rows = row_instructions,
+      cols = seq(col_ind_label_left_number, col_ind_label_right_number)
+    )
 
 
-      }
+    oxl_outer_box(
+      wb, sheet_name,
+      borderStyle = "medium",
+      row_start = row_instructions,
+      row_end = row_instructions,
+      col_start = col_ind_clean_var_number,
+      col_end = col_ind_label_right_number
+    )
 
 
-      openxlsx::addStyle(
-        wb, sheet_name,
-        style = openxlsx::createStyle(fontSize = 8),
-        rows = row_header + diff_question(i, "row"),
-        cols = seq(
-          col_ind_label_point_first_number,
-          col_ind_label_point_last_number
-        ) +
-          diff_question(i, "col", doc_label_cell_merge = doc_label_cell_merge),
-        gridExpand = TRUE, stack = TRUE
-      )
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = ind_ui_response_instructions,
+      startRow = row_instructions,
+      startCol = col_ind_label_left_number,
+      colNames = FALSE
+    )
 
 
-      openxlsx::addStyle(
-        wb, sheet_name,
-        style = style_table,
-        rows = seq(row_ind_first, row_ind_last) + diff_question(i, "row", TRUE),
-        cols = seq(
-          col_ind_clean_var_number + diff_question(i, "col"),
-          col_ind_label_right_number + diff_question(i, "col", doc_label_cell_merge = doc_label_cell_merge * 2)
-        ),
-        gridExpand = TRUE, stack = TRUE
-      )
-
-
-      oxl_outer_box(
-        wb, sheet_name,
-        borderStyle = "medium",
-        row_start = row_header + diff_question(i, "row"),
-        row_end = row_header + diff_question(i, "row", TRUE),
-        col_start = col_ind_clean_var_number + diff_question(i, "col"),
-        col_end = col_ind_label_right_number + diff_question(i, "col", doc_label_cell_merge = doc_label_cell_merge * 2)
-      )
-
-
-      oxl_outer_box(
-        wb, sheet_name,
-        borderStyle = "medium",
-        row_start = row_ind_first + diff_question(i, "row", TRUE),
-        row_end = row_ind_last + diff_question(i, "row", TRUE),
-        col_start = col_ind_clean_var_number + diff_question(i, "col"),
-        col_end = col_ind_label_right_number + diff_question(i, "col", doc_label_cell_merge = doc_label_cell_merge * 2)
-      )
-
-
-      if(i == "ui") temp_row_instructions <- row_instructions
-      if(i == "doc") temp_row_instructions <- row_instructions + diff_question(i, "row") + 1
-
-      openxlsx::mergeCells(
-        wb, sheet_name,
-        rows = temp_row_instructions,
-        cols = seq(
-          col_ind_label_left_number + diff_question(i, "col"),
-          col_ind_label_right_number + diff_question(i, "col", doc_label_cell_merge = doc_label_cell_merge * 2)
-        )
-      )
-
-
-      oxl_outer_box(
-        wb, sheet_name,
-        borderStyle = "medium",
-        row_start = temp_row_instructions,
-        row_end = temp_row_instructions,
-        col_start = col_ind_clean_var_number + diff_question(i, "col"),
-        col_end = col_ind_label_right_number + diff_question(i, "col", doc_label_cell_merge = doc_label_cell_merge * 2)
-      )
-
-
-      if(i == "ui") temp_response_instructions <- ind_ui_response_instructions
-      if(i == "doc") temp_response_instructions <- ind_doc_response_instructions
-
-      openxlsx::writeData(
-        wb, sheet_name,
-        x = temp_response_instructions,
-        startRow = temp_row_instructions,
-        startCol = col_ind_label_left_number + diff_question(i, "col"),
-        colNames = FALSE
-      )
-
-
-      openxlsx::addStyle(
-        wb, sheet_name,
-        style = style_header,
-        rows = temp_row_instructions,
-        cols = seq(
-          col_ind_clean_var_number + diff_question(i, "col"),
-          col_ind_label_right_number + diff_question(i, "col", doc_label_cell_merge = doc_label_cell_merge * 2)
-        ),
-        gridExpand = TRUE, stack = TRUE
-      )
-
-    }
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_header,
+      rows = row_instructions,
+      cols = seq(col_ind_clean_var_number, col_ind_label_right_number),
+      gridExpand = TRUE, stack = TRUE
+    )
 
 
 
@@ -799,36 +636,7 @@ seg_typing_tool <- function(
     )
 
 
-    diff_function <- function(
-    place,
-    type = c("row", "col")
-    ){
-      type <- match.arg(type)
-
-      if((place == row_header || place == row_ind_engine_header) && type == "row") return(0)
-      if((place == row_header || place == row_ind_engine_header) && type == "col") return(0)
-      if(place == row_doc_function_header && type == "row") return(row_diff_ind_eng_doc)
-      if(place == row_doc_function_header && type == "col") return(col_diff_ind_eng_doc)
-    }
-
-
-    range_coef <- map(
-      segments - 1,
-      function(xc){
-        glue('{num2let(col_ind_engine_clean_var_number + diff_function(row_doc_function_header, "col") + 2 + xc)}${row_doc_function_header + 1}:{num2let(col_ind_engine_clean_var_number + diff_function(row_doc_function_header, "col") + 2 + xc)}${row_doc_function_header + 1 + nrow(coef_func) - 2}')
-      }
-    )
-
-
-    range_constant <- map(
-      segments - 1,
-      function(xc){
-        glue('{num2let(col_ind_engine_clean_var_number + diff_function(row_doc_function_header, "col") + 2 + xc)}${row_doc_function_header + 1 + nrow(coef_func) - 1}')
-      }
-    )
-
-
-    for(i in c(row_header, row_ind_engine_header, row_doc_function_header)){
+    for(i in c(row_header, row_ind_engine_header)){
 
       temp_coef_func <- tibble(
         "Question" = c(clean_variable_names, NA)
@@ -923,7 +731,7 @@ seg_typing_tool <- function(
         wb, sheet_name,
         x = temp_coef_func,
         startRow = i,
-        startCol = col_ind_engine_clean_var_number + diff_function(i, "col"),
+        startCol = col_ind_engine_clean_var_number,
         headerStyle = style_header,
         borders = "all",
         colNames = TRUE
@@ -942,15 +750,14 @@ seg_typing_tool <- function(
       openxlsx::mergeCells(
         wb, sheet_name,
         rows = temp_row_header,
-        cols = seq(col_ind_engine_clean_var_number, col_ind_engine_answer_number - 1) + diff_function(i, "col")
-      )
+        cols = seq(col_ind_engine_clean_var_number, col_ind_engine_answer_number - 1)      )
 
 
       openxlsx::writeData(
         wb, sheet_name,
         x = temp_header_text,
         startRow = temp_row_header %>% head(1),
-        startCol = col_ind_engine_clean_var_number + diff_function(i, "col"),
+        startCol = col_ind_engine_clean_var_number,
         colNames = FALSE
       )
 
@@ -959,7 +766,7 @@ seg_typing_tool <- function(
         wb, sheet_name,
         style = style_header2,
         rows = temp_row_header,
-        cols = seq(col_ind_engine_clean_var_number, col_ind_engine_answer_number - 1) + diff_function(i, "col"),
+        cols = seq(col_ind_engine_clean_var_number, col_ind_engine_answer_number - 1),
         gridExpand = TRUE, stack = TRUE
       )
 
@@ -969,9 +776,8 @@ seg_typing_tool <- function(
         borderStyle = "medium",
         row_start = temp_row_header %>% head(1),
         row_end = temp_row_header %>% tail(1),
-        col_start = col_ind_engine_clean_var_number + diff_function(i, "col"),
-        col_end = col_ind_engine_answer_number - 1 + diff_function(i, "col")
-      )
+        col_start = col_ind_engine_clean_var_number,
+        col_end = col_ind_engine_answer_number - 1      )
 
 
       oxl_outer_box(
@@ -1004,6 +810,26 @@ seg_typing_tool <- function(
 
     }
 
+
+    # pull coefficient function Variable and Seg_* from Documentation sheet
+    doc_coef_row_header <- doc_q_row_first + nrow(inputs_table) - 1 + 4
+    doc_coef_data_rows  <- seq(doc_coef_row_header + 1, doc_coef_row_header + nrow(coef_func))
+
+    openxlsx::writeFormula(
+      wb, sheet_name,
+      x = glue("'{sheet_name_doc}'!{num2let(start_col + 1)}{doc_coef_data_rows}"),
+      startRow = row_header + 1,
+      startCol = col_ind_engine_clean_var_number + 1
+    )
+
+    for(s in seq_len(length(segments))){
+      openxlsx::writeFormula(
+        wb, sheet_name,
+        x = glue("'{sheet_name_doc}'!{num2let(start_col + 1 + s)}{doc_coef_data_rows}"),
+        startRow = row_header + 1,
+        startCol = col_ind_engine_clean_var_number + 1 + s
+      )
+    }
 
 
     for(i in seq(row_ind_first, row_ind_last)){
@@ -1223,7 +1049,10 @@ seg_typing_tool <- function(
     )
 
 
-    range_seg_name <- glue("${num2let(col_doc_seg_name_value)}${row_doc_seg_name_first}:${num2let(col_doc_seg_name_value)}${row_doc_seg_name_last}")
+    doc_col_seg_name_value <- start_col + doc_label_cell_merge + 5
+    doc_row_seg_name_first <- row_title + 7
+    doc_row_seg_name_last  <- row_title + 6 + length(segments)
+    range_seg_name <- glue("'{sheet_name_doc}'!${num2let(doc_col_seg_name_value)}${doc_row_seg_name_first}:${num2let(doc_col_seg_name_value)}${doc_row_seg_name_last}")
 
     openxlsx::writeFormula(
       wb, sheet_name,
@@ -1276,315 +1105,13 @@ seg_typing_tool <- function(
     )
 
 
-    openxlsx::writeComment(
-      wb, sheet_name,
-      row = row_ind_control_feedback_style,
-      col = col_ind_engine_controls_number,
-      comment = openxlsx::createComment(
-        comment = "1 = Segment number\n2 = Segment name\n3 = Both",
-        author = "Analytic Provider",
-        style = openxlsx::createStyle(fontSize = 11),
-        visible = TRUE,
-        width = 1, height = 1
-      )
-    )
-
-
-    #######################
-    # write documentation
-    #######################
-
     openxlsx::writeData(
       wb, sheet_name,
-      x = "Typing Tool Documentation",
-      startRow = row_title,
-      startCol = col_doc_start,
+      x = matrix(c("1 = Segment number", "2 = Segment name", "3 = Both"), nrow = 1),
+      startRow = row_ind_control_feedback_style,
+      startCol = col_ind_engine_controls_number + 1,
       colNames = FALSE
     )
-
-
-    openxlsx::addStyle(
-      wb, sheet_name,
-      style = style_title,
-      rows = row_title,
-      cols = col_doc_start,
-      stack = TRUE
-    )
-
-
-    openxlsx::writeData(
-      wb, sheet_name,
-      x = glue("These instructions create the {xfun::numbers_to_words(length(segments))} segment solution from {xfun::numbers_to_words(length(clean_variable_names))} items"),
-      startRow = row_doc_intro,
-      startCol = col_doc_start,
-      colNames = FALSE
-    )
-
-
-    for(xr in seq(row_doc_qualification, row_doc_qualification_last)){
-      openxlsx::mergeCells(
-        wb, sheet_name,
-        cols = seq(col_doc_start, col_doc_qualification_last),
-        rows = xr
-      )
-    }
-
-
-    qualification_instructions_table <- tibble(
-      "Qualifications" = glue("{seq(qualification_instructions)}. {qualification_instructions}"),
-      " " = NA
-    ) %>% setNames(., names(.) %>% trimws())
-
-    qualification_instructions_table <- qualification_instructions_table[, c(1, rep(2, col_doc_qualification_last - col_doc_start))]
-
-    openxlsx::writeData(
-      wb, sheet_name,
-      x = qualification_instructions_table,
-      startRow = row_doc_qualification,
-      startCol = col_doc_start,
-      colNames = TRUE,
-      headerStyle = style_header2
-    )
-
-
-    openxlsx::addStyle(
-      wb, sheet_name,
-      style = openxlsx::createStyle(fgFill = "white"),
-      rows = seq(row_doc_qualification + 1, row_doc_qualification_last),
-      cols = seq(col_doc_start, col_doc_qualification_last),
-      gridExpand = TRUE, stack = TRUE
-    )
-
-
-    oxl_outer_box(
-      wb, sheet_name,
-      borderStyle = "medium",
-      row_start = row_doc_qualification, row_end = row_doc_qualification,
-      col_start = col_doc_start, col_end = col_doc_qualification_last
-    )
-
-
-    oxl_outer_box(
-      wb, sheet_name,
-      borderStyle = "medium",
-      row_start = row_doc_qualification, row_end = row_doc_qualification_last,
-      col_start = col_doc_start, col_end = col_doc_qualification_last
-    )
-
-
-
-    # create seg name tables
-
-    temp_seg_names <- tibble(
-      "Segment Names" = glue("Segment {segments}"),
-      " " = segment_names
-    ) %>% setNames(., names(.) %>% trimws())
-
-    temp_seg_names <- temp_seg_names[, c(1, rep(2, length(segments) + 1))]
-
-
-    openxlsx::writeData(
-      wb, sheet_name,
-      x = temp_seg_names,
-      startRow = row_doc_seg_name_header,
-      startCol = col_doc_seg_name_header,
-      colNames = TRUE,
-      headerStyle = style_header2,
-      borders = "all",
-    )
-
-
-    for(tr in seq(row_doc_seg_name_header, row_doc_seg_name_last)){
-      if(tr == row_doc_seg_name_header){
-        openxlsx::mergeCells(
-          wb, sheet_name,
-          rows = tr,
-          cols = seq(col_doc_seg_name_header, col_last)
-        )
-      }else{
-        openxlsx::mergeCells(
-          wb, sheet_name,
-          rows = tr,
-          cols = seq(col_doc_seg_name_value, col_last)
-        )
-      }
-    }
-
-
-    openxlsx::addStyle(
-      wb, sheet_name,
-      style = style_header,
-      rows = seq(row_doc_seg_name_first, row_doc_seg_name_last),
-      cols = col_doc_seg_name_header,
-      gridExpand = TRUE, stack = TRUE
-    )
-
-
-
-    oxl_outer_box(
-      wb, sheet_name,
-      borderStyle = "medium",
-      row_start = row_doc_seg_name_header,
-      row_end = row_doc_seg_name_header,
-      col_start = col_doc_seg_name_header,
-      col_end = col_last
-    )
-
-
-    oxl_outer_box(
-      wb, sheet_name,
-      borderStyle = "medium",
-      row_start = row_doc_seg_name_header,
-      row_end = row_doc_seg_name_last,
-      col_start = col_doc_seg_name_header,
-      col_end = col_last
-    )
-
-
-    oxl_outer_box(
-      wb, sheet_name,
-      borderStyle = "medium",
-      row_start = row_doc_seg_name_header,
-      row_end = row_doc_seg_name_last,
-      col_start = col_doc_seg_name_header,
-      col_end = col_doc_seg_name_value
-    )
-
-
-
-    # create step-by-step instructions
-
-    calulation_steps <- tibble(
-      "Solution Calculation Step-by-step Instructions" = c(
-        NA,
-        "Segment membership is calculated by doing the following steps:",
-        NA,
-        "Step 1 - Questionnaire",
-        "          Ask respondents the Solution Questions, recording their answer for each item.  Respondents must respond to each and all items for their score to be valid.",
-        NA,
-        "          We do not recommend randomizing item order or label sides.",
-        NA,
-        "          The Typing Tool was designed to be asked among respondents who meet the stated qualifications.",
-        NA, NA,
-        "Step 2 - Recoding",
-        glue("          Rescale the solution questions ({head(clean_variable_names, 1)} through {tail(clean_variable_names, 1)}) using the following rules:"),
-        NA,
-        "          1     ->     -4",
-        "          2     ->     -2",
-        "          3     ->     2",
-        "          4     ->     4 (no change)",
-        NA, NA,
-        "Step 3 - Multiply recoded responses with coefficient function",
-        "          For each participant, multiply the rescaled item responses with the coefficients for each segment. Sum the products for each segment and add the constant.  This will create a score for each segment.",
-        NA,
-        glue('                    Segment 1 Score = ( rs{head(clean_variable_names, 1)} * {coef_func[1, "Seg_1"]} ) + ... + ( rs{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, "Seg_1"]} ) + ( {coef_func[nrow(coef_func), "Seg_1"]} )'),
-        NA,
-        "                              ...     (Repeat this process for each segment)",
-        NA,
-        glue('                    Segment {max(segments)} Score = ( rs{head(clean_variable_names, 1)} * {coef_func[1, ncol(coef_func)]} ) + ... + ( rs{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, ncol(coef_func)]} ) + ( {coef_func[nrow(coef_func), ncol(coef_func)]} )'),
-        NA,
-        "          The segment with the highest score is the one the respondent is most likely to be a member of.",
-        NA, NA,
-        "Step 4 - Calculate the probability (optional)",
-        NA,
-        "          1. Compute the exponential value for each segment score",
-        NA,
-        "                    Segment 1 Exponential Score = EXP( Segment 1 Score )",
-        "                              OR",
-        glue('                    Segment 1 Exponential Score = EXP( ( rs{head(clean_variable_names, 1)} * {coef_func[1, "Seg_1"]} ) + ... + ( rs{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, "Seg_1"]} ) + ( {coef_func[nrow(coef_func), "Seg_1"]} ) )'),
-        NA,
-        "                              ...     (Repeat this process for each segment)",
-        NA,
-        glue("                    Segment {max(segments)} Exponential Score = EXP( Segment {max(segments)} Score )"),
-        "                              OR",
-        glue('                    Segment {max(segments)} Exponential Score = EXP( ( rs{head(clean_variable_names, 1)} * {coef_func[1, ncol(coef_func)]} ) + ... + ( rs{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, ncol(coef_func)]} ) + ( {coef_func[nrow(coef_func), ncol(coef_func)]} ) )'),
-        NA, NA,
-        "          2. Divide each segment's exponential value with the sum of all exponential values",
-        NA,
-        glue("                    Segment 1 Probability = Segment 1 Exponential Score / ( Segment 1 Exponential Score + ... + Segment {max(segments)} Exponential Score )"),
-        "                              OR",
-        glue("                    Segment 1 Probability = EXP( Segment 1 Score ) / ( EXP( Segment 1 Score ) + ... + EXP( Segment {max(segments)} Score ))"),
-        NA,
-        "                              ...     (Repeat this process for each segment)",
-        NA,
-        glue("                    Segment {max(segments)} Probability = Segment {max(segments)} Exponential Score / ( Segment 1 Exponential Score + ... + Segment {max(segments)} Exponential Score )"),
-        "                              OR",
-        glue("                    Segment {max(segments)} Probability = EXP( Segment {max(segments)} Score ) / ( EXP( Segment 1 Score ) + ... + EXP( Segment {max(segments)} Score ))"),
-        NA, NA,
-        "Step 5 - QC Check",
-        NA,
-        "          Perform your calculations on a respondent. Then check your results using the Individual UI to the left of this document (starting cell B2).",
-        NA,
-        "          Note, you can expand Individual Typing Tool Engine, which is currently hidden, if you need additional guidance on step-by-step calculations.",
-        NA
-      ),
-      " " = NA
-    ) %>% setNames(., names(.) %>% trimws())
-
-
-    calulation_steps_bold <- calulation_steps[[1]] %>%
-      left(4) %>%
-      equals("Step") %>%
-      if_na_return()
-
-
-    calulation_steps <- calulation_steps[, c(1, rep(2, col_last - col_doc_start))]
-
-
-    for(xr in seq(row_doc_steps, row_doc_steps + nrow(calulation_steps))){
-      openxlsx::mergeCells(
-        wb, sheet_name,
-        cols = seq(col_doc_start, col_last),
-        rows = xr
-      )
-    }
-
-
-    openxlsx::writeData(
-      wb, sheet_name,
-      x = calulation_steps,
-      startRow = row_doc_steps,
-      startCol = col_doc_start,
-      colNames = TRUE,
-      headerStyle = style_header2
-    )
-
-
-    openxlsx::addStyle(
-      wb, sheet_name,
-      style = openxlsx::createStyle(fgFill = "white"),
-      rows = seq(row_doc_steps + 1, row_doc_steps + nrow(calulation_steps)),
-      cols = seq(col_doc_start, col_last),
-      gridExpand = TRUE, stack = TRUE
-    )
-
-
-    for(i in seq(row_doc_steps + 1, row_doc_steps + nrow(calulation_steps))[calulation_steps_bold]){
-      openxlsx::addStyle(
-        wb, sheet_name,
-        style = openxlsx::createStyle(textDecoration = "bold"),
-        rows = i,
-        cols = seq(col_doc_start, col_last),
-        gridExpand = TRUE, stack = TRUE
-      )
-    }
-
-
-    oxl_outer_box(
-      wb, sheet_name,
-      borderStyle = "medium",
-      row_start = row_doc_steps, row_end = row_doc_steps,
-      col_start = col_doc_start, col_end = col_last
-    )
-
-
-    oxl_outer_box(
-      wb, sheet_name,
-      borderStyle = "medium",
-      row_start = row_doc_steps, row_end = row_doc_steps + nrow(calulation_steps),
-      col_start = col_doc_start, col_end = col_last
-    )
-
 
 
     #######################
@@ -1598,11 +1125,638 @@ seg_typing_tool <- function(
     )
 
 
-    openxlsx::groupColumns(
-      wb, sheet_name,
-      cols = seq(col_doc_start, col_last),
-      hidden = TRUE
+    #######################
+    # return
+    #######################
+
+    return(
+      list(
+        "range_recode" = paste0("'", sheet_name, "'!", range_recode)
+      )
     )
+  }
+
+
+
+
+  documentation_tool <- function(
+    wb = wb,
+    sheet_name = sheet_name,
+    row_title = start_row,
+    start_col = start_col,
+    polar_label_width = polar_label_width
+  ){
+
+    ind_doc_response_instructions <- "Please read each pair of statements and decide which side you agree with more."
+
+
+    #######################
+    # reference constants
+    #######################
+
+    col_clean_var     <- start_col
+    col_survey_var    <- col_clean_var + 1
+    col_label_left    <- col_survey_var + 1
+    col_label_point_first <- col_label_left + 1
+    col_label_point_last  <- col_label_point_first + length(polar_points) - 1
+    col_label_right   <- col_label_point_last + 1
+
+    col_last <- col_label_right + (doc_label_cell_merge * 2)
+
+    col_qualification_last <- col_clean_var + doc_label_cell_merge + 2
+
+    col_seg_name_header <- col_qualification_last + 2
+    col_seg_name_value  <- col_seg_name_header + 1
+
+
+    row_doc_intro            <- row_title + 3
+    row_doc_qualification    <- row_doc_intro + 3
+    row_doc_qualification_last <- row_doc_qualification + length(qualification_instructions)
+
+    row_doc_seg_name_header  <- row_doc_qualification
+    row_doc_seg_name_first   <- row_doc_seg_name_header + 1
+    row_doc_seg_name_last    <- row_doc_seg_name_header + length(segments)
+
+    if(row_doc_qualification_last >= row_doc_seg_name_last){
+      row_doc_questions_header <- row_doc_qualification_last + 5
+    }else{
+      row_doc_questions_header <- row_doc_seg_name_last + 5
+    }
+
+    row_doc_header_top       <- row_doc_questions_header + doc_row_gap
+    row_doc_first            <- row_doc_header_top + 1
+    row_doc_last             <- row_doc_first + nrow(inputs_table) - 1
+
+    row_doc_function_header  <- row_doc_last + 4
+    row_doc_function_last    <- row_doc_function_header + nrow(coef_func) + 1
+
+    row_doc_steps            <- row_doc_function_last + 2
+
+
+    #######################
+    # column widths
+    #######################
+
+    openxlsx::setColWidths(
+      wb, sheet_name,
+      cols = seq(col_clean_var, col_last),
+      widths = 10
+    )
+    openxlsx::setColWidths(wb, sheet_name, cols = col_survey_var, hidden = TRUE)
+
+
+    #######################
+    # title + intro
+    #######################
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = "Typing Tool Documentation",
+      startRow = row_title,
+      startCol = col_clean_var,
+      colNames = FALSE
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_title,
+      rows = row_title,
+      cols = col_clean_var,
+      stack = TRUE
+    )
+
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = glue("These instructions create the {xfun::numbers_to_words(length(segments))} segment solution from {xfun::numbers_to_words(length(clean_variable_names))} items"),
+      startRow = row_doc_intro,
+      startCol = col_clean_var,
+      colNames = FALSE
+    )
+
+
+    #######################
+    # qualifications
+    #######################
+
+    for(xr in seq(row_doc_qualification, row_doc_qualification_last)){
+      openxlsx::mergeCells(
+        wb, sheet_name,
+        cols = seq(col_clean_var, col_qualification_last),
+        rows = xr
+      )
+    }
+
+    qualification_instructions_table <- tibble(
+      "Qualifications" = glue("{seq(qualification_instructions)}. {qualification_instructions}"),
+      " " = NA
+    ) %>% setNames(., names(.) %>% trimws())
+
+    qualification_instructions_table <- qualification_instructions_table[, c(1, rep(2, col_qualification_last - col_clean_var))]
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = qualification_instructions_table,
+      startRow = row_doc_qualification,
+      startCol = col_clean_var,
+      colNames = TRUE,
+      headerStyle = style_header2
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = openxlsx::createStyle(fgFill = "white"),
+      rows = seq(row_doc_qualification + 1, row_doc_qualification_last),
+      cols = seq(col_clean_var, col_qualification_last),
+      gridExpand = TRUE, stack = TRUE
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_qualification, row_end = row_doc_qualification,
+      col_start = col_clean_var, col_end = col_qualification_last
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_qualification, row_end = row_doc_qualification_last,
+      col_start = col_clean_var, col_end = col_qualification_last
+    )
+
+
+    #######################
+    # segment names table
+    #######################
+
+    temp_seg_names <- tibble(
+      "Segment Names" = glue("Segment {segments}"),
+      " " = segment_names
+    ) %>% setNames(., names(.) %>% trimws())
+
+    temp_seg_names <- temp_seg_names[, c(1, rep(2, length(segments) + 1))]
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = temp_seg_names,
+      startRow = row_doc_seg_name_header,
+      startCol = col_seg_name_header,
+      colNames = TRUE,
+      headerStyle = style_header2,
+      borders = "all"
+    )
+
+    for(tr in seq(row_doc_seg_name_header, row_doc_seg_name_last)){
+      if(tr == row_doc_seg_name_header){
+        openxlsx::mergeCells(
+          wb, sheet_name,
+          rows = tr,
+          cols = seq(col_seg_name_header, col_last)
+        )
+      }else{
+        openxlsx::mergeCells(
+          wb, sheet_name,
+          rows = tr,
+          cols = seq(col_seg_name_value, col_last)
+        )
+      }
+    }
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_header,
+      rows = seq(row_doc_seg_name_first, row_doc_seg_name_last),
+      cols = col_seg_name_header,
+      gridExpand = TRUE, stack = TRUE
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_seg_name_header, row_end = row_doc_seg_name_header,
+      col_start = col_seg_name_header, col_end = col_last
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_seg_name_header, row_end = row_doc_seg_name_last,
+      col_start = col_seg_name_header, col_end = col_last
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_seg_name_header, row_end = row_doc_seg_name_last,
+      col_start = col_seg_name_header, col_end = col_seg_name_value
+    )
+
+
+    #######################
+    # Solution Questions (doc copy of ind_ui)
+    #######################
+
+    for(y in seq(col_clean_var, col_label_right + (doc_label_cell_merge * 2))){
+
+      if(
+        y %in% seq(col_clean_var + 2, col_clean_var + 2 + doc_label_cell_merge) ||
+        y %in% seq(col_label_right + doc_label_cell_merge, col_label_right + (doc_label_cell_merge * 2))
+      ){
+        if(y %in% c(col_clean_var + 2, col_label_right + doc_label_cell_merge)){
+          openxlsx::mergeCells(
+            wb, sheet_name,
+            rows = seq(row_doc_header_top - doc_row_gap, row_doc_header_top),
+            cols = seq(y, y + doc_label_cell_merge)
+          )
+        }
+      }else{
+        openxlsx::mergeCells(
+          wb, sheet_name,
+          rows = seq(row_doc_header_top - doc_row_gap, row_doc_header_top),
+          cols = y
+        )
+      }
+    }
+
+    for(tc in c(col_label_left, col_label_right + doc_label_cell_merge)){
+      for(tr in seq(row_doc_first, row_doc_last)){
+        openxlsx::mergeCells(
+          wb, sheet_name,
+          rows = tr,
+          cols = seq(tc, tc + doc_label_cell_merge)
+        )
+      }
+    }
+
+    temp_doc_ui <- ind_ui %>%
+      bind_rows(create_NA_rows(., doc_row_gap), .) %>%
+      mutate(" " = NA) %>%
+      setNames(., names(.) %>% trimws())
+
+    temp_doc_ui <- temp_doc_ui[
+      ,
+      c(
+        1:3,
+        rep(ncol(temp_doc_ui), doc_label_cell_merge),
+        4:ncol(temp_doc_ui),
+        rep(ncol(temp_doc_ui), doc_label_cell_merge - 1)
+      )]
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = temp_doc_ui,
+      startRow = row_doc_header_top - doc_row_gap,
+      startCol = col_clean_var,
+      colNames = TRUE,
+      headerStyle = style_header,
+      borders = "all"
+    )
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = map(
+        seq(nrow(inputs_table)),
+        ~ seq(length(polar_points)) %>% matrix(nrow = 1) %>% data.frame()
+      ) %>% bind_rows(),
+      startRow = row_doc_header_top - doc_row_gap + 3,
+      startCol = col_clean_var + doc_label_cell_merge + 3,
+      colNames = FALSE
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_header,
+      rows = seq(row_doc_header_top - doc_row_gap, row_doc_header_top),
+      cols = seq(col_clean_var, col_label_right + doc_label_cell_merge),
+      gridExpand = TRUE, stack = FALSE
+    )
+
+    openxlsx::mergeCells(
+      wb, sheet_name,
+      rows = row_doc_questions_header - 2,
+      cols = seq(col_clean_var, col_last)
+    )
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = "Solution Questions",
+      startRow = row_doc_questions_header - 2,
+      startCol = col_clean_var,
+      colNames = FALSE
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_header2,
+      rows = row_doc_questions_header - 2,
+      cols = seq(col_clean_var, col_last),
+      gridExpand = TRUE, stack = TRUE
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_questions_header - 2, row_end = row_doc_questions_header - 2,
+      col_start = col_clean_var, col_end = col_last
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = openxlsx::createStyle(fontSize = 8),
+      rows = row_doc_header_top - doc_row_gap,
+      cols = seq(col_label_point_first, col_label_point_last) + doc_label_cell_merge,
+      gridExpand = TRUE, stack = TRUE
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_table,
+      rows = seq(row_doc_first, row_doc_last),
+      cols = seq(col_clean_var, col_label_right + (doc_label_cell_merge * 2)),
+      gridExpand = TRUE, stack = TRUE
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_header_top - doc_row_gap, row_end = row_doc_last,
+      col_start = col_clean_var, col_end = col_label_right + (doc_label_cell_merge * 2)
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_first, row_end = row_doc_last,
+      col_start = col_clean_var, col_end = col_label_right + (doc_label_cell_merge * 2)
+    )
+
+    temp_row_instructions <- row_doc_header_top - doc_row_gap - 1
+    openxlsx::mergeCells(
+      wb, sheet_name,
+      rows = temp_row_instructions,
+      cols = seq(col_label_left, col_label_right + (doc_label_cell_merge * 2))
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = temp_row_instructions, row_end = temp_row_instructions,
+      col_start = col_clean_var, col_end = col_label_right + (doc_label_cell_merge * 2)
+    )
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = ind_doc_response_instructions,
+      startRow = temp_row_instructions,
+      startCol = col_label_left,
+      colNames = FALSE
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_header,
+      rows = temp_row_instructions,
+      cols = seq(col_clean_var, col_label_right + (doc_label_cell_merge * 2)),
+      gridExpand = TRUE, stack = TRUE
+    )
+
+
+    #######################
+    # Solution Coefficient Function (doc copy)
+    #######################
+
+    col_func_clean_var <- col_clean_var
+    col_func_answer    <- col_func_clean_var + 2 + length(segments)
+
+    temp_coef_func <- tibble(
+      "Question" = c(clean_variable_names, NA)
+    ) %>%
+      bind_cols(coef_func)
+
+    temp_coef_func[nrow(temp_coef_func), "Variable"] <- "Constant"
+    temp_coef_func[nrow(temp_coef_func), "Question"] <- "Constant"
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = temp_coef_func,
+      startRow = row_doc_function_header,
+      startCol = col_func_clean_var,
+      headerStyle = style_header,
+      borders = "all",
+      colNames = TRUE
+    )
+
+    openxlsx::mergeCells(
+      wb, sheet_name,
+      rows = row_doc_function_header - 1,
+      cols = seq(col_func_clean_var, col_func_answer - 1)
+    )
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = "Solution Coefficient Function",
+      startRow = row_doc_function_header - 1,
+      startCol = col_func_clean_var,
+      colNames = FALSE
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_header2,
+      rows = row_doc_function_header - 1,
+      cols = seq(col_func_clean_var, col_func_answer - 1),
+      gridExpand = TRUE, stack = TRUE
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = style_table,
+      rows = seq(row_doc_function_header, row_doc_function_header + nrow(temp_coef_func)),
+      cols = seq(col_func_clean_var, col_func_answer - 1),
+      gridExpand = TRUE, stack = TRUE
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_function_header - 1, row_end = row_doc_function_header - 1,
+      col_start = col_func_clean_var, col_end = col_func_answer - 1
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_function_header, row_end = row_doc_function_header,
+      col_start = col_func_clean_var, col_end = col_func_answer - 1
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_function_header + 1,
+      row_end = row_doc_function_header + nrow(temp_coef_func),
+      col_start = col_func_clean_var, col_end = col_func_answer - 1
+    )
+
+
+    #######################
+    # ranges returned for bulk
+    #######################
+
+    range_coef <- map(
+      segments - 1,
+      function(xc){
+        glue('{num2let(col_func_clean_var + 2 + xc)}${row_doc_function_header + 1}:{num2let(col_func_clean_var + 2 + xc)}${row_doc_function_header + 1 + nrow(coef_func) - 2}')
+      }
+    )
+
+    range_constant <- map(
+      segments - 1,
+      function(xc){
+        glue('{num2let(col_func_clean_var + 2 + xc)}${row_doc_function_header + 1 + nrow(coef_func) - 1}')
+      }
+    )
+
+    range_seg_name <- glue("${num2let(col_seg_name_value)}${row_doc_seg_name_first}:${num2let(col_seg_name_value)}${row_doc_seg_name_last}")
+
+
+    #######################
+    # step-by-step instructions
+    #######################
+
+    if(has_recoding){
+      recode_rules <- purrr::map_chr(
+        seq_len(nrow(recode_mapping)),
+        function(i){
+          src <- recode_mapping[[1]][i]
+          rs  <- recode_mapping[[2]][i]
+          suffix <- if(src == rs) " (no change)" else ""
+          glue::glue("          {src}     ->     {rs}{suffix}")
+        }
+      )
+    }
+
+    s_questionnaire <- 1L
+    s_recode        <- if(has_recoding) 2L else NA_integer_
+    s_multiply      <- if(has_recoding) 3L else 2L
+    s_probability   <- if(has_recoding) 4L else 3L
+    s_qc            <- if(has_recoding) 5L else 4L
+
+    var_prefix <- if(has_recoding) "rs" else ""
+    mult_adj   <- if(has_recoding) "recoded " else ""
+    resp_adj   <- if(has_recoding) "rescaled item " else "item "
+
+    recode_step_content <- if(has_recoding) c(
+      glue("Step {s_recode} - Recoding"),
+      glue("          Rescale the solution questions ({head(clean_variable_names, 1)} through {tail(clean_variable_names, 1)}) using the following rules:"),
+      NA,
+      recode_rules,
+      NA, NA
+    ) else character(0)
+
+    calulation_steps <- tibble(
+      "Solution Calculation Step-by-step Instructions" = c(
+        NA,
+        "Segment membership is calculated by doing the following steps:",
+        NA,
+        glue("Step {s_questionnaire} - Questionnaire"),
+        "          Ask respondents the Solution Questions, recording their answer for each item.  Respondents must respond to each and all items for their score to be valid.",
+        NA,
+        "          We do not recommend randomizing item order or label sides.",
+        NA,
+        "          The Typing Tool was designed to be asked among respondents who meet the stated qualifications.",
+        NA, NA,
+        recode_step_content,
+        glue("Step {s_multiply} - Multiply {mult_adj}responses with coefficient function"),
+        glue("          For each participant, multiply the {resp_adj}responses with the coefficients for each segment. Sum the products for each segment and add the constant.  This will create a score for each segment."),
+        NA,
+        glue('                    Segment 1 Score = ( {var_prefix}{head(clean_variable_names, 1)} * {coef_func[1, "Seg_1"]} ) + ... + ( {var_prefix}{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, "Seg_1"]} ) + ( {coef_func[nrow(coef_func), "Seg_1"]} )'),
+        NA,
+        "                              ...     (Repeat this process for each segment)",
+        NA,
+        glue('                    Segment {max(segments)} Score = ( {var_prefix}{head(clean_variable_names, 1)} * {coef_func[1, ncol(coef_func)]} ) + ... + ( {var_prefix}{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, ncol(coef_func)]} ) + ( {coef_func[nrow(coef_func), ncol(coef_func)]} )'),
+        NA,
+        "          The segment with the highest score is the one the respondent is most likely to be a member of.",
+        NA, NA,
+        glue("Step {s_probability} - Calculate the probability (optional)"),
+        NA,
+        "          1. Compute the exponential value for each segment score",
+        NA,
+        "                    Segment 1 Exponential Score = EXP( Segment 1 Score )",
+        "                              OR",
+        glue('                    Segment 1 Exponential Score = EXP( ( {var_prefix}{head(clean_variable_names, 1)} * {coef_func[1, "Seg_1"]} ) + ... + ( {var_prefix}{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, "Seg_1"]} ) + ( {coef_func[nrow(coef_func), "Seg_1"]} ) )'),
+        NA,
+        "                              ...     (Repeat this process for each segment)",
+        NA,
+        glue("                    Segment {max(segments)} Exponential Score = EXP( Segment {max(segments)} Score )"),
+        "                              OR",
+        glue('                    Segment {max(segments)} Exponential Score = EXP( ( {var_prefix}{head(clean_variable_names, 1)} * {coef_func[1, ncol(coef_func)]} ) + ... + ( {var_prefix}{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, ncol(coef_func)]} ) + ( {coef_func[nrow(coef_func), ncol(coef_func)]} ) )'),
+        NA, NA,
+        "          2. Divide each segment's exponential value with the sum of all exponential values",
+        NA,
+        glue("                    Segment 1 Probability = Segment 1 Exponential Score / ( Segment 1 Exponential Score + ... + Segment {max(segments)} Exponential Score )"),
+        "                              OR",
+        glue("                    Segment 1 Probability = EXP( Segment 1 Score ) / ( EXP( Segment 1 Score ) + ... + EXP( Segment {max(segments)} Score ))"),
+        NA,
+        "                              ...     (Repeat this process for each segment)",
+        NA,
+        glue("                    Segment {max(segments)} Probability = Segment {max(segments)} Exponential Score / ( Segment 1 Exponential Score + ... + Segment {max(segments)} Exponential Score )"),
+        "                              OR",
+        glue("                    Segment {max(segments)} Probability = EXP( Segment {max(segments)} Score ) / ( EXP( Segment 1 Score ) + ... + EXP( Segment {max(segments)} Score ))"),
+        NA, NA,
+        glue("Step {s_qc} - QC Check"),
+        NA,
+        "          Perform your calculations on a respondent. Then check your results using the Individual UI sheet (starting cell B2).",
+        NA,
+        "          Note, you can expand Individual Typing Tool Engine, which is currently hidden, if you need additional guidance on step-by-step calculations.",
+        NA
+      ),
+      " " = NA
+    ) %>% setNames(., names(.) %>% trimws())
+
+    calulation_steps_bold <- calulation_steps[[1]] %>%
+      left(4) %>%
+      equals("Step") %>%
+      if_na_return()
+
+    calulation_steps <- calulation_steps[, c(1, rep(2, col_last - col_clean_var))]
+
+    for(xr in seq(row_doc_steps, row_doc_steps + nrow(calulation_steps))){
+      openxlsx::mergeCells(
+        wb, sheet_name,
+        cols = seq(col_clean_var, col_last),
+        rows = xr
+      )
+    }
+
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = calulation_steps,
+      startRow = row_doc_steps,
+      startCol = col_clean_var,
+      colNames = TRUE,
+      headerStyle = style_header2
+    )
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = openxlsx::createStyle(fgFill = "white"),
+      rows = seq(row_doc_steps + 1, row_doc_steps + nrow(calulation_steps)),
+      cols = seq(col_clean_var, col_last),
+      gridExpand = TRUE, stack = TRUE
+    )
+
+    for(i in seq(row_doc_steps + 1, row_doc_steps + nrow(calulation_steps))[calulation_steps_bold]){
+      openxlsx::addStyle(
+        wb, sheet_name,
+        style = openxlsx::createStyle(textDecoration = "bold"),
+        rows = i,
+        cols = seq(col_clean_var, col_last),
+        gridExpand = TRUE, stack = TRUE
+      )
+    }
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_steps, row_end = row_doc_steps,
+      col_start = col_clean_var, col_end = col_last
+    )
+
+    oxl_outer_box(
+      wb, sheet_name, borderStyle = "medium",
+      row_start = row_doc_steps, row_end = row_doc_steps + nrow(calulation_steps),
+      col_start = col_clean_var, col_end = col_last
+    )
+
 
     #######################
     # return
@@ -1610,11 +1764,9 @@ seg_typing_tool <- function(
 
     return(
       list(
-        "col_last" = col_last,
-        "range_recode" = range_recode,
-        "range_coef" = range_coef,
-        "range_constant" = range_constant,
-        "range_seg_name" = range_seg_name
+        "range_coef"     = purrr::map(range_coef, ~paste0("'", sheet_name, "'!", .x)),
+        "range_constant" = purrr::map(range_constant, ~paste0("'", sheet_name, "'!", .x)),
+        "range_seg_name" = paste0("'", sheet_name, "'!", range_seg_name)
       )
     )
   }
@@ -1626,11 +1778,11 @@ seg_typing_tool <- function(
     wb = wb,
     sheet_name = sheet_name,
     row_title = start_row,
-    start_col = range_returns[["col_last"]] + 2,
-    range_recode = range_returns[["range_recode"]],
-    range_coef = range_returns[["range_coef"]],
-    range_constant = range_returns[["range_constant"]],
-    range_seg_name = range_returns[["range_seg_name"]]
+    start_col = start_col,
+    range_recode = NULL,
+    range_coef = NULL,
+    range_constant = NULL,
+    range_seg_name = NULL
   ){
 
     #######################
@@ -1659,7 +1811,7 @@ seg_typing_tool <- function(
       col_recode_last <- col_input_last + length(clean_variable_names) + 1
     }
 
-    col_score_first <- col_recode_last + 1
+    col_score_first <- if(inputs_are_rs) col_recode_last + 1 else col_calculation_qc + 1
     col_score_last <- col_score_first + length(segments) - 1
 
     col_prob_first <- col_score_last + 1
@@ -1804,11 +1956,13 @@ seg_typing_tool <- function(
 
 
     #######################
-    # QC calculation
+    # Calculation Ready
     #######################
 
     temp_qc <- tibble(
-      "Calculation Ready" = glue('COUNTIFS(${num2let(col_input_first)}{seq(row_data_first, row_last)}:${num2let(col_input_last)}{seq(row_data_first, row_last)},">={min(polar_points)}", ${num2let(col_input_first)}{seq(row_data_first, row_last)}:${num2let(col_input_last)}{seq(row_data_first, row_last)},"<={max(polar_points)}") = {length(inputs)}')
+      "Calculation Ready" = glue(
+        'IF(COUNTA(${num2let(col_input_first)}{seq(row_data_first, row_last)}:${num2let(col_input_last)}{seq(row_data_first, row_last)}) = 0, "", COUNTIFS(${num2let(col_input_first)}{seq(row_data_first, row_last)}:${num2let(col_input_last)}{seq(row_data_first, row_last)},">={min(polar_points)}", ${num2let(col_input_first)}{seq(row_data_first, row_last)}:${num2let(col_input_last)}{seq(row_data_first, row_last)},"<={max(polar_points)}") = {length(inputs)})'
+      )
     )
     class(temp_qc[[1]]) <- "formula"
 
@@ -1826,7 +1980,7 @@ seg_typing_tool <- function(
 
     openxlsx::writeData(
       wb, sheet_name,
-      x = "QC",
+      x = "Calculation Ready",
       startRow = row_header - 2,
       startCol = col_calculation_qc,
       colNames = FALSE
@@ -1884,16 +2038,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       cols = col_calculation_qc,
       rows = seq(row_data_first, row_last),
-      rule = glue('AND(${num2let(col_calculation_qc)}{row_data_first} = FALSE, COUNTIFS(${num2let(col_input_first)}{row_data_first}:${num2let(col_input_last)}{row_data_first},">={min(polar_points)}", ${num2let(col_input_first)}{row_data_first}:${num2let(col_input_last)}{row_data_first},"<={max(polar_points)}") = 0)'),
-      style = openxlsx::createStyle(fontColour = "white")
-    )
-
-
-    openxlsx::conditionalFormatting(
-      wb, sheet_name,
-      cols = col_calculation_qc,
-      rows = seq(row_data_first, row_last),
-      rule = glue('AND(${num2let(col_calculation_qc)}{row_data_first} = FALSE, COUNTIF(${num2let(col_input_first)}{row_data_first}:${num2let(col_input_last)}{row_data_first},">= 1") > 0)'),
+      rule = glue('${num2let(col_calculation_qc)}{row_data_first} = FALSE'),
       style = oxl_style_cell_bad(textDecoration = "bold", conditional = TRUE)
     )
 
@@ -1998,7 +2143,7 @@ seg_typing_tool <- function(
     temp <- map2(
       range_coef,
       range_constant,
-      ~glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, EXP(MMULT(${num2let(col_recode_first)}{seq(row_data_first, row_last)}:${num2let(col_recode_last)}{seq(row_data_first, row_last)}, {.x}) + {.y}), "")')
+      ~glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, EXP(MMULT(${num2let(col_recode_first)}{seq(row_data_first, row_last)}:${num2let(col_recode_last)}{seq(row_data_first, row_last)}, {.x}) + {.y}), "")')
     ) %>%
       bind_cols() %>%
       suppressMessages() %>%
@@ -2181,8 +2326,8 @@ seg_typing_tool <- function(
     #######################
 
     temp <- data.frame(
-      "Classification" = glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, MATCH(MAX({num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}), {num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}, 0), "")'),
-      "Name" = glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, INDEX({range_seg_name}, ${num2let(col_seg)}{seq(row_data_first, row_last)}, 1), "")')
+      "Classification" = glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, MATCH(MAX({num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}), {num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}, 0), "")'),
+      "Name" = glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, INDEX({range_seg_name}, ${num2let(col_seg)}{seq(row_data_first, row_last)}, 1), "")')
     )
     class(temp[["Classification"]]) <- "formula"
     class(temp[["Name"]]) <- "formula"
@@ -2402,8 +2547,8 @@ seg_typing_tool <- function(
 
     openxlsx::groupColumns(
       wb, sheet_name,
-      cols = seq(col_recode_first, col_score_last),
-      hidden = TRUE
+      cols = seq(col_score_first, col_prob_last),
+      hidden = FALSE
     )
 
   }
@@ -2416,24 +2561,39 @@ seg_typing_tool <- function(
 
   wb <- oxl_create_workbook()
 
-  sheet_name <- "Typing Tool"
+  sheet_name_ui   <- "Individual UI"
+  sheet_name_doc  <- "Documentation"
+  sheet_name_bulk <- "Bulk"
 
-  openxlsx::addWorksheet(wb, sheet_name)
+  for(s in c(sheet_name_ui, sheet_name_doc, sheet_name_bulk)){
+    openxlsx::addWorksheet(wb, s)
+  }
 
   row_last_formatting <- (start_row + 6) + ((start_row + 6 + nrow(data_inputs)) %>% divide_by(1000) %>% ceiling() %>% multiply_by(1000)) + 1
 
-  openxlsx::addStyle(
-    wb, sheet_name,
-    style = openxlsx::createStyle(fgFill = oxl_colorscale_grey(1)),
-    rows = seq(1, row_last_formatting),
-    cols = seq(1, 200),
-    gridExpand = TRUE
+  for(s in c(sheet_name_ui, sheet_name_doc, sheet_name_bulk)){
+    openxlsx::addStyle(
+      wb, s,
+      style = openxlsx::createStyle(fgFill = oxl_colorscale_grey(1)),
+      rows = seq(1, row_last_formatting),
+      cols = seq(1, 200),
+      gridExpand = TRUE
+    )
+  }
+
+
+  ui_returns <- individual_ui_tool(
+    wb = wb,
+    sheet_name = sheet_name_ui,
+    row_title = start_row,
+    start_col = start_col,
+    polar_label_width = polar_label_width
   )
 
 
-  range_returns <- individual_typing_tool(
+  doc_returns <- documentation_tool(
     wb = wb,
-    sheet_name = sheet_name,
+    sheet_name = sheet_name_doc,
     row_title = start_row,
     start_col = start_col,
     polar_label_width = polar_label_width
@@ -2442,13 +2602,13 @@ seg_typing_tool <- function(
 
   bulk_typing_tool(
     wb = wb,
-    sheet_name = sheet_name,
+    sheet_name = sheet_name_bulk,
     row_title = start_row,
-    start_col = range_returns[["col_last"]] + 2,
-    range_recode = range_returns[["range_recode"]],
-    range_coef = range_returns[["range_coef"]],
-    range_constant = range_returns[["range_constant"]],
-    range_seg_name = range_returns[["range_seg_name"]]
+    start_col = start_col,
+    range_recode = ui_returns[["range_recode"]],
+    range_coef = doc_returns[["range_coef"]],
+    range_constant = doc_returns[["range_constant"]],
+    range_seg_name = doc_returns[["range_seg_name"]]
   )
 
 
