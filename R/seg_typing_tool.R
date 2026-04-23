@@ -157,6 +157,15 @@ seg_typing_tool <- function(
     setNames(., stringr::str_to_title(names(.)))
 
 
+  data_solution_check <- seg[["solutions"]][["analysis"]] %>%
+    purrr::map(purrr::pluck, "solution_table") %>%
+    dplyr::bind_rows() %>%
+    dplyr::filter(lda_name == !!solution_name) %>%
+    dplyr::pull(lda_predict) %>%
+    purrr::pluck(1) %>%
+    dplyr::select(-dplyr::any_of("seg_uuid"))
+
+
   segments <- seg[["solutions"]][["summary_table"]] %>%
     dplyr::filter(lda_name == !!solution_name) %>%
     dplyr::pull(n) %>%
