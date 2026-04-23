@@ -159,8 +159,9 @@ seg_typing_tool <- function(
 
   segments <- seg[["solutions"]][["summary_table"]] %>%
     dplyr::filter(lda_name == !!solution_name) %>%
-    dplyr::pull(n_segments) %>%
-    purrr::pluck(1)
+    dplyr::pull(n) %>%
+    unlist() %>%
+    seq()
 
 
   if(is.null(segment_names)){
@@ -173,7 +174,7 @@ seg_typing_tool <- function(
   data_inputs <- seg[["data"]][["with_solutions"]] %>% select(all_of(c(survey_respondent_id, inputs_raw)))
 
 
-  polar_points <- data_inputs %>% select(-!!survey_respondent_id) %>% unlist() %>% unique() %>% length() %>% seq()
+  polar_points <- data_inputs %>% select(-!!survey_respondent_id) %>% unlist() %>% unique() %>% dplyr::setdiff(NA) %>% length() %>% seq()
 
 
   if(inputs_are_profile && inputs_are_profile_dichot){

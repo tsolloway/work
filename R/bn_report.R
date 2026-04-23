@@ -922,13 +922,27 @@ bn_report <- function(
   )
   weight_options_html <- '<option value="Unweighted">Unweighted</option><option value="Weighted">Weighted</option>'
 
+  # Each control is wrapped in its own .impact-ctrl-cell div so a 3-column
+  # CSS grid can align them in a tidy 3x2 layout (Metric, Focus, Weight on
+  # row 1; Outcome Display, Shift Type, (empty) on row 2). Cells that don't
+  # apply (no weights, no shift variants) render empty <div>s so grid
+  # placement stays stable regardless of which controls are available.
+  # Each control cell has two stacked children: .impact-ctrl-row (label +
+  # select inline) and .impact-warning (drops to its own line when populated).
+  # Keeping the warning outside the row means warning text wraps within the
+  # cell's width instead of expanding the cell and pushing neighbouring
+  # controls out of the grey container.
   weight_ctrl <- if (has_weights) {
     sprintf(paste0(
-      '<label>Weight:</label>',
-      '<select class="impact-ctrl" data-dim="weight">%s</select>',
-      '<span class="impact-warning" data-for="weight"></span>'
+      '<div class="impact-ctrl-cell">',
+        '<div class="impact-ctrl-row">',
+          '<label>Weight:</label>',
+          '<select class="impact-ctrl" data-dim="weight">%s</select>',
+        '</div>',
+        '<span class="impact-warning" data-for="weight"></span>',
+      '</div>'
     ), weight_options_html)
-  } else ""
+  } else '<div class="impact-ctrl-cell"></div>'
 
   # Outcome Display dropdown — offered when both display variants exist.
   # Proportional = (p1-p0)/p0 for maxVmin and shifted/observed for lift.
@@ -936,28 +950,36 @@ bn_report <- function(
   # MI is unaffected (no display variant in the data).
   display_ctrl <- if (has_outcome_display) {
     paste0(
-      '<label>Outcome Display:</label>',
-      '<select class="impact-ctrl" data-dim="display">',
-        '<option value="propdisplay">Proportional</option>',
-        '<option value="absdisplay">Absolute</option>',
-      '</select>',
-      '<span class="impact-warning" data-for="display"></span>'
+      '<div class="impact-ctrl-cell">',
+        '<div class="impact-ctrl-row">',
+          '<label>Outcome Display:</label>',
+          '<select class="impact-ctrl" data-dim="display">',
+            '<option value="propdisplay">Proportional</option>',
+            '<option value="absdisplay">Absolute</option>',
+          '</select>',
+        '</div>',
+        '<span class="impact-warning" data-for="display"></span>',
+      '</div>'
     )
-  } else ""
+  } else '<div class="impact-ctrl-cell"></div>'
 
   # Shift Type dropdown (Pass B). Controls how the lift metric interprets
   # the IV distribution shift. MaxVmin/mi are shift-invariant; JS suppresses
   # the effect when those metrics are selected.
   shift_ctrl <- if (has_shift_type) {
     paste0(
-      '<label>Shift Type:</label>',
-      '<select class="impact-ctrl" data-dim="shift">',
-        '<option value="propshift">Proportional</option>',
-        '<option value="absshift">Absolute</option>',
-      '</select>',
-      '<span class="impact-warning" data-for="shift"></span>'
+      '<div class="impact-ctrl-cell">',
+        '<div class="impact-ctrl-row">',
+          '<label>Shift Type:</label>',
+          '<select class="impact-ctrl" data-dim="shift">',
+            '<option value="propshift">Proportional</option>',
+            '<option value="absshift">Absolute</option>',
+          '</select>',
+        '</div>',
+        '<span class="impact-warning" data-for="shift"></span>',
+      '</div>'
     )
-  } else ""
+  } else '<div class="impact-ctrl-cell"></div>'
 
   # Header row: leading cols (sortable, text) + one metric column per
   # subgroup (sortable, numeric). Subgroup label "_" -> " " for display.
@@ -1019,11 +1041,19 @@ bn_report <- function(
   paste0(
     '<div class="impact-dashboard" data-dashboard-id="', dashboard_id, '">',
     '  <div class="impact-controls">',
-    '    <label>Metric:</label>',
-    '    <select class="impact-ctrl" data-dim="metric">', metric_options_html, '</select>',
-    '    <label>Focus:</label>',
-    '    <select class="impact-ctrl" data-dim="focus">', focus_options_html, '</select>',
-    '    <span class="impact-warning" data-for="focus"></span>',
+    '    <div class="impact-ctrl-cell">',
+    '      <div class="impact-ctrl-row">',
+    '        <label>Metric:</label>',
+    '        <select class="impact-ctrl" data-dim="metric">', metric_options_html, '</select>',
+    '      </div>',
+    '    </div>',
+    '    <div class="impact-ctrl-cell">',
+    '      <div class="impact-ctrl-row">',
+    '        <label>Focus:</label>',
+    '        <select class="impact-ctrl" data-dim="focus">', focus_options_html, '</select>',
+    '      </div>',
+    '      <span class="impact-warning" data-for="focus"></span>',
+    '    </div>',
     '    ', weight_ctrl,
     '    ', display_ctrl,
     '    ', shift_ctrl,
@@ -1663,13 +1693,42 @@ bn_report <- function(
     '',
     '/* Attribute Impacts dashboard (mirrors bn_impact_write dynamic) */',
     '.impact-dashboard { padding: 20px; overflow-x: auto; }',
+    # Layout: responsive grid. auto-fit + minmax(280px, 1fr) means the grid
+    # fits as many 280px-minimum columns as will fit the container — so at
+    # full desktop width you get 3 columns, narrower viewports collapse to
+    # 2, and mobile collapses to 1. Gutters stay equal between whatever
+    # columns remain. box-sizing keeps padding inside the declared width.
     '.impact-controls {',
-    '  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;',
+    '  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));',
+    '  column-gap: 24px; row-gap: 10px; align-items: start;',
+    '  box-sizing: border-box; width: 100%;',
     '  margin-bottom: 16px; padding: 12px;',
     '  background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px;',
     '}',
-    '.impact-controls label {',
-    '  font-weight: 600; color: #333; font-size: 13px;',
+    # Each cell stacks: (row 1) label + select inline, (row 2) warning.
+    # min-width: 0 is required so the cell can shrink below its content's
+    # natural width — otherwise long labels would force the column wider
+    # than 1fr and push siblings out of the grey container.
+    '.impact-ctrl-cell {',
+    '  display: flex; flex-direction: column; gap: 4px;',
+    '  min-width: 0;',
+    '}',
+    # Drop empty placeholder cells (rendered when a control is unavailable)
+    # so responsive packing doesn't leave awkward gaps.
+    '.impact-ctrl-cell:empty { display: none; }',
+    '.impact-ctrl-row {',
+    '  display: flex; align-items: center; gap: 8px; min-width: 0;',
+    '}',
+    '.impact-ctrl-row label {',
+    '  font-weight: 600; color: #333; font-size: 13px; white-space: nowrap;',
+    '  flex: 0 0 130px; text-align: right;',
+    '}',
+    '.impact-ctrl-row .impact-ctrl { flex: 1 1 auto; min-width: 0; max-width: 220px; }',
+    # Warning sits below the ctrl-row so its text can wrap to multiple
+    # lines without shoving the cell wider.
+    '.impact-warning {',
+    '  display: block; padding-left: 138px;',  # 130px label + 8px gap
+    '  white-space: normal; overflow-wrap: anywhere; line-height: 1.3;',
     '}',
     '.impact-ctrl {',
     '  padding: 4px 8px; font-size: 13px; width: 180px;',
