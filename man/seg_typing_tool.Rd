@@ -17,9 +17,69 @@ seg_typing_tool(
   start_row = 2,
   start_col = 2,
   polar_label_width = 65,
-  doc_label_cell_merge = 6
+  additional_questions = NULL,
+  use_colinear_lda = NULL
 )
 }
+\arguments{
+\item{seg}{A seg object with \code{solutions}, \code{data$with_solutions}, and
+\code{spec} populated.}
+
+\item{solution_name}{Character. The \code{lda_name} of the solution to build the
+typing tool for.}
+
+\item{survey_respondent_id}{Character. Column name of the respondent ID in
+\code{seg$data$with_solutions}. Default \code{"uuid"}.}
+
+\item{qualification_instructions}{Character vector. Qualification bullet
+lines shown on the Documentation sheet.}
+
+\item{overwrite_left_label, overwrite_right_label}{Optional character vectors
+to override the polar side A / side B labels pulled from the spec.}
+
+\item{segment_names}{Optional character vector of segment display names. If
+\code{NULL}, placeholder names (\code{"Segment Name 1"}, ...) are used.}
+
+\item{file_name}{Character. Output file basename (no extension).}
+
+\item{where}{Optional character. Directory to save into. If \code{NULL}, uses
+\code{seg$paths$folders$solution}, else the working directory.}
+
+\item{start_row, start_col}{Integers. Top-left anchor for content on each
+sheet. Default \verb{(2, 2)}.}
+
+\item{polar_label_width}{Numeric. Column width for the side-A / side-B
+label columns on the Individual UI sheet.}
+
+\item{additional_questions}{Optional named list of post-LDA reassignment
+rules. Each element's name is the survey variable, and each element is a
+tibble with columns \code{from_seg}, \code{value}, \code{to_seg}. For each respondent,
+after the LDA picks an initial segment, any matching rule reassigns the
+respondent to \code{to_seg}. Only equality comparisons are supported. A
+respondent may match at most one rule across all variables; violations
+raise an error at build time.}
+
+\item{use_colinear_lda}{Optional logical. Controls which coefficient
+function the typing tool embeds:
+\itemize{
+\item \code{NULL} (default) — auto-pick: if the solution's \code{collinear} flag is
+\code{TRUE}, recompute the coefficient table from \code{lda_fit} via
+\code{\link[=coefficient_lda_colinear]{coefficient_lda_colinear()}}. Otherwise use the pre-computed
+\code{lda_coefficient_function} stored on the solution.
+\item \code{TRUE} — always recompute via \code{\link[=coefficient_lda_colinear]{coefficient_lda_colinear()}}.
+\item \code{FALSE} — always use the pre-computed \code{lda_coefficient_function}.
+}}
+}
+\value{
+Invisibly writes the workbook to disk. Returns \code{NULL}.
+}
 \description{
-seg_typing_tool
+Builds a 3-sheet "Typing Tool" Excel workbook for a given LDA
+solution: an interactive Individual UI sheet with a scoring engine, a
+printable Documentation sheet (qualification instructions, solution
+questions, coefficient function, step-by-step calculation guide), and a
+Bulk sheet for scoring many respondents at once. The Individual UI and
+Bulk sheets pull Survey Variable / Side A / Side B labels and the
+coefficient function from the Documentation sheet via cross-sheet
+formulas, so edits to the Documentation sheet propagate.
 }

@@ -6,6 +6,39 @@
 \usage{
 coefficient_lda(fit, input = NULL, grp = NULL)
 }
+\arguments{
+\item{fit}{A fitted \code{MASS::lda} object.}
+
+\item{input}{Optional data frame of predictor variables (rows = respondents,
+columns = predictors). If \code{NULL}, recovered from \code{fit$call}.}
+
+\item{grp}{Optional factor (or vector coerced to factor) of class labels
+for each row of \code{input}. If \code{NULL}, recovered from \code{fit$call}.}
+}
+\value{
+A tibble with column \code{variable} (first row \code{"constant"}, remaining
+rows = predictor names) and one numeric column per segment named
+\verb{seg_<level>}.
+}
 \description{
-coefficient_lda
+Build the per-segment linear discriminant coefficient table
+directly from the within-class covariance matrix. Returns a tidy tibble
+with one row per predictor (plus a \code{constant} row) and one column per
+segment, suitable for plugging into the typing tool's scoring formula
+(\code{score_k = constant_k + sum(beta_jk * x_j)}).
+}
+\details{
+Uses the closed-form linear-discriminant formulation:
+\deqn{\beta_k = \Sigma_W^{-1} \mu_k}
+\deqn{const_k = -\tfrac{1}{2} \mu_k^\top \Sigma_W^{-1} \mu_k + \log \pi_k}
+This requires the raw \code{input} data and group labels so it can re-derive
+the pooled within-class covariance and invert it. \strong{Use this when the
+inputs are well-conditioned} (no perfect collinearity, sample size
+comfortably larger than predictor count). It will fail or produce
+numerically unstable coefficients when \code{Sigma_W} is singular or
+near-singular — for those cases use \code{\link[=coefficient_lda_colinear]{coefficient_lda_colinear()}} instead.
+}
+\seealso{
+\code{\link[=coefficient_lda_colinear]{coefficient_lda_colinear()}} — the same output structure computed
+via \code{fit$scaling} (SVD-based), robust to collinear inputs.
 }

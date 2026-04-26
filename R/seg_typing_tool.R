@@ -35,6 +35,14 @@
 #'   respondent to `to_seg`. Only equality comparisons are supported. A
 #'   respondent may match at most one rule across all variables; violations
 #'   raise an error at build time.
+#' @param use_colinear_lda Optional logical. Controls which coefficient
+#'   function the typing tool embeds:
+#'   * `NULL` (default) — auto-pick: if the solution's `collinear` flag is
+#'     `TRUE`, recompute the coefficient table from `lda_fit` via
+#'     [coefficient_lda_colinear()]. Otherwise use the pre-computed
+#'     `lda_coefficient_function` stored on the solution.
+#'   * `TRUE` — always recompute via [coefficient_lda_colinear()].
+#'   * `FALSE` — always use the pre-computed `lda_coefficient_function`.
 #'
 #' @return Invisibly writes the workbook to disk. Returns `NULL`.
 #'
@@ -52,7 +60,8 @@ seg_typing_tool <- function(
     start_row = 2,
     start_col = 2,
     polar_label_width = 65,
-    additional_questions = NULL
+    additional_questions = NULL,
+    use_colinear_lda = NULL
 ){
 
   row_title <- start_row
@@ -103,8 +112,8 @@ seg_typing_tool <- function(
   #######################
 
   inputs <- seg[["solutions"]][["summary_table"]] %>%
-    filter(lda_name == !!solution_name) %>%
-    select(lda_inputs) %>%
+    dplyr::filter(lda_name == !!solution_name) %>%
+    dplyr::select(lda_inputs) %>%
     unlist() %>%
     setNames(NULL)
 
@@ -115,52 +124,185 @@ seg_typing_tool <- function(
     tidyr::unnest(vars)
 
 
-  if(all(inputs %in% polars_table[["rs_var"]]) && all(!inputs %in% profile_table[["var"]])){
-    inputs_are_rs <- TRUE
-    inputs_are_profile <- FALSE
-  }else if(all(inputs %in% polars_table[["source_var"]]) && all(!inputs %in% profile_table[["var"]])){
-    inputs_are_rs <- FALSE
-    inputs_are_profile <- FALSE
-  }else if(all(inputs %in% profile_table[["source_var"]])){
-    inputs_are_rs <- FALSE
-    inputs_are_profile <- TRUE
-    inputs_are_profile_dichot <- FALSE
-  }else if(all(inputs %in% profile_table[["var"]])){
-    inputs_are_rs <- FALSE
-    inputs_are_profile <- TRUE
-    inputs_are_profile_dichot <- TRUE
+  #######################
+  # value-label parser (reads seg$data$original_dictionary)
+  #######################
+
+  parse_value_labels <- function(var_name){
+    dict <- seg[["data"]][["original_dictionary"]]
+    data_vals <- seg[["data"]][["with_solutions"]][[var_name]] %>%
+      unique() %>% stats::na.omit() %>% sort()
+
+    fallback <- tibble::tibble(
+      code  = as.numeric(data_vals),
+      label = paste0("value ", as.character(data_vals))
+    )
+
+    if(is.null(dict) || !"variable" %in% names(dict) || !var_name %in% dict$variable){
+      return(fallback)
+    }
+
+    row <- dict %>% dplyr::filter(variable == var_name)
+    vl_str <- row[["value_labels"]][1]
+
+    if(is.null(vl_str) || is.na(vl_str) || !nzchar(vl_str)){
+      return(fallback)
+    }
+
+    pairs <- strsplit(vl_str, ", ")[[1]]
+    parsed <- purrr::map_dfr(pairs, function(p){
+      parts <- strsplit(p, " = ", fixed = TRUE)[[1]]
+      if(length(parts) < 2) return(NULL)
+      tibble::tibble(
+        code  = suppressWarnings(as.numeric(parts[1])),
+        label = paste(parts[-1], collapse = " = ")
+      )
+    })
+
+    parsed <- parsed %>% dplyr::filter(!is.na(code)) %>% dplyr::arrange(code)
+
+    if(nrow(parsed) == 0) return(fallback)
+
+    parsed
+  }
+
+
+  #######################
+  # classify each input
+  #######################
+
+  polar_rs_hit     <- inputs %in% polars_table[["rs_var"]]
+  polar_source_hit <- (inputs %in% polars_table[["source_var"]]) & !polar_rs_hit
+  polar_hit        <- polar_rs_hit | polar_source_hit
+
+  profile_hit      <- (inputs %in% profile_table[["var"]]) |
+                      (inputs %in% profile_table[["source_var"]])
+  profile_hit      <- profile_hit & !polar_hit
+
+  data_hit         <- (inputs %in% names(seg[["data"]][["with_solutions"]])) &
+                      !polar_hit & !profile_hit
+
+  unresolved <- inputs[!polar_hit & !profile_hit & !data_hit]
+  if(length(unresolved) > 0){
+    stop(glue::glue("Could not resolve these inputs against polars, profiles, or data columns: {paste(unresolved, collapse = ', ')}"))
+  }
+
+  polar_inputs     <- inputs[polar_hit]
+  non_polar_inputs <- inputs[!polar_hit]
+
+  if(length(polar_inputs) > 0){
+    n_rs  <- sum(polar_rs_hit)
+    n_src <- sum(polar_source_hit)
+    if(n_rs > 0 && n_src > 0){
+      stop("Polar inputs mix `rs_var` and `source_var` — must be one or the other.")
+    }
+    inputs_are_rs <- n_rs > 0
   }else{
-    stop("Script can't find the inputs in the polars, or we mixed raw and rs polar vars.")
+    inputs_are_rs <- FALSE
+  }
+
+
+  #######################
+  # non-polar inputs table (scaffolding for pass #2 — not yet rendered)
+  #######################
+
+  non_polar_inputs_table <- NULL
+
+  if(length(non_polar_inputs) > 0){
+    spec_profile_lookup <- tryCatch(
+      seg[["spec"]][["profiles"]] %>%
+        tidyr::unnest(vars) %>%
+        dplyr::select(var, label),
+      error = function(e) NULL
+    )
+    dict_tbl <- seg[["data"]][["original_dictionary"]]
+
+    non_polar_inputs_table <- tibble::tibble(
+      var = non_polar_inputs
+    ) %>%
+      dplyr::mutate(
+        label = purrr::map_chr(var, function(v){
+          # 1) prefer the spec profiles label
+          if(!is.null(spec_profile_lookup) && nrow(spec_profile_lookup) > 0){
+            row <- spec_profile_lookup %>% dplyr::filter(var == v)
+            if(nrow(row) > 0){
+              lbl <- row$label[1]
+              if(!is.na(lbl) && nzchar(lbl)) return(lbl)
+            }
+          }
+          # 2) fall back to the original-dictionary label
+          if(!is.null(dict_tbl) && "variable" %in% names(dict_tbl) && "label" %in% names(dict_tbl)){
+            d_row <- dict_tbl %>% dplyr::filter(variable == v)
+            if(nrow(d_row) > 0){
+              lbl <- d_row$label[1]
+              if(!is.na(lbl) && nzchar(lbl)) return(lbl)
+            }
+          }
+          # 3) last resort — return the variable name itself
+          v
+        }),
+        value_table = purrr::map(var, parse_value_labels)
+      )
+  }
+
+
+  #######################
+  # polar-only homogeneous detection (existing behavior preserved)
+  #######################
+
+  inputs_are_profile <- FALSE
+  inputs_are_profile_dichot <- FALSE
+
+  if(length(polar_inputs) == 0 && length(non_polar_inputs) > 0){
+    # Pure non-polar / profile path
+    if(all(inputs %in% profile_table[["source_var"]])){
+      inputs_are_profile <- TRUE
+      inputs_are_profile_dichot <- FALSE
+    }else if(all(inputs %in% profile_table[["var"]])){
+      inputs_are_profile <- TRUE
+      inputs_are_profile_dichot <- TRUE
+    }
+    # else: pure non-polar (no profiles either) — handled via non_polar_inputs_table downstream
   }
 
 
 
-  if(inputs_are_rs){
+  if(length(polar_inputs) > 0){
 
-    inputs_table <- polars_table %>% filter(rs_var %in% inputs)
+    if(inputs_are_rs){
+      inputs_table <- polars_table %>% dplyr::filter(rs_var %in% polar_inputs)
+      polar_reordered     <- inputs_table %>% dplyr::pull(rs_var)
+      polar_reordered_raw <- inputs_table %>% dplyr::pull(source_var)
+    }else{
+      inputs_table <- polars_table %>% dplyr::filter(source_var %in% polar_inputs)
+      polar_reordered     <- inputs_table %>% dplyr::pull(source_var)
+      polar_reordered_raw <- polar_reordered
+    }
 
-    inputs <- inputs_table %>% select(rs_var) %>% unlist() %>% setNames(NULL)
-    inputs_raw <- inputs_table %>% select(source_var) %>% unlist() %>% setNames(NULL)
-
-  }else if(!inputs_are_rs && !inputs_are_profile){
-
-    inputs_table <- polars_table %>% filter(source_var %in% inputs)
-
-    inputs <- inputs_table %>% select(source_var) %>% unlist() %>% setNames(NULL)
-    inputs_raw <- inputs
+    # polars first, non-polars after
+    inputs     <- c(polar_reordered,     non_polar_inputs)
+    inputs_raw <- c(polar_reordered_raw, non_polar_inputs)
 
   }else if(inputs_are_profile && !inputs_are_profile_dichot){
 
-    inputs_table <- profile_table %>% filter(source_var %in% inputs)
+    inputs_table <- profile_table %>% dplyr::filter(source_var %in% inputs)
 
-    inputs <- inputs_table %>% select(source_var) %>% unlist() %>% setNames(NULL)
+    inputs <- inputs_table %>% dplyr::select(source_var) %>% unlist() %>% setNames(NULL)
     inputs_raw <- inputs
+
   }else if(inputs_are_profile && inputs_are_profile_dichot){
 
-    inputs_table <- profile_table %>% filter(var %in% inputs)
+    inputs_table <- profile_table %>% dplyr::filter(var %in% inputs)
 
-    inputs <- inputs_table %>% select(var) %>% unlist() %>% setNames(NULL)
-    inputs_raw <- inputs_table %>% select(source_var) %>% unlist() %>% setNames(NULL)
+    inputs <- inputs_table %>% dplyr::select(var) %>% unlist() %>% setNames(NULL)
+    inputs_raw <- inputs_table %>% dplyr::select(source_var) %>% unlist() %>% setNames(NULL)
+
+  }else{
+
+    # Pure non-polar (no polars, no profile matches) — use non_polar_inputs_table
+    inputs_table <- NULL
+    inputs       <- non_polar_inputs
+    inputs_raw   <- non_polar_inputs
   }
 
 
@@ -173,17 +315,48 @@ seg_typing_tool <- function(
 
 
 
-  coef_func <- seg[["solutions"]][["summary_table"]] %>%
-    filter(lda_name == !!solution_name) %>%
-    select(lda_coefficient_function) %>%
-    flatten_dfc() %>%
-    slice(
-      match(
-        c(inputs, "constant"),
-        .[["variable"]]
-      )
-    ) %>%
-    setNames(., stringr::str_to_title(names(.)))
+  # Decide whether to (re)compute the coefficient function via
+  # coefficient_lda_colinear() or use the pre-computed one on the solution.
+  analysis_solution_row <- seg[["solutions"]][["analysis"]] %>%
+    purrr::map(purrr::pluck, "solution_table") %>%
+    dplyr::bind_rows() %>%
+    dplyr::filter(lda_name == !!solution_name) %>%
+    dplyr::slice(1)
+
+  collinear_flag <- isTRUE(analysis_solution_row[["collinear"]][[1]])
+
+  resolved_use_colinear <- if(is.null(use_colinear_lda)){
+    collinear_flag
+  }else{
+    isTRUE(use_colinear_lda)
+  }
+
+  if(resolved_use_colinear){
+    lda_fit_obj <- analysis_solution_row[["lda_fit"]][[1]]
+    if(is.null(lda_fit_obj) || (length(lda_fit_obj) == 1 && is.na(lda_fit_obj))){
+      stop(glue::glue("`use_colinear_lda` requested but `lda_fit` is unavailable for solution '{solution_name}'."))
+    }
+    coef_func <- coefficient_lda_colinear(lda_fit_obj) %>%
+      dplyr::slice(
+        match(
+          c(inputs, "constant"),
+          .[["variable"]]
+        )
+      ) %>%
+      setNames(., stringr::str_to_title(names(.)))
+  }else{
+    coef_func <- seg[["solutions"]][["summary_table"]] %>%
+      dplyr::filter(lda_name == !!solution_name) %>%
+      dplyr::select(lda_coefficient_function) %>%
+      purrr::flatten_dfc() %>%
+      dplyr::slice(
+        match(
+          c(inputs, "constant"),
+          .[["variable"]]
+        )
+      ) %>%
+      setNames(., stringr::str_to_title(names(.)))
+  }
 
 
   data_solution_check <- seg[["solutions"]][["analysis"]] %>%
@@ -196,6 +369,97 @@ seg_typing_tool <- function(
     dplyr::mutate(seg = as.numeric(as.character(seg)))
 
 
+  #######################
+  # validate additional_questions
+  #######################
+
+  additional_questions_info <- NULL
+
+  if(!is.null(additional_questions)){
+
+    if(!is.list(additional_questions) || is.null(names(additional_questions)) || any(names(additional_questions) == "")){
+      stop("`additional_questions` must be a named list of tibbles.")
+    }
+
+    required_cols <- c("from_seg", "value", "to_seg")
+    data_full     <- seg[["data"]][["with_solutions"]]
+    input_table   <- seg[["input_sheet"]][["input_table"]]
+
+    for(var_name in names(additional_questions)){
+      rules <- additional_questions[[var_name]]
+
+      if(!is.data.frame(rules) || !all(required_cols %in% names(rules))){
+        stop(glue::glue("`additional_questions[['{var_name}']]` must be a tibble with columns: {paste(required_cols, collapse = ', ')}."))
+      }
+
+      if(!var_name %in% names(data_full)){
+        stop(glue::glue("`additional_questions` variable '{var_name}' not found in seg$data$with_solutions."))
+      }
+
+      within_conflict <- rules %>%
+        dplyr::group_by(from_seg, value) %>%
+        dplyr::filter(dplyr::n_distinct(to_seg) > 1) %>%
+        dplyr::ungroup()
+
+      if(nrow(within_conflict) > 0){
+        conflict_lines <- purrr::map_chr(
+          seq_len(nrow(within_conflict)),
+          ~glue::glue("  from_seg = {within_conflict$from_seg[.x]}, value = {within_conflict$value[.x]}, to_seg = {within_conflict$to_seg[.x]}")
+        ) %>% paste(collapse = "\n")
+
+        stop(glue::glue(
+          "Within-variable conflict in `additional_questions[['{var_name}']]` — ",
+          "same (from_seg, value) maps to multiple to_seg:\n{conflict_lines}"
+        ))
+      }
+    }
+
+    all_add_vars <- names(additional_questions)
+    resp_df      <- data_full %>% dplyr::select(dplyr::all_of(c(survey_respondent_id, all_add_vars)))
+    initial_segs <- data_solution_check$seg
+
+    for(i in seq_len(nrow(resp_df))){
+      initial <- initial_segs[i]
+      if(is.na(initial)) next
+
+      matches <- purrr::imap_dfr(additional_questions, function(rules, vn){
+        val <- resp_df[[vn]][i]
+        if(is.na(val)) return(NULL)
+        rules %>% dplyr::filter(from_seg == initial, value == val) %>% dplyr::mutate(var = vn, .before = 1)
+      })
+
+      if(nrow(matches) > 1){
+        match_lines <- purrr::map_chr(
+          seq_len(nrow(matches)),
+          ~glue::glue("  {matches$var[.x]}: from_seg = {matches$from_seg[.x]}, value = {matches$value[.x]}, to_seg = {matches$to_seg[.x]}")
+        ) %>% paste(collapse = "\n")
+
+        stop(glue::glue(
+          "Respondent {resp_df[[survey_respondent_id]][i]} (initial seg {initial}) matches ",
+          "{nrow(matches)} reassignment rules across variables — each respondent may match at most one rule:\n{match_lines}"
+        ))
+      }
+    }
+
+    additional_questions_info <- purrr::imap(additional_questions, function(rules, var_name){
+      valid_values <- data_full[[var_name]] %>% unique() %>% stats::na.omit() %>% sort()
+
+      label_row <- input_table %>%
+        dplyr::filter(source_var == var_name | profile_var == var_name | rs_var == var_name) %>%
+        dplyr::slice(1)
+
+      label <- if(nrow(label_row) > 0 && "label" %in% names(label_row)) label_row$label[1] else var_name
+
+      list(
+        var          = var_name,
+        label        = label,
+        valid_values = as.numeric(valid_values),
+        rules        = rules
+      )
+    })
+  }
+
+
   segments <- seg[["solutions"]][["summary_table"]] %>%
     dplyr::filter(lda_name == !!solution_name) %>%
     dplyr::pull(n) %>%
@@ -204,18 +468,23 @@ seg_typing_tool <- function(
 
 
   if(is.null(segment_names)){
-    segment_names <- glue("Segment Name {segments}")
+    segment_names <- glue::glue("Segment Name {segments}")
   }else{
     segment_names <- segment_names %>% stringr::str_squish()
   }
 
 
-  data_inputs <- seg[["data"]][["with_solutions"]] %>% select(all_of(c(survey_respondent_id, inputs_raw)))
+  data_inputs <- seg[["data"]][["with_solutions"]] %>% dplyr::select(dplyr::all_of(c(survey_respondent_id, inputs_raw)))
+
+
+  # Split raw inputs into polar and non-polar for downstream handling
+  polar_inputs_raw     <- if(length(polar_inputs) > 0) head(inputs_raw, length(polar_inputs)) else character(0)
+  non_polar_inputs_raw <- non_polar_inputs
 
 
   polar_info <- seg %>% seg_get_vars_polars()
 
-  has_recoding <- inputs[1] %in% polar_info$rs_var
+  has_recoding <- length(polar_inputs) > 0 && inputs[1] %in% polar_info$rs_var
 
   if(has_recoding){
     first_polar_row <- polar_info %>% dplyr::filter(rs_var == inputs[1])
@@ -230,62 +499,118 @@ seg_typing_tool <- function(
   }
 
 
-  polar_points <- data_inputs %>% select(-!!survey_respondent_id) %>% unlist() %>% unique() %>% dplyr::setdiff(NA) %>% length() %>% seq()
-
-
-  if(inputs_are_profile && inputs_are_profile_dichot){
-    polar_points <- seq(0,1)
+  if(length(polar_inputs) > 0){
+    polar_points <- data_inputs %>%
+      dplyr::select(dplyr::all_of(polar_inputs_raw)) %>%
+      unlist() %>% unique() %>% dplyr::setdiff(NA) %>% length() %>% seq()
+  }else{
+    polar_points <- integer(0)
   }
 
 
-  ind_response <- data_inputs %>%
-    select(-!!survey_respondent_id) %>%
-    slice(1) %>%
-    unlist() %>%
-    map(
-      ~{
-        answer <- (polar_points %in% .x) %>%
-          ifelse("x", NA)
+  if(inputs_are_profile && inputs_are_profile_dichot){
+    polar_points <- seq(0, 1)
+  }
 
-        matrix(answer, nrow = 1) %>%
-          data.frame()
+
+  if(length(polar_inputs) > 0){
+    ind_response <- data_inputs %>%
+      dplyr::select(dplyr::all_of(polar_inputs_raw)) %>%
+      dplyr::slice(1) %>%
+      unlist() %>%
+      purrr::map(
+        ~{
+          answer <- (polar_points %in% .x) %>%
+            ifelse("x", NA)
+
+          matrix(answer, nrow = 1) %>%
+            data.frame()
+        }
+      ) %>%
+      dplyr::bind_rows() %>%
+      setNames(polar_points)
+  }else{
+    ind_response <- NULL
+  }
+
+
+  clean_variable_names <- glue::glue("Q{seq_len(length(inputs))}")
+
+
+  #######################
+  # build ind_ui (polar block only — shared by individual and documentation tools)
+  #######################
+
+  has_non_polar_outer <- !is.null(non_polar_inputs_table)
+
+  if(length(polar_inputs) > 0 && !is.null(inputs_table)){
+    if(has_non_polar_outer){
+      ind_ui <- tibble::tibble(
+        "Question" = head(clean_variable_names, nrow(inputs_table)),
+        "Survey Variable" = inputs_table %>% dplyr::select(source_var) %>% purrr::flatten_chr() %>% stringr::str_squish(),
+        "Side A" = inputs_table %>% dplyr::select(left_label) %>% purrr::flatten_chr() %>% stringr::str_squish(),
+        " " = NA,
+        matrix(nrow = nrow(inputs_table), ncol = length(polar_points)) %>% data.frame(),
+        "Side B" = inputs_table %>% dplyr::select(right_label) %>% purrr::flatten_chr() %>% stringr::str_squish()
+      ) %>%
+        setNames(c("Question", "Survey Variable", "Side A", " ", rep("", length(polar_points)), "Side B"))
+    }else{
+      ind_ui <- tibble::tibble(
+        "Question" = head(clean_variable_names, nrow(inputs_table)),
+        "Survey Variable" = inputs_table %>% dplyr::select(source_var) %>% purrr::flatten_chr() %>% stringr::str_squish(),
+        "Side A" = inputs_table %>% dplyr::select(left_label) %>% purrr::flatten_chr() %>% stringr::str_squish(),
+        matrix(nrow = nrow(inputs_table), ncol = length(polar_points)) %>% data.frame(),
+        "Side B" = inputs_table %>% dplyr::select(right_label) %>% purrr::flatten_chr() %>% stringr::str_squish()
+      ) %>%
+        setNames(c("Question", "Survey Variable", "Side A", rep("", length(polar_points)), "Side B"))
+    }
+  }else{
+    ind_ui <- NULL
+  }
+
+  if(!is.null(ind_ui)){
+    if(length(polar_points) == 4){
+      ind_ui <- ind_ui %>%
+        setNames(c(
+          "Question", "Survey Variable", "Side A",
+          if(has_non_polar_outer) " " else NULL,
+          "Agree Much \nMore \n<<", "Agree Somewhat \nMore \n<<",
+          "Agree Somewhat \nMore \n>>", "Agree Much \nMore \n>>",
+          "Side B"
+        ))
+    }else if(length(polar_points) == 2){
+      ind_ui <- ind_ui %>%
+        setNames(c(
+          "Question", "Survey Variable", "Side A",
+          if(has_non_polar_outer) " " else NULL,
+          "Agree \nMore \n<<", "Agree \nMore \n>>",
+          "Side B"
+        ))
+    }
+  }
+
+
+  #######################
+  # non-polar info bundle for rendering (names + rows)
+  #######################
+
+  if(!is.null(non_polar_inputs_table)){
+    non_polar_inputs_info <- purrr::map(
+      seq_len(nrow(non_polar_inputs_table)),
+      function(i){
+        nv_count    <- nrow(non_polar_inputs_table$value_table[[i]])
+        clean_idx   <- length(polar_inputs) + i
+        list(
+          var          = non_polar_inputs_table$var[i],
+          q_label      = clean_variable_names[clean_idx],
+          text         = non_polar_inputs_table$label[i],
+          value_table  = non_polar_inputs_table$value_table[[i]],
+          n_values     = nv_count
+        )
       }
-    ) %>%
-    bind_rows() %>%
-    setNames(polar_points)
-
-
-  clean_variable_names <- glue("Q{seq(nrow(inputs_table))}")
-
-
-  #######################
-  # build ind_ui (shared by individual and documentation tools)
-  #######################
-
-  ind_ui <- tibble(
-    "Question" = clean_variable_names,
-    "Survey Variable" = inputs_table %>% select(source_var) %>% flatten_chr() %>% stringr::str_squish(),
-    "Side A" = inputs_table %>% select(left_label) %>% flatten_chr() %>% stringr::str_squish(),
-    matrix(nrow = nrow(inputs_table), ncol = length(polar_points)) %>% data.frame(),
-    "Side B" = inputs_table %>% select(right_label) %>% flatten_chr() %>% stringr::str_squish()
-  ) %>%
-    setNames(c("Question", "Survey Variable", "Side A", rep("", length(polar_points)), "Side B"))
-
-  if(length(polar_points) == 4){
-    ind_ui <- ind_ui %>%
-      setNames(c(
-        "Question", "Survey Variable", "Side A",
-        "Agree Much \nMore \n<<", "Agree Somewhat \nMore \n<<",
-        "Agree Somewhat \nMore \n>>", "Agree Much \nMore \n>>",
-        "Side B"
-      ))
-  }else if(length(polar_points) == 2){
-    ind_ui <- ind_ui %>%
-      setNames(c(
-        "Question", "Survey Variable", "Side A",
-        "Agree \nMore \n<<", "Agree \nMore \n>>",
-        "Side B"
-      ))
+    )
+  }else{
+    non_polar_inputs_info <- NULL
   }
 
 
@@ -349,7 +674,10 @@ seg_typing_tool <- function(
     col_ind_clean_var_number <- start_col
     col_ind_survey_var_number <- col_ind_clean_var_number + 1
     col_ind_label_left_number <- col_ind_survey_var_number + 1
-    col_ind_label_point_first_number <- col_ind_label_left_number + 1
+    # add a spacer column between Side A and the polar point cols only when
+    # non-polar blocks need a hidden Code column at that position
+    polar_spacer_offset <- if(!is.null(non_polar_inputs_info)) 2L else 1L
+    col_ind_label_point_first_number <- col_ind_label_left_number + polar_spacer_offset
     col_ind_label_point_last_number <- col_ind_label_point_first_number + length(polar_points) - 1
     col_ind_label_right_number <- col_ind_label_point_last_number + 1
 
@@ -361,7 +689,7 @@ seg_typing_tool <- function(
 
     col_ind_engine_controls_number <- col_ind_engine_clean_var_number + 4
 
-    range_ind_prob <- glue('${num2let(col_ind_engine_survey_var_number + 1)}${row_ind_engine_prob}:${num2let(col_ind_engine_answer_number - 1)}${row_ind_engine_prob}')
+    range_ind_prob <- glue::glue('${num2let(col_ind_engine_survey_var_number + 1)}${row_ind_engine_prob}:${num2let(col_ind_engine_answer_number - 1)}${row_ind_engine_prob}')
 
 
     #######################
@@ -404,7 +732,7 @@ seg_typing_tool <- function(
     )
 
 
-    range_recode <- glue('${num2let(col_ind_label_point_first_number)}${row_ind_recode}:${num2let(col_ind_label_point_first_number + ncol(recode_values) - 1)}${row_ind_recode}')
+    range_recode <- glue::glue('${num2let(col_ind_label_point_first_number)}${row_ind_recode}:${num2let(col_ind_label_point_first_number + ncol(recode_values) - 1)}${row_ind_recode}')
 
 
     openxlsx::addStyle(
@@ -454,21 +782,21 @@ seg_typing_tool <- function(
 
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue("'{sheet_name_doc}'!{doc_col_sv}{doc_q_rows}"),
+      x = glue::glue("'{sheet_name_doc}'!{doc_col_sv}{doc_q_rows}"),
       startRow = row_ind_first,
       startCol = col_ind_survey_var_number
     )
 
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue("'{sheet_name_doc}'!{doc_col_sa}{doc_q_rows}"),
+      x = glue::glue("'{sheet_name_doc}'!{doc_col_sa}{doc_q_rows}"),
       startRow = row_ind_first,
       startCol = col_ind_label_left_number
     )
 
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue("'{sheet_name_doc}'!{doc_col_sb}{doc_q_rows}"),
+      x = glue::glue("'{sheet_name_doc}'!{doc_col_sb}{doc_q_rows}"),
       startRow = row_ind_first,
       startCol = col_ind_label_right_number
     )
@@ -483,10 +811,12 @@ seg_typing_tool <- function(
     )
 
 
+    row_polar_last <- if(!is.null(ind_ui)) row_ind_first + nrow(ind_ui) - 1 else row_ind_last
+
     openxlsx::addStyle(
       wb, sheet_name,
       style = style_table,
-      rows = seq(row_ind_first, row_ind_last),
+      rows = seq(row_ind_first, row_polar_last),
       cols = seq(col_ind_clean_var_number, col_ind_label_right_number),
       gridExpand = TRUE, stack = TRUE
     )
@@ -496,7 +826,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       borderStyle = "medium",
       row_start = row_header,
-      row_end = row_ind_last,
+      row_end = row_polar_last,
       col_start = col_ind_clean_var_number,
       col_end = col_ind_label_right_number
     )
@@ -506,7 +836,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       borderStyle = "medium",
       row_start = row_ind_first,
-      row_end = row_ind_last,
+      row_end = row_polar_last,
       col_start = col_ind_clean_var_number,
       col_end = col_ind_label_right_number
     )
@@ -547,6 +877,267 @@ seg_typing_tool <- function(
     )
 
 
+    #######################
+    # non-polar LDA input blocks (below polar block)
+    #######################
+
+    np_block_bottom <- row_polar_last
+    np_info_with_cells <- NULL
+
+    if(!is.null(non_polar_inputs_info)){
+      np_info_with_cells <- vector("list", length(non_polar_inputs_info))
+
+      # column layout (maps to same sheet columns as polar block):
+      #   B = Question, C = Survey Variable (hidden), D = Question Text,
+      #   E = Code (hidden), F = Response, col_ind_label_right_number = Answer
+      col_np_q        <- col_ind_clean_var_number
+      col_np_var      <- col_ind_survey_var_number
+      col_np_text     <- col_ind_label_left_number
+      col_np_code     <- col_ind_label_left_number + 1
+      col_np_response <- col_ind_label_point_first_number
+      col_np_answer   <- col_ind_label_point_last_number
+
+      style_np_cell <- openxlsx::createStyle(
+        fgFill = "white", halign = "center", valign = "center",
+        border = "TopBottomLeftRight", borderStyle = "thin"
+      )
+      style_np_text <- openxlsx::createStyle(
+        fgFill = "white", halign = "center", valign = "center", wrapText = TRUE,
+        border = "TopBottomLeftRight", borderStyle = "thin"
+      )
+
+      row_np_cursor <- row_polar_last + 3
+
+      for(idx in seq_along(non_polar_inputs_info)){
+        info        <- non_polar_inputs_info[[idx]]
+        n_vals      <- info$n_values
+        row_np_head <- row_np_cursor
+        row_np_first <- row_np_head + 1
+        row_np_last  <- row_np_head + n_vals
+
+        # header row (Question Text header intentionally blank)
+        header_tbl <- tibble::tibble(
+          "Question"         = NA_character_,
+          "Survey Variable"  = NA_character_,
+          " "                = NA_character_,
+          "Code"             = NA_character_,
+          "Response"         = NA_character_,
+          "Answer"           = NA_character_
+        )
+
+        openxlsx::writeData(
+          wb, sheet_name,
+          x = header_tbl[0, ],
+          startRow = row_np_head,
+          startCol = col_np_q,
+          colNames = TRUE,
+          headerStyle = style_header,
+          borders = "all"
+        )
+
+        # Q label, survey var, question text — first value row
+        openxlsx::writeData(wb, sheet_name, x = info$q_label,  startRow = row_np_first, startCol = col_np_q,    colNames = FALSE)
+        openxlsx::writeData(wb, sheet_name, x = info$var,      startRow = row_np_first, startCol = col_np_var,  colNames = FALSE)
+        openxlsx::writeData(wb, sheet_name, x = info$text,     startRow = row_np_first, startCol = col_np_text, colNames = FALSE)
+
+        # merge Q, var, text vertically across all value rows
+        if(n_vals > 1){
+          openxlsx::mergeCells(wb, sheet_name, rows = seq(row_np_first, row_np_last), cols = col_np_q)
+          openxlsx::mergeCells(wb, sheet_name, rows = seq(row_np_first, row_np_last), cols = col_np_var)
+          openxlsx::mergeCells(wb, sheet_name, rows = seq(row_np_first, row_np_last), cols = col_np_text)
+        }
+
+        # determine first respondent's answer and mark x
+        first_val <- seg[["data"]][["with_solutions"]][[info$var]][1]
+        x_row_idx <- which(info$value_table$code == first_val)
+
+        # write code + response per value row, and "x" if this row matches first respondent
+        for(v in seq_len(n_vals)){
+          r <- row_np_first + v - 1
+          openxlsx::writeData(wb, sheet_name, x = info$value_table$code[v],  startRow = r, startCol = col_np_code,     colNames = FALSE)
+          openxlsx::writeData(wb, sheet_name, x = info$value_table$label[v], startRow = r, startCol = col_np_response, colNames = FALSE)
+          if(length(x_row_idx) > 0 && v == x_row_idx[1]){
+            openxlsx::writeData(wb, sheet_name, x = "x", startRow = r, startCol = col_np_answer, colNames = FALSE)
+          }
+        }
+
+        # white background for the question header columns
+        openxlsx::addStyle(
+          wb, sheet_name,
+          style = style_np_cell,
+          rows = seq(row_np_first, row_np_last),
+          cols = seq(col_np_q, col_np_text),
+          gridExpand = TRUE, stack = TRUE
+        )
+
+        # Code column — neutral (orange/yellow) highlight
+        openxlsx::addStyle(
+          wb, sheet_name,
+          style = oxl_style_cell_neutral(textDecoration = "Bold", border = "TopBottomLeftRight"),
+          rows = seq(row_np_first, row_np_last),
+          cols = col_np_code,
+          gridExpand = TRUE, stack = TRUE
+        )
+
+        # Response column — light gray with thin borders
+        openxlsx::addStyle(
+          wb, sheet_name,
+          style = openxlsx::createStyle(
+            fgFill = oxl_colorscale_grey(2),
+            halign = "center", valign = "center",
+            border = "TopBottomLeftRight",
+            borderStyle = "thin"
+          ),
+          rows = seq(row_np_first, row_np_last),
+          cols = col_np_response,
+          gridExpand = TRUE, stack = TRUE
+        )
+
+        # Answer column — white with thin borders (matches polar block inner borders)
+        openxlsx::addStyle(
+          wb, sheet_name,
+          style = openxlsx::createStyle(
+            fgFill = "white",
+            halign = "center", valign = "center",
+            border = "TopBottomLeftRight",
+            borderStyle = "thin"
+          ),
+          rows = seq(row_np_first, row_np_last),
+          cols = col_np_answer,
+          gridExpand = TRUE, stack = TRUE
+        )
+
+        oxl_outer_box(
+          wb, sheet_name, borderStyle = "medium",
+          row_start = row_np_head, row_end = row_np_last,
+          col_start = col_np_q, col_end = col_np_answer
+        )
+
+        # second outer box around data rows only — medium line below the header
+        oxl_outer_box(
+          wb, sheet_name, borderStyle = "medium",
+          row_start = row_np_first, row_end = row_np_last,
+          col_start = col_np_q, col_end = col_np_answer
+        )
+
+        # multi-x warning (yellow) — same logic as polar response highlight
+        np_answer_abs_range <- glue::glue("${num2let(col_np_answer)}${row_np_first}:${num2let(col_np_answer)}${row_np_last}")
+        openxlsx::conditionalFormatting(
+          wb, sheet_name,
+          cols = col_np_answer,
+          rows = seq(row_np_first, row_np_last),
+          rule = glue::glue('AND(${num2let(col_ind_engine_controls_number)}${row_ind_engine_seg_qc} = TRUE, COUNTIF({np_answer_abs_range}, "x") > 1)'),
+          style = oxl_style_cell_neutral(textDecoration = "bold", conditional = TRUE)
+        )
+
+        # hide Code column (col E)
+        openxlsx::setColWidths(wb, sheet_name, cols = col_np_code, hidden = TRUE)
+
+        np_info_with_cells[[idx]] <- c(info, list(
+          row_first    = row_np_first,
+          row_last     = row_np_last,
+          col_code     = col_np_code,
+          col_answer   = col_np_answer,
+          answer_range = glue::glue("{num2let(col_np_answer)}{row_np_first}:{num2let(col_np_answer)}{row_np_last}"),
+          code_range   = glue::glue("{num2let(col_np_code)}{row_np_first}:{num2let(col_np_code)}{row_np_last}")
+        ))
+
+        row_np_cursor <- row_np_last + 2
+      }
+
+      np_block_bottom <- row_np_cursor - 2
+    }
+
+
+    #######################
+    # additional questions block
+    #######################
+
+    aq_input_cells <- NULL
+
+    if(!is.null(additional_questions_info)){
+      n_aq <- length(additional_questions_info)
+
+      row_aq_title  <- np_block_bottom + 2
+      row_aq_header <- row_aq_title + 1
+      row_aq_first  <- row_aq_header + 1
+      row_aq_last   <- row_aq_first + n_aq - 1
+
+      aq_block_col_last <- col_ind_clean_var_number + 4
+
+      aq_tibble <- tibble::tibble(
+        "Question"         = glue::glue("AQ{seq_len(n_aq)}"),
+        "Survey Variable"  = purrr::map_chr(additional_questions_info, "var"),
+        "Question Label"   = purrr::map_chr(additional_questions_info, "label"),
+        "Answer"           = NA,
+        "Valid Values"     = purrr::map_chr(additional_questions_info, ~paste(.x$valid_values, collapse = ", "))
+      )
+
+      openxlsx::mergeCells(
+        wb, sheet_name,
+        rows = row_aq_title,
+        cols = seq(col_ind_clean_var_number, aq_block_col_last)
+      )
+
+      openxlsx::writeData(
+        wb, sheet_name,
+        x = "Additional Questions",
+        startRow = row_aq_title,
+        startCol = col_ind_clean_var_number,
+        colNames = FALSE
+      )
+
+      openxlsx::addStyle(
+        wb, sheet_name,
+        style = style_header2,
+        rows = row_aq_title,
+        cols = seq(col_ind_clean_var_number, aq_block_col_last),
+        gridExpand = TRUE, stack = TRUE
+      )
+
+      openxlsx::writeData(
+        wb, sheet_name,
+        x = aq_tibble,
+        startRow = row_aq_header,
+        startCol = col_ind_clean_var_number,
+        colNames = TRUE,
+        headerStyle = style_header,
+        borders = "all"
+      )
+
+      openxlsx::addStyle(
+        wb, sheet_name,
+        style = style_table,
+        rows = seq(row_aq_first, row_aq_last),
+        cols = seq(col_ind_clean_var_number, aq_block_col_last),
+        gridExpand = TRUE, stack = TRUE
+      )
+
+      oxl_outer_box(
+        wb, sheet_name,
+        borderStyle = "medium",
+        row_start = row_aq_title, row_end = row_aq_last,
+        col_start = col_ind_clean_var_number, col_end = aq_block_col_last
+      )
+
+      aq_input_col_num <- col_ind_clean_var_number + 3
+      aq_input_cells <- purrr::map(
+        seq_len(n_aq),
+        ~glue::glue("{num2let(aq_input_col_num)}{row_aq_first + .x - 1}")
+      ) %>% setNames(purrr::map_chr(additional_questions_info, "var"))
+
+      for(i in seq_len(n_aq)){
+        info <- additional_questions_info[[i]]
+        openxlsx::dataValidation(
+          wb, sheet_name,
+          cols = aq_input_col_num,
+          rows = row_aq_first + i - 1,
+          type = "list",
+          value = paste0('"', paste(info$valid_values, collapse = ","), '"')
+        )
+      }
+    }
+
 
     openxlsx::mergeCells(
       wb, sheet_name,
@@ -576,7 +1167,7 @@ seg_typing_tool <- function(
     temp_col_control <- num2let(col_ind_engine_controls_number)
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue(
+      x = glue::glue(
         '=IF(
     {temp_col_result}{row_ind_engine_seg_qc},
     IF({temp_col_control}{row_ind_control_feedback_style} = 1, "Segment " & {temp_col_result}{row_ind_engine_seg}, IF({temp_col_control}{row_ind_control_feedback_style} = 2, TRIM({temp_col_result}{row_ind_engine_seg_name}), "Segment " & {temp_col_result}{row_ind_engine_seg} & " - " & TRIM({temp_col_result}{row_ind_engine_seg_name}))) &
@@ -592,7 +1183,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number),
       rows = row_ind_score,
-      rule = glue('{temp_col_result}{row_ind_engine_seg_qc} = TRUE'),
+      rule = glue::glue('{temp_col_result}{row_ind_engine_seg_qc} = TRUE'),
       style = oxl_style_cell_good(textDecoration = "bold", conditional = TRUE)
     )
 
@@ -600,7 +1191,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number),
       rows = row_ind_score,
-      rule = glue('{temp_col_result}{row_ind_engine_seg_qc} = FALSE'),
+      rule = glue::glue('{temp_col_result}{row_ind_engine_seg_qc} = FALSE'),
       style = oxl_style_cell_neutral(textDecoration = "bold", conditional = TRUE)
     )
 
@@ -608,8 +1199,8 @@ seg_typing_tool <- function(
     openxlsx::conditionalFormatting(
       wb, sheet_name,
       cols = seq(col_ind_label_point_first_number, col_ind_label_point_last_number),
-      rows = seq(row_ind_first, row_ind_last),
-      rule = glue('AND(${num2let(col_ind_engine_controls_number)}${row_ind_engine_seg_qc} = TRUE, COUNTIF(${num2let(col_ind_label_point_first_number)}{row_ind_first}:${num2let(col_ind_label_point_last_number)}{row_ind_first}, "x") > 1)'),
+      rows = seq(row_ind_first, row_polar_last),
+      rule = glue::glue('AND(${num2let(col_ind_engine_controls_number)}${row_ind_engine_seg_qc} = TRUE, COUNTIF(${num2let(col_ind_label_point_first_number)}{row_ind_first}:${num2let(col_ind_label_point_last_number)}{row_ind_first}, "x") > 1)'),
       style = oxl_style_cell_neutral(textDecoration = "bold", conditional = TRUE)
     )
 
@@ -638,10 +1229,10 @@ seg_typing_tool <- function(
 
     for(i in c(row_header, row_ind_engine_header)){
 
-      temp_coef_func <- tibble(
+      temp_coef_func <- tibble::tibble(
         "Question" = c(clean_variable_names, NA)
       ) %>%
-        bind_cols(coef_func)
+        dplyr::bind_cols(coef_func)
 
       temp_coef_func[nrow(temp_coef_func), "Variable"] <- "Constant"
 
@@ -649,7 +1240,7 @@ seg_typing_tool <- function(
       if(i == row_header){
 
         temp_coef_func <- temp_coef_func %>%
-          mutate(
+          dplyr::mutate(
             "Answer" = NA,
             "Recode" = NA,
             "QC Check" = NA
@@ -704,7 +1295,7 @@ seg_typing_tool <- function(
       }else if(i == row_ind_engine_header){
 
         temp_coef_func <- temp_coef_func %>%
-          mutate_if(
+          dplyr::mutate_if(
             is.numeric, list(~NA)
           ) %>%
           add_NA_rows(2)
@@ -812,12 +1403,18 @@ seg_typing_tool <- function(
 
 
     # pull coefficient function Variable and Seg_* from Documentation sheet
-    doc_coef_row_header <- doc_q_row_first + nrow(inputs_table) - 1 + 4
+    np_doc_extra_rows <- 0
+    if(!is.null(non_polar_inputs_info) && length(non_polar_inputs_info) > 0){
+      N_np_ui          <- length(non_polar_inputs_info)
+      total_vals_np_ui <- sum(purrr::map_int(non_polar_inputs_info, ~ as.integer(.x$n_values)))
+      np_doc_extra_rows <- total_vals_np_ui + 2 * N_np_ui + 1
+    }
+    doc_coef_row_header <- doc_q_row_first + nrow(inputs_table) - 1 + np_doc_extra_rows + 4
     doc_coef_data_rows  <- seq(doc_coef_row_header + 1, doc_coef_row_header + nrow(coef_func))
 
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue("'{sheet_name_doc}'!{num2let(start_col + 1)}{doc_coef_data_rows}"),
+      x = glue::glue("'{sheet_name_doc}'!{num2let(start_col + 1)}{doc_coef_data_rows}"),
       startRow = row_header + 1,
       startCol = col_ind_engine_clean_var_number + 1
     )
@@ -825,7 +1422,7 @@ seg_typing_tool <- function(
     for(s in seq_len(length(segments))){
       openxlsx::writeFormula(
         wb, sheet_name,
-        x = glue("'{sheet_name_doc}'!{num2let(start_col + 1 + s)}{doc_coef_data_rows}"),
+        x = glue::glue("'{sheet_name_doc}'!{num2let(start_col + 1 + s)}{doc_coef_data_rows}"),
         startRow = row_header + 1,
         startCol = col_ind_engine_clean_var_number + 1 + s
       )
@@ -834,24 +1431,40 @@ seg_typing_tool <- function(
 
     for(i in seq(row_ind_first, row_ind_last)){
 
+      input_idx <- i - row_ind_first + 1
+      is_polar  <- input_idx <= length(polar_inputs)
+
+      if(is_polar){
+        answer_formula <- glue::glue('MATCH("x", {num2let(col_ind_label_point_first_number)}{i}:{num2let(col_ind_label_point_last_number)}{i}, 0)')
+        recode_formula <- glue::glue('INDEX(${num2let(col_ind_label_point_first_number)}${row_ind_recode}:${num2let(col_ind_label_point_last_number)}${row_ind_recode},,{num2let(col_ind_engine_answer_number)}{i})')
+        qc_formula     <- glue::glue('COUNTIF({num2let(col_ind_label_point_first_number)}{i}:{num2let(col_ind_label_point_last_number)}{i},"x")')
+        recode_array   <- TRUE
+      }else{
+        np <- np_info_with_cells[[input_idx - length(polar_inputs)]]
+        answer_formula <- glue::glue('MATCH("x", {np$answer_range}, 0)')
+        recode_formula <- glue::glue('INDEX({np$code_range}, {num2let(col_ind_engine_answer_number)}{i}, 1)')
+        qc_formula     <- glue::glue('COUNTIF({np$answer_range},"x")')
+        recode_array   <- FALSE
+      }
+
       openxlsx::writeFormula(
         wb, sheet_name,
-        x = glue('MATCH("x", {num2let(col_ind_label_point_first_number)}{i}:{num2let(col_ind_label_point_last_number)}{i}, 0)'),
+        x = answer_formula,
         startRow = i,
         startCol = col_ind_engine_answer_number,
       )
 
       openxlsx::writeFormula(
         wb, sheet_name,
-        x = glue('INDEX(${num2let(col_ind_label_point_first_number)}${row_ind_recode}:${num2let(col_ind_label_point_last_number)}${row_ind_recode},,{num2let(col_ind_engine_answer_number)}{i})'),
+        x = recode_formula,
         startRow = i,
         startCol = col_ind_engine_recode_number,
-        array = T
+        array = recode_array
       )
 
       openxlsx::writeFormula(
         wb, sheet_name,
-        x = glue('COUNTIF({num2let(col_ind_label_point_first_number)}{i}:{num2let(col_ind_label_point_last_number)}{i},"x")'),
+        x = qc_formula,
         startRow = i,
         startCol = col_ind_engine_qc_number
       )
@@ -891,7 +1504,7 @@ seg_typing_tool <- function(
       for(x in seq(col_ind_engine_survey_var_number + 1, col_ind_engine_answer_number - 1)){
         openxlsx::writeFormula(
           wb, sheet_name,
-          x = glue('{num2let(x)}{i - row_eng_coef_diff} * ${num2let(col_ind_engine_recode_number)}{i - row_eng_coef_diff}'),
+          x = glue::glue('{num2let(x)}{i - row_eng_coef_diff} * ${num2let(col_ind_engine_recode_number)}{i - row_eng_coef_diff}'),
           startRow = i,
           startCol = x,
         )
@@ -907,14 +1520,14 @@ seg_typing_tool <- function(
 
           openxlsx::writeFormula(
             wb, sheet_name,
-            x = glue('EXP(SUM({num2let(x)}${row_ind_engine_first}:{num2let(x)}${row_ind_engine_last}))'),
+            x = glue::glue('EXP(SUM({num2let(x)}${row_ind_engine_first}:{num2let(x)}${row_ind_engine_last}))'),
             startRow = i + 1,
             startCol = x,
           )
 
           openxlsx::writeFormula(
             wb, sheet_name,
-            x = glue('{num2let(x)}{i+1} / SUM(${num2let(col_ind_engine_survey_var_number + 1)}${i+1}:${num2let(col_ind_engine_answer_number - 1)}${i+1})'),
+            x = glue::glue('{num2let(x)}{i+1} / SUM(${num2let(col_ind_engine_survey_var_number + 1)}${i+1}:${num2let(col_ind_engine_answer_number - 1)}${i+1})'),
             startRow = row_ind_engine_prob,
             startCol = x,
           )
@@ -1041,9 +1654,32 @@ seg_typing_tool <- function(
     }
 
 
+    match_core <- glue::glue('MATCH(MAX({range_ind_prob}), {range_ind_prob}, 0)')
+
+    if(!is.null(additional_questions_info) && length(aq_input_cells) > 0){
+      rules_flat <- purrr::imap_dfr(additional_questions_info, function(info, var_name){
+        info$rules %>% dplyr::mutate(
+          var_name = var_name,
+          cell = aq_input_cells[[var_name]]
+        )
+      })
+
+      ifs_args <- purrr::map_chr(
+        seq_len(nrow(rules_flat)),
+        function(i){
+          r <- rules_flat[i, ]
+          glue::glue("AND({match_core} = {r$from_seg}, {r$cell} = {r$value}), {r$to_seg}")
+        }
+      ) %>% paste(collapse = ", ")
+
+      seg_formula <- glue::glue("IFS({ifs_args}, TRUE, {match_core})")
+    }else{
+      seg_formula <- match_core
+    }
+
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue('MATCH(MAX({range_ind_prob}), {range_ind_prob}, 0)'),
+      x = seg_formula,
       startRow = row_ind_engine_seg,
       startCol = col_ind_engine_survey_var_number,
     )
@@ -1052,11 +1688,11 @@ seg_typing_tool <- function(
     doc_col_seg_name_value <- start_col + doc_label_cell_merge + 5
     doc_row_seg_name_first <- row_title + 7
     doc_row_seg_name_last  <- row_title + 6 + length(segments)
-    range_seg_name <- glue("'{sheet_name_doc}'!${num2let(doc_col_seg_name_value)}${doc_row_seg_name_first}:${num2let(doc_col_seg_name_value)}${doc_row_seg_name_last}")
+    range_seg_name <- glue::glue("'{sheet_name_doc}'!${num2let(doc_col_seg_name_value)}${doc_row_seg_name_first}:${num2let(doc_col_seg_name_value)}${doc_row_seg_name_last}")
 
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue("INDEX({range_seg_name}, {num2let(col_ind_engine_survey_var_number)}{row_ind_engine_seg}, 1)"),
+      x = glue::glue("INDEX({range_seg_name}, {num2let(col_ind_engine_survey_var_number)}{row_ind_engine_seg}, 1)"),
       startRow = row_ind_engine_seg_name,
       startCol = col_ind_engine_survey_var_number,
     )
@@ -1064,7 +1700,7 @@ seg_typing_tool <- function(
 
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue('MAX({range_ind_prob})'),
+      x = glue::glue('MAX({range_ind_prob})'),
       startRow = row_ind_engine_seg_prob,
       startCol = col_ind_engine_survey_var_number,
     )
@@ -1072,7 +1708,7 @@ seg_typing_tool <- function(
 
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue('=COUNTIF({num2let(col_ind_engine_qc_number)}{row_ind_first}:{num2let(col_ind_engine_qc_number)}{row_ind_last},1) = {length(clean_variable_names)}'),
+      x = glue::glue('=COUNTIF({num2let(col_ind_engine_qc_number)}{row_ind_first}:{num2let(col_ind_engine_qc_number)}{row_ind_last},1) = {length(clean_variable_names)}'),
       startRow = row_ind_engine_seg_qc,
       startCol = col_ind_engine_survey_var_number,
     )
@@ -1185,9 +1821,17 @@ seg_typing_tool <- function(
 
     row_doc_header_top       <- row_doc_questions_header + doc_row_gap
     row_doc_first            <- row_doc_header_top + 1
-    row_doc_last             <- row_doc_first + nrow(inputs_table) - 1
+    row_doc_last             <- if(!is.null(inputs_table)) row_doc_first + nrow(inputs_table) - 1 else row_doc_header_top
 
-    row_doc_function_header  <- row_doc_last + 4
+    np_doc_total_rows <- 0
+    if(!is.null(non_polar_inputs_info) && length(non_polar_inputs_info) > 0){
+      N_np          <- length(non_polar_inputs_info)
+      total_vals_np <- sum(purrr::map_int(non_polar_inputs_info, ~ as.integer(.x$n_values)))
+      # 2-row lead gap + (1 header + n_values) per block + 1-row inter-block gap
+      np_doc_total_rows <- total_vals_np + 2 * N_np + 1
+    }
+
+    row_doc_function_header  <- row_doc_last + np_doc_total_rows + 4
     row_doc_function_last    <- row_doc_function_header + nrow(coef_func) + 1
 
     row_doc_steps            <- row_doc_function_last + 2
@@ -1228,7 +1872,7 @@ seg_typing_tool <- function(
 
     openxlsx::writeData(
       wb, sheet_name,
-      x = glue("These instructions create the {xfun::numbers_to_words(length(segments))} segment solution from {xfun::numbers_to_words(length(clean_variable_names))} items"),
+      x = glue::glue("These instructions create the {xfun::numbers_to_words(length(segments))} segment solution from {xfun::numbers_to_words(length(clean_variable_names))} items"),
       startRow = row_doc_intro,
       startCol = col_clean_var,
       colNames = FALSE
@@ -1247,8 +1891,8 @@ seg_typing_tool <- function(
       )
     }
 
-    qualification_instructions_table <- tibble(
-      "Qualifications" = glue("{seq(qualification_instructions)}. {qualification_instructions}"),
+    qualification_instructions_table <- tibble::tibble(
+      "Qualifications" = glue::glue("{seq(qualification_instructions)}. {qualification_instructions}"),
       " " = NA
     ) %>% setNames(., names(.) %>% trimws())
 
@@ -1288,8 +1932,8 @@ seg_typing_tool <- function(
     # segment names table
     #######################
 
-    temp_seg_names <- tibble(
-      "Segment Names" = glue("Segment {segments}"),
+    temp_seg_names <- tibble::tibble(
+      "Segment Names" = glue::glue("Segment {segments}"),
       " " = segment_names
     ) %>% setNames(., names(.) %>% trimws())
 
@@ -1384,9 +2028,16 @@ seg_typing_tool <- function(
       }
     }
 
-    temp_doc_ui <- ind_ui %>%
-      bind_rows(create_NA_rows(., doc_row_gap), .) %>%
-      mutate(" " = NA) %>%
+    # drop the polar spacer column (col 4) before building the doc copy —
+    # the spacer only exists in mixed solutions to align Individual UI with
+    # the non-polar Code column. Polar-only solutions have no spacer.
+    temp_doc_ui <- ind_ui
+    if(!is.null(non_polar_inputs_info)){
+      temp_doc_ui <- temp_doc_ui %>% dplyr::select(-4)
+    }
+    temp_doc_ui <- temp_doc_ui %>%
+      dplyr::bind_rows(create_NA_rows(., doc_row_gap), .) %>%
+      dplyr::mutate(" " = NA) %>%
       setNames(., names(.) %>% trimws())
 
     temp_doc_ui <- temp_doc_ui[
@@ -1410,10 +2061,10 @@ seg_typing_tool <- function(
 
     openxlsx::writeData(
       wb, sheet_name,
-      x = map(
+      x = purrr::map(
         seq(nrow(inputs_table)),
         ~ seq(length(polar_points)) %>% matrix(nrow = 1) %>% data.frame()
-      ) %>% bind_rows(),
+      ) %>% dplyr::bind_rows(),
       startRow = row_doc_header_top - doc_row_gap + 3,
       startCol = col_clean_var + doc_label_cell_merge + 3,
       colNames = FALSE
@@ -1514,16 +2165,97 @@ seg_typing_tool <- function(
 
 
     #######################
+    # non-polar question blocks (doc layout)
+    #######################
+
+    if(!is.null(non_polar_inputs_info)){
+
+      col_doc_np_q        <- col_clean_var
+      col_doc_np_var      <- col_survey_var
+      col_doc_np_text     <- col_label_left
+      col_doc_np_text_end <- col_label_left + doc_label_cell_merge
+      col_doc_np_response <- col_doc_np_text_end + 1
+      col_doc_np_answer   <- col_doc_np_response + 1
+
+      row_np_doc_cursor <- row_doc_last + 3
+
+      for(idx in seq_along(non_polar_inputs_info)){
+        info        <- non_polar_inputs_info[[idx]]
+        n_vals      <- info$n_values
+        row_np_d_h  <- row_np_doc_cursor
+        row_np_d_f  <- row_np_d_h + 1
+        row_np_d_l  <- row_np_d_h + n_vals
+
+        # header row
+        openxlsx::writeData(wb, sheet_name, x = "Question",        startRow = row_np_d_h, startCol = col_doc_np_q,        colNames = FALSE)
+        openxlsx::writeData(wb, sheet_name, x = "Survey\nVariable", startRow = row_np_d_h, startCol = col_doc_np_var,      colNames = FALSE)
+        openxlsx::writeData(wb, sheet_name, x = "Response",         startRow = row_np_d_h, startCol = col_doc_np_response, colNames = FALSE)
+        openxlsx::writeData(wb, sheet_name, x = "Answer",           startRow = row_np_d_h, startCol = col_doc_np_answer,   colNames = FALSE)
+
+        openxlsx::mergeCells(wb, sheet_name, rows = row_np_d_h,
+          cols = seq(col_doc_np_text, col_doc_np_text_end))
+
+        openxlsx::addStyle(wb, sheet_name, style = style_header,
+          rows = row_np_d_h,
+          cols = seq(col_doc_np_q, col_doc_np_answer),
+          gridExpand = TRUE, stack = TRUE
+        )
+
+        # info on first data row
+        openxlsx::writeData(wb, sheet_name, x = info$q_label, startRow = row_np_d_f, startCol = col_doc_np_q,    colNames = FALSE)
+        openxlsx::writeData(wb, sheet_name, x = info$var,     startRow = row_np_d_f, startCol = col_doc_np_var,  colNames = FALSE)
+        openxlsx::writeData(wb, sheet_name, x = info$text,    startRow = row_np_d_f, startCol = col_doc_np_text, colNames = FALSE)
+
+        # merge Q + var vertically across all data rows
+        if(n_vals > 1){
+          openxlsx::mergeCells(wb, sheet_name, rows = seq(row_np_d_f, row_np_d_l), cols = col_doc_np_q)
+          openxlsx::mergeCells(wb, sheet_name, rows = seq(row_np_d_f, row_np_d_l), cols = col_doc_np_var)
+        }
+        # merge question text as one wide rectangle (rows x cols)
+        openxlsx::mergeCells(wb, sheet_name,
+          rows = seq(row_np_d_f, row_np_d_l),
+          cols = seq(col_doc_np_text, col_doc_np_text_end))
+
+        # response label + answer numeric per value
+        for(v in seq_len(n_vals)){
+          r <- row_np_d_f + v - 1
+          openxlsx::writeData(wb, sheet_name, x = info$value_table$label[v], startRow = r, startCol = col_doc_np_response, colNames = FALSE)
+          openxlsx::writeData(wb, sheet_name, x = info$value_table$code[v],  startRow = r, startCol = col_doc_np_answer,   colNames = FALSE)
+        }
+
+        # styles + borders
+        openxlsx::addStyle(wb, sheet_name, style = style_table,
+          rows = seq(row_np_d_f, row_np_d_l),
+          cols = seq(col_doc_np_q, col_doc_np_answer),
+          gridExpand = TRUE, stack = TRUE
+        )
+
+        oxl_outer_box(wb, sheet_name, borderStyle = "medium",
+          row_start = row_np_d_h, row_end = row_np_d_l,
+          col_start = col_doc_np_q, col_end = col_doc_np_answer
+        )
+
+        oxl_outer_box(wb, sheet_name, borderStyle = "medium",
+          row_start = row_np_d_f, row_end = row_np_d_l,
+          col_start = col_doc_np_q, col_end = col_doc_np_answer
+        )
+
+        row_np_doc_cursor <- row_np_d_l + 2
+      }
+    }
+
+
+    #######################
     # Solution Coefficient Function (doc copy)
     #######################
 
     col_func_clean_var <- col_clean_var
     col_func_answer    <- col_func_clean_var + 2 + length(segments)
 
-    temp_coef_func <- tibble(
+    temp_coef_func <- tibble::tibble(
       "Question" = c(clean_variable_names, NA)
     ) %>%
-      bind_cols(coef_func)
+      dplyr::bind_cols(coef_func)
 
     temp_coef_func[nrow(temp_coef_func), "Variable"] <- "Constant"
     temp_coef_func[nrow(temp_coef_func), "Question"] <- "Constant"
@@ -1592,21 +2324,21 @@ seg_typing_tool <- function(
     # ranges returned for bulk
     #######################
 
-    range_coef <- map(
+    range_coef <- purrr::map(
       segments - 1,
       function(xc){
-        glue('{num2let(col_func_clean_var + 2 + xc)}${row_doc_function_header + 1}:{num2let(col_func_clean_var + 2 + xc)}${row_doc_function_header + 1 + nrow(coef_func) - 2}')
+        glue::glue('{num2let(col_func_clean_var + 2 + xc)}${row_doc_function_header + 1}:{num2let(col_func_clean_var + 2 + xc)}${row_doc_function_header + 1 + nrow(coef_func) - 2}')
       }
     )
 
-    range_constant <- map(
+    range_constant <- purrr::map(
       segments - 1,
       function(xc){
-        glue('{num2let(col_func_clean_var + 2 + xc)}${row_doc_function_header + 1 + nrow(coef_func) - 1}')
+        glue::glue('{num2let(col_func_clean_var + 2 + xc)}${row_doc_function_header + 1 + nrow(coef_func) - 1}')
       }
     )
 
-    range_seg_name <- glue("${num2let(col_seg_name_value)}${row_doc_seg_name_first}:${num2let(col_seg_name_value)}${row_doc_seg_name_last}")
+    range_seg_name <- glue::glue("${num2let(col_seg_name_value)}${row_doc_seg_name_first}:${num2let(col_seg_name_value)}${row_doc_seg_name_last}")
 
 
     #######################
@@ -1635,65 +2367,106 @@ seg_typing_tool <- function(
     mult_adj   <- if(has_recoding) "recoded " else ""
     resp_adj   <- if(has_recoding) "rescaled item " else "item "
 
+    has_non_polar <- length(non_polar_inputs) > 0
+    polar_count   <- length(polar_inputs)
+
+    polar_clean_first  <- if(polar_count > 0) clean_variable_names[1] else NA_character_
+    polar_clean_last   <- if(polar_count > 0) clean_variable_names[polar_count] else NA_character_
+    np_clean_first     <- if(has_non_polar) clean_variable_names[polar_count + 1] else NA_character_
+    np_clean_last      <- if(has_non_polar) clean_variable_names[length(clean_variable_names)] else NA_character_
+
+    questionnaire_extra <- if(has_non_polar) c(
+      NA,
+      glue::glue("          The solution questions include polar pairs ({polar_clean_first} through {polar_clean_last}) and additional single-answer questions ({np_clean_first} through {np_clean_last}).")
+    ) else character(0)
+
     recode_step_content <- if(has_recoding) c(
-      glue("Step {s_recode} - Recoding"),
-      glue("          Rescale the solution questions ({head(clean_variable_names, 1)} through {tail(clean_variable_names, 1)}) using the following rules:"),
+      glue::glue("Step {s_recode} - Recoding"),
+      glue::glue(
+        "          Rescale the polar solution questions",
+        if(has_non_polar) glue::glue(" ({polar_clean_first} through {polar_clean_last})") else glue::glue(" ({head(clean_variable_names, 1)} through {tail(clean_variable_names, 1)})"),
+        " using the following rules:"
+      ),
       NA,
       recode_rules,
+      NA,
+      if(has_non_polar) "          Non-polar question answers are NOT recoded — use the raw answer code for each non-polar question." else NA,
       NA, NA
     ) else character(0)
 
-    calulation_steps <- tibble(
+    # Build per-segment score formula example pieces (split by polar vs non-polar)
+    score_formula <- function(seg_col){
+      polar_piece <- if(polar_count > 0){
+        glue::glue("( {var_prefix}{polar_clean_first} * {coef_func[1, seg_col]} ) + ... + ( {var_prefix}{polar_clean_last} * {coef_func[polar_count, seg_col]} )")
+      }else{
+        ""
+      }
+      np_piece <- if(has_non_polar){
+        plus_prefix <- if(polar_count > 0) " + " else ""
+        glue::glue("{plus_prefix}( {np_clean_first} * {coef_func[polar_count + 1, seg_col]} ) + ... + ( {np_clean_last} * {coef_func[nrow(coef_func) - 1, seg_col]} )")
+      }else{
+        ""
+      }
+      glue::glue("{polar_piece}{np_piece} + ( {coef_func[nrow(coef_func), seg_col]} )")
+    }
+
+    last_seg_col_name <- names(coef_func)[ncol(coef_func)]
+
+    calulation_steps <- tibble::tibble(
       "Solution Calculation Step-by-step Instructions" = c(
         NA,
         "Segment membership is calculated by doing the following steps:",
         NA,
-        glue("Step {s_questionnaire} - Questionnaire"),
+        glue::glue("Step {s_questionnaire} - Questionnaire"),
         "          Ask respondents the Solution Questions, recording their answer for each item.  Respondents must respond to each and all items for their score to be valid.",
         NA,
         "          We do not recommend randomizing item order or label sides.",
         NA,
         "          The Typing Tool was designed to be asked among respondents who meet the stated qualifications.",
+        questionnaire_extra,
         NA, NA,
         recode_step_content,
-        glue("Step {s_multiply} - Multiply {mult_adj}responses with coefficient function"),
-        glue("          For each participant, multiply the {resp_adj}responses with the coefficients for each segment. Sum the products for each segment and add the constant.  This will create a score for each segment."),
+        glue::glue("Step {s_multiply} - Multiply {mult_adj}responses with coefficient function"),
+        glue::glue(
+          "          For each participant, multiply the {resp_adj}responses with the coefficients for each segment. Sum the products for each segment and add the constant.  This will create a score for each segment.",
+          if(has_non_polar) " For polar questions, multiply the recoded value (rs prefix); for non-polar questions, multiply the raw answer code." else ""
+        ),
         NA,
-        glue('                    Segment 1 Score = ( {var_prefix}{head(clean_variable_names, 1)} * {coef_func[1, "Seg_1"]} ) + ... + ( {var_prefix}{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, "Seg_1"]} ) + ( {coef_func[nrow(coef_func), "Seg_1"]} )'),
+        glue::glue('                    Segment 1 Score = {score_formula("Seg_1")}'),
         NA,
         "                              ...     (Repeat this process for each segment)",
         NA,
-        glue('                    Segment {max(segments)} Score = ( {var_prefix}{head(clean_variable_names, 1)} * {coef_func[1, ncol(coef_func)]} ) + ... + ( {var_prefix}{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, ncol(coef_func)]} ) + ( {coef_func[nrow(coef_func), ncol(coef_func)]} )'),
+        glue::glue('                    Segment {max(segments)} Score = {score_formula(last_seg_col_name)}'),
         NA,
         "          The segment with the highest score is the one the respondent is most likely to be a member of.",
         NA, NA,
-        glue("Step {s_probability} - Calculate the probability (optional)"),
+        glue::glue("Step {s_probability} - Calculate the probability (optional)"),
         NA,
         "          1. Compute the exponential value for each segment score",
         NA,
         "                    Segment 1 Exponential Score = EXP( Segment 1 Score )",
         "                              OR",
-        glue('                    Segment 1 Exponential Score = EXP( ( {var_prefix}{head(clean_variable_names, 1)} * {coef_func[1, "Seg_1"]} ) + ... + ( {var_prefix}{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, "Seg_1"]} ) + ( {coef_func[nrow(coef_func), "Seg_1"]} ) )'),
+        glue::glue('                    Segment 1 Exponential Score = EXP( {score_formula("Seg_1")} )'),
         NA,
         "                              ...     (Repeat this process for each segment)",
         NA,
-        glue("                    Segment {max(segments)} Exponential Score = EXP( Segment {max(segments)} Score )"),
+        glue::glue("                    Segment {max(segments)} Exponential Score = EXP( Segment {max(segments)} Score )"),
         "                              OR",
-        glue('                    Segment {max(segments)} Exponential Score = EXP( ( {var_prefix}{head(clean_variable_names, 1)} * {coef_func[1, ncol(coef_func)]} ) + ... + ( {var_prefix}{tail(clean_variable_names, 1)} * {coef_func[nrow(coef_func)-1, ncol(coef_func)]} ) + ( {coef_func[nrow(coef_func), ncol(coef_func)]} ) )'),
+        glue::glue('                    Segment {max(segments)} Exponential Score = EXP( {score_formula(last_seg_col_name)} )'),
         NA, NA,
         "          2. Divide each segment's exponential value with the sum of all exponential values",
         NA,
-        glue("                    Segment 1 Probability = Segment 1 Exponential Score / ( Segment 1 Exponential Score + ... + Segment {max(segments)} Exponential Score )"),
+        glue::glue("                    Segment 1 Probability = Segment 1 Exponential Score / ( Segment 1 Exponential Score + ... + Segment {max(segments)} Exponential Score )"),
         "                              OR",
-        glue("                    Segment 1 Probability = EXP( Segment 1 Score ) / ( EXP( Segment 1 Score ) + ... + EXP( Segment {max(segments)} Score ))"),
+        glue::glue("                    Segment 1 Probability = EXP( Segment 1 Score ) / ( EXP( Segment 1 Score ) + ... + EXP( Segment {max(segments)} Score ))"),
         NA,
         "                              ...     (Repeat this process for each segment)",
         NA,
-        glue("                    Segment {max(segments)} Probability = Segment {max(segments)} Exponential Score / ( Segment 1 Exponential Score + ... + Segment {max(segments)} Exponential Score )"),
+        glue::glue("                    Segment {max(segments)} Probability = Segment {max(segments)} Exponential Score / ( Segment 1 Exponential Score + ... + Segment {max(segments)} Exponential Score )"),
         "                              OR",
-        glue("                    Segment {max(segments)} Probability = EXP( Segment {max(segments)} Score ) / ( EXP( Segment 1 Score ) + ... + EXP( Segment {max(segments)} Score ))"),
+        glue::glue("                    Segment {max(segments)} Probability = EXP( Segment {max(segments)} Score ) / ( EXP( Segment 1 Score ) + ... + EXP( Segment {max(segments)} Score ))"),
         NA, NA,
-        glue("Step {s_qc} - QC Check"),
+        glue::glue("Step {s_qc} - QC Check"),
         NA,
         "          Perform your calculations on a respondent. Then check your results using the Individual UI sheet (starting cell B2).",
         NA,
@@ -1922,7 +2695,7 @@ seg_typing_tool <- function(
       ncol = length(clean_variable_names)
     ) %>%
       data.frame() %>%
-      set_names(clean_variable_names)
+      rlang::set_names(clean_variable_names)
 
 
     openxlsx::writeData(
@@ -1959,11 +2732,49 @@ seg_typing_tool <- function(
     # Calculation Ready
     #######################
 
-    temp_qc <- tibble(
-      "Calculation Ready" = glue(
-        'IF(COUNTA(${num2let(col_input_first)}{seq(row_data_first, row_last)}:${num2let(col_input_last)}{seq(row_data_first, row_last)}) = 0, "", COUNTIFS(${num2let(col_input_first)}{seq(row_data_first, row_last)}:${num2let(col_input_last)}{seq(row_data_first, row_last)},">={min(polar_points)}", ${num2let(col_input_first)}{seq(row_data_first, row_last)}:${num2let(col_input_last)}{seq(row_data_first, row_last)},"<={max(polar_points)}") = {length(inputs)})'
+    polar_count_b <- length(polar_inputs)
+    polar_input_first_let <- num2let(col_input_first)
+    polar_input_last_let  <- if(polar_count_b > 0) num2let(col_input_first + polar_count_b - 1) else NA_character_
+    all_input_first_let   <- num2let(col_input_first)
+    all_input_last_let    <- num2let(col_input_last)
+
+    has_non_polar_b <- length(non_polar_inputs) > 0
+
+    calc_ready_formulas <- purrr::map_chr(seq(row_data_first, row_last), function(r){
+      parts <- character(0)
+
+      if(polar_count_b > 0){
+        parts <- c(parts, glue::glue(
+          'COUNTIFS(${polar_input_first_let}{r}:${polar_input_last_let}{r},">={min(polar_points)}", ',
+          '${polar_input_first_let}{r}:${polar_input_last_let}{r},"<={max(polar_points)}") = {polar_count_b}'
+        ))
+      }
+
+      if(has_non_polar_b){
+        for(i in seq_along(non_polar_inputs_info)){
+          np_info_b <- non_polar_inputs_info[[i]]
+          np_col_let <- num2let(col_input_first + polar_count_b + i - 1)
+          np_vals    <- as.numeric(np_info_b$value_table$code)
+          np_min     <- min(np_vals, na.rm = TRUE)
+          np_max     <- max(np_vals, na.rm = TRUE)
+          parts <- c(parts, glue::glue('AND(${np_col_let}{r}>={np_min}, ${np_col_let}{r}<={np_max})'))
+        }
+      }
+
+      check_combined <- if(length(parts) > 1){
+        glue::glue('AND({paste(parts, collapse = ", ")})')
+      }else if(length(parts) == 1){
+        parts
+      }else{
+        "TRUE"
+      }
+
+      glue::glue(
+        'IF(COUNTA(${all_input_first_let}{r}:${all_input_last_let}{r}) = 0, "", {check_combined})'
       )
-    )
+    })
+
+    temp_qc <- tibble::tibble("Calculation Ready" = calc_ready_formulas)
     class(temp_qc[[1]]) <- "formula"
 
 
@@ -2029,7 +2840,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       cols = col_calculation_qc,
       rows = seq(row_data_first, row_last),
-      rule = glue('${num2let(col_calculation_qc)}{row_data_first} = TRUE'),
+      rule = glue::glue('${num2let(col_calculation_qc)}{row_data_first} = TRUE'),
       style = oxl_style_cell_good(textDecoration = "bold", conditional = TRUE)
     )
 
@@ -2038,7 +2849,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       cols = col_calculation_qc,
       rows = seq(row_data_first, row_last),
-      rule = glue('${num2let(col_calculation_qc)}{row_data_first} = FALSE'),
+      rule = glue::glue('${num2let(col_calculation_qc)}{row_data_first} = FALSE'),
       style = oxl_style_cell_bad(textDecoration = "bold", conditional = TRUE)
     )
 
@@ -2050,16 +2861,22 @@ seg_typing_tool <- function(
 
     if(inputs_are_rs){
 
-      temp <- map(
+      temp <- purrr::map(
         seq(col_input_first, col_input_last),
         function(xc){
-          glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, IF(ISBLANK({num2let(xc)}{seq(row_data_first, row_last)}), "", INDEX({range_recode},1,{num2let(xc)}{seq(row_data_first, row_last)})), "")')
+          col_idx <- xc - col_input_first + 1
+          is_polar_col <- col_idx <= polar_count_b
+          if(is_polar_col){
+            glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, IF(ISBLANK({num2let(xc)}{seq(row_data_first, row_last)}), "", INDEX({range_recode},1,{num2let(xc)}{seq(row_data_first, row_last)})), "")')
+          }else{
+            glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, IF(ISBLANK({num2let(xc)}{seq(row_data_first, row_last)}), "", {num2let(xc)}{seq(row_data_first, row_last)}), "")')
+          }
         }
       ) %>%
-        bind_cols() %>%
+        dplyr::bind_cols() %>%
         suppressMessages() %>%
         setNames(
-          glue("recode_{clean_variable_names}")
+          glue::glue("recode_{clean_variable_names}")
         )
 
       for(i in names(temp)){
@@ -2140,15 +2957,15 @@ seg_typing_tool <- function(
     # calculate scores
     #######################
 
-    temp <- map2(
+    temp <- purrr::map2(
       range_coef,
       range_constant,
-      ~glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, EXP(MMULT(${num2let(col_recode_first)}{seq(row_data_first, row_last)}:${num2let(col_recode_last)}{seq(row_data_first, row_last)}, {.x}) + {.y}), "")')
+      ~glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, EXP(MMULT(${num2let(col_recode_first)}{seq(row_data_first, row_last)}:${num2let(col_recode_last)}{seq(row_data_first, row_last)}, {.x}) + {.y}), "")')
     ) %>%
-      bind_cols() %>%
+      dplyr::bind_cols() %>%
       suppressMessages() %>%
       setNames(
-        glue("exp_score_seg_{segments}")
+        glue::glue("exp_score_seg_{segments}")
       )
 
 
@@ -2229,14 +3046,14 @@ seg_typing_tool <- function(
     # calculate prob
     #######################
 
-    temp <- map(
+    temp <- purrr::map(
       seq(col_score_first, col_score_last) %>% num2let(),
-      ~glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, {.x}{seq(row_data_first, row_last)} / SUM(${num2let(col_score_first)}{seq(row_data_first, row_last)}:${num2let(col_score_last)}{seq(row_data_first, row_last)}), "")')
+      ~glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, {.x}{seq(row_data_first, row_last)} / SUM(${num2let(col_score_first)}{seq(row_data_first, row_last)}:${num2let(col_score_last)}{seq(row_data_first, row_last)}), "")')
     ) %>%
-      bind_cols() %>%
+      dplyr::bind_cols() %>%
       suppressMessages() %>%
       setNames(
-        glue("prob_seg_{segments}")
+        glue::glue("prob_seg_{segments}")
       )
 
 
@@ -2326,8 +3143,8 @@ seg_typing_tool <- function(
     #######################
 
     temp <- data.frame(
-      "Classification" = glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, MATCH(MAX({num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}), {num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}, 0), "")'),
-      "Name" = glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, INDEX({range_seg_name}, ${num2let(col_seg)}{seq(row_data_first, row_last)}, 1), "")')
+      "Classification" = glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, MATCH(MAX({num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}), {num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}, 0), "")'),
+      "Name" = glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, INDEX({range_seg_name}, ${num2let(col_seg)}{seq(row_data_first, row_last)}, 1), "")')
     )
     class(temp[["Classification"]]) <- "formula"
     class(temp[["Name"]]) <- "formula"
@@ -2415,18 +3232,18 @@ seg_typing_tool <- function(
     )
 
 
-    data_solution_check_formulas <- map2(
+    data_solution_check_formulas <- purrr::map2(
       seq(col_bulk_qc_first, col_bulk_qc_last - 1),
       seq(col_prob_first, col_prob_last),
-      ~glue('ROUND({num2let(.x)}{seq(row_header + 1, row_header + nrow(data_solution_check))}, 4) = ROUND({num2let(.y)}{seq(row_header + 1, row_header + nrow(data_solution_check))}, 4)')
+      ~glue::glue('ROUND({num2let(.x)}{seq(row_header + 1, row_header + nrow(data_solution_check))}, 4) = ROUND({num2let(.y)}{seq(row_header + 1, row_header + nrow(data_solution_check))}, 4)')
     ) %>%
-      bind_cols() %>%
+      dplyr::bind_cols() %>%
       suppressMessages() %>%
       setNames(
-        glue('Prob Check {names(data_solution_check)[-ncol(data_solution_check)]}')
+        glue::glue('Prob Check {names(data_solution_check)[-ncol(data_solution_check)]}')
       ) %>%
-      mutate(
-        "Class Check" = glue('{num2let(col_bulk_qc_last)}{seq(row_header + 1, row_header + nrow(data_solution_check))} = {num2let(col_seg)}{seq(row_header + 1, row_header + nrow(data_solution_check))}')
+      dplyr::mutate(
+        "Class Check" = glue::glue('{num2let(col_bulk_qc_last)}{seq(row_header + 1, row_header + nrow(data_solution_check))} = {num2let(col_seg)}{seq(row_header + 1, row_header + nrow(data_solution_check))}')
       )
 
     for(i in names(data_solution_check_formulas)){
@@ -2524,7 +3341,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       cols = seq(col_bulk_qc_formula_first, col_bulk_qc_formula_last),
       rows = seq(row_header + 1, row_header + nrow(data_solution_check)),
-      rule = glue('{num2let(col_bulk_qc_formula_first)}{row_header + 1} = TRUE'),
+      rule = glue::glue('{num2let(col_bulk_qc_formula_first)}{row_header + 1} = TRUE'),
       style = oxl_style_cell_good(textDecoration = "bold", conditional = TRUE)
     )
 
@@ -2533,7 +3350,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       cols = seq(col_bulk_qc_formula_first, col_bulk_qc_formula_last),
       rows = seq(row_header + 1, row_header + nrow(data_solution_check)),
-      rule = glue('{num2let(col_bulk_qc_formula_first)}{row_header + 1} = FALSE'),
+      rule = glue::glue('{num2let(col_bulk_qc_formula_first)}{row_header + 1} = FALSE'),
       style = oxl_style_cell_bad(textDecoration = "bold", conditional = TRUE)
     )
 
@@ -2623,7 +3440,7 @@ seg_typing_tool <- function(
     where <- getwd()
   }
 
-  file_name <- glue("{where}/{file_name}.xlsx")
+  file_name <- glue::glue("{where}/{file_name}.xlsx")
 
   openxlsx::saveWorkbook(wb, file_name, overwrite = TRUE)
 
