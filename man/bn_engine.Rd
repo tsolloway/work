@@ -26,6 +26,7 @@ bn_engine(
   n_groups = NULL,
   node_size = 1,
   reachability_max_iter = 10,
+  force_white_list_direction = TRUE,
   complexity_boot_n = 100,
   complexity_boot_strength_min = 0.01,
   suppress_bn_warning = FALSE,
@@ -82,6 +83,13 @@ when \code{all_ivs_connect_to_dv = FALSE}.}
 \item{node_size}{Numeric. Node size scaling for viz.}
 
 \item{reachability_max_iter}{Integer. Max passes to enforce path reachability to \code{dv}.}
+
+\item{force_white_list_direction}{Logical (default \code{TRUE}). If \code{TRUE},
+user-supplied \code{white_list} arc directions are preserved across the entire
+pipeline: forced back over \code{tree.bayes()}'s tree-rooted orientation,
+skipped during the intermediary re-orient pass, and excluded from reversal
+during reachability enforcement. A warning is emitted if any node remains
+unreachable as a result.}
 
 \item{complexity_boot_n}{Integer (default = 100). Number of bootstrap replicates
 used when expanding network complexity via \code{bn_increase_complexity()}.

@@ -6,7 +6,7 @@
 \usage{
 bn_report(
   results,
-  types = c("none", "gravity", "charge"),
+  types = c("none", "gravity", "charge", "hierarchy"),
   do_community = c(TRUE, FALSE),
   title = "Network Analysis",
   subtitle = "Project Name (123456789)",

@@ -4,7 +4,19 @@
 \alias{bn_ensure_reachability}
 \title{bn_ensure_reachability}
 \usage{
-bn_ensure_reachability(bn, dv, max_iter = 10)
+bn_ensure_reachability(bn, dv, max_iter = 10, protected_arcs = NULL)
+}
+\arguments{
+\item{bn}{A \code{bnlearn} bn object.}
+
+\item{dv}{Character. Dependent variable name.}
+
+\item{max_iter}{Integer. Max passes of reversal to attempt.}
+
+\item{protected_arcs}{Optional data frame with \code{from}/\code{to} columns. Arcs in
+this set are never reversed during reachability enforcement. When supplied,
+if any nodes remain unreachable after reversal, a warning is emitted listing
+them so the caller can edit the whitelist.}
 }
 \description{
 Function to ensure all nodes reach DV via directed paths

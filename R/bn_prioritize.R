@@ -106,10 +106,14 @@ bn_prioritize <- function(
   # Flatten ivs if passed as a list (e.g., community groups)
   if (is.list(ivs)) ivs <- unlist(ivs) %>% setNames(NULL)
 
-  # Weighted frequency helper
+  # Weighted frequency helper — pads absent levels with 0 so the result aligns
+  # with the BN's factor levels (otherwise length(freq) != length(prior) and
+  # the downstream array()/setEvidence calls fail).
   .get_freq <- function(x, w = NULL) {
-    if (is.null(w)) return(table(x))
-    out <- tapply(w, x, sum)
+    lv <- if (is.factor(x)) levels(x) else sort(unique(stats::na.omit(x)))
+    xf <- factor(x, levels = lv)
+    if (is.null(w)) return(table(xf))
+    out <- tapply(w, xf, sum)
     out[is.na(out)] <- 0
     out
   }

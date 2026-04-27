@@ -35,6 +35,12 @@
 #' @param n_groups Optional integer. Target number of communities for viz (if applicable).
 #' @param node_size Numeric. Node size scaling for viz.
 #' @param reachability_max_iter Integer. Max passes to enforce path reachability to `dv`.
+#' @param force_white_list_direction Logical (default `FALSE`). If `TRUE`,
+#'   user-supplied `white_list` arc directions are preserved across the entire
+#'   pipeline: forced back over `tree.bayes()`'s tree-rooted orientation,
+#'   skipped during the intermediary re-orient pass, and excluded from reversal
+#'   during reachability enforcement. A warning is emitted if any node remains
+#'   unreachable as a result.
 #' @param complexity_boot_n Integer (default = 100). Number of bootstrap replicates
 #'   used when expanding network complexity via `bn_increase_complexity()`.
 #'   This controls the number of resamples passed to `bnlearn::boot.strength()`
@@ -125,6 +131,7 @@ bn_engine <- function(
     n_groups = NULL,
     node_size = 1,
     reachability_max_iter = 10,
+    force_white_list_direction = FALSE,
     complexity_boot_n = 100,
     complexity_boot_strength_min = 0.01,
     suppress_bn_warning = FALSE,
@@ -262,6 +269,39 @@ bn_engine <- function(
       ) %>%
       as.data.frame()
 
+
+    # Force user whitelist directions over tree.bayes' tree-rooted orientation
+    if (isTRUE(force_white_list_direction) && !is.null(white_list) && nrow(white_list) > 0) {
+
+      user_pairs_rev <- paste(white_list[["to"]], white_list[["from"]], sep = "→")
+
+      white_list_base <- white_list_base %>%
+        dplyr::mutate(
+          .needs_flip = paste(from, to, sep = "→") %in% user_pairs_rev,
+          from_new = ifelse(.needs_flip, to, from),
+          to_new = ifelse(.needs_flip, from, to)
+        ) %>%
+        dplyr::transmute(from = from_new, to = to_new) %>%
+        as.data.frame()
+
+      # cycle check — bnlearn errors on cycles when arcs<- is set
+      cycle_msg <- tryCatch({
+        test_bn <- white_list_base %>% unlist() %>% unique() %>% bnlearn::empty.graph()
+        bnlearn::arcs(test_bn) <- white_list_base
+        NULL
+      }, error = function(e) conditionMessage(e))
+
+      if (!is.null(cycle_msg)) {
+        stop(
+          "`force_white_list_direction = TRUE` created a cycle when overriding tree.bayes directions. ",
+          "Cycle reported by bnlearn: ", cycle_msg, ". ",
+          "Edit the whitelist to break the cycle, or set `force_white_list_direction = FALSE`.",
+          call. = FALSE
+        )
+      }
+    }
+
+
   }else if(only_white_list){
 
     if(is.null(white_list)){
@@ -352,7 +392,22 @@ bn_engine <- function(
 
     if(is.null(dv_connection_strength)){
 
-      lowest_dv_cut_off <- which(dv_arcs_boot[["from"]] %in% dv_arcs_select[["from"]]) %>% max(na.rm = TRUE)
+      overlap_idx <- which(dv_arcs_boot[["from"]] %in% dv_arcs_select[["from"]])
+
+      if (length(overlap_idx) == 0) {
+        stop(
+          glue::glue(
+            "No DV arcs survived the bootstrap strength threshold for `{dv}`. ",
+            "Tabu selected DV neighbors ({paste(dv_arcs_select[['from']], collapse = ', ')}) ",
+            "did not appear in `boot.strength` results above strength 0.1. ",
+            "Try lowering `dv_connection_strength`, raising `complexity_boot_n`, ",
+            "or skip hierarchical builds for this DV."
+          ),
+          call. = FALSE
+        )
+      }
+
+      lowest_dv_cut_off <- max(overlap_idx)
 
       dv_arcs <- data.frame(
         from = dv_arcs_boot[["from"]][seq(lowest_dv_cut_off)],
@@ -373,6 +428,17 @@ bn_engine <- function(
     intermediary_nodes <- dv_arcs %>% unlist() %>% dplyr::setdiff(dv)
 
 
+    # tag user whitelist arcs so the re-orient pass can skip them when protected
+    user_wl_key <- if (isTRUE(force_white_list_direction) && !is.null(white_list)) {
+      white_list %>%
+        dplyr::select(dplyr::any_of(c("from", "to"))) %>%
+        dplyr::mutate(.user_wl = paste(from, to, sep = "")) %>%
+        dplyr::pull(.user_wl)
+    } else {
+      character(0)
+    }
+
+
     # Re-orient arcs so flow favors intermediary nodes toward DV
     white_list_base <- white_list_base %>%
       dplyr::rowwise() %>%
@@ -380,7 +446,10 @@ bn_engine <- function(
         from_original = from,
         to_original = to,
 
+        .protected = paste(from_original, to_original, sep = "") %in% user_wl_key,
+
         from = dplyr::case_when(
+          .protected ~ from_original,
           all(c(from_original, to_original) %in% intermediary_nodes) ~ from_original,
           all((c(from_original, to_original) %in% intermediary_nodes) == c(FALSE, TRUE)) ~ from_original,
           all((c(from_original, to_original) %in% intermediary_nodes) == c(TRUE, FALSE)) ~ to_original,
@@ -388,6 +457,7 @@ bn_engine <- function(
         ),
 
         to = dplyr::case_when(
+          .protected ~ to_original,
           all(c(from_original, to_original) %in% intermediary_nodes) ~ to_original,
           all((c(from_original, to_original) %in% intermediary_nodes) == c(FALSE, TRUE)) ~ to_original,
           all((c(from_original, to_original) %in% intermediary_nodes) == c(TRUE, FALSE)) ~ from_original,
@@ -404,7 +474,18 @@ bn_engine <- function(
     temp_bn <- temp_arcs %>% unlist() %>% unique() %>% bnlearn::empty.graph()
     bnlearn::arcs(temp_bn) <- temp_arcs
 
-    temp_bn <- work::bn_ensure_reachability(bn = temp_bn, dv = dv, max_iter = reachability_max_iter)
+    protected_arcs <- if (isTRUE(force_white_list_direction) && !is.null(white_list)) {
+      white_list %>% dplyr::select(dplyr::any_of(c("from", "to"))) %>% as.data.frame()
+    } else {
+      NULL
+    }
+
+    temp_bn <- work::bn_ensure_reachability(
+      bn = temp_bn,
+      dv = dv,
+      max_iter = reachability_max_iter,
+      protected_arcs = protected_arcs
+    )
 
     white_list_base <- temp_bn %>% bnlearn::arcs() %>% as.data.frame()
   }
@@ -586,6 +667,11 @@ bn_engine <- function(
             on_exit_detach_igraph = FALSE
           )
 
+          temp_results[["viz_prep"]] <- work::bn_assign_hierarchy_levels(
+            temp_results[["viz_prep"]],
+            work::bn_get_hierarchy_levels(temp_results[["viz_prep"]])
+          )
+
 
           temp_results[["summary"]] <- work::bn_summary_statistics(
             bn = temp_bn,
@@ -616,6 +702,12 @@ bn_engine <- function(
   ##############################
   # results
   ##############################
+
+  # apply hierarchy levels for visNetwork hierarchical layout
+  base_netviz <- work::bn_assign_hierarchy_levels(
+    base_netviz,
+    work::bn_get_hierarchy_levels(base_netviz)
+  )
 
   results[["bn"]] <- base_bn
   results[["fit"]] <- base_fit

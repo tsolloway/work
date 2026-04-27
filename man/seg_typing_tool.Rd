@@ -18,6 +18,10 @@ seg_typing_tool(
   start_col = 2,
   polar_label_width = 65,
   additional_questions = NULL,
+  additional_logic = NULL,
+  apply_additional_logic_to_qc = FALSE,
+  apply_logic_only_to_max = TRUE,
+  ui_groups = NULL,
   use_colinear_lda = NULL
 )
 }
@@ -52,12 +56,59 @@ sheet. Default \verb{(2, 2)}.}
 label columns on the Individual UI sheet.}
 
 \item{additional_questions}{Optional named list of post-LDA reassignment
-rules. Each element's name is the survey variable, and each element is a
-tibble with columns \code{from_seg}, \code{value}, \code{to_seg}. For each respondent,
-after the LDA picks an initial segment, any matching rule reassigns the
-respondent to \code{to_seg}. Only equality comparisons are supported. A
-respondent may match at most one rule across all variables; violations
-raise an error at build time.}
+rules using survey variables that are \strong{not} LDA inputs. Each element's
+name is the survey variable, and the value is a tibble with columns
+\code{from_seg}, \code{value}, \code{to_seg} (same shape as \code{additional_logic}). These
+variables get their own input blocks rendered on the Individual UI,
+Documentation, and Bulk sheets so respondents can supply answers, then
+matching rules redistribute probability the same way \code{additional_logic}
+does. Names must exist in \code{seg$data$with_solutions} and must not overlap
+with the LDA inputs (use \code{additional_logic} for those). Any new segments
+introduced via \code{to_seg} must be sequential (combined with new segments
+from \code{additional_logic}).}
+
+\item{additional_logic}{Optional named list of post-LDA reassignment rules.
+Each element's name must be the variable name of an LDA input (polar or
+non-polar) and the value is a tibble with columns \code{from_seg}, \code{value},
+\code{to_seg}. After the LDA picks an initial segment, any matching rule
+reassigns the respondent to \code{to_seg} for the final classification. Rules
+may introduce new segments beyond the LDA-derived count, but only as the
+next sequential integers (e.g., if the LDA produced segs 1-6, new
+segments must be 7, 8, ...; gaps raise an error). All variable names must
+exist as LDA inputs; mismatches raise an error.}
+
+\item{apply_additional_logic_to_qc}{Logical. When \code{TRUE}, the
+\code{additional_logic} redistribution is also applied to \code{data_solution_check}
+(the LDA reference probabilities and predicted seg) so the Bulk QC check
+compares post-redistribution values on both sides. When \code{FALSE} (default),
+\code{data_solution_check} stays at the LDA's raw output and the Bulk QC check
+will mark reassigned respondents as mismatches — useful for verifying the
+LDA scoring itself rather than the reassigned classification.}
+
+\item{apply_logic_only_to_max}{Logical, default \code{TRUE}. Controls whether
+\code{additional_logic} / \code{additional_questions} reassignment rules fire
+conditionally on the LDA-predicted segment. When \code{TRUE}, a rule's
+redistribution only fires if \code{from_seg} is currently the max-scoring
+segment for that respondent (i.e., the LDA's predicted class is
+\code{from_seg}); when \code{FALSE}, the rule fires whenever its \code{value} matches
+regardless of which segment the respondent was originally classified as.}
+
+\item{ui_groups}{Optional tibble describing how to merge multiple input
+variables into a single combined block on the Individual UI and
+Documentation sheets. Columns:
+\itemize{
+\item \code{label} — section header for the merged block.
+\item \code{type} — \code{"multi_select"} (multiple selections allowed) or
+\code{"mece"} (mutually exclusive — at most one selection across the group).
+\item \code{vars} — list-column; each cell is a character vector of variable
+names. Each variable must be either an LDA input or an
+\code{additional_questions} variable; otherwise validation errors.
+\item \code{no_selection_allowed} — logical; when \code{TRUE}, zero selections is
+valid in Calculation Ready; when \code{FALSE}, the group requires at least
+one selection (multi_select) or exactly one (mece).
+}
+Variables placed in a \code{ui_groups} row are skipped by their normal
+individual-block render and are rendered inside the merged block instead.}
 
 \item{use_colinear_lda}{Optional logical. Controls which coefficient
 function the typing tool embeds:

@@ -52,6 +52,10 @@
 #' @param n_groups Optional integer; manual override for detected groups.
 #' @param node_size Numeric; relative node size in visualization.
 #' @param reachability_max_iter Integer; max iterations for reachability check.
+#' @param force_white_list_direction Logical (default `FALSE`). Passed to
+#'   `bn_engine()`. If `TRUE`, user-supplied `white_list` arc directions are
+#'   preserved across the entire pipeline (tree.bayes orientation, intermediary
+#'   re-orient, and reachability reversal).
 #'   Ignored when `dv = NULL`.
 #' @param ensure_connectivity Logical; if `TRUE` (default), ensures unsupervised
 #'   networks are fully connected.
@@ -126,6 +130,7 @@ bn_initial_networks <- function(
     n_groups = NULL,
     node_size = 1,
     reachability_max_iter = 10,
+    force_white_list_direction = FALSE,
     ensure_connectivity = TRUE,
     connectivity_boot_n = 50,
     complexity_boot_n = 10,
@@ -231,6 +236,7 @@ bn_initial_networks <- function(
         n_groups = n_groups,
         node_size = node_size,
         reachability_max_iter = reachability_max_iter,
+        force_white_list_direction = force_white_list_direction,
         complexity_boot_n = complexity_boot_n,
         complexity_boot_strength_min = complexity_boot_strength_min,
         tool_tip_edge_prefix = tool_tip_edge_prefix,

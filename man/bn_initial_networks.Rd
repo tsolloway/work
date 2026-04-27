@@ -27,6 +27,7 @@ bn_initial_networks(
   n_groups = NULL,
   node_size = 1,
   reachability_max_iter = 10,
+  force_white_list_direction = TRUE,
   ensure_connectivity = TRUE,
   connectivity_boot_n = 50,
   complexity_boot_n = 10,
@@ -88,7 +89,12 @@ Ignored when \code{dv = NULL}.}
 
 \item{node_size}{Numeric; relative node size in visualization.}
 
-\item{reachability_max_iter}{Integer; max iterations for reachability check.
+\item{reachability_max_iter}{Integer; max iterations for reachability check.}
+
+\item{force_white_list_direction}{Logical (default \code{TRUE}). Passed to
+\code{bn_engine()}. If \code{TRUE}, user-supplied \code{white_list} arc directions are
+preserved across the entire pipeline (tree.bayes orientation, intermediary
+re-orient, and reachability reversal).
 Ignored when \code{dv = NULL}.}
 
 \item{ensure_connectivity}{Logical; if \code{TRUE} (default), ensures unsupervised

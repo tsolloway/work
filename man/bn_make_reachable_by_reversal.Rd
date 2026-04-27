@@ -4,7 +4,16 @@
 \alias{bn_make_reachable_by_reversal}
 \title{bn_make_reachable_by_reversal}
 \usage{
-bn_make_reachable_by_reversal(bn, dv)
+bn_make_reachable_by_reversal(bn, dv, protected_arcs = NULL)
+}
+\arguments{
+\item{bn}{A \code{bnlearn} bn object.}
+
+\item{dv}{Character. Dependent variable name.}
+
+\item{protected_arcs}{Optional data frame with \code{from}/\code{to} columns. Arcs in
+this set are skipped when looking for an arc to reverse, so user-supplied
+whitelist directions are preserved. Default \code{NULL} (no protection).}
 }
 \description{
 bn_make_reachable_by_reversal
