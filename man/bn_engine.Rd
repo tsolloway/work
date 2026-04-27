@@ -26,7 +26,7 @@ bn_engine(
   n_groups = NULL,
   node_size = 1,
   reachability_max_iter = 10,
-  force_white_list_direction = TRUE,
+  force_white_list_direction = FALSE,
   complexity_boot_n = 100,
   complexity_boot_strength_min = 0.01,
   suppress_bn_warning = FALSE,
@@ -84,7 +84,7 @@ when \code{all_ivs_connect_to_dv = FALSE}.}
 
 \item{reachability_max_iter}{Integer. Max passes to enforce path reachability to \code{dv}.}
 
-\item{force_white_list_direction}{Logical (default \code{TRUE}). If \code{TRUE},
+\item{force_white_list_direction}{Logical (default \code{FALSE}). If \code{TRUE},
 user-supplied \code{white_list} arc directions are preserved across the entire
 pipeline: forced back over \code{tree.bayes()}'s tree-rooted orientation,
 skipped during the intermediary re-orient pass, and excluded from reversal

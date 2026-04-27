@@ -86,6 +86,13 @@
 #'     `lda_coefficient_function` stored on the solution.
 #'   * `TRUE` — always recompute via [coefficient_lda_colinear()].
 #'   * `FALSE` — always use the pre-computed `lda_coefficient_function`.
+#' @param additional_bulk_qc_check Optional character vector of variable names
+#'   from `seg$data$with_solutions`. Each named variable is appended as an
+#'   extra column to the right of the Bulk QC Check block on the Bulk sheet,
+#'   under the same merged "Bulk QC Check" title. Useful for spot-checking
+#'   classification results against known reference variables (e.g. the
+#'   original `seg` column from a prior solution). Errors if any name is not
+#'   a column of `seg$data$with_solutions`.
 #'
 #' @return Invisibly writes the workbook to disk. Returns `NULL`.
 #'
@@ -108,7 +115,8 @@ seg_typing_tool <- function(
     apply_additional_logic_to_qc = FALSE,
     apply_logic_only_to_max = TRUE,
     ui_groups = NULL,
-    use_colinear_lda = NULL
+    use_colinear_lda = NULL,
+    additional_bulk_qc_check = NULL
 ){
 
   row_title <- start_row
@@ -116,6 +124,22 @@ seg_typing_tool <- function(
   where <- seg[["paths"]][["folders"]][["solution"]]
 
   df <- seg[["data"]][["with_solutions"]]
+
+  # Validate additional_bulk_qc_check: must be NULL or a character vector whose
+  # entries name columns in seg$data$with_solutions. The bulk tool reads the
+  # values from there and writes them next to the QC Check block.
+  if(!is.null(additional_bulk_qc_check)){
+    if(!is.character(additional_bulk_qc_check)){
+      stop("`additional_bulk_qc_check` must be a character vector of variable names (or NULL).")
+    }
+    missing_qc_vars <- setdiff(additional_bulk_qc_check, names(df))
+    if(length(missing_qc_vars) > 0){
+      stop(glue::glue(
+        "`additional_bulk_qc_check` references variable(s) not found in seg$data$with_solutions: ",
+        "{paste(missing_qc_vars, collapse = ', ')}."
+      ))
+    }
+  }
 
   doc_label_cell_merge <- 6
   doc_row_gap          <- 2
@@ -939,6 +963,67 @@ seg_typing_tool <- function(
 
 
     #######################
+    # grey background canvas — fitted to this sheet's actual extent
+    #
+    # Eagerly compute upper-bound canvas dims from the inputs/layout constants
+    # set above, then paint the canvas BEFORE any block writes so that
+    # block-specific styles (white fills, header fills, etc.) override the
+    # canvas where they apply.
+    #######################
+
+    # Left-side blocks: only count the ones that actually render as their own
+    # individual block (vars folded into a ui_groups block don't render
+    # individually — they appear inside the group block instead).
+    polar_n_canvas <- if(!is.null(inputs_table)) nrow(inputs_table) else 0L
+    ungrouped_np_canvas <- if(!is.null(non_polar_inputs_info)){
+      purrr::keep(non_polar_inputs_info, ~ !.x$var %in% ui_grouped_vars)
+    }else list()
+    ungrouped_aq_canvas <- if(!is.null(additional_questions_info)){
+      purrr::keep(additional_questions_info, ~ !.x$var %in% ui_grouped_vars)
+    }else list()
+
+    # Per-block height (header + n data rows for np/aq, title + header + n_vars
+    # for groups). Inter-block gap = 2 empty rows.
+    np_block_heights_canvas <- purrr::map_int(ungrouped_np_canvas, ~ as.integer(.x$n_values + 1))
+    aq_block_heights_canvas <- purrr::map_int(ungrouped_aq_canvas, ~ as.integer(nrow(.x$value_table) + 1))
+    g_block_heights_canvas  <- if(!is.null(ui_groups_info)){
+      purrr::map_int(ui_groups_info, ~ as.integer(length(.x$vars) + 2))
+    }else integer(0)
+
+    n_indiv_blocks_canvas <- length(np_block_heights_canvas) + length(aq_block_heights_canvas) + length(g_block_heights_canvas)
+    sum_block_heights_canvas <- sum(np_block_heights_canvas, aq_block_heights_canvas, g_block_heights_canvas)
+
+    polar_last_canvas <- row_ind_first + polar_n_canvas - 1
+    left_side_bottom_canvas <- if(n_indiv_blocks_canvas == 0){
+      polar_last_canvas
+    }else{
+      # First block starts at polar_last + 3 (2 empty rows gap). Successive
+      # blocks add their height + 2-row gap (= height + 2). The last block
+      # contributes only its height (no trailing gap), which we get by
+      # subtracting one trailing 2 from the inter-block sum.
+      polar_last_canvas + 3 + sum_block_heights_canvas + (n_indiv_blocks_canvas - 1) * 2 - 1
+    }
+
+    # Right-side engine bottom: bottom row of the controls box (1 row past
+    # row_ind_control_q_feedback = row_ind_engine_seg_qc).
+    engine_bottom_canvas <- row_ind_engine_seg_qc + 1
+
+    # Extend canvas exactly 1 row past the deepest content and 1 col past the
+    # rightmost engine col (col_ind_engine_qc_number is the rightmost cell of
+    # the engine main; the controls box sits to its left and finishes earlier).
+    canvas_max_row <- max(left_side_bottom_canvas, engine_bottom_canvas) + 1
+    canvas_max_col <- col_ind_engine_qc_number + 1
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = openxlsx::createStyle(fgFill = oxl_colorscale_grey(1)),
+      rows = seq(1, canvas_max_row),
+      cols = seq(1, canvas_max_col),
+      gridExpand = TRUE
+    )
+
+
+    #######################
     # write indi ui
     #######################
 
@@ -1046,6 +1131,53 @@ seg_typing_tool <- function(
       startRow = row_ind_first,
       startCol = col_ind_label_right_number
     )
+
+
+    # Precompute each ungrouped non-polar / additional-questions block's
+    # first-data-row in the Documentation sheet. We mirror the doc tool's
+    # cursor math here so that the UI tool — which runs before the doc tool —
+    # can build cross-sheet '='Documentation'!<col><row>' references that
+    # resolve correctly when Excel opens the workbook.
+    doc_row_doc_last  <- doc_q_row_first + (if(!is.null(inputs_table)) nrow(inputs_table) else 0L) - 1
+    doc_col_q_letter        <- num2let(start_col)
+    doc_col_var_letter      <- num2let(start_col + 1)
+    doc_col_text_letter     <- num2let(start_col + 2)
+    doc_col_response_letter <- num2let(start_col + 2 + doc_label_cell_merge + 1)
+    doc_col_answer_letter   <- num2let(start_col + 2 + doc_label_cell_merge + 2)
+
+    doc_block_first_row <- list()  # var_name -> first data row (= row_d_f) in doc
+    doc_group_title_row <- list()  # group_label -> title row in doc
+    {
+      cursor_dq <- doc_row_doc_last + 3
+      if(!is.null(non_polar_inputs_info)){
+        for(info in non_polar_inputs_info){
+          if(info$var %in% ui_grouped_vars) next
+          doc_block_first_row[[info$var]] <- as.integer(cursor_dq + 1)
+          cursor_dq <- cursor_dq + as.integer(info$n_values) + 3L
+        }
+      }
+      if(!is.null(additional_questions_info)){
+        for(info in additional_questions_info){
+          if(info$var %in% ui_grouped_vars) next
+          doc_block_first_row[[info$var]] <- as.integer(cursor_dq + 1)
+          cursor_dq <- cursor_dq + as.integer(nrow(info$value_table)) + 3L
+        }
+      }
+      # Group blocks: title at cursor_dq, header at cursor_dq + 1, first var
+      # data row at cursor_dq + 2; each subsequent var data row +1. Per-block
+      # advance = n_vars + 4 (title + header + n_vars + 2-row gap).
+      if(!is.null(ui_groups_info)){
+        for(g_info in ui_groups_info){
+          doc_group_title_row[[g_info$label]] <- as.integer(cursor_dq)
+          first_var_row <- as.integer(cursor_dq + 2)
+          for(v_idx in seq_along(g_info$vars)){
+            v_name <- g_info$vars[v_idx]
+            doc_block_first_row[[v_name]] <- as.integer(first_var_row + v_idx - 1)
+          }
+          cursor_dq <- cursor_dq + length(g_info$vars) + 4L
+        }
+      }
+    }
 
 
     openxlsx::addStyle(
@@ -1182,10 +1314,25 @@ seg_typing_tool <- function(
           borders = "all"
         )
 
-        # Q label, survey var, question text — first value row
-        openxlsx::writeData(wb, sheet_name, x = info$q_label,  startRow = row_np_first, startCol = col_np_q,    colNames = FALSE)
-        openxlsx::writeData(wb, sheet_name, x = info$var,      startRow = row_np_first, startCol = col_np_var,  colNames = FALSE)
-        openxlsx::writeData(wb, sheet_name, x = info$text,     startRow = row_np_first, startCol = col_np_text, colNames = FALSE)
+        # Q label, survey var, question text pulled from Documentation so any
+        # edits there propagate. doc_block_first_row[[var]] points at the
+        # first data row of this block in the doc np layout.
+        doc_first_row_np <- doc_block_first_row[[info$var]]
+        openxlsx::writeFormula(
+          wb, sheet_name,
+          x = glue::glue("'{sheet_name_doc}'!{doc_col_q_letter}{doc_first_row_np}"),
+          startRow = row_np_first, startCol = col_np_q
+        )
+        openxlsx::writeFormula(
+          wb, sheet_name,
+          x = glue::glue("'{sheet_name_doc}'!{doc_col_var_letter}{doc_first_row_np}"),
+          startRow = row_np_first, startCol = col_np_var
+        )
+        openxlsx::writeFormula(
+          wb, sheet_name,
+          x = glue::glue("'{sheet_name_doc}'!{doc_col_text_letter}{doc_first_row_np}"),
+          startRow = row_np_first, startCol = col_np_text
+        )
 
         # merge Q, var, text vertically across all value rows
         if(n_vals > 1){
@@ -1198,11 +1345,25 @@ seg_typing_tool <- function(
         first_val <- seg[["data"]][["with_solutions"]][[info$var]][1]
         x_row_idx <- which(info$value_table$code == first_val)
 
-        # write code + response per value row, and "x" if this row matches first respondent
+        # Code + response label per value row pulled from Documentation. The
+        # doc block writes "Answer" (= numeric code) at doc_col_answer_letter
+        # and "Response" (= label) at doc_col_response_letter on rows
+        # doc_first_row_np .. doc_first_row_np + n_vals - 1.
+        # The "x" pre-fill at col_np_answer remains writeData since it's a
+        # user-editable input, not metadata.
         for(v in seq_len(n_vals)){
           r <- row_np_first + v - 1
-          openxlsx::writeData(wb, sheet_name, x = info$value_table$code[v],  startRow = r, startCol = col_np_code,     colNames = FALSE)
-          openxlsx::writeData(wb, sheet_name, x = info$value_table$label[v], startRow = r, startCol = col_np_response, colNames = FALSE)
+          doc_v_row <- doc_first_row_np + v - 1
+          openxlsx::writeFormula(
+            wb, sheet_name,
+            x = glue::glue("'{sheet_name_doc}'!{doc_col_answer_letter}{doc_v_row}"),
+            startRow = r, startCol = col_np_code
+          )
+          openxlsx::writeFormula(
+            wb, sheet_name,
+            x = glue::glue("'{sheet_name_doc}'!{doc_col_response_letter}{doc_v_row}"),
+            startRow = r, startCol = col_np_response
+          )
           if(length(x_row_idx) > 0 && v == x_row_idx[1]){
             openxlsx::writeData(wb, sheet_name, x = "x", startRow = r, startCol = col_np_answer, colNames = FALSE)
           }
@@ -1289,10 +1450,10 @@ seg_typing_tool <- function(
           code_range   = glue::glue("{num2let(col_np_code)}{row_np_first}:{num2let(col_np_code)}{row_np_last}")
         ))
 
-        row_np_cursor <- row_np_last + 2
+        row_np_cursor <- row_np_last + 3
       }
 
-      np_block_bottom <- row_np_cursor - 2
+      np_block_bottom <- row_np_cursor - 3
     }
 
 
@@ -1347,11 +1508,26 @@ seg_typing_tool <- function(
           borders = "all"
         )
 
-        # Q label, survey var, question text — first value row
-        q_label_aq <- q_label_for_var(info$var)
-        openxlsx::writeData(wb, sheet_name, x = q_label_aq,  startRow = row_aq_f, startCol = col_aq_q,    colNames = FALSE)
-        openxlsx::writeData(wb, sheet_name, x = info$var,    startRow = row_aq_f, startCol = col_aq_var,  colNames = FALSE)
-        openxlsx::writeData(wb, sheet_name, x = info$label,  startRow = row_aq_f, startCol = col_aq_text, colNames = FALSE)
+        # Q label, survey var, question text pulled from Documentation. The
+        # AQ block in the doc layout follows the same Q/var/text/response/
+        # answer columns as the non-polar block, so we reuse the same column
+        # letters and the same first-data-row lookup.
+        doc_first_row_aq <- doc_block_first_row[[info$var]]
+        openxlsx::writeFormula(
+          wb, sheet_name,
+          x = glue::glue("'{sheet_name_doc}'!{doc_col_q_letter}{doc_first_row_aq}"),
+          startRow = row_aq_f, startCol = col_aq_q
+        )
+        openxlsx::writeFormula(
+          wb, sheet_name,
+          x = glue::glue("'{sheet_name_doc}'!{doc_col_var_letter}{doc_first_row_aq}"),
+          startRow = row_aq_f, startCol = col_aq_var
+        )
+        openxlsx::writeFormula(
+          wb, sheet_name,
+          x = glue::glue("'{sheet_name_doc}'!{doc_col_text_letter}{doc_first_row_aq}"),
+          startRow = row_aq_f, startCol = col_aq_text
+        )
 
         if(n_vals > 1){
           openxlsx::mergeCells(wb, sheet_name, rows = seq(row_aq_f, row_aq_l), cols = col_aq_q)
@@ -1362,10 +1538,21 @@ seg_typing_tool <- function(
         first_val_aq <- seg[["data"]][["with_solutions"]][[info$var]][1]
         x_row_idx_aq <- which(info$value_table$code == first_val_aq)
 
+        # Code + response label per value row pulled from Documentation; the
+        # "x" pre-fill at col_aq_answer remains writeData (user input).
         for(v in seq_len(n_vals)){
           r <- row_aq_f + v - 1
-          openxlsx::writeData(wb, sheet_name, x = info$value_table$code[v],  startRow = r, startCol = col_aq_code,     colNames = FALSE)
-          openxlsx::writeData(wb, sheet_name, x = info$value_table$label[v], startRow = r, startCol = col_aq_response, colNames = FALSE)
+          doc_v_row <- doc_first_row_aq + v - 1
+          openxlsx::writeFormula(
+            wb, sheet_name,
+            x = glue::glue("'{sheet_name_doc}'!{doc_col_answer_letter}{doc_v_row}"),
+            startRow = r, startCol = col_aq_code
+          )
+          openxlsx::writeFormula(
+            wb, sheet_name,
+            x = glue::glue("'{sheet_name_doc}'!{doc_col_response_letter}{doc_v_row}"),
+            startRow = r, startCol = col_aq_response
+          )
           if(length(x_row_idx_aq) > 0 && v == x_row_idx_aq[1]){
             openxlsx::writeData(wb, sheet_name, x = "x", startRow = r, startCol = col_aq_answer, colNames = FALSE)
           }
@@ -1439,7 +1626,7 @@ seg_typing_tool <- function(
           code_abs     = glue::glue("${num2let(col_aq_code)}${row_aq_f}:${num2let(col_aq_code)}${row_aq_l}")
         ))
 
-        row_aq_cursor <- row_aq_l + 2
+        row_aq_cursor <- row_aq_l + 3
       }
     }
 
@@ -1483,19 +1670,23 @@ seg_typing_tool <- function(
         row_g_f  <- row_g_h + 1
         row_g_l  <- row_g_h + n_g_vars
 
-        # title + header row
+        # title + header row. Title text pulled from Documentation so that
+        # editing the doc title (e.g. relabeling "Activities") propagates here.
         openxlsx::mergeCells(wb, sheet_name,
           rows = row_g_h - 1,
           cols = seq(col_g_q, col_g_answer)
         )
-        openxlsx::writeData(wb, sheet_name,
-          x = paste0(g_info$label, if(g_info$type == "mece") " (choose one)" else " (select all that apply)"),
+        doc_title_row_g <- doc_group_title_row[[g_info$label]]
+        openxlsx::writeFormula(wb, sheet_name,
+          x = glue::glue("'{sheet_name_doc}'!{doc_col_q_letter}{doc_title_row_g}"),
           startRow = row_g_h - 1,
-          startCol = col_g_q,
-          colNames = FALSE
+          startCol = col_g_q
         )
+        # Match the column-header row below (style_header) so the title +
+        # column-header pair reads as a single grey band rather than two
+        # different shades stacked on top of each other.
         openxlsx::addStyle(wb, sheet_name,
-          style = style_header2,
+          style = style_header,
           rows = row_g_h - 1,
           cols = seq(col_g_q, col_g_answer),
           gridExpand = TRUE, stack = TRUE
@@ -1544,36 +1735,23 @@ seg_typing_tool <- function(
           v_name <- g_info$vars[v_idx]
           r      <- row_g_f + v_idx - 1
 
-          # Q label, var, label
-          q_label_g <- q_label_for_var(v_name)
-
-          # var question label — pull from spec profiles → dictionary → var
-          v_label <- v_name
-          spec_profile_lookup_g <- tryCatch(
-            seg[["spec"]][["profiles"]] %>% tidyr::unnest(vars) %>% dplyr::select(var, label),
-            error = function(e) NULL
+          # Q label, var, and var-question label all pulled from Documentation
+          # so any edits there propagate. The doc tool resolves the v_label
+          # itself (spec profiles → dictionary → var) and writes it at
+          # doc_block_first_row[[v_name]] in the col_doc_g_text column.
+          doc_var_row <- doc_block_first_row[[v_name]]
+          openxlsx::writeFormula(wb, sheet_name,
+            x = glue::glue("'{sheet_name_doc}'!{doc_col_q_letter}{doc_var_row}"),
+            startRow = r, startCol = col_g_q
           )
-          if(!is.null(spec_profile_lookup_g) && nrow(spec_profile_lookup_g) > 0){
-            row_lk <- spec_profile_lookup_g %>% dplyr::filter(var == v_name)
-            if(nrow(row_lk) > 0){
-              vv <- row_lk$label[1]
-              if(!is.na(vv) && nzchar(vv)) v_label <- vv
-            }
-          }
-          if(v_label == v_name){
-            dict_lk <- seg[["data"]][["original_dictionary"]]
-            if(!is.null(dict_lk) && "variable" %in% names(dict_lk)){
-              dr <- dict_lk %>% dplyr::filter(variable == v_name)
-              if(nrow(dr) > 0){
-                vv <- dr$label[1]
-                if(!is.na(vv) && nzchar(vv)) v_label <- vv
-              }
-            }
-          }
-
-          openxlsx::writeData(wb, sheet_name, x = q_label_g, startRow = r, startCol = col_g_q,    colNames = FALSE)
-          openxlsx::writeData(wb, sheet_name, x = v_name,    startRow = r, startCol = col_g_var,  colNames = FALSE)
-          openxlsx::writeData(wb, sheet_name, x = v_label,   startRow = r, startCol = col_g_text, colNames = FALSE)
+          openxlsx::writeFormula(wb, sheet_name,
+            x = glue::glue("'{sheet_name_doc}'!{doc_col_var_letter}{doc_var_row}"),
+            startRow = r, startCol = col_g_var
+          )
+          openxlsx::writeFormula(wb, sheet_name,
+            x = glue::glue("'{sheet_name_doc}'!{doc_col_text_letter}{doc_var_row}"),
+            startRow = r, startCol = col_g_text
+          )
 
           # merge text cells from col_g_text to col_g_answer - 1
           openxlsx::mergeCells(wb, sheet_name,
@@ -1937,9 +2115,9 @@ seg_typing_tool <- function(
     doc_row_doc_last <- doc_q_row_first + nrow(inputs_table) - 1
     any_doc_region_ui <- (N_np_ui_eff + N_aq_ui_eff + N_g_ui) > 0
     doc_coef_row_header <- if(any_doc_region_ui){
-      doc_row_doc_last + 3 + np_advance_ui + aq_advance_ui + g_advance_ui
+      doc_row_doc_last + 4 + np_advance_ui + aq_advance_ui + g_advance_ui
     }else{
-      doc_row_doc_last + 3
+      doc_row_doc_last + 4
     }
     doc_coef_data_rows  <- seq(doc_coef_row_header + 1, doc_coef_row_header + nrow(coef_func))
 
@@ -1971,7 +2149,28 @@ seg_typing_tool <- function(
         gcell <- ui_grouped_vars_cells[[var_name_eng]]$answer_cell
         answer_formula <- glue::glue('IF({gcell}="x", 1, 0)')
         recode_formula <- glue::glue('IF({gcell}="x", 1, 0)')
-        qc_formula     <- "1"
+
+        # QC for grouped vars: enforce the group-level constraint (matches the
+        # bulk Calculation Ready logic).
+        #   mece   + no_selection_allowed=TRUE  → fail when count > 1
+        #   mece   + no_selection_allowed=FALSE → fail when count != 1
+        #   multi  + no_selection_allowed=TRUE  → no constraint
+        #   multi  + no_selection_allowed=FALSE → fail when count < 1
+        g_info_for_var <- ui_grouped_vars_cells[[var_name_eng]]
+        g_count_expr   <- glue::glue('COUNTIF({g_info_for_var$answer_range},"x")')
+        qc_formula <- if(g_info_for_var$group_type == "mece"){
+          if(isTRUE(g_info_for_var$group_no_sel)){
+            glue::glue('IF({g_count_expr}<=1, 1, 0)')
+          }else{
+            glue::glue('IF({g_count_expr}=1, 1, 0)')
+          }
+        }else{  # multi_select
+          if(isTRUE(g_info_for_var$group_no_sel)){
+            "1"
+          }else{
+            glue::glue('IF({g_count_expr}>=1, 1, 0)')
+          }
+        }
         recode_array   <- FALSE
       }else if(is_polar){
         answer_formula <- glue::glue('MATCH("x", {num2let(col_ind_label_point_first_number)}{i}:{num2let(col_ind_label_point_last_number)}{i}, 0)')
@@ -2040,199 +2239,184 @@ seg_typing_tool <- function(
 
 
 
-    for(i in seq(row_ind_engine_first, row_ind_engine_last)){
+    # Engine multiplication grid (per-cell coef * recoded-input products).
+    # Vectorized: build one column of formulas per seg, then write the whole
+    # grid in a single writeData call. Replaces the old nested per-cell loop
+    # which made nrow(coef_func) * n_seg writeFormula calls.
+    seq_engine_rows <- seq(row_ind_engine_first, row_ind_engine_last)
+    seq_engine_cols <- seq(col_ind_engine_survey_var_number + 1, col_ind_engine_answer_number - 1)
 
-      for(x in seq(col_ind_engine_survey_var_number + 1, col_ind_engine_answer_number - 1)){
-        openxlsx::writeFormula(
-          wb, sheet_name,
-          x = glue::glue('{num2let(x)}{i - row_eng_coef_diff} * ${num2let(col_ind_engine_recode_number)}{i - row_eng_coef_diff}'),
-          startRow = i,
-          startCol = x,
-        )
+    engine_recode_let <- num2let(col_ind_engine_recode_number)
+    engine_grid_tbl <- purrr::map(seq_engine_cols, function(x){
+      glue::glue('{num2let(x)}{seq_engine_rows - row_eng_coef_diff} * ${engine_recode_let}{seq_engine_rows - row_eng_coef_diff}')
+    })
+    engine_grid_tbl <- setNames(
+      as.data.frame(engine_grid_tbl, stringsAsFactors = FALSE),
+      paste0("col_", seq_along(seq_engine_cols))
+    ) %>% tibble::as_tibble()
+    for(c in names(engine_grid_tbl)) class(engine_grid_tbl[[c]]) <- "formula"
 
-        if(i == row_ind_engine_last){
-          openxlsx::writeData(
-            wb, sheet_name,
-            x = c("Score", "Probability") %>% matrix(ncol = 1),
-            startRow = i + 1,
-            startCol = col_ind_engine_survey_var_number,
-            colNames = FALSE
-          )
+    openxlsx::writeData(
+      wb, sheet_name, x = engine_grid_tbl,
+      startRow = row_ind_engine_first,
+      startCol = col_ind_engine_survey_var_number + 1,
+      colNames = FALSE
+    )
 
-          seg_idx_ui  <- x - col_ind_engine_survey_var_number
-          seg_num_ui  <- as.integer(segments[seg_idx_ui])
-          is_new_ui   <- seg_num_ui %in% combined_new_segs
+    # Score / Probability row labels (written once, not per-cell)
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = c("Score", "Probability") %>% matrix(ncol = 1),
+      startRow = row_ind_engine_last + 1,
+      startCol = col_ind_engine_survey_var_number,
+      colNames = FALSE
+    )
 
-          # The score row is laid out as [LDA segs] then [new segs]. We use the
-          # LDA-only sub-range for any max-check (so new-seg score formulas
-          # don't reference their own cell through MATCH/MAX) and as the prob
-          # denominator (so mass conserves when a new seg pulls from an LDA
-          # seg's score).
-          n_lda_ui          <- length(segments) - length(combined_new_segs)
-          col_lda_first_ui  <- col_ind_engine_survey_var_number + 1
-          col_lda_last_ui   <- col_ind_engine_survey_var_number + n_lda_ui
-          score_cell_ui     <- glue::glue("{num2let(x)}{i+1}")
-          score_range_lda_ui <- glue::glue("${num2let(col_lda_first_ui)}${i+1}:${num2let(col_lda_last_ui)}${i+1}")
+    # Score + Probability cells — one pass over segs (no longer nested in the
+    # row x col grid loop).
+    n_lda_ui          <- length(segments) - length(combined_new_segs)
+    col_lda_first_ui  <- col_ind_engine_survey_var_number + 1
+    col_lda_last_ui   <- col_ind_engine_survey_var_number + n_lda_ui
+    score_row_ui      <- row_ind_engine_last + 1
+    score_range_lda_ui <- glue::glue("${num2let(col_lda_first_ui)}${score_row_ui}:${num2let(col_lda_last_ui)}${score_row_ui}")
 
-          ui_max_check_for <- function(from_seg_int){
-            pos <- match(from_seg_int, as.integer(segments[seq_len(n_lda_ui)]))
-            glue::glue("MATCH(MAX({score_range_lda_ui}), {score_range_lda_ui}, 0)={pos}")
-          }
+    ui_max_check_for <- function(from_seg_int){
+      pos <- match(from_seg_int, as.integer(segments[seq_len(n_lda_ui)]))
+      glue::glue("MATCH(MAX({score_range_lda_ui}), {score_range_lda_ui}, 0)={pos}")
+    }
 
-          # helper: build the value cell ref for any var, accounting for ui_groups
-          ui_value_cell_for <- function(var_name){
-            if(var_name %in% names(ui_grouped_vars_cells)){
-              gcell <- ui_grouped_vars_cells[[var_name]]$answer_cell
-              return(list(cell = gcell, is_x = TRUE))
-            }
-            input_idx_v <- match(var_name, inputs)
-            if(!is.na(input_idx_v)){
-              is_polar_v  <- input_idx_v <= length(polar_inputs)
-              engine_row_v <- row_ind_first + input_idx_v - 1
-              if(is_polar_v){
-                return(list(cell = glue::glue("{num2let(col_ind_engine_answer_number)}{engine_row_v}"), is_x = FALSE))
-              }else{
-                return(list(cell = glue::glue("{num2let(col_ind_engine_recode_number)}{engine_row_v}"), is_x = FALSE))
-              }
-            }
-            # additional_questions var (not an LDA input)
-            if(!is.null(aq_info_with_cells)){
-              for(aq_entry in aq_info_with_cells){
-                if(aq_entry$var == var_name){
-                  return(list(cell = glue::glue('INDEX({aq_entry$code_abs}, MATCH("x", {aq_entry$answer_abs}, 0))'), is_x = FALSE))
-                }
-              }
-            }
-            list(cell = NA_character_, is_x = FALSE)
-          }
-
-          # condition wrapper: when var is grouped, comparing to value=1 means "x in row";
-          # for non-grouped vars, regular cell == value.
-          ui_grouped_or_normal_condition <- function(var_name, value, from_seg_int){
-            ref <- ui_value_cell_for(var_name)
-            if(is.na(ref$cell)) return(NA_character_)
-            base <- if(isTRUE(ref$is_x)){
-              if(as.numeric(value) == 1){
-                glue::glue('{ref$cell}="x"')
-              }else if(as.numeric(value) == 0){
-                glue::glue('{ref$cell}<>"x"')
-              }else{
-                'FALSE'
-              }
-            }else{
-              glue::glue('{ref$cell}={value}')
-            }
-            if(isTRUE(apply_logic_only_to_max)){
-              glue::glue("AND({base}, {ui_max_check_for(from_seg_int)})")
-            }else{
-              base
-            }
-          }
-
-          if(!is_new_ui){
-            # plain LDA score — EXP(SUM(...col products...)) with no IF/MAX,
-            # so no circular reference and no formula bloat.
-            base_score_ui <- glue::glue('EXP(SUM({num2let(x)}${row_ind_engine_first}:{num2let(x)}${row_ind_engine_last}))')
-
-            openxlsx::writeFormula(
-              wb, sheet_name,
-              x = base_score_ui,
-              startRow = i + 1,
-              startCol = x,
-            )
-          }else{
-            # new seg score — sum of `IF(rule_cond, from_seg_score_cell, 0)`
-            # across rules where to_seg = this seg. References the from_seg's
-            # score cell directly (cheap, ~10 chars) instead of inlining EXP.
-            added_parts_ui <- character(0)
-
-            collect_to <- function(rules, var_name){
-              ts <- rules %>% dplyr::filter(to_seg == seg_num_ui)
-              for(j in seq_len(nrow(ts))){
-                from_idx <- match(ts$from_seg[j], as.integer(segments))
-                if(!is.na(from_idx)){
-                  from_x          <- col_ind_engine_survey_var_number + from_idx
-                  from_score_cell <- glue::glue("{num2let(from_x)}{i+1}")
-                  cond <- ui_grouped_or_normal_condition(var_name, ts$value[j], ts$from_seg[j])
-                  if(!is.na(cond)) added_parts_ui <- c(added_parts_ui, glue::glue("IF({cond}, {from_score_cell}, 0)"))
-                }
-              }
-              added_parts_ui
-            }
-
-            if(!is.null(additional_logic_info)){
-              for(var_name in names(additional_logic_info)){
-                added_parts_ui <- collect_to(additional_logic_info[[var_name]], var_name)
-              }
-            }
-            if(!is.null(additional_questions_info)){
-              for(aq_e in additional_questions_info){
-                added_parts_ui <- collect_to(aq_e$rules, aq_e$var)
-              }
-            }
-
-            ui_score_formula <- if(length(added_parts_ui) > 0){
-              paste(added_parts_ui, collapse = " + ")
-            }else{
-              "0"
-            }
-
-            openxlsx::writeFormula(
-              wb, sheet_name,
-              x = ui_score_formula,
-              startRow = i + 1,
-              startCol = x,
-            )
-          }
-
-          # Probability — denominator is the LDA-only score range (mass
-          # conserves: new segs pull mass from LDA segs without inflating
-          # the total).
-          base_prob_ui <- glue::glue("{score_cell_ui} / SUM({score_range_lda_ui})")
-
-          ui_prob_formula <- if(!is_new_ui){
-            # LDA seg: zero out when any from_seg=k rule fires
-            from_k_conds_ui <- character(0)
-
-            if(!is.null(additional_logic_info)){
-              for(var_name in names(additional_logic_info)){
-                rules <- additional_logic_info[[var_name]]
-                from_subset <- rules %>% dplyr::filter(from_seg == seg_num_ui)
-                for(j in seq_len(nrow(from_subset))){
-                  cond_str <- ui_grouped_or_normal_condition(var_name, from_subset$value[j], seg_num_ui)
-                  if(!is.na(cond_str)) from_k_conds_ui <- c(from_k_conds_ui, cond_str)
-                }
-              }
-            }
-            if(!is.null(additional_questions_info)){
-              for(aq_e in additional_questions_info){
-                from_subset_aq <- aq_e$rules %>% dplyr::filter(from_seg == seg_num_ui)
-                for(j in seq_len(nrow(from_subset_aq))){
-                  cond_str <- ui_grouped_or_normal_condition(aq_e$var, from_subset_aq$value[j], seg_num_ui)
-                  if(!is.na(cond_str)) from_k_conds_ui <- c(from_k_conds_ui, cond_str)
-                }
-              }
-            }
-
-            if(length(from_k_conds_ui) > 0){
-              glue::glue("IF(OR({paste(from_k_conds_ui, collapse = ', ')}), 0, {base_prob_ui})")
-            }else{
-              base_prob_ui
-            }
-          }else{
-            # new seg: score cell already encodes the contribution; just emit
-            # score / SUM(LDA scores)
-            base_prob_ui
-          }
-
-          openxlsx::writeFormula(
-            wb, sheet_name,
-            x = ui_prob_formula,
-            startRow = row_ind_engine_prob,
-            startCol = x,
-          )
+    ui_value_cell_for <- function(var_name){
+      if(var_name %in% names(ui_grouped_vars_cells)){
+        gcell <- ui_grouped_vars_cells[[var_name]]$answer_cell
+        return(list(cell = gcell, is_x = TRUE))
+      }
+      input_idx_v <- match(var_name, inputs)
+      if(!is.na(input_idx_v)){
+        is_polar_v  <- input_idx_v <= length(polar_inputs)
+        engine_row_v <- row_ind_first + input_idx_v - 1
+        if(is_polar_v){
+          return(list(cell = glue::glue("{num2let(col_ind_engine_answer_number)}{engine_row_v}"), is_x = FALSE))
+        }else{
+          return(list(cell = glue::glue("{num2let(col_ind_engine_recode_number)}{engine_row_v}"), is_x = FALSE))
         }
       }
+      if(!is.null(aq_info_with_cells)){
+        for(aq_entry in aq_info_with_cells){
+          if(aq_entry$var == var_name){
+            return(list(cell = glue::glue('INDEX({aq_entry$code_abs}, MATCH("x", {aq_entry$answer_abs}, 0))'), is_x = FALSE))
+          }
+        }
+      }
+      list(cell = NA_character_, is_x = FALSE)
+    }
+
+    ui_grouped_or_normal_condition <- function(var_name, value, from_seg_int){
+      ref <- ui_value_cell_for(var_name)
+      if(is.na(ref$cell)) return(NA_character_)
+      base <- if(isTRUE(ref$is_x)){
+        if(as.numeric(value) == 1){
+          glue::glue('{ref$cell}="x"')
+        }else if(as.numeric(value) == 0){
+          glue::glue('{ref$cell}<>"x"')
+        }else{
+          'FALSE'
+        }
+      }else{
+        glue::glue('{ref$cell}={value}')
+      }
+      if(isTRUE(apply_logic_only_to_max)){
+        glue::glue("AND({base}, {ui_max_check_for(from_seg_int)})")
+      }else{
+        base
+      }
+    }
+
+    for(x in seq_engine_cols){
+      seg_idx_ui  <- x - col_ind_engine_survey_var_number
+      seg_num_ui  <- as.integer(segments[seg_idx_ui])
+      is_new_ui   <- seg_num_ui %in% combined_new_segs
+      score_cell_ui <- glue::glue("{num2let(x)}{score_row_ui}")
+
+      # Score formula
+      if(!is_new_ui){
+        ui_score_formula <- glue::glue('EXP(SUM({num2let(x)}${row_ind_engine_first}:{num2let(x)}${row_ind_engine_last}))')
+      }else{
+        added_parts_ui <- character(0)
+        collect_to <- function(rules, var_name){
+          ts <- rules %>% dplyr::filter(to_seg == seg_num_ui)
+          for(j in seq_len(nrow(ts))){
+            from_idx <- match(ts$from_seg[j], as.integer(segments))
+            if(!is.na(from_idx)){
+              from_x          <- col_ind_engine_survey_var_number + from_idx
+              from_score_cell <- glue::glue("{num2let(from_x)}{score_row_ui}")
+              cond <- ui_grouped_or_normal_condition(var_name, ts$value[j], ts$from_seg[j])
+              if(!is.na(cond)) added_parts_ui <- c(added_parts_ui, glue::glue("IF({cond}, {from_score_cell}, 0)"))
+            }
+          }
+          added_parts_ui
+        }
+        if(!is.null(additional_logic_info)){
+          for(var_name in names(additional_logic_info)){
+            added_parts_ui <- collect_to(additional_logic_info[[var_name]], var_name)
+          }
+        }
+        if(!is.null(additional_questions_info)){
+          for(aq_e in additional_questions_info){
+            added_parts_ui <- collect_to(aq_e$rules, aq_e$var)
+          }
+        }
+        ui_score_formula <- if(length(added_parts_ui) > 0){
+          paste(added_parts_ui, collapse = " + ")
+        }else{
+          "0"
+        }
+      }
+
+      openxlsx::writeFormula(
+        wb, sheet_name,
+        x = ui_score_formula,
+        startRow = score_row_ui,
+        startCol = x,
+      )
+
+      # Probability formula
+      base_prob_ui <- glue::glue("{score_cell_ui} / SUM({score_range_lda_ui})")
+      ui_prob_formula <- if(!is_new_ui){
+        from_k_conds_ui <- character(0)
+        if(!is.null(additional_logic_info)){
+          for(var_name in names(additional_logic_info)){
+            rules <- additional_logic_info[[var_name]]
+            from_subset <- rules %>% dplyr::filter(from_seg == seg_num_ui)
+            for(j in seq_len(nrow(from_subset))){
+              cond_str <- ui_grouped_or_normal_condition(var_name, from_subset$value[j], seg_num_ui)
+              if(!is.na(cond_str)) from_k_conds_ui <- c(from_k_conds_ui, cond_str)
+            }
+          }
+        }
+        if(!is.null(additional_questions_info)){
+          for(aq_e in additional_questions_info){
+            from_subset_aq <- aq_e$rules %>% dplyr::filter(from_seg == seg_num_ui)
+            for(j in seq_len(nrow(from_subset_aq))){
+              cond_str <- ui_grouped_or_normal_condition(aq_e$var, from_subset_aq$value[j], seg_num_ui)
+              if(!is.na(cond_str)) from_k_conds_ui <- c(from_k_conds_ui, cond_str)
+            }
+          }
+        }
+        if(length(from_k_conds_ui) > 0){
+          glue::glue("IF(OR({paste(from_k_conds_ui, collapse = ', ')}), 0, {base_prob_ui})")
+        }else{
+          base_prob_ui
+        }
+      }else{
+        base_prob_ui
+      }
+
+      openxlsx::writeFormula(
+        wb, sheet_name,
+        x = ui_prob_formula,
+        startRow = row_ind_engine_prob,
+        startCol = x,
+      )
     }
 
 
@@ -2541,15 +2725,71 @@ seg_typing_tool <- function(
     any_doc_region <- (N_np_eff + N_aq_eff + N_g) > 0
 
     # 2 empty rows after polar block, regions chain with 2 empty rows between,
-    # 2 empty rows between the final region and the coef function label.
+    # 2 empty rows between the final region's last data row and the
+    # "Solution Coefficient Function" label (which sits at
+    # row_doc_function_header - 1; the data row is the column-header row of
+    # the coef table itself, so we add one extra to land the LABEL — not the
+    # data row — 2 rows below the last input).
     row_doc_function_header <- if(any_doc_region){
-      row_doc_last + 3 + np_advance + aq_advance + g_advance
+      row_doc_last + 4 + np_advance + aq_advance + g_advance
     }else{
-      row_doc_last + 3
+      row_doc_last + 4
     }
     row_doc_function_last    <- row_doc_function_header + nrow(coef_func) + 1
 
     row_doc_steps            <- row_doc_function_last + 2
+
+
+    #######################
+    # grey background canvas — fitted to this sheet's actual extent
+    #
+    # Painted before any block writes so block-specific styles override the
+    # canvas where they apply. The bottom is the step-by-step instructions
+    # tibble's last row, computed eagerly here from the same inputs the tibble
+    # build (further down) uses — keeping the two in sync.
+    #######################
+
+    # Mirror the calulation_steps c(...) construction further down so we know
+    # nrow(calulation_steps) here, before any block writes happen.
+    #
+    # Fixed parts of the c():
+    #   9 intro elements (NA, "Segment membership...", NA, Step Q + 5 lines)
+    # + 2 NAs after intro
+    # + 12 elements in the multiply step (incl. trailing NA, NA)
+    # + 28 elements in the probability step (incl. trailing NA, NA)
+    # + 6 elements in the QC step
+    # = 57 fixed elements.
+    #
+    # Conditional sections:
+    #   questionnaire_extra:    2 elements when has_non_polar
+    #   recode_step_content:    7 + nrow(recode_mapping) when has_recoding
+    #   reassign_step_content:  7 + n_reassign_rules when has_logic_doc
+    has_logic_doc_canvas <- !is.null(additional_logic_info) || !is.null(additional_questions_info)
+    has_non_polar_canvas <- length(non_polar_inputs) > 0
+    n_recode_rows_canvas <- if(has_recoding) as.integer(nrow(recode_mapping)) else 0L
+    n_reassign_rules_canvas <- 0L +
+      (if(!is.null(additional_logic_info)) sum(purrr::map_int(additional_logic_info, ~ as.integer(nrow(.x)))) else 0L) +
+      (if(!is.null(additional_questions_info)) sum(purrr::map_int(additional_questions_info, ~ as.integer(nrow(.x$rules)))) else 0L)
+
+    n_calc_steps_canvas <- 57L +
+      (if(has_non_polar_canvas) 2L else 0L) +
+      (if(has_recoding)         7L + n_recode_rows_canvas else 0L) +
+      (if(has_logic_doc_canvas) 7L + n_reassign_rules_canvas else 0L)
+
+    # writeData(... colNames = TRUE) writes the column header at row_doc_steps
+    # and the data rows at row_doc_steps + 1 .. row_doc_steps + n_calc_steps,
+    # so the table's last row sits at row_doc_steps + n_calc_steps. Extend the
+    # canvas one row past that.
+    canvas_max_row_doc <- row_doc_steps + n_calc_steps_canvas + 1
+    canvas_max_col_doc <- col_last + 1
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = openxlsx::createStyle(fgFill = oxl_colorscale_grey(1)),
+      rows = seq(1, canvas_max_row_doc),
+      cols = seq(1, canvas_max_col_doc),
+      gridExpand = TRUE
+    )
 
 
     #######################
@@ -3090,8 +3330,10 @@ seg_typing_tool <- function(
           startCol = col_doc_g_q,
           colNames = FALSE
         )
+        # Match the column-header row below (style_header) so the title +
+        # column-header pair reads as a single grey band.
         openxlsx::addStyle(wb, sheet_name,
-          style = style_header2,
+          style = style_header,
           rows = row_g_d_t,
           cols = seq(col_doc_g_q, col_doc_g_answer),
           gridExpand = TRUE, stack = TRUE
@@ -3587,7 +3829,57 @@ seg_typing_tool <- function(
     col_bulk_qc_formula_first <- col_bulk_qc_last + 1
     col_bulk_qc_formula_last <- col_bulk_qc_formula_first + ncol(data_solution_check) - 1
 
-    col_last <- col_bulk_qc_formula_last
+    # Optional extra columns (additional_bulk_qc_check) appended directly to
+    # the right of the QC Check formula block, under the same merged title.
+    # Each named variable contributes two columns: the variable's value (from
+    # seg$data$with_solutions) followed by a TRUE/FALSE column comparing it
+    # to the bulk Classification col (col_seg).
+    n_additional_qc <- length(additional_bulk_qc_check)
+    has_additional_qc <- n_additional_qc > 0
+    col_additional_qc_first <- col_bulk_qc_formula_last + 1
+    col_additional_qc_last  <- col_bulk_qc_formula_last + 2L * n_additional_qc
+
+    # Helpers: data col / check col for additional QC var i (1-indexed).
+    col_additional_qc_data_for  <- function(i) col_additional_qc_first + (i - 1L) * 2L
+    col_additional_qc_check_for <- function(i) col_additional_qc_first + (i - 1L) * 2L + 1L
+
+    # Rightmost col of the QC Check block (used by title merge / borders /
+    # canvas etc.). Falls back to col_bulk_qc_formula_last when no extras.
+    col_bulk_qc_block_last <- if(has_additional_qc) col_additional_qc_last else col_bulk_qc_formula_last
+
+    col_last <- col_bulk_qc_block_last
+
+
+    #######################
+    # grey background canvas — fitted to this sheet's actual extent
+    #
+    # Painted before any block writes so block-specific styles override the
+    # canvas where they apply. The bulk table extends past the inputted data
+    # to `row_last` (rounded up to the next 1000-row boundary so pre-baked
+    # formulas can absorb additional respondents without re-rendering the
+    # sheet); the canvas matches the table and extends 1 row beyond it.
+    # Width = 1 col past col_qc_count (col_bulk_qc_block_last + 7), the
+    # rightmost freq-table column written further down. col_bulk_qc_block_last
+    # equals col_bulk_qc_formula_last unless additional_bulk_qc_check is
+    # supplied — then it extends to include those extra columns.
+    #######################
+
+    # Width = 1 col past col_qc_count (= col_bulk_qc_block_last + 7) plus 2
+    # cols per additional QC var, since each extra var adds its own Seg Counts
+    # table (label + count) to the right of QC Seg Counts. Height matches the
+    # bulk table; the Check Counts tables sit a few rows below row_header,
+    # well above row_last, so the +1 buffer there is enough.
+    canvas_max_row_bulk <- row_last + 1
+    canvas_max_col_bulk <- col_bulk_qc_block_last + 8 + (if(has_additional_qc) n_additional_qc * 2L else 0L)
+
+    openxlsx::addStyle(
+      wb, sheet_name,
+      style = openxlsx::createStyle(fgFill = oxl_colorscale_grey(1)),
+      rows = seq(1, canvas_max_row_bulk),
+      cols = seq(1, canvas_max_col_bulk),
+      gridExpand = TRUE
+    )
+
 
     #######################
     # bulk title
@@ -4428,10 +4720,69 @@ seg_typing_tool <- function(
     )
 
 
+    # Optional additional QC check columns (additional_bulk_qc_check). Each
+    # named variable produces two adjacent columns:
+    #   1. the variable's value (pulled straight from seg$data$with_solutions)
+    #   2. a TRUE/FALSE check formula = (var_value == Classification)
+    # Both sit inside the merged "Bulk QC Check" title.
+    if(has_additional_qc){
+      seq_qc_rows <- seq(row_header + 1, row_header + nrow(data_solution_check))
+      col_seg_letter <- num2let(col_seg)
+      for(i in seq_len(n_additional_qc)){
+        var_i      <- additional_bulk_qc_check[i]
+        col_data_i <- col_additional_qc_data_for(i)
+        col_chk_i  <- col_additional_qc_check_for(i)
+
+        # 1. data column — the var's values + a header
+        openxlsx::writeData(
+          wb, sheet_name,
+          x = tibble::tibble(!!var_i := df[[var_i]][seq_len(nrow(data_solution_check))]),
+          startRow = row_header,
+          startCol = col_data_i,
+          borders = "all",
+          headerStyle = style_header,
+          colNames = TRUE
+        )
+
+        # 2. check column — formula comparing the data col to Classification
+        col_data_letter <- num2let(col_data_i)
+        check_formulas <- glue::glue('{col_data_letter}{seq_qc_rows} = {col_seg_letter}{seq_qc_rows}')
+        check_tbl <- tibble::tibble(!!glue::glue("{var_i} = Class") := check_formulas)
+        class(check_tbl[[1]]) <- "formula"
+        openxlsx::writeData(
+          wb, sheet_name,
+          x = check_tbl,
+          startRow = row_header,
+          startCol = col_chk_i,
+          borders = "all",
+          headerStyle = style_header,
+          colNames = TRUE
+        )
+
+        # TRUE / FALSE conditional formatting on the check col, matching the
+        # existing QC formula block styling.
+        openxlsx::conditionalFormatting(
+          wb, sheet_name,
+          cols = col_chk_i,
+          rows = seq_qc_rows,
+          rule = glue::glue('{num2let(col_chk_i)}{row_header + 1} = TRUE'),
+          style = bulk_style_good_bold
+        )
+        openxlsx::conditionalFormatting(
+          wb, sheet_name,
+          cols = col_chk_i,
+          rows = seq_qc_rows,
+          rule = glue::glue('{num2let(col_chk_i)}{row_header + 1} = FALSE'),
+          style = bulk_style_bad_bold
+        )
+      }
+    }
+
+
     openxlsx::mergeCells(
       wb, sheet_name,
       rows = row_header - 2,
-      cols = seq(col_bulk_qc_first, col_bulk_qc_formula_last)
+      cols = seq(col_bulk_qc_first, col_bulk_qc_block_last)
     )
 
 
@@ -4439,7 +4790,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       style = style_header2,
       rows = row_header - 2,
-      cols = seq(col_bulk_qc_first, col_bulk_qc_formula_last),
+      cols = seq(col_bulk_qc_first, col_bulk_qc_block_last),
       gridExpand = TRUE, stack = TRUE
     )
 
@@ -4451,7 +4802,7 @@ seg_typing_tool <- function(
         row_start = i,
         row_end = i,
         col_start = col_bulk_qc_first,
-        col_end = col_bulk_qc_formula_last
+        col_end = col_bulk_qc_block_last
       )
     }
 
@@ -4460,7 +4811,7 @@ seg_typing_tool <- function(
       wb, sheet_name,
       style = style_table,
       rows = seq(row_header + 1, row_header + nrow(data_solution_check)),
-      cols = seq(col_bulk_qc_first, col_bulk_qc_formula_last),
+      cols = seq(col_bulk_qc_first, col_bulk_qc_block_last),
       gridExpand = TRUE, stack = TRUE
     )
 
@@ -4480,7 +4831,7 @@ seg_typing_tool <- function(
       row_start = row_header + 1,
       row_end = row_header + nrow(data_solution_check),
       col_start = col_bulk_qc_first,
-      col_end = col_bulk_qc_formula_last
+      col_end = col_bulk_qc_block_last
     )
 
 
@@ -4516,7 +4867,7 @@ seg_typing_tool <- function(
     # Bulk frequency tables (Class Check / Membership / QC Seg)
     #######################
 
-    col_freq_first <- col_bulk_qc_formula_last + 2
+    col_freq_first <- col_bulk_qc_block_last + 2
 
     col_cc_label  <- col_freq_first
     col_cc_count  <- col_freq_first + 1
@@ -4602,6 +4953,92 @@ seg_typing_tool <- function(
 
     col_last <- col_qc_count
 
+    # Per-additional-var freq tables: Seg Counts continue right of QC Seg
+    # Counts (same row band), and Check Counts (TRUE/FALSE) sit one row below
+    # the seg counts table at the same column.
+    if(has_additional_qc){
+      n_seg_rows <- length(segments)
+      row_check_label <- row_header + n_seg_rows + 3   # 2 empty rows below the seg counts table
+      row_check_data  <- row_check_label + 1
+
+      for(i in seq_len(n_additional_qc)){
+        var_i        <- additional_bulk_qc_check[i]
+        col_var_lbl  <- col_qc_count + 1L + (i - 1L) * 2L
+        col_var_cnt  <- col_var_lbl + 1L
+
+        # Seg Counts: per-segment count of the additional var's values
+        # (= COUNTIF(<var_data_range>, <seg>)). The data column was written
+        # at col_additional_qc_data_for(i).
+        var_data_letter <- num2let(col_additional_qc_data_for(i))
+        var_data_range  <- glue::glue("${var_data_letter}${row_data_first}:${var_data_letter}${row_last}")
+
+        var_seg_tbl <- tibble::tibble(
+          "Segment" = glue::glue("Seg {segments}"),
+          "Count"   = glue::glue("COUNTIF({var_data_range}, {segments})")
+        )
+        class(var_seg_tbl[["Count"]]) <- "formula"
+
+        write_freq_table(var_seg_tbl, col_var_lbl, col_var_cnt, glue::glue("{var_i} Seg Counts"))
+
+        # Check Counts: TRUE / FALSE counts over the matching `<var> = Class`
+        # check column, written below the seg counts table.
+        var_check_letter <- num2let(col_additional_qc_check_for(i))
+        var_check_range  <- glue::glue("${var_check_letter}${row_data_first}:${var_check_letter}${row_last}")
+
+        var_check_tbl <- tibble::tibble(
+          "Result" = c("TRUE", "FALSE"),
+          "Count"  = c(
+            glue::glue("COUNTIF({var_check_range}, TRUE)"),
+            glue::glue("COUNTIF({var_check_range}, FALSE)")
+          )
+        )
+        class(var_check_tbl[["Count"]]) <- "formula"
+
+        # write_freq_table anchors its row positions at row_header / row_header - 2,
+        # so we inline the equivalent at row_check_label / row_check_data here.
+        openxlsx::mergeCells(wb, sheet_name,
+          rows = row_check_label,
+          cols = c(col_var_lbl, col_var_cnt)
+        )
+        openxlsx::writeData(wb, sheet_name,
+          x = glue::glue("{var_i} Check Counts"),
+          startRow = row_check_label,
+          startCol = col_var_lbl,
+          colNames = FALSE
+        )
+        openxlsx::addStyle(wb, sheet_name,
+          style = style_header2,
+          rows = row_check_label,
+          cols = c(col_var_lbl, col_var_cnt),
+          gridExpand = TRUE, stack = TRUE
+        )
+        openxlsx::writeData(wb, sheet_name,
+          x = var_check_tbl,
+          startRow = row_check_data,
+          startCol = col_var_lbl,
+          borders = "all",
+          headerStyle = style_header,
+          colNames = TRUE
+        )
+        openxlsx::addStyle(wb, sheet_name,
+          style = style_table,
+          rows = seq(row_check_data + 1, row_check_data + nrow(var_check_tbl)),
+          cols = c(col_var_lbl, col_var_cnt),
+          gridExpand = TRUE, stack = TRUE
+        )
+        oxl_outer_box(wb, sheet_name, borderStyle = "medium",
+          row_start = row_check_label, row_end = row_check_label,
+          col_start = col_var_lbl, col_end = col_var_cnt
+        )
+        oxl_outer_box(wb, sheet_name, borderStyle = "medium",
+          row_start = row_check_data, row_end = row_check_data + nrow(var_check_tbl),
+          col_start = col_var_lbl, col_end = col_var_cnt
+        )
+      }
+
+      col_last <- col_qc_count + n_additional_qc * 2L
+    }
+
 
     #######################
     # final column group
@@ -4634,17 +5071,9 @@ seg_typing_tool <- function(
     openxlsx::addWorksheet(wb, s)
   }
 
-  row_last_formatting <- (start_row + 6) + ((start_row + 6 + nrow(data_inputs)) %>% divide_by(1000) %>% ceiling() %>% multiply_by(1000)) + 1
-
-  for(s in c(sheet_name_ui, sheet_name_doc, sheet_name_bulk)){
-    openxlsx::addStyle(
-      wb, s,
-      style = openxlsx::createStyle(fgFill = oxl_colorscale_grey(1)),
-      rows = seq(1, row_last_formatting),
-      cols = seq(1, 200),
-      gridExpand = TRUE
-    )
-  }
+  # Each inner tool function applies its own grey-background canvas internally,
+  # sized to that sheet's actual extent (see "grey background canvas" sections
+  # in individual_ui_tool / documentation_tool / bulk_typing_tool).
 
 
   ui_returns <- individual_ui_tool(
