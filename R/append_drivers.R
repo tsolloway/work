@@ -51,7 +51,7 @@ append_drivers <- function(
     total_impact  = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
     separator     = openxlsx::createStyle(fgFill = "black"),
     neg_sign      = openxlsx::createStyle(textDecoration = c("bold", "italic")),
-    insig         = openxlsx::createStyle(bgFill = "black")
+    insig         = openxlsx::createStyle(bgFill = "black", fontColour = "white")
   )
 
 
@@ -124,6 +124,10 @@ append_drivers <- function(
     )
   }
   openxlsx::writeData(wb, sheet_name, write_data, startRow = row_data_start, startCol = col_data_start)
+  # Pin the header row height. wrapText = TRUE on the header style would
+  # otherwise auto-fit row height based on every cell — including hidden
+  # columns whose long names wrap into many lines and bloat the header.
+  openxlsx::setRowHeights(wb, sheet_name, rows = row_data_start, heights = 36)
   openxlsx::addFilter(wb, sheet_name, rows = row_data_start, cols = seq(col_data_start, col_data_start + ncol(write_table) - 1))
 
   # Hidden black separator row to break the filter range before Total Impact

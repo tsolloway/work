@@ -42,7 +42,7 @@ subgroup_summary <- function(
       sheet_name = sheet_name,
       title = title,
       sub_title = sub_title,
-      label_width = label_width,
+      subgroup_width = label_width,  # appender's param is `subgroup_width`
       write_file = write_file
     )
 

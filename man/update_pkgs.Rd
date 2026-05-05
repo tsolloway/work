@@ -7,10 +7,30 @@
 update_pkgs(ask = FALSE, upgrade = TRUE)
 }
 \arguments{
-\item{ask}{Logical. Whether to ask for confirmation when installing a different version of a package that is already installed. Installations that only add new packages never require confirmation.}
+\item{ask}{Logical. Forwarded to \code{pak::pkg_install()}. If \code{TRUE},
+prompts before replacing an installed package with a different
+version. New packages never trigger a prompt.}
 
-\item{upgrade}{Logical. When FALSE, the default, pak does the minimum amount of work to give you the latest version(s) of pkg. It will only upgrade dependent packages if pkg, or one of their dependencies explicitly require a higher version than what you currently have. It will also prefer a binary package over to source package, even it the binary package is older.}
+\item{upgrade}{Logical. Forwarded to \code{pak::pkg_install()}. When
+\code{FALSE} (default) \code{pak} does the minimum work to satisfy \code{x}.}
+}
+\value{
+\code{TRUE} when every requested package installed successfully,
+otherwise a character vector naming the packages that did not
+install (with a \code{warning()} listing them).
 }
 \description{
 Updates R libraries
+}
+\details{
+\code{upgrade} and \code{update_pkgs} are orthogonal:
+\itemize{
+\item \code{upgrade} is forwarded to \code{pak::pkg_install()} and controls how
+aggressively dependencies of \code{x} are upgraded.
+\item \code{update_pkgs} decides whether all currently outdated packages
+(per \code{utils::old.packages()}) are added to the install set.
+}
+}
+\seealso{
+\code{\link[=install_pak]{install_pak()}}, \code{\link[=restart]{restart()}}
 }

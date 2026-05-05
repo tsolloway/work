@@ -93,8 +93,254 @@
 #'   classification results against known reference variables (e.g. the
 #'   original `seg` column from a prior solution). Errors if any name is not
 #'   a column of `seg$data$with_solutions`.
+#' @param additional_logic_advanced Optional tibble of sequential
+#'   `case_when`-style reassignment rules, applied after the simple
+#'   `additional_logic` / `additional_questions` redistributions. Columns:
+#'   \itemize{
+#'     \item `when` — either a character expression (e.g.
+#'       `"(VT02 == 1 | VT03 == 1) & VT21 == 1"`) **or** a one-sided formula
+#'       (e.g. `~ (VT02 == 1 | VT03 == 1) & VT21 == 1`) describing the
+#'       variable condition. Strings let you use `tibble::tribble` for a
+#'       compact row-major layout; formulas require `tibble::tibble` with an
+#'       explicit list-column for `when` (since `tribble` parses every
+#'       `~`-prefixed cell as a column-name spec). Supported operators in
+#'       both forms: `==`, `!=`, `<`, `<=`, `>`, `>=`, `&`, `|`, `!`,
+#'       `%in%`, plus parentheses. Variables must be LDA inputs or appear
+#'       in `additional_questions` (an entry of
+#'       `additional_questions = list(VAR = NULL)` declares a variable for
+#'       conditions only).
+#'     \item `from_lda` — `NA` for **hard reassignment** (when `when` fires,
+#'       `to_seg`'s probability is clamped to 1 and every other segment's
+#'       probability to 0; classification therefore lands on `to_seg`
+#'       regardless of which LDA segment the respondent originally
+#'       resolved to); a single integer or integer vector of LDA segments
+#'       for **soft reassignment** (probability mass moves from those
+#'       segments to `to_seg` when `when` fires — sum-to-1 preserved by
+#'       redistribution; classification re-argmaxes).
+#'     \item `to_seg` — single integer target segment. Can be an existing
+#'       LDA seg or a new seg (extends `segments` like
+#'       `additional_logic` / `additional_questions` do; new segs must be
+#'       sequential).
+#'   }
+#'   Rules are applied in row order (case_when semantics: first matching
+#'   hard rule overrides the argmax classification; soft rules all fire
+#'   independently at the prob layer). Stacks on top of `additional_logic`
+#'   and `additional_questions` — both can coexist.
 #'
 #' @return Invisibly writes the workbook to disk. Returns `NULL`.
+#'
+#' @examples
+#' \dontrun{
+#' # 1. Minimal call — just polars and non-polars from the solution.
+#' seg %>% seg_typing_tool(solution_name = "LDA_kids_v11_seed")
+#'
+#' # 2. Simple post-LDA reassignment — when DM20 = 1, take Segment 6's
+#' #    probability and add it to Segment 1 (LDA → LDA, mass conserved).
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_kids_v11_seed",
+#'   additional_logic = list(
+#'     DM20 = tibble::tribble(
+#'       ~from_seg, ~value, ~to_seg,
+#'       6,         1,      1
+#'     )
+#'   )
+#' )
+#'
+#' # 3. additional_questions adds non-LDA vars with their own input blocks
+#' #    in Individual UI / Documentation / Bulk and reassigns to a new seg
+#' #    (Segment 7 here, which is auto-extended onto the segment set).
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_kids_v11_seed",
+#'   additional_questions = list(
+#'     DM26 = tibble::tribble(~from_seg, ~value, ~to_seg, 2, 1, 7),
+#'     DM25 = tibble::tribble(~from_seg, ~value, ~to_seg, 3, 1, 7)
+#'   )
+#' )
+#'
+#' # 4. ui_groups merges multiple LDA inputs / additional_questions into a
+#' #    single multi_select / mece block on the Individual UI and Doc sheets.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_kids_v11_seed",
+#'   ui_groups = tibble::tribble(
+#'     ~label,         ~type,           ~vars,                                     ~no_selection_allowed,
+#'     "Activities",   "multi_select",  list(c("AP06", "PL03", "PL27")),            TRUE,
+#'     "Child Age",    "mece",          list(c("DM20", "DM21", "DM22", "DM23")),    FALSE
+#'   )
+#' )
+#'
+#' # 5. additional_bulk_qc_check appends one or more reference columns from
+#' #    seg$data$with_solutions to the Bulk QC Check, plus per-var
+#' #    classification-comparison columns and matching freq tables.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_kids_v11_seed",
+#'   additional_bulk_qc_check = c("solution_kids_krikor_fix", "seg_v8")
+#' )
+#'
+#' # 6. Combine the simple mechanisms — additional_logic + additional_questions
+#' #    + ui_groups + additional_bulk_qc_check at once. Note DM20-DM24 are LDA
+#' #    inputs (folded into Child Age) while DM26/DM25 are additional_questions
+#' #    (folded into Child Gender).
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_kids_v11_seed",
+#'   additional_bulk_qc_check = "solution_kids_krikor_fix",
+#'   additional_logic = list(
+#'     DM20 = tibble::tribble(~from_seg, ~value, ~to_seg, 6, 1, 1)
+#'   ),
+#'   additional_questions = list(
+#'     DM26 = tibble::tribble(~from_seg, ~value, ~to_seg, 2, 1, 7),
+#'     DM25 = tibble::tribble(~from_seg, ~value, ~to_seg, 3, 1, 7)
+#'   ),
+#'   ui_groups = tibble::tribble(
+#'     ~label,         ~type,           ~vars,                                            ~no_selection_allowed,
+#'     "Activities",   "multi_select",  list(c("AP06", "PL03", "PL27")),                   TRUE,
+#'     "Child Age",    "mece",          list(c("DM20", "DM21", "DM22", "DM23", "DM24")),   FALSE,
+#'     "Child Gender", "mece",          list(c("DM26", "DM25")),                           FALSE
+#'   )
+#' )
+#'
+#' # 7. additional_logic_advanced — single hard rule (no LDA reference).
+#' #    When VT02 or VT03 is 1 AND VT21 or VT22 is 1, Segment 9's probability
+#' #    is set to 100% and every other segment to 0% (so classification lands
+#' #    on Segment 9). Variables used in the condition that aren't LDA inputs
+#' #    (VT21, VT22) are declared with `additional_questions = list(VAR = NULL)`
+#' #    so they're pulled into Bulk + Individual UI without their own
+#' #    reassignment rules. `when` uses the character form so the tribble
+#' #    row-major layout works.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_opt_seed_v30",
+#'   additional_questions = list(VT21 = NULL, VT22 = NULL),
+#'   additional_logic_advanced = tibble::tribble(
+#'     ~when,                                                       ~from_lda, ~to_seg,
+#'     "(VT02 == 1 | VT03 == 1) & (VT21 == 1 | VT22 == 1)",         NA,        9
+#'   )
+#' )
+#'
+#' # 8. additional_logic_advanced — single soft rule (LDA gated). When
+#' #    VT03 = 1 AND the respondent's LDA argmax is Segment 6 or 7,
+#' #    probability mass moves from those segments to Segment 9.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_opt_seed_v30",
+#'   additional_logic_advanced = tibble::tribble(
+#'     ~when,           ~from_lda, ~to_seg,
+#'     "VT03 == 1",     c(6, 7),   9
+#'   )
+#' )
+#'
+#' # 9. additional_logic_advanced — pure-LDA rename (no condition variables;
+#' #    just rename Segment 9 to 10 and Segment 10 to 11). Use "TRUE" for
+#' #    "no extra condition" — first match wins, so order matters.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_opt_seed_v30",
+#'   additional_logic_advanced = tibble::tribble(
+#'     ~when,   ~from_lda, ~to_seg,
+#'     "TRUE",   9,         10,
+#'     "TRUE",   10,        11
+#'   )
+#' )
+#'
+#' # 10. additional_logic_advanced — full case_when from a real project,
+#' #     mixing hard + soft rules sequentially.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_opt_seed_v30",
+#'   additional_questions = list(VT21 = NULL, VT22 = NULL),
+#'   additional_logic_advanced = tibble::tribble(
+#'     ~when,                                                       ~from_lda, ~to_seg,
+#'     "(VT02 == 1 | VT03 == 1) & (VT21 == 1 | VT22 == 1)",         NA,        9,
+#'     "VT03 == 1",                                                  c(6, 7),   9,
+#'     "TRUE",                                                       9,         10,
+#'     "TRUE",                                                       10,        11
+#'   )
+#' )
+#'
+#' # 11. %in% support inside conditions — equivalent to chained == / |.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_opt_seed_v30",
+#'   additional_logic_advanced = tibble::tribble(
+#'     ~when,                       ~from_lda, ~to_seg,
+#'     "VT01 %in% c(1, 2, 3)",      c(4, 5),   8
+#'   )
+#' )
+#'
+#' # 12. Same rules as example 10, but using formula syntax via
+#' #     `tibble::tibble` with an explicit list-column. Equivalent end result;
+#' #     pick whichever style you prefer. (Strings + tribble = compact;
+#' #     formulas + tibble + list-column = better IDE syntax highlighting.)
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_opt_seed_v30",
+#'   additional_questions = list(VT21 = NULL, VT22 = NULL),
+#'   additional_logic_advanced = tibble::tibble(
+#'     when = list(
+#'       ~ (VT02 == 1 | VT03 == 1) & (VT21 == 1 | VT22 == 1),
+#'       ~ VT03 == 1,
+#'       ~ TRUE,
+#'       ~ TRUE
+#'     ),
+#'     from_lda = list(NA, c(6, 7), 9, 10),
+#'     to_seg   = c(9, 9, 10, 11)
+#'   )
+#' )
+#'
+#' # 13. Stack additional_logic_advanced on top of additional_logic /
+#' #     additional_questions — they coexist. Soft rules from both layers
+#' #     redistribute mass at the prob layer; hard rules from advanced
+#' #     override the argmax at the very end.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_opt_seed_v30",
+#'   additional_questions = list(
+#'     VT21 = NULL,
+#'     VT22 = NULL,
+#'     DM01 = tibble::tribble(~from_seg, ~value, ~to_seg, 5, 1, 8)
+#'   ),
+#'   additional_logic = list(
+#'     VT01 = tibble::tribble(~from_seg, ~value, ~to_seg, 3, 1, 2)
+#'   ),
+#'   additional_logic_advanced = tibble::tribble(
+#'     ~when,                                                  ~from_lda, ~to_seg,
+#'     "(VT02 == 1 | VT03 == 1) & (VT21 == 1 | VT22 == 1)",    NA,        9,
+#'     "TRUE",                                                  9,         10
+#'   )
+#' )
+#'
+#' # 13. apply_additional_logic_to_qc = TRUE so the Bulk QC Check compares
+#' #     post-redistribution classifications on both sides (matching). Useful
+#' #     once you trust the redistribution logic and want a clean Class Check.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_kids_v11_seed",
+#'   additional_logic = list(
+#'     DM20 = tibble::tribble(~from_seg, ~value, ~to_seg, 6, 1, 1)
+#'   ),
+#'   apply_additional_logic_to_qc = TRUE
+#' )
+#'
+#' # 14. apply_logic_only_to_max = FALSE — rules fire whenever their
+#' #     condition matches, regardless of which segment the respondent was
+#' #     originally classified into. Useful for unconditional reassignments.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_kids_v11_seed",
+#'   additional_questions = list(
+#'     DM26 = tibble::tribble(~from_seg, ~value, ~to_seg, 2, 1, 7)
+#'   ),
+#'   apply_logic_only_to_max = FALSE
+#' )
+#'
+#' # 15. use_colinear_lda — recompute the coefficient table from the LDA fit
+#' #     via SVD-based scaling. Use when the closed-form Sigma_W^{-1} blows
+#' #     up on collinear inputs.
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_collinear_inputs_solution",
+#'   use_colinear_lda = TRUE
+#' )
+#'
+#' # 16. overwrite_left_label / overwrite_right_label / segment_names — full
+#' #     manual labeling override (e.g. when the spec hasn't been finalized).
+#' seg %>% seg_typing_tool(
+#'   solution_name = "LDA_kids_v11_seed",
+#'   overwrite_left_label = c("I prefer X", "I prefer Y", "..."),
+#'   overwrite_right_label = c("I prefer not X", "I prefer not Y", "..."),
+#'   segment_names = c("Adventurers", "Caretakers", "Builders", "Explorers",
+#'                     "Performers", "Strategists", "Free Spirits")
+#' )
+#' }
 #'
 #' @export
 seg_typing_tool <- function(
@@ -116,7 +362,8 @@ seg_typing_tool <- function(
     apply_logic_only_to_max = TRUE,
     ui_groups = NULL,
     use_colinear_lda = NULL,
-    additional_bulk_qc_check = NULL
+    additional_bulk_qc_check = NULL,
+    additional_logic_advanced = NULL
 ){
 
   row_title <- start_row
@@ -473,6 +720,14 @@ seg_typing_tool <- function(
     required_cols <- c("from_seg", "value", "to_seg")
     for(var_name in names(arg_value)){
       rules <- arg_value[[var_name]]
+      # NULL / empty-tibble entries are allowed in additional_questions: they
+      # declare "this var participates in additional_logic_advanced conditions
+      # — pull it into Bulk + UI — but it has no own from/to/value rules".
+      # additional_logic still requires real rule tibbles since LDA inputs are
+      # already pulled in regardless.
+      if(!must_be_in_inputs && (is.null(rules) || (is.data.frame(rules) && nrow(rules) == 0))){
+        next
+      }
       if(!is.data.frame(rules) || !all(required_cols %in% names(rules))){
         stop(glue::glue("`{arg_name}[['{var_name}']]` must be a tibble with columns: {paste(required_cols, collapse = ', ')}."))
       }
@@ -531,6 +786,13 @@ seg_typing_tool <- function(
         }
       }
 
+      # NULL / empty-tibble entries (vars declared for advanced conditions
+      # only) get an empty rules tibble so downstream code that iterates
+      # rules still works.
+      if(is.null(rules) || nrow(rules) == 0){
+        rules <- tibble::tibble(from_seg = integer(0), value = numeric(0), to_seg = integer(0))
+      }
+
       list(
         var         = var_name,
         label       = label_val,
@@ -540,11 +802,151 @@ seg_typing_tool <- function(
     })
   }
 
-  # combine new segs from both sources for one sequential check
+
+  #######################
+  # additional_logic_advanced — validate, parse formulas, extract referenced
+  # vars. The actual Excel-formula emission happens at render time inside
+  # bulk_typing_tool() / individual_ui_tool() since they need the var-to-cell
+  # mapper.
+  #######################
+
+  additional_logic_advanced_info <- NULL
+
+  if(!is.null(additional_logic_advanced)){
+    if(!is.data.frame(additional_logic_advanced)){
+      stop("`additional_logic_advanced` must be a tibble (or NULL).")
+    }
+    required_adv_cols <- c("when", "from_lda", "to_seg")
+    if(!all(required_adv_cols %in% names(additional_logic_advanced))){
+      stop(glue::glue(
+        "`additional_logic_advanced` must have columns: {paste(required_adv_cols, collapse = ', ')}."
+      ))
+    }
+
+    # Recursive AST walker: extract every variable name (symbol) referenced
+    # in a `when` formula. Used for validation (every var must exist in LDA
+    # inputs or additional_questions) and later for downstream wiring.
+    extract_when_vars_recursive <- function(expr){
+      if(is.symbol(expr)){
+        nm <- as.character(expr)
+        if(nm %in% c("TRUE", "FALSE", "NA", "T", "F")) return(character(0))
+        return(nm)
+      }
+      if(is.call(expr)){
+        out <- character(0)
+        for(arg in as.list(expr)[-1]){
+          out <- c(out, extract_when_vars_recursive(arg))
+        }
+        return(out)
+      }
+      character(0)
+    }
+    extract_when_vars <- function(when_formula){
+      if(!inherits(when_formula, "formula")) return(character(0))
+      unique(extract_when_vars_recursive(rlang::f_rhs(when_formula)))
+    }
+
+    aq_var_names_for_when <- if(!is.null(additional_questions_info)){
+      purrr::map_chr(additional_questions_info, "var")
+    }else character(0)
+    valid_when_vars <- c(inputs, aq_var_names_for_when)
+
+    parsed_adv_rules <- purrr::imap(seq_len(nrow(additional_logic_advanced)), function(i, .) NULL)  # placeholder to ensure indices
+    parsed_adv_rules <- vector("list", nrow(additional_logic_advanced))
+
+    for(i in seq_len(nrow(additional_logic_advanced))){
+      when_raw <- additional_logic_advanced[["when"]][[i]]
+      # Accept either a one-sided formula (`~ expr`) or a character string
+      # (`"expr"`). Strings make the row-major `tribble` form usable —
+      # `tribble` parses every `~`-prefixed cell as a column-name spec, so
+      # formulas can only live in a list-column built via `tibble::tibble`.
+      when_i <- if(inherits(when_raw, "formula")){
+        when_raw
+      }else if(is.character(when_raw) && length(when_raw) == 1 && !is.na(when_raw)){
+        stats::as.formula(paste("~", when_raw))
+      }else{
+        stop(glue::glue(
+          "`additional_logic_advanced$when[[{i}]]` must be a one-sided formula ",
+          "(e.g. `~ VT03 == 1`) or a character expression (e.g. `\"VT03 == 1\"`)."
+        ))
+      }
+
+      from_lda_i <- additional_logic_advanced[["from_lda"]][[i]]
+      # accept NA, single integer, integer vector. Validate values fall in LDA segs.
+      if(length(from_lda_i) == 1 && is.na(from_lda_i)){
+        from_lda_i <- NA_integer_
+      }else{
+        from_lda_i <- as.integer(from_lda_i)
+        if(any(is.na(from_lda_i))){
+          stop(glue::glue(
+            "`additional_logic_advanced$from_lda[[{i}]]` contains NA among non-NA entries; ",
+            "use a bare NA scalar for hard reassignment, or a single integer / integer vector ",
+            "of LDA segments for soft reassignment."
+          ))
+        }
+        bad_lda <- setdiff(from_lda_i, lda_segments)
+        if(length(bad_lda) > 0){
+          stop(glue::glue(
+            "`additional_logic_advanced$from_lda[[{i}]]` references segment(s) ",
+            "({paste(bad_lda, collapse = ', ')}) not in the LDA segment set ",
+            "({paste(lda_segments, collapse = ', ')})."
+          ))
+        }
+      }
+
+      to_seg_i <- as.integer(additional_logic_advanced[["to_seg"]][[i]])
+      if(length(to_seg_i) != 1 || is.na(to_seg_i)){
+        stop(glue::glue("`additional_logic_advanced$to_seg[[{i}]]` must be a single integer."))
+      }
+
+      vars_in_when <- extract_when_vars(when_i)
+      bad_vars <- setdiff(vars_in_when, valid_when_vars)
+      if(length(bad_vars) > 0){
+        stop(glue::glue(
+          "`additional_logic_advanced$when[[{i}]]` references variable(s) not in LDA inputs ",
+          "or additional_questions: {paste(bad_vars, collapse = ', ')}. ",
+          "Add them to `additional_questions` (use `additional_questions = list({bad_vars[1]} = NULL, ...)` ",
+          "to declare them for conditions only)."
+        ))
+      }
+
+      parsed_adv_rules[[i]] <- list(
+        when_formula = when_i,
+        when_vars    = vars_in_when,
+        from_lda     = from_lda_i,                            # NA_integer_ = hard, else soft
+        to_seg       = to_seg_i,
+        is_hard      = length(from_lda_i) == 1 && is.na(from_lda_i),
+        rule_index   = i
+      )
+    }
+
+    # Reorder for display: soft rules first (they redistribute prob mass —
+    # all run independently), then hard rules (clamp the final prob vector;
+    # sequential, first match wins). Within each kind, preserve the user's
+    # tribble order. Assign display_index 1..N in this new order so the doc
+    # step text and Reassignment Counts table read 1, 2, 3 top-to-bottom
+    # regardless of how the user mixed soft/hard in their input. The original
+    # rule_index is kept too in case any debugging back-reference to the
+    # user's tribble row is needed.
+    is_hard_flags  <- purrr::map_lgl(parsed_adv_rules, "is_hard")
+    soft_first_idx <- c(which(!is_hard_flags), which(is_hard_flags))
+    parsed_adv_rules <- parsed_adv_rules[soft_first_idx]
+    for(i in seq_along(parsed_adv_rules)){
+      parsed_adv_rules[[i]]$display_index <- i
+    }
+
+    additional_logic_advanced_info <- parsed_adv_rules
+  }
+
+
+  # combine new segs from all sources for one sequential check
   current_max_seg <- max(as.integer(segments))
   all_to_segs <- c(
     unlist(purrr::map(additional_logic,     ~ as.integer(.x$to_seg))),
-    unlist(purrr::map(additional_questions, ~ as.integer(.x$to_seg)))
+    unlist(purrr::map(additional_questions, ~ as.integer(.x$to_seg))),
+    if(!is.null(additional_logic_advanced_info)){
+      purrr::map_int(additional_logic_advanced_info, ~ as.integer(.x$to_seg))
+    }else integer(0)
   )
   new_segs <- sort(unique(all_to_segs[all_to_segs > current_max_seg]))
 
@@ -579,7 +981,11 @@ seg_typing_tool <- function(
     coef_func <- dplyr::bind_cols(coef_func, new_cols)
   }
 
-  if(isTRUE(apply_additional_logic_to_qc) && (!is.null(additional_logic_info) || !is.null(additional_questions_info))){
+  any_redistribution_logic_for_qc <- !is.null(additional_logic_info) ||
+    !is.null(additional_questions_info) ||
+    !is.null(additional_logic_advanced_info)
+
+  if(isTRUE(apply_additional_logic_to_qc) && any_redistribution_logic_for_qc){
     # redistribute probs in data_solution_check + update seg via argmax
     seg_prob_cols <- glue::glue("seg_{lda_segments}")
     new_prob_cols <- glue::glue("seg_{combined_new_segs}")
@@ -629,12 +1035,62 @@ seg_typing_tool <- function(
         }
       }
 
+      # Soft advanced rules — same prob redistribution shape as the simple
+      # additional_logic, but with compound `when` conditions evaluated in
+      # the respondent's data row, and from_lda allowed to be a vector of
+      # LDA segs (any of which contributes when the rule fires).
+      if(!is.null(additional_logic_advanced_info)){
+        for(rule in additional_logic_advanced_info){
+          if(rule$is_hard) next
+          when_val <- tryCatch(
+            isTRUE(rlang::eval_tidy(
+              rlang::f_rhs(rule$when_formula),
+              data = seg[["data"]][["with_solutions"]][i, , drop = FALSE]
+            )),
+            error = function(e) FALSE
+          )
+          if(!isTRUE(when_val)) next
+          if(isTRUE(apply_logic_only_to_max)){
+            if(is.na(base_argmax_seg) || !(base_argmax_seg %in% rule$from_lda)) next
+          }
+          to_idx <- match(rule$to_seg, segments)
+          if(is.na(to_idx)) next
+          for(fl in rule$from_lda){
+            from_idx <- match(fl, segments)
+            if(!is.na(from_idx)){
+              probs[to_idx]   <- probs[to_idx] + probs[from_idx]
+              probs[from_idx] <- 0
+            }
+          }
+        }
+      }
+
       for(k in seq_along(all_prob_cols)){
         data_solution_check[[all_prob_cols[k]]][i] <- probs[k]
       }
 
-      if(any(probs > 0)){
-        data_solution_check[["seg"]][i] <- as.numeric(segments[which.max(probs)])
+      # Final classification for this row: argmax of redistributed probs,
+      # then overridden by the first matching hard advanced rule (case_when
+      # semantics — sequential, first match wins, fall-through to argmax).
+      final_seg_i <- if(any(probs > 0)) as.numeric(segments[which.max(probs)]) else NA_real_
+      if(!is.null(additional_logic_advanced_info)){
+        for(rule in additional_logic_advanced_info){
+          if(!rule$is_hard) next
+          when_val <- tryCatch(
+            isTRUE(rlang::eval_tidy(
+              rlang::f_rhs(rule$when_formula),
+              data = seg[["data"]][["with_solutions"]][i, , drop = FALSE]
+            )),
+            error = function(e) FALSE
+          )
+          if(isTRUE(when_val)){
+            final_seg_i <- as.numeric(rule$to_seg)
+            break
+          }
+        }
+      }
+      if(!is.na(final_seg_i)){
+        data_solution_check[["seg"]][i] <- final_seg_i
       }
     }
 
@@ -789,6 +1245,135 @@ seg_typing_tool <- function(
     idx_aq <- match(v, aq_var_names_master)
     if(!is.na(idx_aq)) return(as.character(all_q_names[length(inputs) + idx_aq]))
     v
+  }
+
+
+  #######################
+  # additional_logic_advanced — formula → Excel translator
+  #
+  # Walks the rhs of a one-sided formula and emits an Excel formula string
+  # (or vector of strings, when var_to_cell returns vectorized cell refs).
+  # Supported subset:
+  #   symbols (var names)              → var_to_cell(name)
+  #   TRUE / FALSE / T / F             → "TRUE" / "FALSE"
+  #   numeric / character literals     → as.character(value)
+  #   ==, !=, <, <=, >, >=             → corresponding Excel comparators
+  #   &, |                             → AND(...), OR(...)
+  #   !                                → NOT(...)
+  #   x %in% c(v1, v2, ...)            → OR(x=v1, x=v2, ...)
+  #   parentheses                      → preserved structurally
+  # Unsupported nodes raise an error rather than silently mis-translating.
+  #######################
+
+  expr_to_excel <- function(expr, var_to_cell){
+    if(is.symbol(expr)){
+      nm <- as.character(expr)
+      if(nm %in% c("TRUE", "T")) return("TRUE")
+      if(nm %in% c("FALSE", "F")) return("FALSE")
+      return(var_to_cell(nm))
+    }
+    if(is.numeric(expr) || is.logical(expr)){
+      return(as.character(expr))
+    }
+    if(is.character(expr)){
+      return(glue::glue('"{expr}"'))
+    }
+    if(is.call(expr)){
+      op <- as.character(expr[[1]])
+      args <- as.list(expr[-1])
+
+      if(op == "("){
+        return(expr_to_excel(args[[1]], var_to_cell))
+      }
+
+      binary_ops <- c("==" = "=", "!=" = "<>", "<" = "<", "<=" = "<=", ">" = ">", ">=" = ">=")
+      if(op %in% names(binary_ops)){
+        lhs <- expr_to_excel(args[[1]], var_to_cell)
+        rhs <- expr_to_excel(args[[2]], var_to_cell)
+        return(glue::glue("{lhs}{binary_ops[op]}{rhs}"))
+      }
+
+      if(op == "&"){
+        lhs <- expr_to_excel(args[[1]], var_to_cell)
+        rhs <- expr_to_excel(args[[2]], var_to_cell)
+        return(glue::glue("AND({lhs}, {rhs})"))
+      }
+      if(op == "|"){
+        lhs <- expr_to_excel(args[[1]], var_to_cell)
+        rhs <- expr_to_excel(args[[2]], var_to_cell)
+        return(glue::glue("OR({lhs}, {rhs})"))
+      }
+      if(op == "!"){
+        sub <- expr_to_excel(args[[1]], var_to_cell)
+        return(glue::glue("NOT({sub})"))
+      }
+      if(op == "%in%"){
+        lhs       <- expr_to_excel(args[[1]], var_to_cell)
+        rhs_lit   <- tryCatch(eval(args[[2]]), error = function(e) NULL)
+        if(is.null(rhs_lit)){
+          stop("`%in%` rhs in additional_logic_advanced$when must be a literal vector (e.g. c(1, 2, 3)).")
+        }
+        conds <- purrr::map(rhs_lit, ~ glue::glue("{lhs}={.x}"))
+        combined <- purrr::reduce(conds, function(a, b) paste0(a, ", ", b))
+        return(glue::glue("OR({combined})"))
+      }
+
+      stop(glue::glue(
+        "Unsupported operator `{op}` in additional_logic_advanced$when. ",
+        "Supported: ==, !=, <, <=, >, >=, &, |, !, %in%, parentheses."
+      ))
+    }
+    stop("Unsupported expression in additional_logic_advanced$when.")
+  }
+
+  when_to_excel <- function(when_formula, var_to_cell){
+    expr_to_excel(rlang::f_rhs(when_formula), var_to_cell)
+  }
+
+
+  # Human-readable rendering of a `when` formula with Q labels substituted
+  # for the underlying variable names — used in the Documentation step text
+  # so readers see "Q24 == 1 | Q25 == 1" instead of "VT02 == 1 | VT03 == 1".
+  expr_to_human_text <- function(expr){
+    if(is.symbol(expr)){
+      nm <- as.character(expr)
+      if(nm %in% c("TRUE", "T"))  return("TRUE")
+      if(nm %in% c("FALSE", "F")) return("FALSE")
+      if(nm == "NA")              return("NA")
+      return(q_label_for_var(nm))
+    }
+    if(is.numeric(expr) || is.logical(expr)) return(as.character(expr))
+    if(is.character(expr))                   return(glue::glue('"{expr}"'))
+    if(is.call(expr)){
+      op   <- as.character(expr[[1]])
+      args <- as.list(expr[-1])
+
+      if(op == "("){
+        return(glue::glue("({expr_to_human_text(args[[1]])})"))
+      }
+      binary_ops <- c("==", "!=", "<", "<=", ">", ">=", "&", "|", "&&", "||")
+      if(op %in% binary_ops){
+        lhs <- expr_to_human_text(args[[1]])
+        rhs <- expr_to_human_text(args[[2]])
+        return(glue::glue("{lhs} {op} {rhs}"))
+      }
+      if(op == "!"){
+        return(glue::glue("!{expr_to_human_text(args[[1]])}"))
+      }
+      if(op == "%in%"){
+        lhs     <- expr_to_human_text(args[[1]])
+        rhs_lit <- tryCatch(eval(args[[2]]), error = function(e) NULL)
+        if(is.null(rhs_lit)) return(glue::glue("{lhs} %in% <unknown>"))
+        return(glue::glue("{lhs} %in% c({paste(rhs_lit, collapse = ', ')})"))
+      }
+      # fallback for unsupported nodes — preserves the raw expression
+      return(paste(deparse(expr), collapse = " "))
+    }
+    as.character(expr)
+  }
+
+  when_to_human_text <- function(when_formula){
+    expr_to_human_text(rlang::f_rhs(when_formula))
   }
 
 
@@ -1721,13 +2306,18 @@ seg_typing_tool <- function(
           gridExpand = TRUE, stack = TRUE
         )
 
-        # determine first respondent's selected var (if any)
-        first_resp_selected_var <- NA_character_
+        # determine which vars to pre-fill with "x" for the first respondent.
+        # For mece groups at most one will be 1 by design (so first-match is
+        # fine); for multi_select groups multiple can be 1 and we must mark
+        # every one — otherwise the engine recode for unmarked-but-actually-
+        # selected vars will be 0 and the UI exp_score will diverge from
+        # Bulk for the same respondent.
+        first_resp_selected_vars <- character(0)
         for(v in g_info$vars){
           val <- seg[["data"]][["with_solutions"]][[v]][1]
           if(!is.na(val) && val == 1){
-            first_resp_selected_var <- v
-            break
+            first_resp_selected_vars <- c(first_resp_selected_vars, v)
+            if(g_info$type == "mece") break
           }
         }
 
@@ -1758,8 +2348,8 @@ seg_typing_tool <- function(
             rows = r, cols = seq(col_g_text, col_g_answer - 1)
           )
 
-          # pre-fill x for first respondent's selected var
-          if(!is.na(first_resp_selected_var) && v_name == first_resp_selected_var){
+          # pre-fill x for every var the first respondent selected
+          if(v_name %in% first_resp_selected_vars){
             openxlsx::writeData(wb, sheet_name, x = "x", startRow = r, startCol = col_g_answer, colNames = FALSE)
           }
 
@@ -1908,8 +2498,12 @@ seg_typing_tool <- function(
 
     for(i in c(row_header, row_ind_engine_header)){
 
+      # Question col includes "Constant" on the last row so that downstream
+      # INDEX/MATCH lookups against the Question column can find the constant
+      # row by name (rather than relying on positional row alignment between
+      # the engine grid and the Solution Coefficient Function block).
       temp_coef_func <- tibble::tibble(
-        "Question" = c(clean_variable_names, NA)
+        "Question" = c(clean_variable_names, "Constant")
       ) %>%
         dplyr::bind_cols(coef_func)
 
@@ -2119,19 +2713,61 @@ seg_typing_tool <- function(
     }else{
       doc_row_doc_last + 4
     }
-    doc_coef_data_rows  <- seq(doc_coef_row_header + 1, doc_coef_row_header + nrow(coef_func))
+    doc_coef_data_rows <- seq(doc_coef_row_header + 1, doc_coef_row_header + nrow(coef_func))
 
+    # Pull the UI's Solution Coefficient Function block (Variable + Seg cols)
+    # from Documentation via 2D INDEX/MATCH — row matched against Doc's
+    # Question column, col matched against Doc's column-header row. Robust
+    # to edits or column re-orderings on the Doc sheet: as long as the
+    # Question labels (e.g. "Q1", "Q2", ..., "Constant") and column headers
+    # (e.g. "Variable", "Seg_1", ...) still exist, the UI resolves them.
+    doc_q_col_letter      <- num2let(start_col)
+    doc_first_value_col   <- start_col + 1                       # Variable col onward
+    doc_last_value_col    <- start_col + 1 + length(segments)    # last Seg col
+    doc_first_value_letter <- num2let(doc_first_value_col)
+    doc_last_value_letter  <- num2let(doc_last_value_col)
+    doc_data_first_row    <- doc_coef_data_rows[1]
+    doc_data_last_row     <- doc_coef_data_rows[length(doc_coef_data_rows)]
+
+    doc_q_range_abs <- glue::glue(
+      "'{sheet_name_doc}'!${doc_q_col_letter}${doc_data_first_row}:",
+      "${doc_q_col_letter}${doc_data_last_row}"
+    )
+    doc_value_2d_range <- glue::glue(
+      "'{sheet_name_doc}'!${doc_first_value_letter}${doc_data_first_row}:",
+      "${doc_last_value_letter}${doc_data_last_row}"
+    )
+    doc_header_row_range <- glue::glue(
+      "'{sheet_name_doc}'!${doc_first_value_letter}${doc_coef_row_header}:",
+      "${doc_last_value_letter}${doc_coef_row_header}"
+    )
+
+    ui_scf_q_letter <- num2let(col_ind_engine_clean_var_number)
+    ui_scf_q_cells  <- glue::glue("${ui_scf_q_letter}{seq(row_header + 1, row_header + nrow(coef_func))}")
+
+    # Variable column lookup: row keyed by Q label, col keyed by the UI's
+    # own "Variable" header cell so a Doc rearrangement doesn't break it.
+    ui_var_header_cell <- glue::glue("${num2let(col_ind_engine_clean_var_number + 1)}${row_header}")
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue::glue("'{sheet_name_doc}'!{num2let(start_col + 1)}{doc_coef_data_rows}"),
+      x = glue::glue(
+        "INDEX({doc_value_2d_range}, ",
+        "MATCH({ui_scf_q_cells}, {doc_q_range_abs}, 0), ",
+        "MATCH({ui_var_header_cell}, {doc_header_row_range}, 0))"
+      ),
       startRow = row_header + 1,
       startCol = col_ind_engine_clean_var_number + 1
     )
 
     for(s in seq_len(length(segments))){
+      ui_seg_header_cell <- glue::glue("${num2let(col_ind_engine_clean_var_number + 1 + s)}${row_header}")
       openxlsx::writeFormula(
         wb, sheet_name,
-        x = glue::glue("'{sheet_name_doc}'!{num2let(start_col + 1 + s)}{doc_coef_data_rows}"),
+        x = glue::glue(
+          "INDEX({doc_value_2d_range}, ",
+          "MATCH({ui_scf_q_cells}, {doc_q_range_abs}, 0), ",
+          "MATCH({ui_seg_header_cell}, {doc_header_row_range}, 0))"
+        ),
         startRow = row_header + 1,
         startCol = col_ind_engine_clean_var_number + 1 + s
       )
@@ -2178,8 +2814,13 @@ seg_typing_tool <- function(
         qc_formula     <- glue::glue('COUNTIF({num2let(col_ind_label_point_first_number)}{i}:{num2let(col_ind_label_point_last_number)}{i},"x")')
         recode_array   <- TRUE
       }else{
-        # locate the np_info_with_cells entry for this var (since some entries may be skipped via ui_groups)
-        np_idx <- which(purrr::map_chr(np_info_with_cells, "var") == var_name_eng)
+        # locate the np_info_with_cells entry for this var. Some slots are
+        # NULL because their var was folded into a ui_groups block at line
+        # 1810 (the preallocated list is left NULL on skip). Use
+        # `.default = NA_character_` so map_chr tolerates the gaps instead
+        # of erroring "Result must be length 1, not 0".
+        np_idx <- which(purrr::map_chr(np_info_with_cells, "var",
+          .default = NA_character_) == var_name_eng)
         np <- np_info_with_cells[[np_idx[1]]]
         answer_formula <- glue::glue('MATCH("x", {np$answer_range}, 0)')
         recode_formula <- glue::glue('INDEX({np$code_range}, {num2let(col_ind_engine_answer_number)}{i}, 1)')
@@ -2240,15 +2881,75 @@ seg_typing_tool <- function(
 
 
     # Engine multiplication grid (per-cell coef * recoded-input products).
-    # Vectorized: build one column of formulas per seg, then write the whole
-    # grid in a single writeData call. Replaces the old nested per-cell loop
-    # which made nrow(coef_func) * n_seg writeFormula calls.
+    # Each cell looks up the Solution Coefficient Function block by the
+    # engine row's Question label (Q1, Q2, ..., Constant) using INDEX/MATCH
+    # — robust to row-order changes in the SCF block.
+    #   coef value  = INDEX(<seg_col_range_in_SCF>, MATCH(<engine_q_cell>, <q_range_in_SCF>, 0))
+    #   recode mult = INDEX(<recode_col_range_in_SCF>, MATCH(<engine_q_cell>, <q_range_in_SCF>, 0))
+    # Constant-row recode is 1 (written elsewhere) so the multiplication
+    # naturally yields the seg constant on the engine constant row.
     seq_engine_rows <- seq(row_ind_engine_first, row_ind_engine_last)
     seq_engine_cols <- seq(col_ind_engine_survey_var_number + 1, col_ind_engine_answer_number - 1)
 
-    engine_recode_let <- num2let(col_ind_engine_recode_number)
+    scf_q_letter      <- num2let(col_ind_engine_clean_var_number)
+    scf_var_letter    <- num2let(col_ind_engine_clean_var_number + 1)
+    scf_recode_letter <- num2let(col_ind_engine_recode_number)
+    scf_first_row     <- row_header + 1
+    scf_last_row      <- row_header + nrow(coef_func)
+    scf_q_range       <- glue::glue("${scf_q_letter}${scf_first_row}:${scf_q_letter}${scf_last_row}")
+    scf_recode_range  <- glue::glue("${scf_recode_letter}${scf_first_row}:${scf_recode_letter}${scf_last_row}")
+
+    # Make the Response Calculations block's Question and Variable columns
+    # formulaic — each engine row mirrors the SCF row at the matching offset,
+    # so the SCF block stays the single source of truth. Overwrites the
+    # hardcoded values just written via temp_coef_func at row_ind_engine_header.
+    scf_rows_for_engine <- scf_first_row + (seq_engine_rows - row_ind_engine_first)
+    engine_q_formulas   <- glue::glue("={scf_q_letter}{scf_rows_for_engine}")
+    engine_var_formulas <- glue::glue("={scf_var_letter}{scf_rows_for_engine}")
+
+    engine_q_var_tbl <- tibble::tibble(
+      "Question" = engine_q_formulas,
+      "Variable" = engine_var_formulas
+    )
+    class(engine_q_var_tbl[["Question"]]) <- "formula"
+    class(engine_q_var_tbl[["Variable"]]) <- "formula"
+
+    openxlsx::writeData(
+      wb, sheet_name, x = engine_q_var_tbl,
+      startRow = row_ind_engine_first,
+      startCol = col_ind_engine_clean_var_number,
+      colNames = FALSE
+    )
+
+    engine_q_cells <- glue::glue("${scf_q_letter}{seq_engine_rows}")  # engine row's own Question cell
+
+    # 2D INDEX/MATCH against the Solution Coefficient Function block. Row is
+    # matched against SCF's Question column, col is matched against SCF's
+    # column-header row. The recode lookup uses the literal "Recode" header
+    # so it survives column reordering inside the SCF block.
+    scf_first_col_letter <- num2let(col_ind_engine_clean_var_number)
+    scf_last_col_letter  <- num2let(col_ind_engine_qc_number)
+    scf_data_2d_range    <- glue::glue(
+      "${scf_first_col_letter}${scf_first_row}:${scf_last_col_letter}${scf_last_row}"
+    )
+    scf_header_row_range <- glue::glue(
+      "${scf_first_col_letter}${row_header}:${scf_last_col_letter}${row_header}"
+    )
+    recode_col_match <- glue::glue('MATCH("Recode", {scf_header_row_range}, 0)')
+
     engine_grid_tbl <- purrr::map(seq_engine_cols, function(x){
-      glue::glue('{num2let(x)}{seq_engine_rows - row_eng_coef_diff} * ${engine_recode_let}{seq_engine_rows - row_eng_coef_diff}')
+      # horizontal key: this column's own header cell (e.g. "Seg_1") on the
+      # engine block's header row. Same value as the SCF block's header at
+      # the matching column, but matching by header value rather than column
+      # position keeps the formula valid even if either block's columns get
+      # reordered.
+      engine_seg_header_cell <- glue::glue("{num2let(x)}${row_ind_engine_header}")
+      seg_col_match <- glue::glue("MATCH({engine_seg_header_cell}, {scf_header_row_range}, 0)")
+      row_match     <- glue::glue("MATCH({engine_q_cells}, {scf_q_range}, 0)")
+      glue::glue(
+        "INDEX({scf_data_2d_range}, {row_match}, {seg_col_match}) * ",
+        "INDEX({scf_data_2d_range}, {row_match}, {recode_col_match})"
+      )
     })
     engine_grid_tbl <- setNames(
       as.data.frame(engine_grid_tbl, stringsAsFactors = FALSE),
@@ -2331,6 +3032,49 @@ seg_typing_tool <- function(
       }
     }
 
+    # additional_logic_advanced helpers — UI engine side. Mirrors the bulk
+    # implementation but emits scalar cell refs (one cell per var) since the
+    # UI engine resolves to a single respondent.
+    ui_when_var_to_cell <- function(var_name){
+      ref <- ui_value_cell_for(var_name)
+      if(is.na(ref$cell)) return(NA_character_)
+      # grouped vars hold "x" / blank — translate to 1 / 0 for numeric
+      # comparisons inside the formula.
+      if(isTRUE(ref$is_x)){
+        return(glue::glue('IF({ref$cell}="x", 1, 0)'))
+      }
+      ref$cell
+    }
+
+    ui_advanced_soft_expanded <- list()
+    ui_advanced_hard_rules    <- list()
+    if(!is.null(additional_logic_advanced_info)){
+      for(rule in additional_logic_advanced_info){
+        when_excel_ui <- when_to_excel(rule$when_formula, ui_when_var_to_cell)
+        if(rule$is_hard){
+          ui_advanced_hard_rules[[length(ui_advanced_hard_rules) + 1]] <- list(
+            when_excel = when_excel_ui,
+            to_seg     = rule$to_seg,
+            rule_index = rule$rule_index
+          )
+        }else{
+          for(fl in rule$from_lda){
+            cond_with_max <- if(isTRUE(apply_logic_only_to_max)){
+              glue::glue("AND({when_excel_ui}, {ui_max_check_for(fl)})")
+            }else{
+              when_excel_ui
+            }
+            ui_advanced_soft_expanded[[length(ui_advanced_soft_expanded) + 1]] <- list(
+              cond       = cond_with_max,
+              from_lda   = fl,
+              to_seg     = rule$to_seg,
+              rule_index = rule$rule_index
+            )
+          }
+        }
+      }
+    }
+
     for(x in seq_engine_cols){
       seg_idx_ui  <- x - col_ind_engine_survey_var_number
       seg_num_ui  <- as.integer(segments[seg_idx_ui])
@@ -2365,6 +3109,18 @@ seg_typing_tool <- function(
             added_parts_ui <- collect_to(aq_e$rules, aq_e$var)
           }
         }
+
+        # additional_logic_advanced (soft) — accumulate from_lda's score onto
+        # this new seg when the rule's `when` condition fires.
+        for(adv in ui_advanced_soft_expanded){
+          if(adv$to_seg != seg_num_ui) next
+          from_idx <- match(adv$from_lda, as.integer(segments))
+          if(is.na(from_idx)) next
+          from_x          <- col_ind_engine_survey_var_number + from_idx
+          from_score_cell <- glue::glue("{num2let(from_x)}{score_row_ui}")
+          added_parts_ui <- c(added_parts_ui, glue::glue("IF({adv$cond}, {from_score_cell}, 0)"))
+        }
+
         ui_score_formula <- if(length(added_parts_ui) > 0){
           paste(added_parts_ui, collapse = " + ")
         }else{
@@ -2379,36 +3135,97 @@ seg_typing_tool <- function(
         startCol = x,
       )
 
-      # Probability formula
+      # Probability formula. For LDA segs we both zero on `from_seg = this`
+      # rules AND add `IF(cond, base_prob_from, 0)` on `to_seg = this` rules
+      # so LDA→LDA reassignment conserves mass at the prob layer (LDA→new
+      # already conserves mass via the score block's accumulator).
       base_prob_ui <- glue::glue("{score_cell_ui} / SUM({score_range_lda_ui})")
       ui_prob_formula <- if(!is_new_ui){
         from_k_conds_ui <- character(0)
+        added_parts_prob_ui <- character(0)
+
+        prob_from_for_idx <- function(from_idx){
+          from_x_prob   <- col_ind_engine_survey_var_number + from_idx
+          from_score_pf <- glue::glue("{num2let(from_x_prob)}{score_row_ui}")
+          glue::glue("{from_score_pf} / SUM({score_range_lda_ui})")
+        }
+
+        collect_for_var <- function(rules, var_name){
+          fs <- rules %>% dplyr::filter(from_seg == seg_num_ui)
+          for(j in seq_len(nrow(fs))){
+            cond_str <- ui_grouped_or_normal_condition(var_name, fs$value[j], seg_num_ui)
+            if(!is.na(cond_str)) from_k_conds_ui <<- c(from_k_conds_ui, cond_str)
+          }
+          ts <- rules %>% dplyr::filter(to_seg == seg_num_ui)
+          for(j in seq_len(nrow(ts))){
+            from_idx <- match(ts$from_seg[j], as.integer(segments))
+            if(!is.na(from_idx)){
+              cond_to <- ui_grouped_or_normal_condition(var_name, ts$value[j], ts$from_seg[j])
+              if(!is.na(cond_to)){
+                added_parts_prob_ui <<- c(
+                  added_parts_prob_ui,
+                  glue::glue("IF({cond_to}, {prob_from_for_idx(from_idx)}, 0)")
+                )
+              }
+            }
+          }
+        }
+
         if(!is.null(additional_logic_info)){
           for(var_name in names(additional_logic_info)){
-            rules <- additional_logic_info[[var_name]]
-            from_subset <- rules %>% dplyr::filter(from_seg == seg_num_ui)
-            for(j in seq_len(nrow(from_subset))){
-              cond_str <- ui_grouped_or_normal_condition(var_name, from_subset$value[j], seg_num_ui)
-              if(!is.na(cond_str)) from_k_conds_ui <- c(from_k_conds_ui, cond_str)
-            }
+            collect_for_var(additional_logic_info[[var_name]], var_name)
           }
         }
         if(!is.null(additional_questions_info)){
           for(aq_e in additional_questions_info){
-            from_subset_aq <- aq_e$rules %>% dplyr::filter(from_seg == seg_num_ui)
-            for(j in seq_len(nrow(from_subset_aq))){
-              cond_str <- ui_grouped_or_normal_condition(aq_e$var, from_subset_aq$value[j], seg_num_ui)
-              if(!is.na(cond_str)) from_k_conds_ui <- c(from_k_conds_ui, cond_str)
+            collect_for_var(aq_e$rules, aq_e$var)
+          }
+        }
+
+        # additional_logic_advanced (soft) — same pattern: zero on from rules,
+        # add on to rules (LDA→LDA only).
+        for(adv in ui_advanced_soft_expanded){
+          if(adv$from_lda == seg_num_ui){
+            from_k_conds_ui <- c(from_k_conds_ui, adv$cond)
+          }
+          if(adv$to_seg == seg_num_ui){
+            from_idx <- match(adv$from_lda, as.integer(segments))
+            if(!is.na(from_idx)){
+              added_parts_prob_ui <- c(
+                added_parts_prob_ui,
+                glue::glue("IF({adv$cond}, {prob_from_for_idx(from_idx)}, 0)")
+              )
             }
           }
         }
-        if(length(from_k_conds_ui) > 0){
+
+        zeroed_part_ui <- if(length(from_k_conds_ui) > 0){
           glue::glue("IF(OR({paste(from_k_conds_ui, collapse = ', ')}), 0, {base_prob_ui})")
         }else{
           base_prob_ui
         }
+
+        if(length(added_parts_prob_ui) > 0){
+          paste(c(zeroed_part_ui, added_parts_prob_ui), collapse = " + ")
+        }else{
+          zeroed_part_ui
+        }
       }else{
         base_prob_ui
+      }
+
+      # Hard advanced rules — when one fires, the row's prob vector becomes
+      # (1 for the rule's to_seg, 0 for all other segs), so the prob row
+      # mirrors the classification override at row_ind_engine_seg.
+      if(length(ui_advanced_hard_rules) > 0){
+        ui_prob_formula <- purrr::reduce(
+          rev(ui_advanced_hard_rules),
+          function(acc, hard){
+            target <- if(hard$to_seg == seg_num_ui) "1" else "0"
+            glue::glue("IF({hard$when_excel}, {target}, {acc})")
+          },
+          .init = ui_prob_formula
+        )
       }
 
       openxlsx::writeFormula(
@@ -2541,9 +3358,21 @@ seg_typing_tool <- function(
     # Plain MATCH — additional_logic redistributes probabilities upstream
     # (in the row_ind_engine_prob formulas), so MAX over the adjusted probs
     # naturally lands on the correct (post-redistribution) segment.
+    # additional_logic_advanced (hard) rules wrap this argmax in an IF chain
+    # — first matching hard rule overrides the argmax (case_when semantics).
+    ui_seg_core <- glue::glue('MATCH(MAX({range_ind_prob}), {range_ind_prob}, 0)')
+    if(length(ui_advanced_hard_rules) > 0){
+      ui_seg_core <- purrr::reduce(
+        rev(ui_advanced_hard_rules),
+        function(acc, hard){
+          glue::glue('IF({hard$when_excel}, {hard$to_seg}, {acc})')
+        },
+        .init = ui_seg_core
+      )
+    }
     openxlsx::writeFormula(
       wb, sheet_name,
-      x = glue::glue('MATCH(MAX({range_ind_prob}), {range_ind_prob}, 0)'),
+      x = ui_seg_core,
       startRow = row_ind_engine_seg,
       startCol = col_ind_engine_survey_var_number,
     )
@@ -2637,6 +3466,19 @@ seg_typing_tool <- function(
   }
 
 
+
+
+  # Shared cell style for non-polar / additional_questions / ui_groups data
+  # rows in the documentation sheet: white fill with a thin grid border on
+  # every side, matching the polar table's appearance.
+  style_doc_data_cell <- openxlsx::createStyle(
+    fgFill         = "white",
+    halign         = "center",
+    valign         = "center",
+    border         = "TopBottomLeftRight",
+    borderStyle    = "thin",
+    wrapText       = TRUE
+  )
 
 
   documentation_tool <- function(
@@ -2764,14 +3606,25 @@ seg_typing_tool <- function(
     #   questionnaire_extra:    2 elements when has_non_polar
     #   recode_step_content:    7 + nrow(recode_mapping) when has_recoding
     #   reassign_step_content:  7 + n_reassign_rules when has_logic_doc
-    has_logic_doc_canvas <- !is.null(additional_logic_info) || !is.null(additional_questions_info)
+    has_logic_doc_canvas <- !is.null(additional_logic_info) ||
+      !is.null(additional_questions_info) ||
+      !is.null(additional_logic_advanced_info)
     has_non_polar_canvas <- length(non_polar_inputs) > 0
     n_recode_rows_canvas <- if(has_recoding) as.integer(nrow(recode_mapping)) else 0L
+    # advanced rules contribute their N lines plus a preamble + spacer (2
+    # lines) when at least one rule exists, plus an extra NA spacer (1
+    # line) when both soft and hard rules are present.
+    adv_n         <- if(!is.null(additional_logic_advanced_info)) length(additional_logic_advanced_info) else 0L
+    adv_n_hard    <- if(adv_n > 0) sum(purrr::map_lgl(additional_logic_advanced_info, "is_hard")) else 0L
+    adv_n_soft    <- adv_n - adv_n_hard
+    adv_extra <- (if(adv_n > 0) 3L else 0L) + (if(adv_n_hard > 0L && adv_n_soft > 0L) 1L else 0L)
+
     n_reassign_rules_canvas <- 0L +
       (if(!is.null(additional_logic_info)) sum(purrr::map_int(additional_logic_info, ~ as.integer(nrow(.x)))) else 0L) +
-      (if(!is.null(additional_questions_info)) sum(purrr::map_int(additional_questions_info, ~ as.integer(nrow(.x$rules)))) else 0L)
+      (if(!is.null(additional_questions_info)) sum(purrr::map_int(additional_questions_info, ~ as.integer(nrow(.x$rules)))) else 0L) +
+      adv_n + adv_extra
 
-    n_calc_steps_canvas <- 57L +
+    n_calc_steps_canvas <- 58L +
       (if(has_non_polar_canvas) 2L else 0L) +
       (if(has_recoding)         7L + n_recode_rows_canvas else 0L) +
       (if(has_logic_doc_canvas) 7L + n_reassign_rules_canvas else 0L)
@@ -3181,8 +4034,8 @@ seg_typing_tool <- function(
           openxlsx::writeData(wb, sheet_name, x = info$value_table$code[v],  startRow = r, startCol = col_doc_np_answer,   colNames = FALSE)
         }
 
-        # styles + borders
-        openxlsx::addStyle(wb, sheet_name, style = style_table,
+        # white fill + thin inner grid (matches polar / coef table look)
+        openxlsx::addStyle(wb, sheet_name, style = style_doc_data_cell,
           rows = seq(row_np_d_f, row_np_d_l),
           cols = seq(col_doc_np_q, col_doc_np_answer),
           gridExpand = TRUE, stack = TRUE
@@ -3266,7 +4119,7 @@ seg_typing_tool <- function(
           openxlsx::writeData(wb, sheet_name, x = info$value_table$code[v],  startRow = r, startCol = col_doc_aq_answer,   colNames = FALSE)
         }
 
-        openxlsx::addStyle(wb, sheet_name, style = style_table,
+        openxlsx::addStyle(wb, sheet_name, style = style_doc_data_cell,
           rows = seq(row_aq_d_f, row_aq_d_l),
           cols = seq(col_doc_aq_q, col_doc_aq_answer),
           gridExpand = TRUE, stack = TRUE
@@ -3391,7 +4244,7 @@ seg_typing_tool <- function(
           )
         }
 
-        openxlsx::addStyle(wb, sheet_name, style = style_table,
+        openxlsx::addStyle(wb, sheet_name, style = style_doc_data_cell,
           rows = seq(row_g_d_f, row_g_d_l),
           cols = seq(col_doc_g_q, col_doc_g_answer),
           gridExpand = TRUE, stack = TRUE
@@ -3523,7 +4376,9 @@ seg_typing_tool <- function(
       )
     }
 
-    has_logic_doc <- !is.null(additional_logic_info) || !is.null(additional_questions_info)
+    has_logic_doc <- !is.null(additional_logic_info) ||
+      !is.null(additional_questions_info) ||
+      !is.null(additional_logic_advanced_info)
 
     s_questionnaire <- 1L
     s_recode        <- if(has_recoding) 2L else NA_integer_
@@ -3597,6 +4452,77 @@ seg_typing_tool <- function(
           }
         }
       }
+
+      # additional_logic_advanced — render rules in evaluation order: soft
+      # rules first (they redistribute prob mass at the prob layer; all run
+      # independently and compose with each other and with simpler logic),
+      # then hard rules (clamp the final prob vector to 100/0 — sequential,
+      # first match wins, always supersede soft work).
+      if(!is.null(additional_logic_advanced_info)){
+        soft_lines <- character(0)
+        hard_lines <- character(0)
+
+        for(rule in additional_logic_advanced_info){
+          # render the when condition with question labels (Q1, Q2, ...)
+          # substituted for the underlying variable names — easier to read
+          # than the raw rs_* / VT* / DM* identifiers.
+          when_text <- when_to_human_text(rule$when_formula)
+          if(rule$is_hard){
+            hard_lines <- c(
+              hard_lines,
+              glue::glue(
+                "          [Advanced rule {rule$display_index}, hard reassignment] If ({when_text}): ",
+                "set Segment {rule$to_seg}'s probability to 1 (100%) and every other segment's probability to 0; ",
+                "the final classification becomes Segment {rule$to_seg}."
+              )
+            )
+          }else{
+            from_set <- paste(rule$from_lda, collapse = ", ")
+            n_from   <- length(rule$from_lda)
+            seg_word <- if(n_from == 1) "Segment" else "Segments"
+            max_clause <- if(isTRUE(apply_logic_only_to_max)){
+              if(n_from == 1){
+                glue::glue(" (only when Segment {from_set} has the highest base probability)")
+              }else{
+                glue::glue(" (only when one of Segments {from_set} has the highest base probability)")
+              }
+            }else ""
+            soft_lines <- c(
+              soft_lines,
+              glue::glue(
+                "          [Advanced rule {rule$display_index}, soft reassignment] If ({when_text}){max_clause}: ",
+                "add {seg_word} {from_set}'s probability to Segment {rule$to_seg}, ",
+                "and set {seg_word} {from_set}'s probability to 0."
+              )
+            )
+          }
+        }
+
+        has_soft <- length(soft_lines) > 0
+        has_hard <- length(hard_lines) > 0
+
+        preamble_line_1 <- paste0(
+          "          The reassignments below run in two passes: soft rules first ",
+          "(they move probability mass between segments)."
+        )
+        preamble_line_2 <- paste0(
+          "          Then hard rules, which clamp the final probability vector to 100% ",
+          "on 'to_seg' and 0% on every other segment - first matching hard rule wins. ",
+          "Hard rules always supersede any soft redistribution that occurred for the same respondent."
+        )
+
+        if(has_soft || has_hard){
+          reassign_lines <- c(reassign_lines, preamble_line_1, preamble_line_2, NA)
+        }
+        if(has_soft){
+          reassign_lines <- c(reassign_lines, soft_lines)
+          if(has_hard) reassign_lines <- c(reassign_lines, NA)
+        }
+        if(has_hard){
+          reassign_lines <- c(reassign_lines, hard_lines)
+        }
+      }
+
       c(
         glue::glue("Step {s_reassign} - Probability Reassignment"),
         "          After computing the base probabilities, apply the following adjustments:",
@@ -3641,10 +4567,8 @@ seg_typing_tool <- function(
         NA, NA,
         recode_step_content,
         glue::glue("Step {s_multiply} - Multiply {mult_adj}responses with coefficient function"),
-        glue::glue(
-          "          For each participant, multiply the {resp_adj}responses with the coefficients for each segment. Sum the products for each segment and add the constant.  This will create a score for each segment.",
-          if(has_non_polar) " For polar questions, multiply the recoded value (rs prefix); for non-polar questions, multiply the raw answer code." else ""
-        ),
+        glue::glue("          For each participant, multiply the {resp_adj}responses with the coefficients for each segment. Sum the products for each segment and add the constant.  This will create a score for each segment."),
+        if(has_non_polar) "          For polar questions, multiply the recoded value (rs prefix); for non-polar questions, multiply the raw answer code." else NA,
         NA,
         glue::glue('                    Segment 1 Score = {score_formula("Seg_1")}'),
         NA,
@@ -3829,23 +4753,28 @@ seg_typing_tool <- function(
     col_bulk_qc_formula_first <- col_bulk_qc_last + 1
     col_bulk_qc_formula_last <- col_bulk_qc_formula_first + ncol(data_solution_check) - 1
 
+    # "Prob Sum to 1" sanity-check column sits directly after the Class Check
+    # column (= col_bulk_qc_formula_last). Always present.
+    col_prob_sum_check <- col_bulk_qc_formula_last + 1L
+
     # Optional extra columns (additional_bulk_qc_check) appended directly to
-    # the right of the QC Check formula block, under the same merged title.
-    # Each named variable contributes two columns: the variable's value (from
+    # the right of the prob-sum check, under the same merged title. Each
+    # named variable contributes two columns: the variable's value (from
     # seg$data$with_solutions) followed by a TRUE/FALSE column comparing it
     # to the bulk Classification col (col_seg).
     n_additional_qc <- length(additional_bulk_qc_check)
     has_additional_qc <- n_additional_qc > 0
-    col_additional_qc_first <- col_bulk_qc_formula_last + 1
-    col_additional_qc_last  <- col_bulk_qc_formula_last + 2L * n_additional_qc
+    col_additional_qc_first <- col_prob_sum_check + 1L
+    col_additional_qc_last  <- col_prob_sum_check + 2L * n_additional_qc
 
     # Helpers: data col / check col for additional QC var i (1-indexed).
     col_additional_qc_data_for  <- function(i) col_additional_qc_first + (i - 1L) * 2L
     col_additional_qc_check_for <- function(i) col_additional_qc_first + (i - 1L) * 2L + 1L
 
     # Rightmost col of the QC Check block (used by title merge / borders /
-    # canvas etc.). Falls back to col_bulk_qc_formula_last when no extras.
-    col_bulk_qc_block_last <- if(has_additional_qc) col_additional_qc_last else col_bulk_qc_formula_last
+    # canvas etc.). Always at least col_prob_sum_check; extends to
+    # col_additional_qc_last when extras are supplied.
+    col_bulk_qc_block_last <- if(has_additional_qc) col_additional_qc_last else col_prob_sum_check
 
     col_last <- col_bulk_qc_block_last
 
@@ -3864,13 +4793,16 @@ seg_typing_tool <- function(
     # supplied — then it extends to include those extra columns.
     #######################
 
-    # Width = 1 col past col_qc_count (= col_bulk_qc_block_last + 7) plus 2
-    # cols per additional QC var, since each extra var adds its own Seg Counts
-    # table (label + count) to the right of QC Seg Counts. Height matches the
-    # bulk table; the Check Counts tables sit a few rows below row_header,
-    # well above row_last, so the +1 buffer there is enough.
+    # Width covers (in order): the QC block itself, a 2-col gap, then the
+    # four base freq tables (Class Check / Prob Sum / Membership / QC Seg = 8
+    # cols), plus 2 cols per additional QC var for that var's Seg Counts
+    # table. Height matches the bulk table; the Check Counts tables sit a
+    # few rows below row_header, well above row_last.
+    has_advanced_rules <- !is.null(additional_logic_advanced_info) && length(additional_logic_advanced_info) > 0
     canvas_max_row_bulk <- row_last + 1
-    canvas_max_col_bulk <- col_bulk_qc_block_last + 8 + (if(has_additional_qc) n_additional_qc * 2L else 0L)
+    canvas_max_col_bulk <- col_bulk_qc_block_last + 10 +
+      (if(has_additional_qc) n_additional_qc * 2L else 0L) +
+      (if(has_advanced_rules) 4L else 0L)
 
     openxlsx::addStyle(
       wb, sheet_name,
@@ -4178,15 +5110,19 @@ seg_typing_tool <- function(
 
     if(inputs_are_rs){
 
+      # Recode only LDA inputs — AQ vars don't feed the LDA score so they
+      # don't need a recode column. col_input_last spans LDA + AQ; clamping
+      # to col_lda_input_last keeps the loop output length in sync with
+      # clean_variable_names (LDA only) so setNames doesn't create NA names.
       temp <- purrr::map(
-        seq(col_input_first, col_input_last),
+        seq(col_input_first, col_lda_input_last),
         function(xc){
           col_idx <- xc - col_input_first + 1
           is_polar_col <- col_idx <= polar_count_b
           if(is_polar_col){
-            glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, IF(ISBLANK({num2let(xc)}{seq(row_data_first, row_last)}), "", INDEX({range_recode},1,{num2let(xc)}{seq(row_data_first, row_last)})), "")')
+            glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, IF(ISBLANK({num2let(xc)}{seq(row_data_first, row_last)}), "", INDEX({range_recode},1,{num2let(xc)}{seq(row_data_first, row_last)})), "")')
           }else{
-            glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)}, IF(ISBLANK({num2let(xc)}{seq(row_data_first, row_last)}), "", {num2let(xc)}{seq(row_data_first, row_last)}), "")')
+            glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, IF(ISBLANK({num2let(xc)}{seq(row_data_first, row_last)}), "", {num2let(xc)}{seq(row_data_first, row_last)}), "")')
           }
         }
       ) %>%
@@ -4304,6 +5240,46 @@ seg_typing_tool <- function(
       }
     }
 
+    # additional_logic_advanced helpers — Excel-formula side
+    bulk_when_var_to_cell <- function(var_name){
+      col <- bulk_col_for_var(var_name)
+      glue::glue("{num2let(col)}{seq_r_p}")
+    }
+
+    # Pre-translate every soft advanced rule's `when` condition into Excel
+    # (vectorized over data rows). Each soft rule is then expanded into one
+    # entry per from_lda value so the score/prob blocks can iterate
+    # uniformly. Hard rules go to a separate list used by the classification
+    # override at the end of the bulk render.
+    bulk_advanced_soft_expanded <- list()
+    bulk_advanced_hard_rules    <- list()
+    if(!is.null(additional_logic_advanced_info)){
+      for(rule in additional_logic_advanced_info){
+        when_excel <- when_to_excel(rule$when_formula, bulk_when_var_to_cell)
+        if(rule$is_hard){
+          bulk_advanced_hard_rules[[length(bulk_advanced_hard_rules) + 1]] <- list(
+            when_excel = when_excel,
+            to_seg     = rule$to_seg,
+            rule_index = rule$rule_index
+          )
+        }else{
+          for(fl in rule$from_lda){
+            cond_with_max <- if(isTRUE(apply_logic_only_to_max)){
+              glue::glue("AND({when_excel}, {bulk_max_check_for(fl)})")
+            }else{
+              when_excel
+            }
+            bulk_advanced_soft_expanded[[length(bulk_advanced_soft_expanded) + 1]] <- list(
+              cond       = cond_with_max,
+              from_lda   = fl,
+              to_seg     = rule$to_seg,
+              rule_index = rule$rule_index
+            )
+          }
+        }
+      }
+    }
+
     # Per-seg base exp expression (vectorized over rows). LDA segs use the
     # closed-form EXP(MMULT(recodes, coefs) + const). New segs have zero
     # coefs/constant in coef_func, so we don't write that formula at all
@@ -4349,6 +5325,19 @@ seg_typing_tool <- function(
           cell_v <- glue::glue("{num2let(bulk_col_for_var(aq_entry$var))}{seq_r_p}")
           collect_to_rules(aq_entry$rules, cell_v)
         }
+      }
+
+      # additional_logic_advanced (soft) — accumulate from_lda's score onto
+      # this new seg when the rule's `when` condition fires.
+      for(adv in bulk_advanced_soft_expanded){
+        if(adv$to_seg != seg_num) next
+        from_idx <- match(adv$from_lda, as.integer(segments))
+        if(is.na(from_idx)) next
+        from_score_let  <- score_col_letters[from_idx]
+        from_score_cell <- glue::glue("{from_score_let}{seq_r_p}")
+        added_parts_list[[length(added_parts_list) + 1]] <- glue::glue(
+          "IF({adv$cond}, {from_score_cell}, 0)"
+        )
       }
 
       inner <- if(length(added_parts_list) > 0){
@@ -4448,6 +5437,22 @@ seg_typing_tool <- function(
     # the corresponding to_seg below — total prob sums to 1.
     #######################
 
+    # Hard-rule wrapper: when a hard advanced rule fires, the whole row's
+    # probability vector becomes (1 for the rule's to_seg, 0 for everyone
+    # else), so the prob layer mirrors the classification override at the
+    # col_seg level. Sequential semantics — first matching hard rule wins.
+    bulk_wrap_prob_with_hard <- function(inner, seg_num){
+      if(length(bulk_advanced_hard_rules) == 0) return(inner)
+      purrr::reduce(
+        rev(bulk_advanced_hard_rules),
+        function(acc, hard){
+          target <- if(hard$to_seg == seg_num) "1" else "0"
+          glue::glue("IF({hard$when_excel}, {target}, {acc})")
+        },
+        .init = inner
+      )
+    }
+
     prob_columns_list <- purrr::map(seq_along(segments), function(seg_idx){
       seg_num   <- as.integer(segments[seg_idx])
       is_new    <- seg_num %in% combined_new_segs
@@ -4457,16 +5462,30 @@ seg_typing_tool <- function(
 
       if(is_new){
         # new seg's score is already redistributed; just emit score / SUM(LDA)
-        return(as.character(glue::glue('IF({calc_qc_cell_v} = TRUE, {base_prob_k}, "")')))
+        wrapped <- bulk_wrap_prob_with_hard(base_prob_k, seg_num)
+        return(as.character(glue::glue('IF({calc_qc_cell_v} = TRUE, {wrapped}, "")')))
       }
 
-      # LDA seg with from-rules: zero out when any from_seg=k rule fires
+      # LDA seg: zero on from-rules + add on to-rules (LDA→LDA only — new seg
+      # to-rules already accumulate at the score level upstream, and the
+      # SUM(score_range_lda) denominator is unaffected).
       from_k_conds_list <- list()
+      added_parts_list  <- list()
 
-      collect_from_rules <- function(rules, cell_v){
+      collect_rules_for_lda <- function(rules, cell_v){
         from_subset <- rules %>% dplyr::filter(from_seg == seg_num)
         for(j in seq_len(nrow(from_subset))){
           from_k_conds_list[[length(from_k_conds_list) + 1]] <<- bulk_rule_condition(cell_v, from_subset$value[j], seg_num)
+        }
+        to_subset <- rules %>% dplyr::filter(to_seg == seg_num)
+        for(j in seq_len(nrow(to_subset))){
+          from_idx <- match(to_subset$from_seg[j], as.integer(segments))
+          if(!is.na(from_idx)){
+            from_score_let <- score_col_letters[from_idx]
+            base_prob_from <- glue::glue("{from_score_let}{seq_r_p}/SUM({score_range_lda})")
+            cond <- bulk_rule_condition(cell_v, to_subset$value[j], to_subset$from_seg[j])
+            added_parts_list[[length(added_parts_list) + 1]] <<- glue::glue("IF({cond}, {base_prob_from}, 0)")
+          }
         }
       }
 
@@ -4474,25 +5493,52 @@ seg_typing_tool <- function(
         for(var_name in names(additional_logic_info)){
           input_idx_v <- match(var_name, inputs)
           cell_v <- glue::glue("{num2let(col_input_first + input_idx_v - 1)}{seq_r_p}")
-          collect_from_rules(additional_logic_info[[var_name]], cell_v)
+          collect_rules_for_lda(additional_logic_info[[var_name]], cell_v)
         }
       }
 
       if(!is.null(additional_questions_info)){
         for(aq_entry in additional_questions_info){
           cell_v <- glue::glue("{num2let(bulk_col_for_var(aq_entry$var))}{seq_r_p}")
-          collect_from_rules(aq_entry$rules, cell_v)
+          collect_rules_for_lda(aq_entry$rules, cell_v)
         }
       }
 
-      full <- if(length(from_k_conds_list) > 0){
+      # additional_logic_advanced (soft) — same pattern: zero on from rules,
+      # add on to rules (LDA→LDA only; LDA→new flows through the score block
+      # above and inherits the SUM(LDA) denominator).
+      for(adv in bulk_advanced_soft_expanded){
+        if(adv$from_lda == seg_num){
+          from_k_conds_list[[length(from_k_conds_list) + 1]] <- adv$cond
+        }
+        if(adv$to_seg == seg_num){
+          from_idx <- match(adv$from_lda, as.integer(segments))
+          if(!is.na(from_idx)){
+            from_score_let <- score_col_letters[from_idx]
+            base_prob_from <- glue::glue("{from_score_let}{seq_r_p}/SUM({score_range_lda})")
+            added_parts_list[[length(added_parts_list) + 1]] <- glue::glue(
+              "IF({adv$cond}, {base_prob_from}, 0)"
+            )
+          }
+        }
+      }
+
+      zeroed_part <- if(length(from_k_conds_list) > 0){
         combined_conds <- purrr::reduce(from_k_conds_list, function(a, b) paste0(a, ", ", b))
         glue::glue("IF(OR({combined_conds}), 0, {base_prob_k})")
       }else{
         base_prob_k
       }
 
-      as.character(glue::glue('IF({calc_qc_cell_v} = TRUE, {full}, "")'))
+      full <- if(length(added_parts_list) > 0){
+        combined_added <- purrr::reduce(added_parts_list, function(a, b) paste0(a, " + ", b))
+        paste0(zeroed_part, " + ", combined_added)
+      }else{
+        zeroed_part
+      }
+
+      wrapped <- bulk_wrap_prob_with_hard(full, seg_num)
+      as.character(glue::glue('IF({calc_qc_cell_v} = TRUE, {wrapped}, "")'))
     })
 
     temp <- setNames(prob_columns_list, glue::glue("prob_seg_{segments}")) %>%
@@ -4589,6 +5635,20 @@ seg_typing_tool <- function(
     # in the Calculate Probabilities block, so MAX over the adjusted probs
     # already reflects the reassignment.
     classification_core <- glue::glue('MATCH(MAX({num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}), {num2let(col_prob_first)}{seq(row_data_first, row_last)}:{num2let(col_prob_last)}{seq(row_data_first, row_last)}, 0)')
+
+    # additional_logic_advanced (hard) — wrap the argmax classification in a
+    # sequential IF chain so the first matching hard rule overrides the
+    # post-soft-redistribution argmax. Order preserved from the user's
+    # `additional_logic_advanced` tibble.
+    if(length(bulk_advanced_hard_rules) > 0){
+      classification_core <- purrr::reduce(
+        rev(bulk_advanced_hard_rules),
+        function(acc, hard){
+          glue::glue('IF({hard$when_excel}, {hard$to_seg}, {acc})')
+        },
+        .init = classification_core
+      )
+    }
 
     temp <- data.frame(
       "Classification" = glue::glue('IF(${num2let(col_calculation_qc)}{seq(row_data_first, row_last)} = TRUE, {classification_core}, "")'),
@@ -4711,6 +5771,42 @@ seg_typing_tool <- function(
     )
 
 
+    # Prob Sum to 1 sanity check — verifies that the row's probabilities sum
+    # to 1 (rounded to 4 decimals to absorb floating-point noise). Sits
+    # directly after Class Check inside the Bulk QC Check block. Blank when
+    # the row is not Calculation Ready, matching the prob columns themselves.
+    seq_qc_rows <- seq(row_header + 1, row_header + nrow(data_solution_check))
+    prob_sum_check_formulas <- glue::glue(
+      'IF(${num2let(col_calculation_qc)}{seq_qc_rows} = TRUE, ',
+      'ROUND(SUM({num2let(col_prob_first)}{seq_qc_rows}:{num2let(col_prob_last)}{seq_qc_rows}), 4) = 1, "")'
+    )
+    prob_sum_tbl <- tibble::tibble("Prob Sum to 1" = prob_sum_check_formulas)
+    class(prob_sum_tbl[[1]]) <- "formula"
+    openxlsx::writeData(
+      wb, sheet_name,
+      x = prob_sum_tbl,
+      startRow = row_header,
+      startCol = col_prob_sum_check,
+      borders = "all",
+      headerStyle = style_header,
+      colNames = TRUE
+    )
+    openxlsx::conditionalFormatting(
+      wb, sheet_name,
+      cols = col_prob_sum_check,
+      rows = seq_qc_rows,
+      rule = glue::glue('{num2let(col_prob_sum_check)}{row_header + 1} = TRUE'),
+      style = bulk_style_good_bold
+    )
+    openxlsx::conditionalFormatting(
+      wb, sheet_name,
+      cols = col_prob_sum_check,
+      rows = seq_qc_rows,
+      rule = glue::glue('{num2let(col_prob_sum_check)}{row_header + 1} = FALSE'),
+      style = bulk_style_bad_bold
+    )
+
+
     openxlsx::writeData(
       wb, sheet_name,
       x = "Bulk QC Check",
@@ -4726,7 +5822,6 @@ seg_typing_tool <- function(
     #   2. a TRUE/FALSE check formula = (var_value == Classification)
     # Both sit inside the merged "Bulk QC Check" title.
     if(has_additional_qc){
-      seq_qc_rows <- seq(row_header + 1, row_header + nrow(data_solution_check))
       col_seg_letter <- num2let(col_seg)
       for(i in seq_len(n_additional_qc)){
         var_i      <- additional_bulk_qc_check[i]
@@ -4871,12 +5966,15 @@ seg_typing_tool <- function(
 
     col_cc_label  <- col_freq_first
     col_cc_count  <- col_freq_first + 1
-    col_mem_label <- col_freq_first + 2
-    col_mem_count <- col_freq_first + 3
-    col_qc_label  <- col_freq_first + 4
-    col_qc_count  <- col_freq_first + 5
+    col_ps_label  <- col_freq_first + 2
+    col_ps_count  <- col_freq_first + 3
+    col_mem_label <- col_freq_first + 4
+    col_mem_count <- col_freq_first + 5
+    col_qc_label  <- col_freq_first + 6
+    col_qc_count  <- col_freq_first + 7
 
     class_check_range <- glue::glue("${num2let(col_bulk_qc_formula_last)}${row_data_first}:${num2let(col_bulk_qc_formula_last)}${row_last}")
+    prob_sum_range    <- glue::glue("${num2let(col_prob_sum_check)}${row_data_first}:${num2let(col_prob_sum_check)}${row_last}")
     seg_range_freq    <- glue::glue("${num2let(col_seg)}${row_data_first}:${num2let(col_seg)}${row_last}")
     qc_seg_range      <- glue::glue("${num2let(col_bulk_qc_last)}${row_header + 1}:${num2let(col_bulk_qc_last)}${row_header + nrow(data_solution_check)}")
 
@@ -4889,6 +5987,16 @@ seg_typing_tool <- function(
       )
     )
     class(cc_tbl[["Count"]]) <- "formula"
+
+    # Prob Sum to 1 Counts
+    ps_tbl <- tibble::tibble(
+      "Result" = c("TRUE", "FALSE"),
+      "Count"  = c(
+        glue::glue("COUNTIF({prob_sum_range}, TRUE)"),
+        glue::glue("COUNTIF({prob_sum_range}, FALSE)")
+      )
+    )
+    class(ps_tbl[["Count"]]) <- "formula"
 
     # Membership counts (col_seg = bulk's classification col)
     mem_tbl <- tibble::tibble(
@@ -4948,6 +6056,7 @@ seg_typing_tool <- function(
     }
 
     write_freq_table(cc_tbl,  col_cc_label,  col_cc_count,  "Class Check Counts")
+    write_freq_table(ps_tbl,  col_ps_label,  col_ps_count,  "Prob Sum to 1 Counts")
     write_freq_table(mem_tbl, col_mem_label, col_mem_count, "Membership Counts")
     write_freq_table(qc_tbl,  col_qc_label,  col_qc_count,  "QC Seg Counts")
 
@@ -5037,6 +6146,38 @@ seg_typing_tool <- function(
       }
 
       col_last <- col_qc_count + n_additional_qc * 2L
+    }
+
+
+    # additional_logic_advanced — Reassignment Counts table
+    #
+    # One row per advanced rule, count = COUNTIF(col_seg, rule$to_seg). This
+    # is an aggregate per to_seg, so multiple rules sharing a to_seg show the
+    # same count (acceptable approximation — the per-respondent attribution
+    # to a specific rule would require hidden helper columns and isn't worth
+    # the workbook bloat for the QC use case).
+    if(!is.null(additional_logic_advanced_info) && length(additional_logic_advanced_info) > 0){
+      col_adv_label <- col_last + 2L
+      col_adv_count <- col_adv_label + 1L
+
+      adv_seg_range <- glue::glue("${num2let(col_seg)}${row_data_first}:${num2let(col_seg)}${row_last}")
+      adv_rule_labels <- purrr::map_chr(additional_logic_advanced_info, function(rule){
+        kind <- if(rule$is_hard) "hard" else "soft"
+        glue::glue("Rule {rule$display_index} ({kind}) -> {rule$to_seg}")
+      })
+      adv_rule_counts <- purrr::map_chr(additional_logic_advanced_info, function(rule){
+        as.character(glue::glue("COUNTIF({adv_seg_range}, {rule$to_seg})"))
+      })
+
+      adv_tbl <- tibble::tibble(
+        "Rule" = adv_rule_labels,
+        "Count" = adv_rule_counts
+      )
+      class(adv_tbl[["Count"]]) <- "formula"
+
+      write_freq_table(adv_tbl, col_adv_label, col_adv_count, "Reassignment Counts")
+
+      col_last <- col_adv_count
     }
 
 

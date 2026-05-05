@@ -19,7 +19,13 @@ append_bn_impact_dynamic(
   label_width = "auto",
   has_weights = FALSE,
   weighted_results_sheet = NULL,
-  min_base_for_lift = NULL
+  min_base_for_lift = NULL,
+  batteries = NULL,
+  battery_groups = NULL,
+  battery_filter = NULL,
+  write_helper_sheets = TRUE,
+  outcome_display = c("absolute", "proportional"),
+  shift_type = c("absolute", "proportional")
 )
 }
 \arguments{

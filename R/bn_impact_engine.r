@@ -848,7 +848,31 @@ bn_impact_engine <- function(
         tidyselect::matches("^dv_min_value"),
         tidyselect::matches("^mi"),
         tidyselect::matches("^maxVmin_"),
-        tidyselect::matches("^lift")
+        tidyselect::matches("^lift"),
+        # Base counts (overall + per-brand). These don't vary across
+        # bootstrap iterations but the engine's pivot still emits
+        # `base_mean`, `base_<brand>_mean`, etc. The dashboard's Base
+        # row reads `<sg>_base` / `<sg>_base_<focus>`, so we need these
+        # here so the rename-_mean step below produces `<sg>_base`.
+        tidyselect::matches("^base")
+      ) %>%
+      # The dashboard formulas key off bare-name VALUE columns (e.g.
+      # "lift_0_propdisplay") to compute the displayed index, and off
+      # `<col>_p_value` for the bootstrap blackout. The pivot above only
+      # emits `<metric>_<stat>` columns, so rename `_mean` (the bootstrap
+      # point estimate) to no-suffix and drop stats the dashboards don't
+      # use to keep the table from ballooning into thousands of columns.
+      # Kept stats: <metric> (= mean), <metric>_p_value, <metric>_ci_low,
+      # <metric>_ci_high. Dropped: _sd, _se, _t (internal computations
+      # not surfaced in any UI).
+      dplyr::select(
+        -tidyselect::ends_with("_sd"),
+        -tidyselect::ends_with("_se"),
+        -tidyselect::ends_with("_t")
+      ) %>%
+      dplyr::rename_with(
+        .fn = ~ sub("_mean$", "", .),
+        .cols = tidyselect::ends_with("_mean")
       )
 
 

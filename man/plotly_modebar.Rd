@@ -21,7 +21,7 @@ for CSV download (e.g., a hidden \code{shiny::downloadButton} ID). When
 
 \item{nav_buttons}{Character vector of standard plotly modebar button names
 to include after the custom buttons. Defaults to \code{c("zoom2d",
-  "pan2d", "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d")}. Set to
+"pan2d", "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d")}. Set to
 \code{character(0)} to omit all navigation buttons.}
 }
 \value{

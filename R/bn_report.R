@@ -119,8 +119,17 @@ bn_report <- function(
     seed = 1,
     add_additional_results = FALSE,
     results_excel = NULL,
-    qc_mode = FALSE
+    qc_mode = FALSE,
+    # Initial values for the Outcome Display + Shift Type dropdowns on
+    # the impact dashboard. Defaults: "absolute" for both — matches the
+    # static-write defaults so all three views (HTML / standard / dynamic)
+    # land on the same choice on first open. Users can still toggle.
+    outcome_display = c("absolute", "proportional"),
+    shift_type      = c("absolute", "proportional")
 ){
+
+  outcome_display <- match.arg(outcome_display)
+  shift_type      <- match.arg(shift_type)
 
   # --- auto-name from title/subtitle ---
   auto_name <- if (!is.null(subtitle)) {
@@ -389,6 +398,45 @@ bn_report <- function(
     result_counter <<- result_counter + 1L
     rid <- glue::glue("r{result_counter}")
 
+    # Pre-build shared impact / prioritization payloads ONCE per result.
+    # Each payload is rendered as a single <script> at the result level;
+    # every type-panel's dashboard then references it via
+    # `data-impact-data-id` instead of carrying its own copy. Cuts file
+    # size by ~(N-1) × payload-size for N layout types when
+    # add_additional_results = TRUE.
+    shared_scripts <- character(0)
+    impacts_res         <- result[["impacts"]]
+    prioritizations_res <- result[["prioritizations"]]
+
+    shared_attr_id <- NULL
+    shared_comm_id <- NULL
+    if (isTRUE(add_additional_results)) {
+      if (!is.null(impacts_res) && !is.null(impacts_res[["table_attribute"]])) {
+        shared_attr_id <- as.character(glue::glue("impact-data-{rid}-attr"))
+        attr_payload <- .bn_report_render_attribute_impacts_dashboard(
+          impacts_res, result_name = name, dashboard_id = "_payload_only",
+          qc_mode = qc_mode,
+          outcome_display = outcome_display, shift_type = shift_type
+        )
+        shared_scripts <- c(shared_scripts, paste0(
+          '<script type="application/json" id="', shared_attr_id, '">',
+          attr_payload$data_json, '</script>'
+        ))
+      }
+      if (!is.null(impacts_res) && !is.null(impacts_res[["table_community"]])) {
+        shared_comm_id <- as.character(glue::glue("impact-data-{rid}-comm"))
+        comm_payload <- .bn_report_render_attribute_impacts_dashboard(
+          impacts_res, result_name = name, dashboard_id = "_payload_only",
+          is_community = TRUE, qc_mode = qc_mode,
+          outcome_display = outcome_display, shift_type = shift_type
+        )
+        shared_scripts <- c(shared_scripts, paste0(
+          '<script type="application/json" id="', shared_comm_id, '">',
+          comm_payload$data_json, '</script>'
+        ))
+      }
+    }
+
     # build type panels — each contains tabs (or single view)
     type_panels <- purrr::map2_chr(types, type_labels, function(type, label) {
 
@@ -442,15 +490,16 @@ bn_report <- function(
         extras_panels  <- character(0)
 
         if (isTRUE(add_additional_results)) {
-          impacts_res         <- result[["impacts"]]
-          prioritizations_res <- result[["prioritizations"]]
 
           if (!is.null(impacts_res) && !is.null(impacts_res[["table_attribute"]])) {
             impact_attr_id <- glue::glue("{panel_id}_impact_attr")
-            impact_attr_html <- .bn_report_render_attribute_impacts_dashboard(
+            impact_attr_res <- .bn_report_render_attribute_impacts_dashboard(
               impacts_res, result_name = name, dashboard_id = impact_attr_id,
-              qc_mode = qc_mode
+              qc_mode = qc_mode,
+              outcome_display = outcome_display, shift_type = shift_type,
+              shared_data_id = shared_attr_id
             )
+            impact_attr_html <- impact_attr_res$html
             extras_buttons <- c(extras_buttons, glue::glue(
               '    <button class="tab-btn" onclick="switchTab(this, \'{impact_attr_id}\')">Attribute Impacts</button>'
             ))
@@ -461,10 +510,13 @@ bn_report <- function(
 
           if (!is.null(impacts_res) && !is.null(impacts_res[["table_community"]])) {
             impact_comm_id <- glue::glue("{panel_id}_impact_comm")
-            impact_comm_html <- .bn_report_render_attribute_impacts_dashboard(
+            impact_comm_res <- .bn_report_render_attribute_impacts_dashboard(
               impacts_res, result_name = name, dashboard_id = impact_comm_id,
-              is_community = TRUE, qc_mode = qc_mode
+              is_community = TRUE, qc_mode = qc_mode,
+              outcome_display = outcome_display, shift_type = shift_type,
+              shared_data_id = shared_comm_id
             )
+            impact_comm_html <- impact_comm_res$html
             extras_buttons <- c(extras_buttons, glue::glue(
               '    <button class="tab-btn" onclick="switchTab(this, \'{impact_comm_id}\')">Community Impacts</button>'
             ))
@@ -524,6 +576,7 @@ bn_report <- function(
     })
 
     type_panels_str <- paste(type_panels, collapse = "\n")
+    shared_scripts_str <- paste(shared_scripts, collapse = "\n")
 
     open_attr <- if (result_counter == 1L) " open" else ""
 
@@ -557,6 +610,7 @@ bn_report <- function(
       '    {download_btn_html}',
       '  </summary>',
       '  {xlsx_script_html}',
+      '  {shared_scripts_str}',
       '  <div class="accordion-body">',
       '    {type_panels_str}',
       '  </div>',
@@ -771,7 +825,15 @@ bn_report <- function(
 #' @noRd
 .bn_report_render_attribute_impacts_dashboard <- function(
     impacts, result_name, dashboard_id, is_community = FALSE,
-    qc_mode = FALSE
+    qc_mode = FALSE,
+    outcome_display = "absolute", shift_type = "absolute",
+    # When non-NULL, emit the dashboard markup with a `data-impact-data-id`
+    # pointer instead of an inline `<script class="impact-data">` payload —
+    # the caller is then responsible for emitting that shared script once.
+    # This dedupe lets a single JSON payload back N type-panel copies of
+    # the same dashboard (one per layout), cutting bn_report file size
+    # dramatically when add_additional_results = TRUE.
+    shared_data_id = NULL
 ) {
   if (isTRUE(is_community)) {
     tbl   <- impacts[["table_community"]]
@@ -804,6 +866,11 @@ bn_report <- function(
 
   sg1 <- sgs[1]
   sg1_cols <- all_cols[startsWith(all_cols, paste0(sg1, "_"))]
+  # Strip bootstrap-stat columns when inferring metric structure — those
+  # are sibling stats (mean/sd/se/t/ci_low/ci_high/p_value), not distinct
+  # metrics. Otherwise has_outcome_display / has_shift_type detection
+  # picks up false positives from `<metric>_propdisplay_p_value` etc.
+  sg1_cols <- sg1_cols[!grepl("_(sd|se|t|ci_low|ci_high|p_value)$", sg1_cols)]
   metric_suffixes <- sub(paste0("^", sg1, "_"), "", sg1_cols)
 
   # After the Pass-A outcome-display split, lift / maxVmin columns carry a
@@ -858,18 +925,61 @@ bn_report <- function(
   has_community <- (!isTRUE(is_community)) && ("Community" %in% names(tbl))
   has_label     <- (!isTRUE(is_community)) && ("Label"     %in% names(tbl))
 
+  # Battery grouping (Index By feature). meta$batteries is stamped by
+  # bn_finalize_network when the user provides a `batteries` arg or when
+  # bn_engine was called with a named-list `ivs`. Only meaningful in the
+  # attribute view — communities aren't battery-aligned.
+  batteries <- meta[["batteries"]]
+  battery_groups <- meta[["battery_groups"]]
+  has_battery <- (!isTRUE(is_community)) && !is.null(batteries) &&
+    length(batteries) > 0L
+  iv_to_battery <- if (has_battery) {
+    iv2b <- character(0)
+    for (b_name in names(batteries)) {
+      ivs_in_b <- batteries[[b_name]]
+      iv2b <- c(iv2b, rlang::set_names(rep(b_name, length(ivs_in_b)), ivs_in_b))
+    }
+    iv2b
+  } else NULL
+  # Group membership lookup — mirrors `iv_to_battery` but flattens each
+  # group's component batteries to its IV union. Embedded in the data
+  # payload so the JS Index By filter can pick rows for a group selection.
+  battery_group_ivs <- if (has_battery && !is.null(battery_groups) &&
+                           length(battery_groups) > 0L) {
+    lapply(battery_groups, function(comp) {
+      unname(unique(unlist(batteries[comp], use.names = FALSE)))
+    })
+  } else NULL
+
+  # Per-subgroup column allow-list: in bootstrap mode the table can carry
+  # thousands of `<col>_<stat>` columns (mean, sd, se, t, ci_low, ci_high,
+  # p_value × every metric × every brand × every shift × every display).
+  # The HTML dashboard only ever reads VALUE columns (no suffix) and
+  # `_p_value`. Filtering here drops dropbox payload size by ~80% on a
+  # bootstrap table without losing any rendered information.
+  sg_cols_keep <- if (any(grepl("_p_value$", all_cols))) {
+    # boot mode → keep value cols + _p_value cols + base + p_val + dv_max/min
+    all_cols[!grepl("_(sd|se|t|ci_low|ci_high)$", all_cols)]
+  } else {
+    all_cols
+  }
+
   # --- Flatten one table (unweighted or weighted) into per-row JSON lists
   .flatten <- function(tt) {
     lapply(seq_len(nrow(tt)), function(i) {
       row <- list(
         id        = as.character(tt[[id_col_name]][i]),
         community = if (has_community) as.character(tt$Community[i]) else NULL,
+        battery   = if (has_battery) {
+          v <- as.character(tt[[id_col_name]][i])
+          if (v %in% names(iv_to_battery)) unname(iv_to_battery[v]) else ""
+        } else NULL,
         label     = if (has_label)     as.character(tt$Label[i])     else NULL,
         sg        = list()
       )
       for (sg in sgs) {
         sg_data <- list()
-        sg_cols <- all_cols[startsWith(all_cols, paste0(sg, "_"))]
+        sg_cols <- sg_cols_keep[startsWith(sg_cols_keep, paste0(sg, "_"))]
         for (col in sg_cols) {
           suf <- sub(paste0("^", sg, "_"), "", col)
           v <- tt[[col]][i]
@@ -889,7 +999,14 @@ bn_report <- function(
     has_outcome_display = has_outcome_display,
     has_shift_type    = has_shift_type,
     has_community     = has_community,
+    has_battery       = has_battery,
     has_label         = has_label,
+    battery_groups    = battery_group_ivs,
+    # Bootstrap mode: bn_impact emits per-metric `<col>_p_value` columns
+    # when impact_n_boot > 1. When TRUE, the JS blackout rule looks up the
+    # bootstrap p-value of whichever metric is currently selected, instead
+    # of the static MI chi-squared p_val.
+    boot_applied      = any(grepl("_p_value$", all_cols)),
     min_base_for_lift = as.integer(min_base_for_lift),
     qc_mode           = isTRUE(qc_mode),
     rows_unweighted   = .flatten(tbl),
@@ -949,13 +1066,15 @@ bn_report <- function(
   # Absolute = p1-p0 for maxVmin and raw DV probability shift for lift.
   # MI is unaffected (no display variant in the data).
   display_ctrl <- if (has_outcome_display) {
+    abs_sel  <- if (outcome_display == "absolute")     " selected" else ""
+    prop_sel <- if (outcome_display == "proportional") " selected" else ""
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
           '<label>Outcome Display:</label>',
           '<select class="impact-ctrl" data-dim="display">',
-            '<option value="propdisplay">Proportional</option>',
-            '<option value="absdisplay">Absolute</option>',
+            '<option value="absdisplay"', abs_sel, '>Absolute</option>',
+            '<option value="propdisplay"', prop_sel, '>Proportional</option>',
           '</select>',
         '</div>',
         '<span class="impact-warning" data-for="display"></span>',
@@ -967,13 +1086,15 @@ bn_report <- function(
   # the IV distribution shift. MaxVmin/mi are shift-invariant; JS suppresses
   # the effect when those metrics are selected.
   shift_ctrl <- if (has_shift_type) {
+    abs_sel  <- if (shift_type == "absolute")     " selected" else ""
+    prop_sel <- if (shift_type == "proportional") " selected" else ""
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
           '<label>Shift Type:</label>',
           '<select class="impact-ctrl" data-dim="shift">',
-            '<option value="propshift">Proportional</option>',
-            '<option value="absshift">Absolute</option>',
+            '<option value="absshift"', abs_sel, '>Absolute</option>',
+            '<option value="propshift"', prop_sel, '>Proportional</option>',
           '</select>',
         '</div>',
         '<span class="impact-warning" data-for="shift"></span>',
@@ -981,8 +1102,46 @@ bn_report <- function(
     )
   } else '<div class="impact-ctrl-cell"></div>'
 
+  # Index By dropdown — visible only when battery info is present.
+  # Options: "All" (global index, all rows shown), each battery name (filter
+  # to that battery), then each group name (filter to the union of the
+  # group's component batteries). JS reads `data-dim="indexby"`.
+  indexby_ctrl <- if (has_battery) {
+    battery_options_html <- paste0(
+      vapply(names(batteries), function(b) {
+        sprintf('<option value="%s">%s</option>',
+          htmltools::htmlEscape(b), htmltools::htmlEscape(b))
+      }, character(1)),
+      collapse = ""
+    )
+    group_options_html <- if (!is.null(battery_group_ivs) &&
+                              length(battery_group_ivs) > 0L) {
+      paste0(
+        vapply(names(battery_group_ivs), function(g) {
+          sprintf('<option value="%s">%s</option>',
+            htmltools::htmlEscape(g), htmltools::htmlEscape(g))
+        }, character(1)),
+        collapse = ""
+      )
+    } else ""
+    paste0(
+      '<div class="impact-ctrl-cell">',
+        '<div class="impact-ctrl-row">',
+          '<label>Index By:</label>',
+          '<select class="impact-ctrl" data-dim="indexby">',
+            '<option value="All">All</option>',
+            battery_options_html,
+            group_options_html,
+          '</select>',
+        '</div>',
+      '</div>'
+    )
+  } else '<div class="impact-ctrl-cell"></div>'
+
   # Header row: leading cols (sortable, text) + one metric column per
   # subgroup (sortable, numeric). Subgroup label "_" -> " " for display.
+  # Battery isn't shown as a column — its info is captured by the Index By
+  # dropdown selection rather than a redundant grouping label.
   leading_headers <- c(
     sprintf('<th class="sortable" data-sort="text" data-col="id">%s</th>',
       htmltools::htmlEscape(id_col_label)),
@@ -1037,9 +1196,14 @@ bn_report <- function(
     paste(base_cells, collapse = ""), '</tr>'
   )
 
-  # Compose
+  # Compose. When sharing a payload, the dashboard root carries a
+  # `data-impact-data-id` attribute pointing at the shared <script>; the
+  # init JS reads that attribute and looks up the JSON once.
+  shared_attr <- if (!is.null(shared_data_id)) {
+    paste0(' data-impact-data-id="', shared_data_id, '"')
+  } else ""
   paste0(
-    '<div class="impact-dashboard" data-dashboard-id="', dashboard_id, '">',
+    '<div class="impact-dashboard" data-dashboard-id="', dashboard_id, '"', shared_attr, '>',
     '  <div class="impact-controls">',
     '    <div class="impact-ctrl-cell">',
     '      <div class="impact-ctrl-row">',
@@ -1057,6 +1221,7 @@ bn_report <- function(
     '    ', weight_ctrl,
     '    ', display_ctrl,
     '    ', shift_ctrl,
+    '    ', indexby_ctrl,
     '  </div>',
     '  <div class="impact-table-wrap">',
     '    <table class="impact-table">',
@@ -1071,10 +1236,19 @@ bn_report <- function(
     'Black cells mean an insignificant relationship (p &gt; 0.10). ',
     'Lift impacts are not calculated when the base is below ', min_base_for_lift, '.</p>',
     '  </div>',
-    '  <script type="application/json" class="impact-data">', data_json, '</script>',
+    if (is.null(shared_data_id)) {
+      paste0('  <script type="application/json" class="impact-data">', data_json, '</script>')
+    } else "",
     '  <script>(function(){ initImpactDashboard("', dashboard_id, '"); })();</script>',
     '</div>'
-  )
+  ) -> html_out
+
+  # Caller can use the returned `data_json` to emit a single shared
+  # <script> at the result level when N type-panel dashboards reuse the
+  # same payload. Backward compat: callers that coerce the result to
+  # character get the html string (`as.character.list` returns the
+  # vector — fall back via `$html` instead in those callsites).
+  list(html = html_out, data_json = data_json)
 }
 
 
@@ -1753,7 +1927,7 @@ bn_report <- function(
     '  background: #fff; table-layout: auto;',
     '}',
     '.impact-table thead th {',
-    '  background: #D9D9D9; color: #222; font-weight: 700;',
+    '  background: #fafafa; color: #222; font-weight: 700;',  # match .impact-controls bg
     '  padding: 8px 10px; text-align: center; vertical-align: middle;',
     '  border: 1px solid #BFBFBF;',
     '  white-space: normal; word-wrap: break-word; overflow-wrap: break-word;',
@@ -1774,7 +1948,7 @@ bn_report <- function(
     '  cursor: pointer; user-select: none; position: relative;',
     '  padding-right: 18px;',  # room for the absolutely-positioned triangle
     '}',
-    '.impact-table thead th.sortable:hover { background: #CCCCCC; }',
+    '.impact-table thead th.sortable:hover { background: #ececec; }',  # subtle hover, slightly darker than #fafafa
     '.impact-table thead th.sortable::after {',
     '  content: ""; position: absolute; right: 4px; top: 50%;',
     '  transform: translateY(-50%);',
@@ -1795,7 +1969,7 @@ bn_report <- function(
     '.impact-table tbody td.txt-col { text-align: left; }',
     '.impact-table td.idx-cell.neg { font-weight: 700; font-style: italic; }',
     '.impact-table td.idx-cell.insig {',
-    '  background: #000 !important; color: #000; /* blackout */',
+    '  background: #000 !important; color: #FFF; /* blackout, white text */',
     '}',
     '.impact-table tfoot td {',
     '  padding: 8px 10px; border: 1px solid #BFBFBF;',
@@ -2068,7 +2242,16 @@ bn_report <- function(
     'function initImpactDashboard(dashId) {',
     '  var root = document.getElementById(dashId);',
     '  if (!root) return;',
-    '  var dataScript = root.querySelector("script.impact-data");',
+    '  // Prefer a shared payload referenced by data-impact-data-id (one',
+    '  // <script> serves N dashboards across layout types). The attribute',
+    '  // lives on the inner .impact-dashboard div — root may be its outer',
+    '  // tab-panel wrapper, so we search WITHIN root instead of reading off',
+    '  // root itself. Fall back to the dashboard\'s own embedded payload.',
+    '  var dataScript = null;',
+    '  var sharedHost = root.matches("[data-impact-data-id]") ? root : root.querySelector("[data-impact-data-id]");',
+    '  var sharedId = sharedHost ? sharedHost.getAttribute("data-impact-data-id") : null;',
+    '  if (sharedId) dataScript = document.getElementById(sharedId);',
+    '  if (!dataScript) dataScript = root.querySelector("script.impact-data");',
     '  if (!dataScript) return;',
     '  var data;',
     '  try { data = JSON.parse(dataScript.textContent); } catch (e) { return; }',
@@ -2100,9 +2283,20 @@ bn_report <- function(
     '    return key + "_" + shift + "_" + display;',
     '  }',
     '',
-    '  function isInsignificant(sgData) {',
+    '  function isInsignificant(sgData, focus) {',
     '    if (!sgData) return false;',
-    '    var pv = sgData.p_val;',
+    '    // Bootstrap mode: each metric column has its own `<col>_p_value`',
+    '    // sibling. Use the bootstrap p-value of the *currently selected*',
+    '    // metric so the blackout follows whatever the user is viewing.',
+    '    // Static mode: fall back to the chi-squared MI p-value (one per row).',
+    '    var pv;',
+    '    if (data.boot_applied && focus) {',
+    '      var k = metricKey(focus);',
+    '      pv = (k ? sgData[k + "_p_value"] : null);',
+    '      if (pv == null) pv = sgData.p_val; // safety fallback',
+    '    } else {',
+    '      pv = sgData.p_val;',
+    '    }',
     '    return (pv != null && pv > 0.10);',
     '  }',
     '',
@@ -2114,12 +2308,40 @@ bn_report <- function(
     '  }',
     '',
     '  function update() {',
-    '    var rows = getRows();',
+    '    var allRows = getRows();',
     '    var focus = currentValue("focus") || "Market";',
     '    var mkey = currentValue("metric");',
     '    var weight = currentValue("weight") || "Unweighted";',
+    '    var indexBy = currentValue("indexby") || "All";',
     '',
-    '    // 1. Compute per-subgroup mean-absolute-raw (denominator for index)',
+    '    // Index By dropdown semantics:',
+    '    //   "All"          → all rows visible, indexed against the global',
+    '    //                    per-subgroup mean.',
+    '    //   "<batteryName>" → only rows in that battery are visible.',
+    '    //   "<groupName>"  → only rows whose IV is in any of the group\'s',
+    '    //                    component batteries are visible.',
+    '    //   In both filtered cases the index normalizes against the visible',
+    '    //   rows\' mean for each subgroup.',
+    '    var groupIvs = (data.battery_groups && data.battery_groups[indexBy]) || null;',
+    '    var memberOf = function(r) {',
+    '      if (indexBy === "All") return true;',
+    '      if (groupIvs) return groupIvs.indexOf(r.id) !== -1;',
+    '      return (r.battery || "") === indexBy;',
+    '    };',
+    '    var batteryFilter = (data.has_battery && indexBy !== "All") ? indexBy : null;',
+    '    var rows = batteryFilter == null ? allRows : allRows.filter(memberOf);',
+    '',
+    '    // Hide / show <tr>s based on filter so the table visually reflects',
+    '    // the active selection.',
+    '    allRows.forEach(function(r, i) {',
+    '      var firstCell = root.querySelector(\'td.idx-cell[data-row="\' + i + \'"]\');',
+    '      if (!firstCell) return;',
+    '      var tr = firstCell.parentElement;',
+    '      tr.style.display = memberOf(r) ? "" : "none";',
+    '    });',
+    '',
+    '    // 1. Compute the per-subgroup mean of |raw| over the *visible* rows.',
+    '    //    That denominator drives every index cell shown.',
     '    data.subgroups.forEach(function(sg) {',
     '      var absVals = rows.map(function(r) {',
     '        var v = getRaw(r, sg, focus);',
@@ -2130,7 +2352,9 @@ bn_report <- function(
     '',
     '      // 2. Fill index cells + collect for color scaling',
     '      var idxValues = [];',
-    '      rows.forEach(function(r, i) {',
+    '      rows.forEach(function(r) {',
+    '        // Find this row\'s index in allRows so we can target the right <td>.',
+    '        var i = allRows.indexOf(r);',
     '        var cell = root.querySelector(\'td.idx-cell[data-sg="\' + sg + \'"][data-row="\' + i + \'"]\');',
     '        if (!cell) return;',
     '        var raw = getRaw(r, sg, focus);',
@@ -2156,7 +2380,7 @@ bn_report <- function(
     '        }',
     '',
     '        if (raw < 0) cell.classList.add("neg");',
-    '        if (isInsignificant(sgData)) cell.classList.add("insig");',
+    '        if (isInsignificant(sgData, focus)) cell.classList.add("insig");',
     '      });',
     '',
     '      // 3. Apply 3-color scale across non-null, non-insig cells in this subgroup',
@@ -2165,10 +2389,11 @@ bn_report <- function(
     '        var minV = Math.min.apply(null, vals);',
     '        var maxV = Math.max.apply(null, vals);',
     '        var midV = (minV + maxV) / 2;',
-    '        rows.forEach(function(r, i) {',
-    '          var cell = root.querySelector(\'td.idx-cell[data-sg="\' + sg + \'"][data-row="\' + i + \'"]\');',
+    '        rows.forEach(function(r, fi) {',
+    '          var allI = allRows.indexOf(r);',
+    '          var cell = root.querySelector(\'td.idx-cell[data-sg="\' + sg + \'"][data-row="\' + allI + \'"]\');',
     '          if (!cell || cell.classList.contains("insig")) return;',
-    '          var v = idxValues[i]; if (v == null) return;',
+    '          var v = idxValues[fi]; if (v == null) return;',
     '          cell.style.background = interpolate3(v, minV, midV, maxV);',
     '        });',
     '      }',

@@ -115,6 +115,13 @@ bn_impact_write <- function(
     very_hide_all = TRUE,
     min_base_for_lift = NULL,
     min_base_for_sim = NULL,
+    # Static-write display variants. Only consulted when wb_type = "standard"
+    # — they pick which precomputed lift column drives the displayed index.
+    # Defaults: absolute outcome display + absolute IV shift, so the static
+    # sheet shows raw probability-point change under an additive shift.
+    # Dynamic dashboards expose these as dropdowns and ignore the params.
+    outcome_display = c("absolute", "proportional"),
+    shift_type      = c("absolute", "proportional"),
     path = ".",
     wb = NULL,
     save = TRUE,
@@ -123,6 +130,8 @@ bn_impact_write <- function(
 ){
 
   wb_type <- match.arg(wb_type)
+  outcome_display <- match.arg(outcome_display)
+  shift_type      <- match.arg(shift_type)
 
   # Accept either the full bn_finalize_network() object or just bn_subgroups
   if (!is.null(bn_obj) && "bn_subgroups" %in% names(bn_obj)) {
@@ -158,9 +167,128 @@ bn_impact_write <- function(
   index_by         <- meta[["index_by"]]
   type             <- meta[["type"]]
   dv               <- meta[["dv"]]
+  batteries        <- meta[["batteries"]]
+  battery_groups   <- meta[["battery_groups"]]
+  has_battery_groups <- !is.null(battery_groups) && length(battery_groups) > 0L
+  # Resolve a group name to its union of IVs across the component batteries.
+  .group_ivs <- function(group_name) {
+    comp <- battery_groups[[group_name]]
+    unique(unlist(batteries[comp], use.names = FALSE))
+  }
   if (is.null(min_base_for_lift)) min_base_for_lift <- meta[["min_base_for_lift"]]
   # Simulator threshold: inherit from min_base_for_lift when not supplied
   if (is.null(min_base_for_sim)) min_base_for_sim <- min_base_for_lift %||% 75
+
+  # ---------------------------------------------------------------------------
+  # Battery helpers (used by both static and dynamic write paths)
+  # ---------------------------------------------------------------------------
+  has_batteries <- !is.null(batteries) && length(batteries) > 0L
+
+  # IV → battery name lookup. Built once for reuse.
+  iv_to_battery <- if (has_batteries) {
+    iv2b <- character(0)
+    for (b_name in names(batteries)) {
+      ivs_in_b <- batteries[[b_name]]
+      iv2b <- c(iv2b, rlang::set_names(rep(b_name, length(ivs_in_b)), ivs_in_b))
+    }
+    iv2b
+  } else NULL
+
+  # Inject a Battery column into a table just before any subgroup column.
+  # Position: after Community when present, otherwise after Variable.
+  .inject_battery_col <- function(tbl) {
+    if (!has_batteries || !"Variable" %in% names(tbl)) return(tbl)
+    tbl$Battery <- ifelse(
+      tbl$Variable %in% names(iv_to_battery),
+      iv_to_battery[tbl$Variable],
+      ""
+    )
+    if ("Community" %in% names(tbl)) {
+      tbl <- tbl %>% dplyr::relocate(Battery, .after = "Community")
+    } else {
+      tbl <- tbl %>% dplyr::relocate(Battery, .after = "Variable")
+    }
+    tbl
+  }
+
+  # Resolve the raw-metric column suffix for the current index_by, scoped
+  # by the user's outcome_display / shift_type choices. Returned suffix is
+  # what we'd append to a subgroup name to land on the precomputed raw
+  # column, e.g. "_lift_0_absshift_absdisplay" for lift indexes.
+  display_tag <- if (outcome_display == "absolute") "absdisplay" else "propdisplay"
+  shift_tag   <- if (shift_type      == "absolute") "absshift"   else "propshift"
+
+  .resolve_metric_suffix <- function(tbl) {
+    sg1 <- subgroups[[1]]
+    if (index_by %in% c("lift_first", "lift_second")) {
+      # Discover which lift_N levels exist in the table (e.g. lift_0, lift_10).
+      # We match against the trailing display tag because that's universal —
+      # every lift column ends with `_propdisplay` or `_absdisplay` regardless
+      # of shift tag presence.
+      lift_pat <- paste0("^", sg1, "_lift_(\\d+)_(propshift|absshift)_(propdisplay|absdisplay)$")
+      m <- regmatches(names(tbl), regexpr(lift_pat, names(tbl)))
+      if (length(m) == 0) {
+        # Fallback to old (pre-Pass-B) shape: lift_N_propdisplay/absdisplay.
+        legacy_pat <- paste0("^", sg1, "_lift_(\\d+)_(propdisplay|absdisplay)$")
+        m <- regmatches(names(tbl), regexpr(legacy_pat, names(tbl)))
+        if (length(m) == 0) return("_maxVmin_absdisplay")
+        ns <- sort(unique(as.integer(sub(legacy_pat, "\\1", m))))
+        target_n <- if (index_by == "lift_first") ns[1] else ns[min(2L, length(ns))]
+        return(paste0("_lift_", target_n, "_", display_tag))
+      }
+      ns <- sort(unique(as.integer(sub(lift_pat, "\\1", m))))
+      target_n <- if (index_by == "lift_first") ns[1] else ns[min(2L, length(ns))]
+      paste0("_lift_", target_n, "_", shift_tag, "_", display_tag)
+    } else if (index_by == "maxVmin") {
+      # maxVmin is shift-invariant — only display variants exist.
+      paste0("_maxVmin_", display_tag)
+    } else if (index_by == "mi") {
+      "_mi"
+    } else {
+      "_maxVmin"
+    }
+  }
+
+  # For the static "main" sheet we also need to overwrite each subgroup's
+  # `index`-aliased display column so it reflects the user's outcome /
+  # shift choices. The engine bakes in a default index (prop-shift,
+  # abs-display) — this rewrites it to match `outcome_display` x `shift_type`.
+  .reindex_main_table <- function(tbl) {
+    suffix <- .resolve_metric_suffix(tbl)
+    for (sg in subgroups) {
+      raw_col <- paste0(sg, suffix)
+      if (!raw_col %in% names(tbl)) next
+      raw_vals <- tbl[[raw_col]]
+      denom <- mean(abs(raw_vals), na.rm = TRUE)
+      tbl[[sg]] <- if (is.finite(denom) && denom > 0) {
+        abs(raw_vals) / denom * 100
+      } else {
+        NA_real_
+      }
+    }
+    tbl
+  }
+
+  # For a given battery: filter to its rows, then recompute each subgroup's
+  # display column as within-battery index. Returns a fresh table ready to
+  # hand to append_bn_impact.
+  .per_battery_table <- function(tbl, battery_ivs, metric_suffix) {
+    sub_tbl <- tbl %>%
+      dplyr::filter(.data[["Variable"]] %in% battery_ivs)
+    if (nrow(sub_tbl) == 0L) return(NULL)
+    for (sg in subgroups) {
+      raw_col <- paste0(sg, metric_suffix)
+      if (!raw_col %in% names(sub_tbl)) next
+      raw_vals <- sub_tbl[[raw_col]]
+      denom <- mean(abs(raw_vals), na.rm = TRUE)
+      sub_tbl[[sg]] <- if (is.finite(denom) && denom > 0) {
+        abs(raw_vals) / denom * 100
+      } else {
+        NA_real_
+      }
+    }
+    sub_tbl
+  }
 
   # Use name of dv if named, otherwise the value itself
 dv_display <- if (!is.null(names(dv))) names(dv) else dv
@@ -214,8 +342,17 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     if (is.null(wb)) wb <- oxl_create_workbook()
     pre_sheets <- names(wb)
 
+    # Inject Battery column into the main table when batteries are defined.
+    # The static main sheet keeps GLOBAL indexing — battery is just a label
+    # the user can sort/filter by. Per-battery within-battery-indexed sheets
+    # come below.
+    main_table <- .inject_battery_col(table)
+    # Override the engine-baked index with one keyed off the user's
+    # outcome_display × shift_type choice.
+    main_table <- .reindex_main_table(main_table)
+
     wb <- append_bn_impact(
-      analysis_table = table,
+      analysis_table = main_table,
       subgroups = subgroups,
       wb = wb,
       sheet_name = sheet_name,
@@ -227,9 +364,78 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       index_by = index_by
     )
 
-    # Community sheet (optional)
+    # Per-battery sheets (optional, static path only). One sheet per battery
+    # showing only that battery's rows, with the subgroup index columns
+    # recomputed against the within-battery mean. Sheet names are truncated
+    # to Excel's 31-character limit to avoid silent truncation collisions.
+    if (has_batteries) {
+      metric_suffix <- .resolve_metric_suffix(table)
+      for (b_name in names(batteries)) {
+        b_tbl <- .per_battery_table(main_table, batteries[[b_name]], metric_suffix)
+        if (is.null(b_tbl)) next
+        # "Attribute Drivers - <battery>" trimmed to 31 chars.
+        prefix <- "AD - "
+        max_name_len <- 31L - nchar(prefix)
+        b_short <- if (nchar(b_name) > max_name_len) {
+          substr(b_name, 1L, max_name_len)
+        } else b_name
+        b_sheet <- paste0(prefix, b_short)
+        b_title <- if (!is.null(dv_display)) {
+          paste0("Attribute Drivers of ", dv_display, " — ", b_name, " (within-battery index)")
+        } else {
+          paste0("Attribute Drivers — ", b_name, " (within-battery index)")
+        }
+        wb <- append_bn_impact(
+          analysis_table = b_tbl,
+          subgroups = subgroups,
+          wb = wb,
+          sheet_name = b_sheet,
+          title = b_title,
+          sub_title = sub_title,
+          footer = footer,
+          variable_width = variable_width,
+          label_width = label_width,
+          index_by = index_by
+        )
+      }
+    }
+
+    # Per-group sheets — same shape as per-battery sheets, but the IV set
+    # is the union of the group's component batteries.
+    if (has_battery_groups) {
+      metric_suffix <- .resolve_metric_suffix(table)
+      for (g_name in names(battery_groups)) {
+        g_tbl <- .per_battery_table(main_table, .group_ivs(g_name), metric_suffix)
+        if (is.null(g_tbl)) next
+        prefix <- "AD - "
+        max_name_len <- 31L - nchar(prefix)
+        g_short <- if (nchar(g_name) > max_name_len) substr(g_name, 1L, max_name_len) else g_name
+        g_sheet <- paste0(prefix, g_short)
+        g_title <- if (!is.null(dv_display)) {
+          paste0("Attribute Drivers of ", dv_display, " — ", g_name, " (within-group index)")
+        } else {
+          paste0("Attribute Drivers — ", g_name, " (within-group index)")
+        }
+        wb <- append_bn_impact(
+          analysis_table = g_tbl,
+          subgroups = subgroups,
+          wb = wb,
+          sheet_name = g_sheet,
+          title = g_title,
+          sub_title = sub_title,
+          footer = footer,
+          variable_width = variable_width,
+          label_width = label_width,
+          index_by = index_by
+        )
+      }
+    }
+
+    # Community sheet (optional). Same outcome_display / shift_type
+    # override applies — keeps the community-level index aligned with
+    # the attribute-level one.
     if (!is.null(community_result)) {
-      comm_table <- community_result
+      comm_table <- .reindex_main_table(community_result)
       comm_sheet <- "Community Drivers"
 
       comm_title <- if (!is.null(dv_display)) {
@@ -347,7 +553,11 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     if (is.null(wb)) wb <- oxl_create_workbook()
     pre_sheets <- names(wb)
 
-    # Attribute dynamic dashboard
+    # Attribute dynamic dashboard (main, all rows, global index). Pass
+    # `battery_groups` here too so the BatteryGroup_<name> helper columns
+    # are injected onto the Results sheet on this first call (subsequent
+    # per-group tabs reference those columns and won't get a chance to
+    # write them themselves — write_helper_sheets = FALSE there).
     wb <- append_bn_impact_dynamic(
       wb = wb, table = table, subgroups = subgroups,
       dash_sheet = sheet_name, results_sheet = "Results", lookup_sheet = "_lookup",
@@ -356,8 +566,76 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       label_width = label_width,
       has_weights = has_weights,
       weighted_results_sheet = if (has_weights) "Results_Weighted" else NULL,
-      min_base_for_lift = min_base_for_lift
+      min_base_for_lift = min_base_for_lift,
+      batteries = batteries,
+      battery_groups = battery_groups,
+      outcome_display = outcome_display, shift_type = shift_type
     )
+
+    # Per-battery dashboards. Each tab shows only its battery's IVs and
+    # indexes within that battery; they share the Results/_lookup sheets
+    # written by the main call above (write_helper_sheets = FALSE). Sheet
+    # name truncated to Excel's 31-character limit.
+    if (!is.null(batteries) && length(batteries) > 0L) {
+      for (b_name in names(batteries)) {
+        prefix <- "AD - "
+        max_name_len <- 31L - nchar(prefix)
+        b_short <- if (nchar(b_name) > max_name_len) substr(b_name, 1L, max_name_len) else b_name
+        b_sheet <- paste0(prefix, b_short)
+        b_title <- if (!is.null(dv_display)) {
+          paste0("Attribute Drivers of ", dv_display, " — ", b_name, " (within-battery index)")
+        } else {
+          paste0("Attribute Drivers — ", b_name, " (within-battery index)")
+        }
+        wb <- append_bn_impact_dynamic(
+          wb = wb, table = table, subgroups = subgroups,
+          dash_sheet = b_sheet, results_sheet = "Results", lookup_sheet = "_lookup",
+          title = b_title, sub_title = sub_title, engine_footer = engine_footer,
+          variable_width = variable_width, community_width = community_width,
+          label_width = label_width,
+          has_weights = has_weights,
+          weighted_results_sheet = if (has_weights) "Results_Weighted" else NULL,
+          min_base_for_lift = min_base_for_lift,
+          batteries = batteries,
+          battery_groups = battery_groups,
+          battery_filter = b_name,
+          write_helper_sheets = FALSE,
+          outcome_display = outcome_display, shift_type = shift_type
+        )
+      }
+    }
+
+    # Per-group dashboards. Each tab shows the union of its component
+    # batteries' IVs and indexes within that union. Same shared Results
+    # /_lookup sheets as the per-battery tabs.
+    if (has_battery_groups) {
+      for (g_name in names(battery_groups)) {
+        prefix <- "AD - "
+        max_name_len <- 31L - nchar(prefix)
+        g_short <- if (nchar(g_name) > max_name_len) substr(g_name, 1L, max_name_len) else g_name
+        g_sheet <- paste0(prefix, g_short)
+        g_title <- if (!is.null(dv_display)) {
+          paste0("Attribute Drivers of ", dv_display, " — ", g_name, " (within-group index)")
+        } else {
+          paste0("Attribute Drivers — ", g_name, " (within-group index)")
+        }
+        wb <- append_bn_impact_dynamic(
+          wb = wb, table = table, subgroups = subgroups,
+          dash_sheet = g_sheet, results_sheet = "Results", lookup_sheet = "_lookup",
+          title = g_title, sub_title = sub_title, engine_footer = engine_footer,
+          variable_width = variable_width, community_width = community_width,
+          label_width = label_width,
+          has_weights = has_weights,
+          weighted_results_sheet = if (has_weights) "Results_Weighted" else NULL,
+          min_base_for_lift = min_base_for_lift,
+          batteries = batteries,
+          battery_groups = battery_groups,
+          battery_filter = g_name,
+          write_helper_sheets = FALSE,
+          outcome_display = outcome_display, shift_type = shift_type
+        )
+      }
+    }
 
     # Community dynamic dashboard (optional)
     if (!is.null(community_result)) {
@@ -379,7 +657,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
         label_width = label_width,
         has_weights = !is.null(community_weighted),
         weighted_results_sheet = if (!is.null(community_weighted)) "Results_Community_Weighted" else NULL,
-        min_base_for_lift = min_base_for_lift
+        min_base_for_lift = min_base_for_lift,
+        outcome_display = outcome_display, shift_type = shift_type
       )
     }
 

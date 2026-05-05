@@ -13,16 +13,44 @@ install_pkg(
 )
 }
 \arguments{
-\item{x}{Character vector. Vector of libraries to install}
+\item{x}{Character vector of package names to install. May be \code{NULL}
+when \code{update_pkgs = TRUE}.}
 
-\item{ask}{Logical. Whether to ask for confirmation when installing a different version of a package that is already installed. Installations that only add new packages never require confirmation.}
+\item{ask}{Logical. Forwarded to \code{pak::pkg_install()}. If \code{TRUE},
+prompts before replacing an installed package with a different
+version. New packages never trigger a prompt.}
 
-\item{upgrade}{Logical. When FALSE, the default, pak does the minimum amount of work to give you the latest version(s) of pkg. It will only upgrade dependent packages if pkg, or one of their dependencies explicitly require a higher version than what you currently have. It will also prefer a binary package over to source package, even it the binary package is older.}
+\item{upgrade}{Logical. Forwarded to \code{pak::pkg_install()}. When
+\code{FALSE} (default) \code{pak} does the minimum work to satisfy \code{x}.}
 
-\item{update_pkgs}{Logical. Update all current packages.}
+\item{update_pkgs}{Logical. If \code{TRUE}, every package reported by
+\code{utils::old.packages()} is unioned into \code{x}.}
 
-\item{on_exit_restart}{Logical. Restart R session of install.}
+\item{on_exit_restart}{Logical. If \code{TRUE} (default), the R session
+is restarted via \code{work::restart(keep = TRUE)} when the function
+exits. The restart is only scheduled after input validation
+succeeds, so a bad call does not blow away the session.}
+}
+\value{
+\code{TRUE} when every requested package installed successfully,
+otherwise a character vector naming the packages that did not
+install (with a \code{warning()} listing them).
 }
 \description{
-Install R libraries
+Install R packages using \code{pak}, with a graceful fallback to
+\code{utils::install.packages()} (source first, then binary) for any
+package \code{pak} cannot install. Failures are collected and retried
+one-at-a-time before the function reports back.
+}
+\details{
+\code{upgrade} and \code{update_pkgs} are orthogonal:
+\itemize{
+\item \code{upgrade} is forwarded to \code{pak::pkg_install()} and controls how
+aggressively dependencies of \code{x} are upgraded.
+\item \code{update_pkgs} decides whether all currently outdated packages
+(per \code{utils::old.packages()}) are added to the install set.
+}
+}
+\seealso{
+\code{\link[=install_pak]{install_pak()}}, \code{\link[=restart]{restart()}}
 }

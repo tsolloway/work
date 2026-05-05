@@ -24,7 +24,9 @@ bn_report(
   seed = 1,
   add_additional_results = FALSE,
   results_excel = NULL,
-  qc_mode = FALSE
+  qc_mode = FALSE,
+  outcome_display = c("absolute", "proportional"),
+  shift_type = c("absolute", "proportional")
 )
 }
 \arguments{

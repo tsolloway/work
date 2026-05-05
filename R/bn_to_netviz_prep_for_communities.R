@@ -38,15 +38,22 @@ bn_to_netviz_prep_for_communities <- function(
 
 
   # --- create community nodes ---
+  # NB: select BEFORE distinct. mutate keeps every original column on the
+  # attribute table (title, level, label, etc.), so distinct() against the
+  # full row never collapses to one row per community — those per-attribute
+  # fields differ between rows in the same community. Dropping to just the
+  # community-level fields first lets distinct() do its job.
   community_nodes <- attribute_viz_prep[["nodes"]] %>%
-    dplyr::mutate(
+    dplyr::transmute(
       id = community_name,
       label = community_name,
+      group,
+      community_name,
+      color,
       value = 1
     ) %>%
     dplyr::distinct() %>%
-    dplyr::arrange(id) %>%
-    dplyr::select(id, label, group, community_name, color, value)
+    dplyr::arrange(id)
 
 
   # --- create community edges ---

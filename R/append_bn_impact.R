@@ -52,7 +52,7 @@ append_bn_impact <- function(
     total_impact  = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
     separator     = openxlsx::createStyle(fgFill = "black"),
     neg_sign      = openxlsx::createStyle(textDecoration = c("bold", "italic")),
-    insig         = openxlsx::createStyle(bgFill = "black")
+    insig         = openxlsx::createStyle(bgFill = "black", fontColour = "white")
   )
 
 
@@ -121,14 +121,24 @@ append_bn_impact <- function(
   row_data_start <- if (!is.null(sub_title)) 5L else 4L
   col_data_start <- 2L
 
+  # Battery info ships on the table for filtering / per-battery sheet logic
+  # but is intentionally NOT a visible column on the static sheet — it gets
+  # added to cols_to_hide (the column is hidden via setColWidths below).
+  # Per-battery / per-group sheets exist as their own tabs, so the Battery
+  # label is redundant on the main table.
   display_names <- c("Variable", "Community", "Label", subgroups)
   cols_all <- seq(ncol(analysis_table)) + (col_data_start - 1)
   col_first <- utils::head(cols_all, 1)
   col_last <- utils::tail(cols_all, 1)
   cols_to_hide <- (which(!names(analysis_table) %in% display_names) + (col_data_start - 1))
   cols_to_format <- (which(names(analysis_table) %in% display_names) + (col_data_start - 1))
+  # Borders should land on the last *visible* column. col_last (= last col
+  # of analysis_table) usually points at a hidden raw-metric / p-value
+  # column, so a right-edge style applied there is invisible — leaving the
+  # rightmost displayed column without its expected border.
+  col_visible_last <- max(cols_to_format)
 
-  # Index columns are the subgroup display columns (after Variable/Label/Community)
+  # Index columns are the subgroup display columns (after the leading text cols)
   n_leading <- sum(c("Variable", "Community", "Label") %in% names(analysis_table))
   index_cols <- cols_to_format[-(seq_len(n_leading))]
   data_rows <- (seq(nrow(analysis_table)) + row_data_start)[-nrow(analysis_table)]
@@ -159,6 +169,14 @@ append_bn_impact <- function(
     )
   }
   openxlsx::writeData(wb, sheet_name, write_data, startRow = row_data_start, startCol = col_data_start)
+  # Pin the header row height. With wrapText = TRUE on the header style,
+  # Excel auto-fits row height based on every cell — INCLUDING hidden
+  # columns. Hidden columns carry long Pass-B raw-metric names like
+  # "Total_lift_0_propshift_propdisplay" (+ underscores converted to spaces
+  # for display) which wrap into 5+ lines and bloat the header height.
+  # Pinning to 36 gives roughly two lines for the longest visible subgroup
+  # labels (e.g. "Frequent Google User") without being driven by hidden text.
+  openxlsx::setRowHeights(wb, sheet_name, rows = row_data_start, heights = 36)
   openxlsx::addFilter(wb, sheet_name, rows = row_data_start, cols = seq(col_data_start, col_data_start + ncol(write_table) - 1))
 
   # Hidden black separator row to break the filter range before Total Impact
@@ -190,9 +208,20 @@ append_bn_impact <- function(
     )
   }
 
-  openxlsx::setColWidths(wb, sheet_name, cols = col_data_start, widths = variable_width)
-  if (n_leading >= 2) {
-    openxlsx::setColWidths(wb, sheet_name, cols = col_data_start + 1, widths = label_width)
+  # Apply column widths to each leading column by its actual position in
+  # the table. The old code assumed Label was always the second column,
+  # but with Community (and the hidden Battery) injected between Variable
+  # and Label, the Label column lives further right — so label_width
+  # silently landed on Community instead of Label.
+  for (lc_name in c("Variable", "Community", "Label")) {
+    lc_pos <- which(names(analysis_table) == lc_name)
+    if (length(lc_pos) == 0L) next
+    excel_col <- col_data_start + lc_pos - 1L
+    w <- switch(lc_name,
+      Variable  = variable_width,
+      Community = variable_width,  # share Variable's width unless we add a community_width param
+      Label     = label_width)
+    openxlsx::setColWidths(wb, sheet_name, cols = excel_col, widths = w)
   }
 
   # Header row — outer box only
@@ -203,7 +232,7 @@ append_bn_impact <- function(
     rows = row_data_start, cols = min(cols_all), stack = TRUE)
   openxlsx::addStyle(wb, sheet_name,
     style = openxlsx::createStyle(border = "TopBottomRight", borderStyle = "medium"),
-    rows = row_data_start, cols = max(cols_all), stack = TRUE)
+    rows = row_data_start, cols = col_visible_last, stack = TRUE)
 
   # Total impact row
   openxlsx::addStyle(wb, sheet_name, style = styles$total_impact,
@@ -217,7 +246,7 @@ append_bn_impact <- function(
     rows = table_rows, cols = min(cols_all), gridExpand = TRUE, stack = TRUE)
   openxlsx::addStyle(wb, sheet_name,
     style = openxlsx::createStyle(border = "Right", borderStyle = "medium"),
-    rows = table_rows, cols = max(cols_all), gridExpand = TRUE, stack = TRUE)
+    rows = table_rows, cols = col_visible_last, gridExpand = TRUE, stack = TRUE)
   openxlsx::addStyle(wb, sheet_name,
     style = openxlsx::createStyle(border = "Bottom", borderStyle = "medium"),
     rows = total_impact_row, cols = cols_all, gridExpand = TRUE, stack = TRUE)
@@ -266,13 +295,13 @@ append_bn_impact <- function(
   # ---------------------------------------------------------------------------
   oxl_outer_box(wb, sheet_name,
     row_start = row_data_start, row_end = max(data_rows),
-    col_start = col_first, col_end = col_last,
+    col_start = col_first, col_end = col_visible_last,
     borderStyle = "medium"
   )
 
   oxl_outer_box(wb, sheet_name,
     row_start = total_impact_row, row_end = total_impact_row,
-    col_start = col_first, col_end = col_last,
+    col_start = col_first, col_end = col_visible_last,
     borderStyle = "medium"
   )
 

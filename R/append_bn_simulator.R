@@ -190,10 +190,18 @@ append_bn_simulator <- function(
   p_cols <- grep("^P_", names(sim_data), value = TRUE)
 
   # Add Expected_Value: SUMPRODUCT(level_values, probabilities)
+  # NB: p_cols is the UNION of every target node's levels — so a row whose
+  # target has fewer levels than the union (e.g. a binary DV in a network
+  # that also contains 4-level demographics) carries NA in the unused
+  # P_<level> columns. Plain matrix-multiply propagates those NAs into
+  # the entire row's Expected_Value, which downstream lands NA on
+  # _sim_data_wide and silently zeros out every Mean-mode SUMPRODUCT in
+  # the simulator dashboard. Replace NA → 0 before the multiply so the
+  # padding contributes nothing instead of poisoning the row.
   nd_levels_numeric <- as.numeric(gsub("^P_", "", p_cols))
-  sim_data$Expected_Value <- as.numeric(
-    as.matrix(sim_data[, p_cols]) %*% nd_levels_numeric
-  )
+  prob_mat_for_ev <- as.matrix(sim_data[, p_cols])
+  prob_mat_for_ev[is.na(prob_mat_for_ev)] <- 0
+  sim_data$Expected_Value <- as.numeric(prob_mat_for_ev %*% nd_levels_numeric)
 
   # ---------------------------------------------------------------------------
   # 1a. Factored storage: pivot long → wide + prior
@@ -346,8 +354,18 @@ append_bn_simulator <- function(
           # Precompute the weighted mean of the IV's shifted distribution.
           # (Used by the dashboard's "mean from X to Y" display — avoids
           # SUMPRODUCT+TRANSPOSE contortions in Excel.)
+          # Coerce non-numeric level names (e.g., factor levels like "low"/
+          # "med"/"high") to 0 with `na.rm`-equivalent handling, so the
+          # matrix multiply never produces NaN. Mixed-cardinality networks
+          # often pair a numeric Likert IV with a categorical demographic;
+          # leaving NA in iv_level_num poisons the entire Mean column for
+          # that IV and openxlsx can write that as malformed XML.
           iv_level_num <- suppressWarnings(as.numeric(iv_levels))
+          iv_level_num[is.na(iv_level_num)] <- 0
           mean_vec <- as.numeric(shifted_mat %*% iv_level_num)
+          # Belt-and-suspenders: replace any residual NaN with NA_real_ so
+          # tibble + openxlsx writes a clean empty cell instead of "NaN".
+          mean_vec[is.nan(mean_vec)] <- NA_real_
 
           tibble::tibble(
             Subgroup    = sg,
@@ -1248,10 +1266,15 @@ append_bn_simulator <- function(
         "&\"|\"&", focus_ref, weight_suffix_fmla)
       shift_row_match <- paste0("MATCH(", shift_key, ",", probs_key_range, ",0)")
 
+      # SUMPRODUCT with two INDEX(range, row, 0) row-arrays as comma-
+      # separated args is unreliable across Excel builds (the inner row
+      # arrays sometimes collapse to a scalar, the first cell, producing
+      # 0). Using explicit `*` inside SUMPRODUCT forces element-wise array
+      # multiplication BEFORE the sum and is the canonical robust form.
       raw_pct_ev <- paste0(
         "IFERROR(SUMPRODUCT(",
-          "INDEX(", probs_p_range, ",", shift_row_match, ",0),",
-          "INDEX(", wide_ev_range, ",", mean_wide_row, ",0)",
+          "(INDEX(", probs_p_range, ",", shift_row_match, ",0))*",
+          "(INDEX(", wide_ev_range, ",", mean_wide_row, ",0))",
         "),0)"
       )
 
@@ -1262,8 +1285,8 @@ append_bn_simulator <- function(
       bl_shift_row <- paste0("MATCH(", bl_shift_key, ",", probs_key_range, ",0)")
       bl_pct_ev <- paste0(
         "IFERROR(SUMPRODUCT(",
-          "INDEX(", probs_p_range, ",", bl_shift_row, ",0),",
-          "INDEX(", wide_ev_range, ",", mean_wide_row, ",0)",
+          "(INDEX(", probs_p_range, ",", bl_shift_row, ",0))*",
+          "(INDEX(", wide_ev_range, ",", mean_wide_row, ",0))",
         "),0)"
       )
 
@@ -1289,6 +1312,10 @@ append_bn_simulator <- function(
   } else {
     openxlsx::setColWidths(wb, dash_sheet, cols = col_data_start + 1, widths = "auto")  # Label
   }
+  # Metric column — give it a sensible width so the formula's text/numeric
+  # output is visible. Default Excel column width (~8.43) chokes on percent
+  # values like "+15.3%" plus the filter dropdown arrow.
+  openxlsx::setColWidths(wb, dash_sheet, cols = ev_col, widths = 14)
 
   # Borders
   oxl_outer_box(wb, dash_sheet,

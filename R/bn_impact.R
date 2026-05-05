@@ -225,26 +225,33 @@ bn_impact <- function(
   dv <- unname(dv)
 
   # Helper: insert a shift-type tag (propshift / absshift) into lift column
-  # names, right before the trailing `_propdisplay` / `_absdisplay` suffix.
-  # maxVmin / mi / p_val / dv_max_value / dv_min_value / index are shift-
-  # independent and are NOT renamed.
+  # names, right after the propdisplay / absdisplay token. Handles both:
+  #   - value cols ending in propdisplay/absdisplay
+  #   - bootstrap stat cols of the form <lift>_<display>_<stat>
+  #     (where <stat> ∈ mean | sd | se | t | ci_low | ci_high | p_value)
+  # so the dashboard's metric-keyed bootstrap p-value lookup resolves to a
+  # consistently-shaped col name. maxVmin / mi / p_val / dv_max_value /
+  # dv_min_value / index don't start with `lift` and are NOT renamed.
   .insert_shift_suffix <- function(cols, shift_key) {
-    sub("^(lift.*)_(propdisplay|absdisplay)$",
-        paste0("\\1_", shift_key, "_\\2"), cols)
+    # POSIX regex (no perl=TRUE): R's perl backref handling treats `\\1`
+    # as the byte 0x01 (octal escape) and emits literal control chars
+    # instead of backrefs. Plain POSIX gives reliable backref behavior.
+    sub("^(lift.*)_(propdisplay|absdisplay)(_.*)?$",
+        paste0("\\1_", shift_key, "_\\2\\3"), cols)
   }
 
   # Helper: merge two engine outputs produced with impact_shift_type =
   # "proportional" and "absolute". Keep everything from the prop run; from
-  # the abs run take only the renamed lift columns and bind alongside.
-  # Result has 2× lift columns (shift × display) and 1× of everything else.
+  # the abs run take all lift-related columns (values + bootstrap stats)
+  # and bind alongside, each tagged _absshift_.
   .merge_shift_variants <- function(prop_tbl, abs_tbl) {
     # Rename lift columns in the prop run to include _propshift_ tag.
     prop_names <- names(prop_tbl)
     renamed_prop <- .insert_shift_suffix(prop_names, "propshift")
     names(prop_tbl) <- renamed_prop
 
-    # From abs run, extract lift columns only and tag them _absshift_.
-    abs_lift_cols <- grep("^lift.*_(propdisplay|absdisplay)$",
+    # From abs run, extract all lift cols (values + boot stats) and tag.
+    abs_lift_cols <- grep("^lift.*_(propdisplay|absdisplay)(_.*)?$",
       names(abs_tbl), value = TRUE)
     if (length(abs_lift_cols) == 0) return(prop_tbl)
     abs_lift_only <- abs_tbl[, abs_lift_cols, drop = FALSE]

@@ -29,6 +29,8 @@ bn_finalize_network(
   impact_lift = c(0, 0.1),
   prioritize_shift_type = c("proportional", "absolute"),
   impact_include_base = TRUE,
+  batteries = NULL,
+  battery_groups = NULL,
   do_prioritizations = TRUE,
   prioritize_lift = 0.1,
   prioritize_ivs_excluded = NULL,

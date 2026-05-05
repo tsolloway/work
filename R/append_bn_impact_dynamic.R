@@ -36,11 +36,115 @@ append_bn_impact_dynamic <- function(
     label_width = "auto",
     has_weights = FALSE,
     weighted_results_sheet = NULL,
-    min_base_for_lift = NULL
+    min_base_for_lift = NULL,
+    # Survey-battery grouping. Named list mapping battery name -> IV vector.
+    # When non-NULL, the dashboard's leading cols gain a Battery column.
+    batteries = NULL,
+    # Optional battery groups — named list of vectors of battery names to
+    # combine into within-group views. When `battery_filter` matches a
+    # name in here (rather than in `batteries`), the dashboard scopes to
+    # the union of the group's component batteries' IVs.
+    battery_groups = NULL,
+    # Optional name pointing at either a single battery (in `batteries`) or
+    # a group (in `battery_groups`). When set, the dashboard is restricted
+    # to that battery's / group's IVs and the index / Total Impact
+    # denominators scope to the same set on the Results sheet.
+    battery_filter = NULL,
+    # When FALSE, skip writing the Results / Results_Weighted / lookup
+    # helper sheets (assumes a prior call already wrote them). The
+    # dashboard sheet still gets written with formulas that reference the
+    # already-existing helper sheets.
+    write_helper_sheets = TRUE,
+    # Initial values for the Outcome Display + Shift Type dropdowns.
+    # Defaults: "absolute" for both — keeps the dynamic dashboard aligned
+    # with the static-write defaults. Caller may override.
+    outcome_display = c("absolute", "proportional"),
+    shift_type      = c("absolute", "proportional")
 ) {
 
-  n_results_rows <- nrow(table)
-  n_results_cols <- ncol(table)
+  outcome_display <- match.arg(outcome_display)
+  shift_type      <- match.arg(shift_type)
+  display_default_label <- if (outcome_display == "absolute") "Absolute" else "Proportional"
+  shift_default_label   <- if (shift_type      == "absolute") "Absolute" else "Proportional"
+
+  has_batteries <- !is.null(batteries) && length(batteries) > 0L
+  if (has_batteries && "Variable" %in% names(table)) {
+    iv2b <- character(0)
+    for (b_name in names(batteries)) {
+      ivs_in_b <- batteries[[b_name]]
+      iv2b <- c(iv2b, rlang::set_names(rep(b_name, length(ivs_in_b)), ivs_in_b))
+    }
+    table$Battery <- ifelse(
+      table$Variable %in% names(iv2b),
+      iv2b[table$Variable],
+      ""
+    )
+    if ("Community" %in% names(table)) {
+      table <- table %>% dplyr::relocate(Battery, .after = "Community")
+    } else {
+      table <- table %>% dplyr::relocate(Battery, .after = "Variable")
+    }
+    # Per-group helper columns — one column per battery group, with 1 if
+    # the row's IV is in any of the group's component batteries, else 0.
+    # The dashboard's per-group tab references these columns in its
+    # SUMPRODUCT / COUNTIF masks (we can't filter by Battery=<name> when
+    # the group spans multiple batteries).
+    if (!is.null(battery_groups) && length(battery_groups) > 0L) {
+      for (g_name in names(battery_groups)) {
+        comp <- battery_groups[[g_name]]
+        ivs_in_g <- unique(unlist(batteries[comp], use.names = FALSE))
+        helper_col <- paste0("BatteryGroup_", g_name)
+        table[[helper_col]] <- as.integer(table$Variable %in% ivs_in_g)
+      }
+    }
+  }
+  has_battery_col <- has_batteries && "Battery" %in% names(table)
+
+  # Bootstrap detection: bn_impact emits per-metric `<col>_p_value` columns
+  # only when n_boot > 1. When present, the dashboard's blackout rule (p
+  # > 0.10) switches from the static MI chi-squared p_val to the
+  # bootstrap p_value of WHATEVER metric the user has selected.
+  boot_applied <- any(grepl("_p_value$", names(table)))
+
+  # Snapshot the full (cross-battery) table for the Results sheet write.
+  # `table` itself becomes the display set — filtered to the selected
+  # battery / group when `battery_filter` is set, so the dashboard renders
+  # only those IV rows. The Results sheet still carries every IV so that
+  # downstream lookups / sibling tabs can share one Results sheet.
+  full_table <- table
+  # Filter kind: "none" (no filter), "battery" (single battery), or "group"
+  # (union of multiple batteries). Drives both the table filter and the
+  # SUMPRODUCT mask used in the index / Total Impact formulas below.
+  filter_kind <- "none"
+  if (!is.null(battery_filter) && has_battery_col) {
+    if (battery_filter %in% names(batteries)) {
+      keep_ivs <- batteries[[battery_filter]]
+      filter_kind <- "battery"
+    } else if (!is.null(battery_groups) &&
+               battery_filter %in% names(battery_groups)) {
+      comp <- battery_groups[[battery_filter]]
+      keep_ivs <- unique(unlist(batteries[comp], use.names = FALSE))
+      filter_kind <- "group"
+    } else {
+      stop("battery_filter '", battery_filter,
+           "' is not a name in `batteries` or `battery_groups`.")
+    }
+    table <- table[table$Variable %in% keep_ivs, , drop = FALSE]
+    if (nrow(table) == 0L) {
+      stop("battery_filter '", battery_filter,
+           "' matched no IVs in the impact table.")
+    }
+  }
+
+  # n_results_rows / n_results_cols describe the *Results sheet* (full
+  # cross-battery dataset). They feed every formula range that hits Results
+  # (the SUMPRODUCT/INDEX denominators, the MATCH lookup column, etc.) so
+  # those references always cover every IV regardless of which dashboard
+  # tab we're on. n_dash_rows describes only this dashboard's display
+  # height — it shrinks for per-battery tabs to avoid trailing blank rows.
+  n_results_rows <- nrow(full_table)
+  n_results_cols <- ncol(full_table)
+  n_dash_rows    <- nrow(table)
 
   # ---------------------------------------------------------------------------
   # Determine dropdown options from column names
@@ -52,6 +156,12 @@ append_bn_impact_dynamic <- function(
 
   if (!is.null(sg1)) {
     sg_cols <- all_cols[startsWith(all_cols, paste0(sg1, "_"))]
+    # Strip bootstrap-stat sibling columns from the metric inventory.
+    # `<metric>_p_value` / `_ci_low` / `_ci_high` are statistical siblings
+    # of a metric, not distinct metrics — including them here would
+    # bloat the Metric / Outcome Display / Shift Type dropdown options
+    # with bogus entries like "lift_0_propdisplay_ci_low".
+    sg_cols <- sg_cols[!grepl("_(sd|se|t|ci_low|ci_high|p_value)$", sg_cols)]
     metric_suffixes <- gsub(paste0("^", sg1, "_"), "", sg_cols)
   } else {
     metric_suffixes <- setdiff(all_cols, c("Variable", "Label", "Community"))
@@ -135,15 +245,20 @@ append_bn_impact_dynamic <- function(
   openxlsx::addWorksheet(wb, dash_sheet, gridLines = FALSE)
 
   # ---------------------------------------------------------------------------
-  # Sheet 2: Results (raw data)
+  # Sheet 2: Results (raw data) — written only on the first call. Subsequent
+  # per-battery calls share the existing Results sheet (write_helper_sheets = FALSE).
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, results_sheet, gridLines = FALSE)
-  openxlsx::writeData(wb, results_sheet, table, startRow = 1, startCol = 1)
+  if (write_helper_sheets) {
+    openxlsx::addWorksheet(wb, results_sheet, gridLines = FALSE)
+    openxlsx::writeData(wb, results_sheet, full_table, startRow = 1, startCol = 1)
+  }
 
   # ---------------------------------------------------------------------------
-  # Sheet 3: _lookup (hidden)
+  # Sheet 3: _lookup (hidden) — same gating as Results.
   # ---------------------------------------------------------------------------
-  openxlsx::addWorksheet(wb, lookup_sheet, gridLines = FALSE)
+  if (write_helper_sheets) {
+    openxlsx::addWorksheet(wb, lookup_sheet, gridLines = FALSE)
+  }
 
   # Focus options in A column
   openxlsx::writeData(wb, lookup_sheet, "Focus", startRow = 1, startCol = 1)
@@ -245,6 +360,10 @@ append_bn_impact_dynamic <- function(
     lk_col <- lk_col + 1L
   }
 
+  # (No Index By options column. In Excel-dynamic mode the per-battery
+  # views are emitted as separate dashboard tabs by bn_impact_write rather
+  # than driven by a dropdown — see `battery_filter` argument.)
+
   # ---------------------------------------------------------------------------
   # Styles
   # ---------------------------------------------------------------------------
@@ -259,7 +378,7 @@ append_bn_impact_dynamic <- function(
     total_impact = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
     separator = openxlsx::createStyle(fgFill = "black"),
     neg_sign  = openxlsx::createStyle(textDecoration = c("bold", "italic")),
-    insig     = openxlsx::createStyle(bgFill = "black"),
+    insig     = openxlsx::createStyle(bgFill = "black", fontColour = "white"),
     dropdown_label = openxlsx::createStyle(textDecoration = "bold", halign = "right"),
     dropdown_cell  = openxlsx::createStyle(
       border = "Bottom", borderStyle = "thin", halign = "center"
@@ -274,7 +393,10 @@ append_bn_impact_dynamic <- function(
   row_dropdowns <- if (!is.null(sub_title)) 5L else 4L
   col_data_start <- 2L
 
-  # Determine leading columns
+  # Determine leading columns. Battery info is on the Results sheet (so the
+  # SUMPRODUCT/COUNTIF for per-battery scoping can filter on it), but it
+  # isn't shown as a dashboard column — per-battery views live on their own
+  # tabs, and the main tab doesn't need a redundant grouping label.
   id_col <- if ("Variable" %in% names(table)) "Variable" else "Community"
   has_label <- "Label" %in% names(table)
   has_community <- "Community" %in% names(table) && id_col != "Community"
@@ -282,6 +404,20 @@ append_bn_impact_dynamic <- function(
   if (has_community) leading_cols <- c(leading_cols, "Community")
   if (has_label) leading_cols <- c(leading_cols, "Label")
   n_leading <- length(leading_cols)
+  # Column index of Battery within the Results sheet (1-indexed). Used by
+  # the within-battery SUMPRODUCT/COUNTIF formulas. The static-write
+  # injection above places Battery after Community/Variable so its index
+  # in `table` matches its column position on the Results sheet.
+  battery_results_col <- if (has_battery_col) {
+    which(names(table) == "Battery")
+  } else NA_integer_
+  # Column index of the BatteryGroup_<filter> helper column on Results.
+  # Set only when filter_kind == "group". Used by the SUMPRODUCT mask
+  # below (filter mask = (BatteryGroup_<name> = 1)) instead of the
+  # battery-column equality.
+  battery_group_results_col <- if (filter_kind == "group") {
+    which(names(table) == paste0("BatteryGroup_", battery_filter))
+  } else NA_integer_
 
   # Column layout per subgroup: Metric (hidden) | P Value (hidden) | Index (visible)
   n_total_cols <- n_leading + length(sgs) * 3
@@ -386,7 +522,7 @@ append_bn_impact_dynamic <- function(
       startRow = current_row, startCol = label_col)
     openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
       rows = current_row, cols = label_col, stack = TRUE)
-    openxlsx::writeData(wb, dash_sheet, "Proportional",
+    openxlsx::writeData(wb, dash_sheet, display_default_label,
       startRow = current_row, startCol = cell_col)
     openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
       rows = current_row, cols = cell_col, stack = TRUE)
@@ -416,7 +552,7 @@ append_bn_impact_dynamic <- function(
       startRow = current_row, startCol = label_col)
     openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
       rows = current_row, cols = label_col, stack = TRUE)
-    openxlsx::writeData(wb, dash_sheet, "Proportional",
+    openxlsx::writeData(wb, dash_sheet, shift_default_label,
       startRow = current_row, startCol = cell_col)
     openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
       rows = current_row, cols = cell_col, stack = TRUE)
@@ -430,6 +566,8 @@ append_bn_impact_dynamic <- function(
       type = "list", value = shift_type_range)
     current_row <- current_row + 1L
   }
+
+  # (No Index By dropdown — per-battery views are separate tabs.)
 
   # Build metric key lookup formula
   dash_sheet_escaped <- gsub("'", "''", dash_sheet)
@@ -606,6 +744,10 @@ append_bn_impact_dynamic <- function(
   all_header_cols <- seq(col_data_start, col_data_start + n_total_cols - 1)
   openxlsx::addStyle(wb, dash_sheet, style = styles$header,
     rows = row_data_start, cols = all_header_cols, gridExpand = TRUE, stack = TRUE)
+  # Pin the header row height (same rationale as the static path) — keeps
+  # multi-word subgroup labels readable on two lines without auto-fit
+  # ballooning the row from any other cell content.
+  openxlsx::setRowHeights(wb, dash_sheet, rows = row_data_start, heights = 36)
   openxlsx::addStyle(wb, dash_sheet,
     style = openxlsx::createStyle(border = "TopBottomLeft", borderStyle = "medium"),
     rows = row_data_start, cols = min(all_header_cols), stack = TRUE)
@@ -613,8 +755,10 @@ append_bn_impact_dynamic <- function(
     style = openxlsx::createStyle(border = "TopBottomRight", borderStyle = "medium"),
     rows = row_data_start, cols = max(all_header_cols), stack = TRUE)
 
-  # Write leading columns — static values
-  for (ri in seq_len(n_results_rows)) {
+  # Write leading columns — static values. Iterate over n_dash_rows (this
+  # tab's display height) rather than n_results_rows so per-battery tabs
+  # don't carry trailing blank rows below the filtered IV set.
+  for (ri in seq_len(n_dash_rows)) {
     for (ci in seq_along(leading_cols)) {
       val <- as.character(table[[leading_cols[ci]]][ri])
       openxlsx::writeData(wb, dash_sheet, val,
@@ -644,8 +788,10 @@ append_bn_impact_dynamic <- function(
     results_count_ref <- paste0(results_sheet, "!$A$2:$A$", n_results_rows + 1)
   }
 
-  # Write INDEX/MATCH formulas
-  data_rows <- seq(row_data_start + 1, row_data_start + n_results_rows)
+  # Write INDEX/MATCH formulas. data_rows spans this dashboard's display
+  # height only — Results-sheet ranges further inside formulas still use
+  # n_results_rows so they cover the full data.
+  data_rows <- seq(row_data_start + 1, row_data_start + n_dash_rows)
 
   # Build the fully-qualified column name that corresponds to the current
   # Metric / Focus / Outcome-Display selection.
@@ -738,22 +884,39 @@ append_bn_impact_dynamic <- function(
     col_name_f <- .col_name_formula(sg, mk)
     match_col <- paste0("MATCH(", col_name_f, ",", results_header_range, ",0)")
 
-    pval_col_name <- paste0("\"", sg, "_p_val\"")
+    # Significance source:
+    #   boot_applied = FALSE → static MI chi-squared p-value `<sg>_p_val`
+    #   boot_applied = TRUE  → bootstrap p-value of the *currently selected*
+    #     metric column: `<col_name_f>_p_value`. The dashboard's blackout
+    #     rule (p > 0.10) follows whichever metric the user is viewing.
+    if (boot_applied) {
+      pval_col_name <- paste0("(", col_name_f, ")&\"_p_value\"")
+    } else {
+      pval_col_name <- paste0("\"", sg, "_p_val\"")
+    }
     pval_match <- paste0("MATCH(", pval_col_name, ",", results_header_range, ",0)")
+
+    # ID-column cell reference for THIS dashboard row. Column anchored
+    # ($), row left relative — so when Excel sorts the table, the formula
+    # in the moved <tr> auto-adjusts to point at the same row's ID cell
+    # (e.g. row 5's "$B5" becomes "$B12" when that row sorts to position 12).
+    # That's how the metric formula below stays bonded to its displayed
+    # Variable / Community label rather than to a hardcoded Results row.
+    id_col_let <- num2let(col_data_start)
 
     for (ri in seq_along(data_rows)) {
       row <- data_rows[ri]
-      if (has_weights) {
-        results_row_ref <- paste0("INDIRECT(", active_sheet, "&\"!", ri + 1, ":", ri + 1, "\")")
-      } else {
-        results_row_ref <- paste0(results_sheet, "!", ri + 1, ":", ri + 1)
-      }
+      id_cell_ref <- paste0("$", id_col_let, row)
+      # Find the row on Results whose ID column equals this dashboard row's
+      # ID. Sort-stable: id_cell_ref shifts with the row; results_count_ref
+      # is fully absolute and stays put.
+      match_row <- paste0("MATCH(", id_cell_ref, ",", results_count_ref, ",0)")
 
       # Raw metric (hidden — blank if missing/zero)
       raw_let <- num2let(raw_metric_cols[sg_i])
       raw_formula <- paste0(
-        "IFERROR(IF(INDEX(", results_row_ref, ",", match_col, ")=0,\"\",",
-        "INDEX(", results_row_ref, ",", match_col, ")),\"\")"
+        "IFERROR(IF(INDEX(", results_all_rows, ",", match_row, ",", match_col, ")=0,\"\",",
+        "INDEX(", results_all_rows, ",", match_row, ",", match_col, ")),\"\")"
       )
       openxlsx::writeFormula(wb, dash_sheet, x = raw_formula,
         startRow = row, startCol = raw_metric_cols[sg_i])
@@ -761,16 +924,48 @@ append_bn_impact_dynamic <- function(
       # P-value (hidden — 0 if raw metric is blank, no blackout)
       pval_formula <- paste0(
         "IF(", raw_let, row, "=\"\",0,",
-        "IFERROR(INDEX(", results_row_ref, ",", pval_match, "),\"\"))"
+        "IFERROR(INDEX(", results_all_rows, ",", match_row, ",", pval_match, "),\"\"))"
       )
       openxlsx::writeFormula(wb, dash_sheet, x = pval_formula,
         startRow = row, startCol = p_val_cols[sg_i])
 
-      # Index = ABS(raw) / mean(ABS(all)) * 100 (blank if all-zero column)
+      # Index denominator:
+      #   filter_kind="none"    → mean(ABS(raw)) across every row in Results
+      #   filter_kind="battery" → mean(ABS(raw)) within rows whose Battery=<name>
+      #   filter_kind="group"   → mean(ABS(raw)) within rows whose
+      #                           BatteryGroup_<name>=1
+      if (filter_kind != "none") {
+        mask_col_idx <- if (filter_kind == "battery") battery_results_col
+                        else battery_group_results_col
+        mask_let <- num2let(mask_col_idx)
+        mask_range <- if (has_weights) {
+          paste0("INDIRECT(", active_sheet, "&\"!$", mask_let, "$2:$",
+            mask_let, "$", n_results_rows + 1, "\")")
+        } else {
+          paste0(results_sheet, "!$", mask_let, "$2:$",
+            mask_let, "$", n_results_rows + 1)
+        }
+        mask_lit <- if (filter_kind == "battery") {
+          paste0("\"", gsub('"', '""', battery_filter), "\"")
+        } else {
+          "1"
+        }
+        denom <- paste0(
+          "IFERROR((SUMPRODUCT((", mask_range, "=", mask_lit, ")",
+            "*ABS(INDEX(", results_all_rows, ",0,", match_col, ")))",
+          "/COUNTIF(", mask_range, ",", mask_lit, ")),0)"
+        )
+      } else {
+        denom <- paste0(
+          "(SUMPRODUCT(ABS(INDEX(", results_all_rows, ",0,", match_col, ")))",
+          "/ROWS(", results_count_ref, "))"
+        )
+      }
+      # Numerator uses the same id-cell-keyed lookup as the raw / pval cells
+      # above so the row stays correctly linked under sort.
       cell_formula <- paste0(
-        "IFERROR(ABS(INDEX(", results_row_ref, ",", match_col, "))",
-        "/(SUMPRODUCT(ABS(INDEX(", results_all_rows, ",0,", match_col, ")))",
-        "/ROWS(", results_count_ref, "))*100,\"\")"
+        "IFERROR(ABS(INDEX(", results_all_rows, ",", match_row, ",", match_col, "))/",
+        denom, "*100,\"\")"
       )
       openxlsx::writeFormula(wb, dash_sheet, x = cell_formula,
         startRow = row, startCol = index_cols_pos[sg_i])
@@ -791,15 +986,17 @@ append_bn_impact_dynamic <- function(
       rows = data_rows, cols = col_data_start + lci - 1, gridExpand = TRUE, stack = TRUE)
   }
 
-  # Column widths
-  openxlsx::setColWidths(wb, dash_sheet, cols = col_data_start, widths = variable_width)
-  if (has_community) {
-    openxlsx::setColWidths(wb, dash_sheet, cols = col_data_start + 1, widths = community_width)
-    if (has_label) {
-      openxlsx::setColWidths(wb, dash_sheet, cols = col_data_start + 2, widths = label_width)
-    }
-  } else if (has_label) {
-    openxlsx::setColWidths(wb, dash_sheet, cols = col_data_start + 1, widths = label_width)
+  # Column widths — apply per leading-col position. Battery isn't a
+  # dashboard column (it's only on the Results sheet for SUMPRODUCT
+  # filtering), so it doesn't appear here.
+  for (lci in seq_along(leading_cols)) {
+    nm <- leading_cols[lci]
+    w <- switch(nm,
+      Community = community_width,
+      Label     = label_width,
+      variable_width)
+    openxlsx::setColWidths(wb, dash_sheet,
+      cols = col_data_start + lci - 1, widths = w)
   }
 
   # ---------------------------------------------------------------------------
@@ -822,10 +1019,36 @@ append_bn_impact_dynamic <- function(
     match_col <- paste0("MATCH(", col_name_f, ",", results_header_range, ",0)")
 
     sum_expr <- paste0("SUMPRODUCT(ABS(INDEX(", results_all_rows, ",0,", match_col, ")))")
-    ti_formula <- paste0(
-      "IFERROR(IF(", sum_expr, "=0,\"\",",
-      sum_expr, "/ROWS(", results_count_ref, ")),\"\")"
-    )
+
+    if (filter_kind != "none") {
+      # Total Impact scoped to the dashboard's battery / group — same
+      # SUMPRODUCT / COUNTIF filter used for the row-level index denominator.
+      mask_col_idx <- if (filter_kind == "battery") battery_results_col
+                      else battery_group_results_col
+      mask_let <- num2let(mask_col_idx)
+      mask_range <- if (has_weights) {
+        paste0("INDIRECT(", active_sheet, "&\"!$", mask_let, "$2:$",
+          mask_let, "$", n_results_rows + 1, "\")")
+      } else {
+        paste0(results_sheet, "!$", mask_let, "$2:$",
+          mask_let, "$", n_results_rows + 1)
+      }
+      mask_lit <- if (filter_kind == "battery") {
+        paste0("\"", gsub('"', '""', battery_filter), "\"")
+      } else {
+        "1"
+      }
+      ti_formula <- paste0(
+        "IFERROR(SUMPRODUCT((", mask_range, "=", mask_lit, ")",
+          "*ABS(INDEX(", results_all_rows, ",0,", match_col, ")))",
+        "/COUNTIF(", mask_range, ",", mask_lit, "),\"\")"
+      )
+    } else {
+      ti_formula <- paste0(
+        "IFERROR(IF(", sum_expr, "=0,\"\",",
+        sum_expr, "/ROWS(", results_count_ref, ")),\"\")"
+      )
+    }
     openxlsx::writeFormula(wb, dash_sheet, x = ti_formula,
       startRow = total_impact_row, startCol = index_cols_pos[sg_i])
   }
@@ -917,6 +1140,9 @@ append_bn_impact_dynamic <- function(
     openxlsx::conditionalFormatting(wb, dash_sheet, cols = i, rows = data_rows,
       style = styles$insig, type = "expression", rule = p_formula)
   }
+
+  # (Per-battery dashboards are pre-filtered tabs rather than a dropdown,
+  # so no row-hiding rule is needed.)
 
   # ---------------------------------------------------------------------------
   # Borders, freeze, filter

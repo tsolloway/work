@@ -97,10 +97,17 @@ bn_write <- function(
     sig_threshold = NULL,
     marginal_threshold = NULL,
     lift = 0.10,
+    # Static-write index variants — only consulted when wb_type="standard".
+    # Defaults: absolute outcome display + absolute IV shift. Forwarded to
+    # bn_impact_write.
+    outcome_display = c("absolute", "proportional"),
+    shift_type      = c("absolute", "proportional"),
     path = "."
 ) {
 
   wb_type <- match.arg(wb_type)
+  outcome_display <- match.arg(outcome_display)
+  shift_type      <- match.arg(shift_type)
 
   impacts <- obj[["impacts"]]
   prioritizations <- obj[["prioritizations"]]
@@ -183,6 +190,8 @@ bn_write <- function(
       very_hide_all      = very_hide_all,
       min_base_for_lift  = min_base_for_lift,
       min_base_for_sim   = min_base_for_sim,
+      outcome_display    = outcome_display,
+      shift_type         = shift_type,
       path               = path,
       wb                 = wb,
       save               = FALSE,

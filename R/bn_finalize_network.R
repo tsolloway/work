@@ -130,6 +130,23 @@ bn_finalize_network <- function(
     impact_lift = c(0, 0.1),
     prioritize_shift_type = c("proportional", "absolute"),
     impact_include_base = TRUE,
+    # Survey-battery grouping for the "Index By: Battery" feature in the
+    # impact dashboards. Named list of vectors mapping battery name -> IVs.
+    # If NULL, resolved from obj$meta$ivs when that's a named list (the
+    # natural format coming out of bn_engine when the user passed a
+    # named-list ivs). NULL flat-falls through everywhere downstream
+    # (Battery column hidden, Index By control omitted, per-battery
+    # static sheets skipped).
+    batteries = NULL,
+    # Optional cuts that combine two or more batteries into a single
+    # within-cut indexed view, in addition to (not replacing) the per-battery
+    # views. Format: named list of character vectors, where each element's
+    # name is the new cut's display name and each element's values are
+    # battery names already present in `batteries`. Each cut produces:
+    # one extra dynamic dashboard tab "AD - <name>" + one extra static
+    # sheet "AD - <name>" + one extra entry in bn_report's Index By dropdown.
+    # Group names must NOT collide with any battery name. Default NULL.
+    battery_groups = NULL,
     # --- Prioritization ---
     do_prioritizations = TRUE,
     prioritize_lift = 0.10,
@@ -183,6 +200,12 @@ bn_finalize_network <- function(
 
       if(is.null(dv)) dv <- obj[["meta"]][["dv"]]
       if(is.null(previous_dv)) previous_dv <- obj[["meta"]][["dv"]]
+      # Capture the named-list form (battery structure) BEFORE unlisting,
+      # so the iv_batteries fallback below has access to it.
+      if (is.null(batteries) && is.list(obj[["meta"]][["ivs"]]) &&
+          !is.null(names(obj[["meta"]][["ivs"]]))) {
+        batteries <- obj[["meta"]][["ivs"]]
+      }
       x_ivs <- obj[["meta"]][["ivs"]] %>% unlist() %>% setNames(NULL)
 
     }else if(analysis_type == "bn_model_unsupervised"){
@@ -192,6 +215,10 @@ bn_finalize_network <- function(
 
       if(is.null(bn)) bn <- obj[["bn"]]
       if(is.null(viz_prep)) viz_prep <- obj[["viz_prep"]]
+      if (is.null(batteries) && is.list(obj[["meta"]][["ivs"]]) &&
+          !is.null(names(obj[["meta"]][["ivs"]]))) {
+        batteries <- obj[["meta"]][["ivs"]]
+      }
       x_ivs <- obj[["meta"]][["ivs"]] %>% unlist() %>% setNames(NULL)
 
     }else{
@@ -465,6 +492,84 @@ bn_finalize_network <- function(
     results[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]] <-
       join_impact(community_nodes, results[["impacts"]][["table_community"]], "Community")
 
+  }
+
+
+  ###############################
+  # Stash battery structure for downstream "Index By: Battery" feature.
+  # Populated on both result$meta and per-subgroup meta so writers don't
+  # have to know which slot to look in.
+  ###############################
+  if (!is.null(batteries)) {
+    if (is.null(results[["meta"]])) results[["meta"]] <- list()
+    results[["meta"]][["batteries"]] <- batteries
+    if (!is.null(results[["bn_subgroups"]])) {
+      for (sg in names(results[["bn_subgroups"]])) {
+        if (is.null(results[["bn_subgroups"]][[sg]][["meta"]])) {
+          results[["bn_subgroups"]][[sg]][["meta"]] <- list()
+        }
+        results[["bn_subgroups"]][[sg]][["meta"]][["batteries"]] <- batteries
+      }
+    }
+    # Also stamp onto impacts$meta so bn_impact_write (which reads its
+    # metadata from there, not from the bn_finalize result) finds the
+    # battery structure without needing a new parameter wired through.
+    if (!is.null(results[["impacts"]])) {
+      if (is.null(results[["impacts"]][["meta"]])) {
+        results[["impacts"]][["meta"]] <- list()
+      }
+      results[["impacts"]][["meta"]][["batteries"]] <- batteries
+    }
+  }
+
+  # Validate + stash battery_groups (extra cuts that combine batteries).
+  # Each group's name must not collide with a battery name; each entry's
+  # values must reference battery names that exist in `batteries`.
+  if (!is.null(battery_groups)) {
+    if (!is.list(battery_groups) || is.null(names(battery_groups)) ||
+        any(!nzchar(names(battery_groups)))) {
+      cli::cli_abort(
+        "{.arg battery_groups} must be a named list, e.g. {.code list(new_group = c(\"battery1\", \"battery2\"))}."
+      )
+    }
+    if (is.null(batteries) || length(batteries) == 0L) {
+      cli::cli_abort(
+        "{.arg battery_groups} requires {.arg batteries} to be non-empty (groups reference battery names)."
+      )
+    }
+    bg_names <- names(battery_groups)
+    collisions <- intersect(bg_names, names(batteries))
+    if (length(collisions) > 0) {
+      cli::cli_abort(c(
+        "{.arg battery_groups} name{?s} collide with existing battery name{?s}: {.val {collisions}}.",
+        "i" = "Each group name must be distinct from every battery name."
+      ))
+    }
+    for (gn in bg_names) {
+      gv <- battery_groups[[gn]]
+      if (!is.character(gv) || length(gv) < 2L) {
+        cli::cli_abort(
+          "{.arg battery_groups${gn}} must be a character vector of at least 2 battery names."
+        )
+      }
+      bad <- setdiff(gv, names(batteries))
+      if (length(bad) > 0) {
+        cli::cli_abort(c(
+          "{.arg battery_groups${gn}} references unknown batter{?y/ies}: {.val {bad}}.",
+          "i" = "Available batteries: {.val {names(batteries)}}."
+        ))
+      }
+    }
+
+    results[["meta"]][["battery_groups"]] <- battery_groups
+    if (!is.null(results[["bn_subgroups"]])) {
+      for (sg in names(results[["bn_subgroups"]])) {
+        results[["bn_subgroups"]][[sg]][["meta"]][["battery_groups"]] <- battery_groups
+      }
+    }
+    if (!is.null(results[["impacts"]])) {
+      results[["impacts"]][["meta"]][["battery_groups"]] <- battery_groups
+    }
   }
 
 

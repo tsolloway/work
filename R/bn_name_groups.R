@@ -170,6 +170,11 @@ bn_name_groups <- function(results,
     "For each group below, provide a short descriptive thematic name ",
     "({min_words} to {max_words} words). The name should capture the common ",
     "theme of the attributes in that group.\n\n",
+    "IMPORTANT: every group name must be UNIQUE. Two groups can have ",
+    "overlapping themes, but the labels you return must differ — ",
+    "use a more specific qualifier (e.g. \"Functional Trust\" vs ",
+    "\"Emotional Trust\") rather than repeating the same word. ",
+    "Duplicate names break the downstream visualization.\n\n",
     "{paste(group_lines, collapse = '\n')}\n\n",
     "Respond with ONLY the group names, one per line, in the format:\n",
     "Group N: Name\n\n",
@@ -314,6 +319,24 @@ bn_name_groups <- function(results,
   # navigate to the engine
   obj <- results
   for (key in path) obj <- obj[[key]]
+
+  # Dedupe duplicate names within this engine. The AI / manual mapping can
+  # land on the same string for two different groups (e.g. "Trust" and
+  # "Trust"). Downstream `bn_to_netviz_prep_for_communities` keys community
+  # nodes by `id = community_name`, so duplicates produce "nodes must have
+  # unique ids" errors in visNetwork. Suffix each duplicate with " (2)",
+  # " (3)", … in the order encountered to keep them distinct.
+  name_vals <- unlist(name_map[as.character(sort(as.integer(names(name_map))))])
+  if (anyDuplicated(name_vals)) {
+    seen <- list()
+    for (k in names(name_vals)) {
+      base <- name_vals[[k]]
+      cnt  <- (seen[[base]] %||% 0L) + 1L
+      seen[[base]] <- cnt
+      if (cnt > 1L) name_vals[[k]] <- paste0(base, " (", cnt, ")")
+    }
+    for (k in names(name_vals)) name_map[[k]] <- name_vals[[k]]
+  }
 
   # update attribute nodes
   nodes <- obj$viz_prep$attribute_viz_prep$nodes

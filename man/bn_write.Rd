@@ -32,6 +32,8 @@ bn_write(
   sig_threshold = NULL,
   marginal_threshold = NULL,
   lift = 0.1,
+  outcome_display = c("absolute", "proportional"),
+  shift_type = c("absolute", "proportional"),
   path = "."
 )
 }
