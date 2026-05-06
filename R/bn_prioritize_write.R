@@ -105,10 +105,34 @@ bn_prioritize_write <- function(
   if (is.null(wb)) wb <- oxl_create_workbook()
   pre_sheets <- names(wb)
 
+  # Strategy display labels — must match what .prioritize_build_registry()
+  # writes into the registry (and therefore into _priorit_lookup) so that
+  # the "Max-strategy → force focus/weight" Excel formulas compare apples
+  # to apples. Pull lift% from meta so the label reflects the actual shift.
+  meta_lift <- result[["meta"]][["lift"]]
+  lift_pct_label <- if (!is.null(meta_lift)) round(meta_lift * 100) else round(lift * 100)
+  lift_label            <- paste0("Moderate Lift (", lift_pct_label, "%)")
+  max_label             <- "Maximum Lift"
+  max_deprecated_label  <- "Maximum Lift (Deprecated)"
+
   # ---------------------------------------------------------------------------
   # Build registry: flat list of tagged entries
   # ---------------------------------------------------------------------------
   registry <- .prioritize_build_registry(result)
+
+  # Detect whether the outcome is binary (top_box / 0-1 probability) by
+  # checking whether every dv_estimate falls in [0, 1]. When true, the
+  # absolute metric columns (Outcome Estimate, Cumulative Gain, Incremental
+  # Lift) render as XX.X% instead of XX.XX. Pct columns are already in
+  # XX.X% form.
+  is_binary_outcome <- {
+    dv_vals <- unlist(purrr::map(registry, function(e) {
+      if (is.null(e$tbl) || !is.data.frame(e$tbl)) return(numeric(0))
+      as.numeric(e$tbl$dv_estimate)
+    }))
+    dv_vals <- dv_vals[!is.na(dv_vals)]
+    length(dv_vals) > 0 && min(dv_vals) >= -1e-6 && max(dv_vals) <= 1 + 1e-6
+  }
 
   # Phantom entries (skipped slices) have tbl = NULL — they only exist to
   # populate _lookup for the Focus warning/base display. Guard all NULL-tbl
@@ -213,8 +237,12 @@ bn_prioritize_write <- function(
     sub_title  = openxlsx::createStyle(textDecoration = c("bold", "italic"), fontSize = 14),
     header     = openxlsx::createStyle(textDecoration = "bold", halign = "center", wrapText = TRUE, fgFill = "#D9D9D9"),
     center_int = openxlsx::createStyle(numFmt = "0", halign = "center"),
-    center_2dp = openxlsx::createStyle(numFmt = "0.00", halign = "center"),
-    center_pct = openxlsx::createStyle(numFmt = "0.00%", halign = "center"),
+    # When the outcome is binary (probability in [0, 1]), the absolute
+    # columns render as XX.X% (multiplied by 100); otherwise XX.XX.
+    center_2dp = openxlsx::createStyle(
+      numFmt = if (is_binary_outcome) "0.0%" else "0.00",
+      halign = "center"),
+    center_pct = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
     left       = openxlsx::createStyle(halign = "left"),
     baseline   = openxlsx::createStyle(textDecoration = "italic", fgFill = "#F2F2F2"),
     p_green    = openxlsx::createStyle(fontColour = "#2E7D32", textDecoration = "bold"),
@@ -250,7 +278,7 @@ bn_prioritize_write <- function(
   weight_cell_row <- NULL  # captured for the "Weights don't affect this strategy" warning
 
   dim_display_labels <- c(
-    strategy = "Strategy:",
+    strategy = "Analysis:",
     search   = "Search:",
     subgroup = "Subgroup:",
     focus    = "Focus:",
@@ -288,18 +316,87 @@ bn_prioritize_write <- function(
     current_row <- current_row + 1L
   }
 
+  # --- Display-mode dropdown (always shown, UI-only — doesn't touch the
+  # registry / key lookup, only controls which numbers feed the chart). ---
+  # Default = "Percent Change" (cumulative gain %). "Point Change"
+  # reproduces the original DV-Estimate-based stacked chart.
+  chart_options <- c("Percent Change", "Point Change")
+  # Place chart options on _priorit_lookup right after the existing dim opts
+  chart_opt_col <- opt_col
+  openxlsx::writeData(wb, "_priorit_lookup", "Display",
+    startRow = 1, startCol = chart_opt_col)
+  for (vi in seq_along(chart_options)) {
+    openxlsx::writeData(wb, "_priorit_lookup", chart_options[vi],
+      startRow = vi + 1, startCol = chart_opt_col)
+  }
+  opt_col <- opt_col + 1L
+
+  chart_cell_row <- current_row
+  openxlsx::writeData(wb, dash, "Display:",
+    startRow = current_row, startCol = label_col)
+  openxlsx::addStyle(wb, dash, style = styles$dropdown_label,
+    rows = current_row, cols = label_col, stack = TRUE)
+  openxlsx::writeData(wb, dash, chart_options[1],
+    startRow = current_row, startCol = cell_col)
+  openxlsx::addStyle(wb, dash, style = styles$dropdown_cell,
+    rows = current_row, cols = cell_col, stack = TRUE)
+  chart_opt_range <- paste0("_priorit_lookup!$", num2let(chart_opt_col),
+    "$2:$", num2let(chart_opt_col), "$", length(chart_options) + 1)
+  openxlsx::dataValidation(wb, dash,
+    col = cell_col, rows = current_row,
+    type = "list", value = chart_opt_range)
+  chart_cell_ref <- paste0("Prioritization!$", num2let(cell_col), "$", current_row)
+  current_row <- current_row + 1L
+
   openxlsx::setColWidths(wb, dash, cols = label_col, widths = 10)
   openxlsx::setColWidths(wb, dash, cols = cell_col, widths = 14)
 
   last_control_row <- current_row - 1L
 
   # --- Build key formula from dropdown refs ---
-  # For dimensions with only one value, hardcode that value in the key
+  # For dimensions with only one value, hardcode that value in the key.
+  # When the strategy dropdown is active and the user picks "Max", force
+  # focus="Market" and weight="Unweighted" in the key — Max is registered
+  # only at that combination (it's brand-invariant and weight-invariant
+  # by definition), so without this override switching Strategy → Max
+  # while Focus or Weight is on something else produces a key that
+  # doesn't exist in _priorit_lookup → empty table.
+  strategy_active <- "strategy" %in% active_dims
+  strategy_ref <- if (strategy_active) {
+    paste0("Prioritization!", dropdown_refs[["strategy"]])
+  } else {
+    paste0("\"", dims[["strategy"]], "\"")
+  }
+  # Both "Maximum Lift" and "Maximum Lift (Deprecated)" are brand- and
+  # weight-invariant — registered only at focus = Market / weight = Unweighted.
+  is_max_expr <- if (strategy_active) {
+    paste0("OR(", strategy_ref, "=\"", max_label, "\",",
+                  strategy_ref, "=\"", max_deprecated_label, "\")")
+  } else {
+    if (identical(dims[["strategy"]], max_label) ||
+        identical(dims[["strategy"]], max_deprecated_label)) "TRUE" else "FALSE"
+  }
+  # "Maximum Lift (Deprecated)" detection — used by the Display warning
+  # (next to the chart dropdown) and by the dynamic-column formulas to
+  # force Point Change rendering even when the Display dropdown sits on
+  # Percent Change.
+  is_deprecated_expr <- if (strategy_active) {
+    paste0(strategy_ref, "=\"", max_deprecated_label, "\"")
+  } else {
+    if (identical(dims[["strategy"]], max_deprecated_label)) "TRUE" else "FALSE"
+  }
   key_parts <- purrr::map_chr(dim_names, function(dn) {
-    if (dn %in% active_dims) {
+    base <- if (dn %in% active_dims) {
       paste0("Prioritization!", dropdown_refs[[dn]])
     } else {
       paste0("\"", dims[[dn]], "\"")
+    }
+    if (dn == "focus") {
+      paste0("IF(", is_max_expr, ",\"Market\",", base, ")")
+    } else if (dn == "weight") {
+      paste0("IF(", is_max_expr, ",\"Unweighted\",", base, ")")
+    } else {
+      base
     }
   })
   key_formula <- paste(key_parts, collapse = "&\"|\"&")
@@ -362,13 +459,17 @@ bn_prioritize_write <- function(
     strategy_ref <- paste0("Prioritization!", dropdown_refs[["strategy"]])
     weight_warn_col <- cell_col + 1L
     weight_warn_formula <- paste0(
-      "IF(", strategy_ref, "=\"Max\",",
+      "IF(OR(", strategy_ref, "=\"", max_label, "\",",
+              strategy_ref, "=\"", max_deprecated_label, "\"),",
       "\"Weights don't affect this strategy\",\"\")"
     )
     openxlsx::writeFormula(wb, dash, x = weight_warn_formula,
       startRow = weight_cell_row, startCol = weight_warn_col)
 
-    weight_warn_rule <- paste0(strategy_ref, "=\"Max\"")
+    weight_warn_rule <- paste0(
+      "OR(", strategy_ref, "=\"", max_label, "\",",
+             strategy_ref, "=\"", max_deprecated_label, "\")"
+    )
     openxlsx::conditionalFormatting(wb, dash,
       cols = weight_warn_col, rows = weight_cell_row,
       style = openxlsx::createStyle(fontColour = "#888888",
@@ -376,42 +477,113 @@ bn_prioritize_write <- function(
       type = "expression", rule = weight_warn_rule)
   }
 
+  # -------------------------------------------------------------------------
+  # Display warning — fires when Strategy = "Maximum Lift (Deprecated)" AND
+  # Display = "Percent Change". The deprecated strategy stores the raw
+  # dv_estimate as cumulative gain (no baseline comparison), so the percent
+  # columns are NA and Percent Change rendering would be blank. The
+  # dynamic-column formulas already coerce to Point Change in this case;
+  # this warning explains why the user's Percent Change selection has no
+  # visible effect. Mirrors the Focus base warning's grey-italic style.
+  # -------------------------------------------------------------------------
+  if (max_deprecated_label %in% dims[["strategy"]]) {
+    chart_warn_col <- cell_col + 1L
+    chart_warn_rule <- paste0(
+      "AND(", is_deprecated_expr, ",",
+              chart_cell_ref, "=\"Percent Change\")"
+    )
+    chart_warn_formula <- paste0(
+      "IF(", chart_warn_rule, ",",
+        "\"Point change display is the only option for this analysis.\",",
+        "\"\")"
+    )
+    openxlsx::writeFormula(wb, dash, x = chart_warn_formula,
+      startRow = chart_cell_row, startCol = chart_warn_col)
+    openxlsx::conditionalFormatting(wb, dash,
+      cols = chart_warn_col, rows = chart_cell_row,
+      style = openxlsx::createStyle(fontColour = "#888888",
+        textDecoration = "italic"),
+      type = "expression", rule = chart_warn_rule)
+  }
+
   # --- Data table ---
-  # Prioritization columns (no combo) and their source column letters in the data sheets
+  # Prioritization columns and their source column letters in the data sheets.
+  # The bn_prioritize tibble emits columns in this order (combo is not shown
+  # on the dashboard but is still in the data sheet):
   # Without community: A=priority, B=variable, C=label, D=combo, E=dv_estimate,
-  #   F=marginal_gain, G=marginal_gain_pct, H=p_value
+  #   F=cumulative_gain, G=marginal_gain, H=cumulative_gain_pct,
+  #   I=marginal_gain_pct, J=p_value
   # With community: A=priority, B=variable, C=community, D=label, E=combo,
-  #   F=dv_estimate, G=marginal_gain, H=marginal_gain_pct, I=p_value
+  #   F=dv_estimate, G=cumulative_gain, H=marginal_gain,
+  #   I=cumulative_gain_pct, J=marginal_gain_pct, K=p_value
+  # Two physical metric columns (Cumulative + Incremental) carry whichever
+  # value matches the Display dropdown — Cumulative Gain / Incremental Lift
+  # in Point Change, Cumulative Gain % / Incremental Lift % in Percent
+  # Change. Outcome Estimate stays in the layout but its column is hidden
+  # (kept available for chart references). source_letters[i] is the Point
+  # Change source letter; percent_source_letters[i] is the Percent Change
+  # source letter for dynamic columns (NA for non-dynamic columns).
   if (has_community) {
     display_headers <- c("Step", "Variable", "Community", "Label",
-                         "DV Estimate", "Marginal Gain", "Marginal Gain %")
-    source_letters <- c("A", "B", "C", "D", "F", "G", "H")
+                         "Outcome Estimate",
+                         "Cumulative Gain", "Incremental Lift")
+    source_letters         <- c("A", "B", "C", "D", "F", "G", "H")
+    percent_source_letters <- c(NA,  NA,  NA,  NA,  NA,  "I", "J")
     if (has_p) {
-      display_headers <- c(display_headers, "p-value")
-      source_letters <- c(source_letters, "I")
+      display_headers        <- c(display_headers, "p-value")
+      source_letters         <- c(source_letters, "K")
+      percent_source_letters <- c(percent_source_letters, NA)
     }
   } else {
     display_headers <- c("Step", "Variable", "Label",
-                         "DV Estimate", "Marginal Gain", "Marginal Gain %")
-    source_letters <- c("A", "B", "C", "E", "F", "G")
+                         "Outcome Estimate",
+                         "Cumulative Gain", "Incremental Lift")
+    source_letters         <- c("A", "B", "C", "E", "F", "G")
+    percent_source_letters <- c(NA,  NA,  NA,  NA,  "H", "I")
     if (has_p) {
-      display_headers <- c(display_headers, "p-value")
-      source_letters <- c(source_letters, "H")
+      display_headers        <- c(display_headers, "p-value")
+      source_letters         <- c(source_letters, "J")
+      percent_source_letters <- c(percent_source_letters, NA)
     }
   }
+
+  # Per-column kind. "dynamic" columns swap their header text + value source
+  # based on the Display dropdown; "static" columns are written once.
+  column_kind <- ifelse(is.na(percent_source_letters), "static", "dynamic")
 
   n_display_cols <- length(display_headers)
   row_data_start <- last_control_row + 2L
   chart_height <- 19L
 
+  # When strategy = "Maximum Lift (Deprecated)" the percent columns are
+  # NA, so the dynamic columns are forced to Point Change regardless of
+  # the Display dropdown — selecting Percent Change while on Deprecated
+  # would otherwise show a blank table.
+  is_point_change_expr <- paste0(
+    "OR(", chart_cell_ref, "=\"Point Change\",", is_deprecated_expr, ")"
+  )
+
   # Table at col B (left), chart to the right after a spacer
   cols_all <- seq(col_data_start, col_data_start + n_display_cols - 1)
   col_chart_start <- max(cols_all) + 2L  # one spacer column after table
 
-  # Write headers
+  # Write headers — dynamic columns (Cumulative / Incremental) become
+  # formulas that switch label between point and percent versions.
   for (ci in seq_along(display_headers)) {
-    openxlsx::writeData(wb, dash, display_headers[ci],
-      startRow = row_data_start, startCol = col_data_start + ci - 1)
+    if (column_kind[ci] == "static") {
+      openxlsx::writeData(wb, dash, display_headers[ci],
+        startRow = row_data_start, startCol = col_data_start + ci - 1)
+    } else {
+      # Dynamic — swap "Cumulative Gain" / "Cumulative Gain %", etc.
+      point_label   <- display_headers[ci]
+      percent_label <- paste0(point_label, " %")
+      header_formula <- paste0(
+        'IF(', is_point_change_expr, ',"',
+        point_label, '","', percent_label, '")'
+      )
+      openxlsx::writeFormula(wb, dash, x = header_formula,
+        startRow = row_data_start, startCol = col_data_start + ci - 1)
+    }
   }
   openxlsx::addStyle(wb, dash, style = styles$header,
     rows = row_data_start, cols = cols_all, gridExpand = TRUE, stack = TRUE)
@@ -424,36 +596,65 @@ bn_prioritize_write <- function(
     source_row <- ri + 1  # row 2+ in data sheet
 
     for (ci in seq_len(n_display_cols)) {
-      src_let <- source_letters[ci]
-      src_ref <- paste0(sheet_lookup, "&\"!$", src_let, "$", source_row, "\"")
-      cell_formula <- paste0(
-        "IF(ISBLANK(INDIRECT(", src_ref, ")),\"\",IFERROR(INDIRECT(", src_ref, "),\"\"))"
+      point_let <- source_letters[ci]
+      point_ref <- paste0(sheet_lookup, "&\"!$", point_let, "$", source_row, "\"")
+      point_branch <- paste0(
+        "IF(ISBLANK(INDIRECT(", point_ref, ")),\"\",IFERROR(INDIRECT(", point_ref, "),\"\"))"
       )
+
+      cell_formula <- if (column_kind[ci] == "static") {
+        point_branch
+      } else {
+        # Dynamic — pick point_ref or percent_ref based on Display dropdown.
+        pct_let <- percent_source_letters[ci]
+        percent_ref <- paste0(sheet_lookup, "&\"!$", pct_let, "$", source_row, "\"")
+        percent_branch <- paste0(
+          "IF(ISBLANK(INDIRECT(", percent_ref, ")),\"\",IFERROR(INDIRECT(", percent_ref, "),\"\"))"
+        )
+        paste0(
+          'IF(', is_point_change_expr, ',',
+          point_branch, ',', percent_branch, ')'
+        )
+      }
       openxlsx::writeFormula(wb, dash, x = cell_formula,
         startRow = row, startCol = col_data_start + ci - 1)
     }
   }
+
+  # Hide the baseline (priority == 0) dashboard row. The data is preserved
+  # in the source data sheet but the dashboard collapses the row out of
+  # view. ri == 1 corresponds to source_row == 2 — the first data row of
+  # the source sheet, which is always the baseline emitted by
+  # bn_prioritize().
+  baseline_dash_row <- data_rows[1]
+  openxlsx::setRowHeights(wb, dash, rows = baseline_dash_row, heights = 0)
 
   # --- Column positions (derived from display_headers order) ---
   col_step <- col_data_start + match("Step", display_headers) - 1
   col_variable <- col_data_start + match("Variable", display_headers) - 1
   col_community <- if (has_community) col_data_start + match("Community", display_headers) - 1 else NULL
   col_label <- col_data_start + match("Label", display_headers) - 1
-  col_estimate <- col_data_start + match("DV Estimate", display_headers) - 1
-  col_gain <- col_data_start + match("Marginal Gain", display_headers) - 1
-  col_gain_pct <- col_data_start + match("Marginal Gain %", display_headers) - 1
+  col_estimate <- col_data_start + match("Outcome Estimate", display_headers) - 1
+  col_cum  <- col_data_start + match("Cumulative Gain", display_headers) - 1
+  col_gain <- col_data_start + match("Incremental Lift", display_headers) - 1
   col_pvalue <- if (has_p) col_data_start + match("p-value", display_headers) - 1 else NULL
 
   # --- Column widths ---
-  openxlsx::setColWidths(wb, dash, cols = col_step, widths = 6)
-  openxlsx::setColWidths(wb, dash, cols = col_variable, widths = variable_width)
+  # Step is a tight integer column (fixed 5). Variable auto-sizes to its
+  # short attribute names. Community is fixed 20 and Label fixed 30 — the
+  # INDIRECT formula cells defeat openxlsx's "auto" (bestFit only honors
+  # direct values), so we set them explicitly. Metric columns get a uniform
+  # width of 10. Outcome Estimate is hidden but kept structurally so chart
+  # references and sort keys still work.
+  openxlsx::setColWidths(wb, dash, cols = col_step, widths = 5)
+  openxlsx::setColWidths(wb, dash, cols = col_variable, widths = "auto")
   if (!is.null(col_community)) {
-    openxlsx::setColWidths(wb, dash, cols = col_community, widths = community_width)
+    openxlsx::setColWidths(wb, dash, cols = col_community, widths = 20)
   }
-  openxlsx::setColWidths(wb, dash, cols = col_label, widths = label_width)
-  openxlsx::setColWidths(wb, dash, cols = col_estimate, widths = 14)
-  openxlsx::setColWidths(wb, dash, cols = col_gain, widths = 14)
-  openxlsx::setColWidths(wb, dash, cols = col_gain_pct, widths = 14)
+  openxlsx::setColWidths(wb, dash, cols = col_label, widths = 30)
+  openxlsx::setColWidths(wb, dash, cols = col_estimate, widths = 10, hidden = TRUE)
+  openxlsx::setColWidths(wb, dash, cols = col_cum, widths = 10)
+  openxlsx::setColWidths(wb, dash, cols = col_gain, widths = 10)
   if (!is.null(col_pvalue)) {
     openxlsx::setColWidths(wb, dash, cols = col_pvalue, widths = 10)
   }
@@ -467,21 +668,23 @@ bn_prioritize_write <- function(
   openxlsx::addStyle(wb, dash, style = styles$center_int,
     rows = data_rows, cols = col_step, gridExpand = TRUE, stack = TRUE)
 
-  # DV Estimate, Marginal Gain = 2 decimals
+  # Outcome Estimate, Cumulative, Incremental — 2 decimals (or XX.X% when
+  # the outcome is binary). The dynamic Cumulative/Incremental columns
+  # alternate between point and percent values; for binary outcomes the
+  # "0.0%" format works for both modes, for non-binary the "0.00" format
+  # is correct in Point Change and the user accepts fractional display in
+  # Percent Change (single static format can't represent both perfectly
+  # without conditional formatting).
   openxlsx::addStyle(wb, dash, style = styles$center_2dp,
-    rows = data_rows, cols = c(col_estimate, col_gain), gridExpand = TRUE, stack = TRUE)
-
-  # Marginal Gain % = percentage
-  openxlsx::addStyle(wb, dash, style = styles$center_pct,
-    rows = data_rows, cols = col_gain_pct, gridExpand = TRUE, stack = TRUE)
+    rows = data_rows, cols = c(col_estimate, col_cum, col_gain), gridExpand = TRUE, stack = TRUE)
 
   # Left-align text columns
   text_cols <- c(col_variable, col_community, col_label)
   openxlsx::addStyle(wb, dash, style = styles$left,
     rows = data_rows, cols = text_cols, gridExpand = TRUE, stack = TRUE)
 
-  # White-to-green colour scale for DV Estimate, Marginal Gain, Marginal Gain %
-  for (cc in c(col_estimate, col_gain, col_gain_pct)) {
+  # White-to-green colour scale for the visible numeric columns
+  for (cc in c(col_cum, col_gain)) {
     openxlsx::conditionalFormatting(wb, dash,
       cols = cc, rows = data_rows,
       style = c("#FFFFFF", "#66bd7d"), type = "colourScale")
@@ -576,9 +779,11 @@ bn_prioritize_write <- function(
 
   footer_lines <- c(
     "Step \u2014 Priority step number (order in which attributes were selected)",
-    "DV Estimate \u2014 Expected DV value with all selected attributes shifted",
-    "Marginal Gain \u2014 Absolute increase in DV estimate from adding this attribute",
-    "Marginal Gain % \u2014 Percentage increase relative to the previous step"
+    "Outcome Estimate \u2014 Expected DV value with all selected attributes shifted",
+    "Cumulative Gain \u2014 Absolute increase in outcome estimate from baseline (all attributes through this step)",
+    "Incremental Lift \u2014 Absolute increase in outcome estimate from adding this attribute",
+    "Cumulative Gain % \u2014 Percentage increase from baseline through this step",
+    "Incremental Lift % \u2014 Percentage increase relative to the previous step"
   )
 
   if (has_p) {
@@ -590,13 +795,20 @@ bn_prioritize_write <- function(
     )
   }
 
-  lift_pct <- round(lift * 100)
   footer_lines <- c(footer_lines,
     "",
-    paste0("Lift \u2014 Shifts each IV's distribution upward by ", lift_pct,
+    paste0(lift_label, " \u2014 Shifts each IV's distribution upward by ", lift_pct_label,
            "%, reflecting a realistic improvement scenario"),
-    "Max \u2014 Sets each IV to its highest level as hard evidence, representing the theoretical ceiling"
+    paste0(max_label, " \u2014 Sets each IV to its highest level as hard evidence, representing the theoretical ceiling")
   )
+  # Deprecated strategy only appears when bn_prioritizations() was called
+  # with include_maximum_lift_deprecated = TRUE \u2014 check dims to know.
+  if (max_deprecated_label %in% dims[["strategy"]]) {
+    footer_lines <- c(footer_lines,
+      paste0(max_deprecated_label,
+             " \u2014 Same as Maximum Lift but cumulative gain is the raw outcome estimate (no comparison to baseline). Provided for backward compatibility.")
+    )
+  }
 
   for (fi in seq_along(footer_lines)) {
     openxlsx::writeData(wb, dash, footer_lines[fi],
@@ -614,13 +826,19 @@ bn_prioritize_write <- function(
       startRow = 1, startCol = ci)
   }
 
-  var_let <- num2let(col_variable)
-  est_let <- num2let(col_estimate)
+  var_let  <- num2let(col_variable)
+  cum_let  <- num2let(col_cum)
   gain_let <- num2let(col_gain)
 
-  # Guarded formulas: blank rows → "" for labels, #N/A for numerics (charts skip #N/A)
-  for (ri in seq_along(data_rows)) {
-    dr <- data_rows[ri]
+  # The dashboard's Cumulative / Incremental columns auto-switch between
+  # point and percent values based on the Display dropdown, so the chart
+  # can simply reference those cells without re-doing the mode check —
+  # whatever the dashboard is showing is what the chart should plot.
+  # Skip data_rows[1] — that's the baseline row in the dashboard, hidden
+  # from the table and excluded from the chart.
+  chart_data_rows <- if (length(data_rows) >= 2) data_rows[-1] else data_rows
+  for (ri in seq_along(chart_data_rows)) {
+    dr <- chart_data_rows[ri]
     chart_r <- ri + 1
     blank_check <- paste0('Prioritization!', var_let, dr, '=""')
 
@@ -629,21 +847,36 @@ bn_prioritize_write <- function(
       x = paste0('IF(', blank_check, ',"",Prioritization!', var_let, dr, ')'),
       startRow = chart_r, startCol = 1)
 
-    # Col B: Previous = DV Estimate - Marginal Gain (#N/A so chart gaps)
+    # Col B: Previous (stacked baseline of the bar) = cumulative − incremental
     openxlsx::writeFormula(wb, "_priorit_chart_data",
-      x = paste0('IF(', blank_check, ',NA(),Prioritization!', est_let, dr,
-                 '-Prioritization!', gain_let, dr, ')'),
+      x = paste0(
+        'IF(', blank_check, ',NA(),',
+          'Prioritization!', cum_let, dr, '-Prioritization!', gain_let, dr,
+        ')'),
       startRow = chart_r, startCol = 2)
 
-    # Col C: Incremental = Marginal Gain
+    # Col C: Incremental (stacked top of the bar)
     openxlsx::writeFormula(wb, "_priorit_chart_data",
-      x = paste0('IF(', blank_check, ',NA(),Prioritization!', gain_let, dr, ')'),
+      x = paste0(
+        'IF(', blank_check, ',NA(),Prioritization!', gain_let, dr, ')'),
       startRow = chart_r, startCol = 3)
 
-    # Col D: Cumulative DV = DV Estimate
+    # Col D: Cumulative DV (line series)
     openxlsx::writeFormula(wb, "_priorit_chart_data",
-      x = paste0('IF(', blank_check, ',NA(),Prioritization!', est_let, dr, ')'),
+      x = paste0(
+        'IF(', blank_check, ',NA(),Prioritization!', cum_let, dr, ')'),
       startRow = chart_r, startCol = 4)
+  }
+
+  # Tag the chart_data numeric cells (B/C/D) with the binary-aware number
+  # format so Excel has a consistent format on both the source cells and
+  # the chart axis. This matches the table's center_2dp style.
+  if (length(chart_data_rows) > 0) {
+    chart_data_style <- openxlsx::createStyle(
+      numFmt = if (is_binary_outcome) "0.0%" else "0.00")
+    openxlsx::addStyle(wb, "_priorit_chart_data", style = chart_data_style,
+      rows = seq_len(length(chart_data_rows)) + 1L,
+      cols = 2:4, gridExpand = TRUE, stack = TRUE)
   }
 
   # ---------------------------------------------------------------------------
@@ -713,7 +946,7 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   # 7. Add chart via openxlsx2 (reload → insert chart XML → re-save)
   # ---------------------------------------------------------------------------
-  # Compute axis minimum from default data set baseline
+  # Compute axis minimum from default data set baseline (priority == 0 row)
   default_tbl <- registry[[1]]$tbl
   baseline <- default_tbl$dv_estimate[1]
   n_steps <- nrow(default_tbl)
@@ -724,7 +957,11 @@ bn_prioritize_write <- function(
   }
   axis_min <- max(0, axis_min)
 
-  chart_xml <- .prioritize_chart_xml(max_rows, axis_min)
+  # max_rows includes the baseline row in the dashboard, but the chart
+  # data sheet skips baseline (chart_data_rows = data_rows[-1]), so the
+  # chart's data range is one row shorter.
+  chart_xml <- .prioritize_chart_xml(max_rows - 1L, axis_min,
+    is_binary = is_binary_outcome)
   chart_dims <- paste0(
     num2let(col_chart_start), row_data_start, ":",
     num2let(col_chart_start + 9), row_data_start + chart_height - 1
@@ -782,6 +1019,15 @@ bn_prioritize_write <- function(
   meta <- result[["meta"]]
   has_subgroups <- !is.null(meta[["subgroups"]])
 
+  # Display labels for the strategy dropdown — substituted into the registry
+  # so they appear in the dropdown, the _lookup keys, and the JS payload
+  # consistently. The raw "Lift" / "Max" tags only live inside
+  # bn_prioritizations() output; the writer / report never sees them.
+  lift_pct <- if (!is.null(meta[["lift"]])) round(meta[["lift"]] * 100) else 10
+  lift_label            <- paste0("Moderate Lift (", lift_pct, "%)")
+  max_label             <- "Maximum Lift"
+  max_deprecated_label  <- "Maximum Lift (Deprecated)"
+
   # Helper to iterate subgroups or treat as single
   .iter <- function(variant_data, strategy, search, focus, weight) {
     if (has_subgroups && is.list(variant_data) && !is.data.frame(variant_data)) {
@@ -798,19 +1044,28 @@ bn_prioritize_write <- function(
 
   # greedy_lift
   if (!is.null(result[["greedy_lift"]])) {
-    .iter(result[["greedy_lift"]], strategy = "Lift", search = "Greedy",
+    .iter(result[["greedy_lift"]], strategy = lift_label, search = "Greedy",
           focus = "Market", weight = "Unweighted")
   }
 
   # greedy_max
   if (!is.null(result[["greedy_max"]])) {
-    .iter(result[["greedy_max"]], strategy = "Max", search = "Greedy",
+    .iter(result[["greedy_max"]], strategy = max_label, search = "Greedy",
           focus = "Market", weight = "Unweighted")
+  }
+
+  # greedy_max_deprecated — same shape as greedy_max but the cumulative
+  # gain is the raw dv_estimate (no baseline subtraction). Only present
+  # when bn_prioritizations() was called with
+  # include_maximum_lift_deprecated = TRUE.
+  if (!is.null(result[["greedy_max_deprecated"]])) {
+    .iter(result[["greedy_max_deprecated"]], strategy = max_deprecated_label,
+          search = "Greedy", focus = "Market", weight = "Unweighted")
   }
 
   # greedy_lift_weighted
   if (!is.null(result[["greedy_lift_weighted"]])) {
-    .iter(result[["greedy_lift_weighted"]], strategy = "Lift", search = "Greedy",
+    .iter(result[["greedy_lift_weighted"]], strategy = lift_label, search = "Greedy",
           focus = "Market", weight = "Weighted")
   }
 
@@ -818,7 +1073,7 @@ bn_prioritize_write <- function(
   if (!is.null(result[["greedy_lift_brand"]])) {
     for (brand_name in names(result[["greedy_lift_brand"]])) {
       brand_result <- result[["greedy_lift_brand"]][[brand_name]]
-      .iter(brand_result, strategy = "Lift", search = "Greedy",
+      .iter(brand_result, strategy = lift_label, search = "Greedy",
             focus = brand_name, weight = "Unweighted")
     }
   }
@@ -827,7 +1082,7 @@ bn_prioritize_write <- function(
   if (!is.null(result[["greedy_lift_brand_weighted"]])) {
     for (brand_name in names(result[["greedy_lift_brand_weighted"]])) {
       brand_result <- result[["greedy_lift_brand_weighted"]][[brand_name]]
-      .iter(brand_result, strategy = "Lift", search = "Greedy",
+      .iter(brand_result, strategy = lift_label, search = "Greedy",
             focus = brand_name, weight = "Weighted")
     }
   }
@@ -841,7 +1096,7 @@ bn_prioritize_write <- function(
     for (s in skipped) {
       wt_label <- if (isTRUE(s$weighted)) "Weighted" else "Unweighted"
       registry[[length(registry) + 1]] <- list(
-        strategy = "Lift",
+        strategy = lift_label,
         search = "Greedy",
         subgroup = s$sg_name,
         focus = s$brand_name,
@@ -860,8 +1115,14 @@ bn_prioritize_write <- function(
 # =============================================================================
 # Internal: generate OOXML chart XML for combo stacked bar + line chart
 # =============================================================================
-.prioritize_chart_xml <- function(max_rows, axis_min = 0) {
+.prioritize_chart_xml <- function(max_rows, axis_min = 0, is_binary = FALSE) {
   n <- max_rows + 1  # last data row in _priorit_chart_data (row 1 = header)
+
+  # Match the table's binary-aware rule: probability-scale outcomes render
+  # as XX.X% on the value axis; everything else as XX.XX. Excel needs the
+  # ampersand escaped (`&amp;`) in chart XML, but neither character appears
+  # in our format strings.
+  axis_num_fmt <- if (isTRUE(is_binary)) "0.0%" else "0.00"
 
   # Helper to build a cell range reference for _priorit_chart_data
   ref <- function(col, r1 = 2, r2 = n) {
@@ -967,7 +1228,7 @@ bn_prioritize_write <- function(
     '</c:scaling>',
     '<c:delete val="0"/>',
     '<c:axPos val="l"/>',
-    '<c:numFmt formatCode="0.00" sourceLinked="0"/>',
+    '<c:numFmt formatCode="', axis_num_fmt, '" sourceLinked="0"/>',
     '<c:txPr>',
     '<a:bodyPr/>',
     '<a:lstStyle/>',

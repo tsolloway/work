@@ -28,6 +28,7 @@ bn_prioritizations(
   brand_names = NULL,
   weight = NULL,
   use_parallel = TRUE,
+  include_maximum_lift_deprecated = FALSE,
   seed = 1
 )
 }
@@ -104,6 +105,12 @@ observation weights. When provided, adds weighted lift variants.
 Default NULL.}
 
 \item{use_parallel}{Logical. Parallelize candidate evaluation. Default TRUE.}
+
+\item{include_maximum_lift_deprecated}{Logical. When TRUE, run an
+additional Maximum Lift analysis with no baseline comparison
+(cumulative_gain == dv_estimate). The result is stored under
+\code{greedy_max_deprecated} and surfaces in the writer/report as the
+"Maximum Lift (Deprecated)" strategy. Default FALSE.}
 
 \item{seed}{Integer. Random seed. Default 1.}
 }

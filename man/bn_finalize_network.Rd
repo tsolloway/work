@@ -39,6 +39,7 @@ bn_finalize_network(
   prioritize_noise_tail = 1/3,
   prioritize_sig_threshold = 0.05,
   prioritize_marginal_threshold = 0.1,
+  prioritize_include_maximum_lift_deprecated = FALSE,
   tool_tip_edge_prefix = NULL,
   viz_size_node_by_impact = TRUE,
   viz_include_dv = FALSE,
@@ -146,6 +147,12 @@ consistent colour coding. Default 0.05.}
 
 \item{prioritize_marginal_threshold}{Numeric. P-value threshold for the
 "marginal" colour band stored in the prioritizations meta. Default 0.10.}
+
+\item{prioritize_include_maximum_lift_deprecated}{Logical. Forwarded to
+\code{bn_prioritizations()}. When TRUE, runs an additional Maximum
+Lift analysis with no baseline comparison (cumulative_gain ==
+dv_estimate). Surfaces in the writer/report as the
+"Maximum Lift (Deprecated)" strategy. Default FALSE.}
 
 \item{tool_tip_edge_prefix}{Character or NULL. Prefix for edge tooltips.}
 

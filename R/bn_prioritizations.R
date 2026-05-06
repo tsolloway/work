@@ -57,6 +57,11 @@
 #'   observation weights. When provided, adds weighted lift variants.
 #'   Default NULL.
 #' @param use_parallel Logical. Parallelize candidate evaluation. Default TRUE.
+#' @param include_maximum_lift_deprecated Logical. When TRUE, run an
+#'   additional Maximum Lift analysis with no baseline comparison
+#'   (cumulative_gain == dv_estimate). The result is stored under
+#'   \code{greedy_max_deprecated} and surfaces in the writer/report as the
+#'   "Maximum Lift (Deprecated)" strategy. Default FALSE.
 #' @param seed Integer. Random seed. Default 1.
 #'
 #' @return A list with:
@@ -102,6 +107,7 @@ bn_prioritizations <- function(
     brand_names = NULL,
     weight = NULL,
     use_parallel = TRUE,
+    include_maximum_lift_deprecated = FALSE,
     seed = 1
 ) {
 
@@ -152,8 +158,20 @@ bn_prioritizations <- function(
     # Greedy max
     tasks[[paste0("max__", sg_name)]] <- list(
       type = "max", sg_name = sg_name, brand_name = NULL,
-      sg_obj = sg_obj, sg_df = sg_df, strategy = "max", wt = NULL
+      sg_obj = sg_obj, sg_df = sg_df, strategy = "max", wt = NULL,
+      subtract_baseline = TRUE
     )
+
+    # Greedy max — deprecated (no baseline comparison). Optional, off by
+    # default; included for backward-compatibility with the older output
+    # where cumulative_gain was the raw dv_estimate.
+    if (isTRUE(include_maximum_lift_deprecated)) {
+      tasks[[paste0("max_deprecated__", sg_name)]] <- list(
+        type = "max_deprecated", sg_name = sg_name, brand_name = NULL,
+        sg_obj = sg_obj, sg_df = sg_df, strategy = "max", wt = NULL,
+        subtract_baseline = FALSE
+      )
+    }
 
     # Greedy lift (unweighted)
     tasks[[paste0("lift__", sg_name)]] <- list(
@@ -229,6 +247,7 @@ bn_prioritizations <- function(
         n_boot_final = n_boot_final, noise_tail = noise_tail,
         min_base_for_boot = min_base_for_boot,
         weight = task$wt, dictionary = dictionary,
+        subtract_baseline = task$subtract_baseline %||% TRUE,
         use_parallel = FALSE, verbose = FALSE, seed = seed
       )
     },
@@ -240,6 +259,7 @@ bn_prioritizations <- function(
   # Reassemble results into structured output
   # ---------------------------------------------------------------------------
   results_max <- list()
+  results_max_deprecated <- if (isTRUE(include_maximum_lift_deprecated)) list() else NULL
   results_lift <- list()
   results_lift_weighted <- if (!is.null(weight)) list() else NULL
   results_lift_brand <- if (!is.null(brands_to_run)) list() else NULL
@@ -253,6 +273,8 @@ bn_prioritizations <- function(
 
     if (task$type == "max") {
       results_max[[task$sg_name]] <- res
+    } else if (task$type == "max_deprecated") {
+      results_max_deprecated[[task$sg_name]] <- res
     } else if (task$type == "lift") {
       results_lift[[task$sg_name]] <- res
     } else if (task$type == "lift_weighted") {
@@ -271,6 +293,7 @@ bn_prioritizations <- function(
   # ---------------------------------------------------------------------------
   if (length(sg_names) == 1) {
     results_max <- results_max[[1]]
+    if (!is.null(results_max_deprecated)) results_max_deprecated <- results_max_deprecated[[1]]
     results_lift <- results_lift[[1]]
     if (!is.null(weight)) results_lift_weighted <- results_lift_weighted[[1]]
     if (!is.null(brands_to_run)) {
@@ -307,6 +330,7 @@ bn_prioritizations <- function(
     }
 
     results_max <- .add_community(results_max)
+    if (!is.null(results_max_deprecated)) results_max_deprecated <- .add_community(results_max_deprecated)
     results_lift <- .add_community(results_lift)
     if (!is.null(results_lift_weighted)) results_lift_weighted <- .add_community(results_lift_weighted)
     if (!is.null(results_lift_brand)) {
@@ -325,6 +349,7 @@ bn_prioritizations <- function(
     greedy_lift = results_lift
   )
 
+  if (!is.null(results_max_deprecated)) output$greedy_max_deprecated <- results_max_deprecated
   if (!is.null(weight)) output$greedy_lift_weighted <- results_lift_weighted
   if (!is.null(brands_to_run)) output$greedy_lift_brand <- results_lift_brand
   if (!is.null(brands_to_run) && !is.null(weight)) output$greedy_lift_brand_weighted <- results_lift_brand_weighted

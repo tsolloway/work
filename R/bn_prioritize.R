@@ -56,6 +56,13 @@
 #' @param use_parallel Logical. Parallelize candidate evaluation within rounds.
 #' @param verbose Logical. Print round/step/bootstrap progress messages.
 #'   Default TRUE.
+#' @param subtract_baseline Logical. When \code{TRUE} (default) cumulative
+#'   and incremental gains are computed as \code{dv_estimate - baseline}
+#'   (where \code{baseline} is the no-evidence DV estimate). When
+#'   \code{FALSE} the baseline is treated as 0 — cumulative_gain becomes
+#'   the raw \code{dv_estimate} and the percent columns become \code{NA}.
+#'   Used by \code{bn_prioritizations(include_maximum_lift_deprecated = TRUE)}
+#'   for backward compatibility with the older output format.
 #' @param seed Integer. Random seed for reproducibility.
 #'
 #' @return A tibble with columns: \code{priority}, \code{variable},
@@ -86,6 +93,7 @@ bn_prioritize <- function(
     weight = NULL,
     use_parallel = TRUE,
     verbose = TRUE,
+    subtract_baseline = TRUE,
     seed = 1
 ) {
 
@@ -160,15 +168,22 @@ bn_prioritize <- function(
     }
   }
 
-  # Baseline DV estimate (no evidence)
-  baseline <- .query_dv(grain_bn, evidence = list())
-  if (verbose) cli::cli_alert_info("Baseline DV estimate: {round(baseline, 4)}")
+  # Baseline DV estimate (no evidence). When subtract_baseline = FALSE we
+  # treat baseline as 0 in all gain calculations — the deprecated behaviour
+  # where cumulative_gain == dv_estimate (no comparison against the
+  # no-evidence DV). The TRUE baseline is still computed for the baseline
+  # row's dv_estimate field.
+  baseline_true <- .query_dv(grain_bn, evidence = list())
+  baseline <- if (isTRUE(subtract_baseline)) baseline_true else 0
+  if (verbose) cli::cli_alert_info("Baseline DV estimate: {round(baseline_true, 4)}{if (!isTRUE(subtract_baseline)) ' (no-baseline mode: gains computed against 0)' else ''}")
 
   baseline_row <- tibble::tibble(
     priority = 0L,
     variable = "Baseline",
     combo = NA_character_,
-    dv_estimate = baseline,
+    dv_estimate = baseline_true,
+    cumulative_gain = 0,
+    cumulative_gain_pct = 0,
     marginal_gain = 0,
     marginal_gain_pct = 0
   )
@@ -253,12 +268,21 @@ bn_prioritize <- function(
     remaining <- setdiff(round1_order, best_iv)
     prev_estimate <- best_estimate
 
+    # In subtract_baseline = FALSE mode, baseline is forced to 0 above —
+    # cumulative_gain becomes the raw dv_estimate, and the percent columns
+    # are NA because a baseline-relative percentage is undefined when the
+    # baseline is zero.
+    cum_pct_first <- if (isTRUE(subtract_baseline)) (best_estimate - baseline) / baseline else NA_real_
+    marg_pct_first <- cum_pct_first
+
     results_list <- list(
       tibble::tibble(
         priority = 1L, variable = best_iv, combo = best_iv,
         dv_estimate = best_estimate,
+        cumulative_gain = best_estimate - baseline,
+        cumulative_gain_pct = cum_pct_first,
         marginal_gain = best_estimate - baseline,
-        marginal_gain_pct = (best_estimate - baseline) / baseline
+        marginal_gain_pct = marg_pct_first
       )
     )
 
@@ -297,11 +321,18 @@ bn_prioritize <- function(
       remaining <- setdiff(remaining, best_iv)
       prev_estimate <- best_estimate
 
+      cum_pct <- if (isTRUE(subtract_baseline) && baseline != 0) {
+        (best_estimate - baseline) / baseline
+      } else {
+        NA_real_
+      }
       results_list[[round]] <- tibble::tibble(
         priority = as.integer(round),
         variable = best_iv,
         combo = paste(selected, collapse = ", "),
         dv_estimate = best_estimate,
+        cumulative_gain = best_estimate - baseline,
+        cumulative_gain_pct = cum_pct,
         marginal_gain = marginal_gain,
         marginal_gain_pct = marginal_gain_pct
       )
@@ -346,11 +377,18 @@ bn_prioritize <- function(
         break
       }
 
+      cum_pct_k <- if (isTRUE(subtract_baseline) && baseline != 0) {
+        (best_estimate - baseline) / baseline
+      } else {
+        NA_real_
+      }
       results_list[[k]] <- tibble::tibble(
         priority = as.integer(k),
         variable = paste(new_vars, collapse = ", "),
         combo = paste(sort(best_combo), collapse = ", "),
         dv_estimate = best_estimate,
+        cumulative_gain = best_estimate - baseline,
+        cumulative_gain_pct = cum_pct_k,
         marginal_gain = marginal_gain,
         marginal_gain_pct = marginal_gain_pct
       )
@@ -435,7 +473,11 @@ bn_prioritize <- function(
           bnlearn::bn.fit(bn, boot_df, method = "bayes") %>%
             bnlearn::as.grain()
         ))
-        boot_baseline <- .query_dv(boot_grain, evidence = list())
+        boot_baseline <- if (isTRUE(subtract_baseline)) {
+          .query_dv(boot_grain, evidence = list())
+        } else {
+          0
+        }
         combo_estimates <- purrr::map_dbl(final_combos, function(combo) {
           ev <- ivs_max[combo]
           .query_dv(boot_grain, evidence = ev)
@@ -516,9 +558,12 @@ bn_prioritize <- function(
     })
   }
 
-  # Reorder columns
+  # Reorder columns. Absolute values (dv_estimate, cumulative_gain,
+  # marginal_gain) come first, then percent versions (cumulative_gain_pct,
+  # marginal_gain_pct). p_value, if present, goes last.
   col_order <- c("priority", "variable", "label", "combo", "dv_estimate",
-                 "marginal_gain", "marginal_gain_pct")
+                 "cumulative_gain", "marginal_gain",
+                 "cumulative_gain_pct", "marginal_gain_pct")
   if ("p_value" %in% names(result)) {
     col_order <- c(col_order, "p_value")
   }

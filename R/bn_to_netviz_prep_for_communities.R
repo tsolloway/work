@@ -86,10 +86,14 @@ bn_to_netviz_prep_for_communities <- function(
 
 
   # --- normalize MI for visualization ---
+  # Community edges are uniform grey — no per-edge color signal at the
+  # community level. Width still varies with `value` (computed from MI),
+  # so the user can still see edge strength by thickness.
   community_edges <- community_edges %>%
     dplyr::mutate(
       value = mi / mean(abs(mi)),
-      index = value * 100
+      index = value * 100,
+      color = "#999999"
     ) %>%
     as.data.frame()
 

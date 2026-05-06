@@ -468,7 +468,7 @@ append_bn_impact_dynamic <- function(
   # Metric dropdown
   metric_cell_col <- cell_col
   metric_cell_row <- current_row
-  openxlsx::writeData(wb, dash_sheet, "Metric: ", startRow = current_row, startCol = label_col)
+  openxlsx::writeData(wb, dash_sheet, "Analysis: ", startRow = current_row, startCol = label_col)
   openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
     rows = current_row, cols = label_col, stack = TRUE)
   openxlsx::writeData(wb, dash_sheet, metric_labels[1], startRow = current_row, startCol = cell_col)

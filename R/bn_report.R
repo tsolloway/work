@@ -1207,7 +1207,7 @@ bn_report <- function(
     '  <div class="impact-controls">',
     '    <div class="impact-ctrl-cell">',
     '      <div class="impact-ctrl-row">',
-    '        <label>Metric:</label>',
+    '        <label>Analysis:</label>',
     '        <select class="impact-ctrl" data-dim="metric">', metric_options_html, '</select>',
     '      </div>',
     '    </div>',
@@ -1218,10 +1218,10 @@ bn_report <- function(
     '      </div>',
     '      <span class="impact-warning" data-for="focus"></span>',
     '    </div>',
+    '    ', indexby_ctrl,
     '    ', weight_ctrl,
     '    ', display_ctrl,
     '    ', shift_ctrl,
-    '    ', indexby_ctrl,
     '  </div>',
     '  <div class="impact-table-wrap">',
     '    <table class="impact-table">',
@@ -1338,7 +1338,7 @@ bn_report <- function(
 
 
 # --- internal: full Prioritization dashboard (HTML + inline JS) ------------
-# Mirrors the bn_prioritize_write dynamic dashboard: Strategy, Search,
+# Mirrors the bn_prioritize_write dynamic dashboard: Analysis, Search,
 # Subgroup, Focus, Weight dropdowns (only those with multiple values are
 # shown); one row per priority step; conditional formatting on p-values
 # (green < sig_threshold, orange < marginal_threshold, blackout otherwise)
@@ -1384,19 +1384,25 @@ bn_report <- function(
   for (e in registry) {
     key <- paste(e$strategy, e$search, e$subgroup, e$focus, e$weight, sep = "|")
     tbl <- e$tbl
+    # Strip the baseline (priority == 0) row — hidden from the dashboard.
+    if (!is.null(tbl) && is.data.frame(tbl) && "priority" %in% names(tbl)) {
+      tbl <- tbl[!(!is.na(tbl$priority) & tbl$priority == 0L), , drop = FALSE]
+    }
     rows <- if (is.null(tbl) || !is.data.frame(tbl) || nrow(tbl) == 0) {
       list()
     } else {
       lapply(seq_len(nrow(tbl)), function(i) {
         list(
-          priority          = if ("priority"          %in% names(tbl)) as.integer(tbl$priority[i])          else i - 1L,
-          variable          = if ("variable"          %in% names(tbl)) as.character(tbl$variable[i])        else NA_character_,
-          community         = if ("community"         %in% names(tbl)) as.character(tbl$community[i])       else NULL,
-          label             = if ("label"             %in% names(tbl)) as.character(tbl$label[i])           else NULL,
-          dv_estimate       = if ("dv_estimate"       %in% names(tbl)) as.numeric(tbl$dv_estimate[i])       else NA_real_,
-          marginal_gain     = if ("marginal_gain"     %in% names(tbl)) as.numeric(tbl$marginal_gain[i])     else NA_real_,
-          marginal_gain_pct = if ("marginal_gain_pct" %in% names(tbl)) as.numeric(tbl$marginal_gain_pct[i]) else NA_real_,
-          p_value           = if ("p_value"           %in% names(tbl)) as.numeric(tbl$p_value[i])           else NA_real_
+          priority            = if ("priority"            %in% names(tbl)) as.integer(tbl$priority[i])            else i - 1L,
+          variable            = if ("variable"            %in% names(tbl)) as.character(tbl$variable[i])          else NA_character_,
+          community           = if ("community"           %in% names(tbl)) as.character(tbl$community[i])         else NULL,
+          label               = if ("label"               %in% names(tbl)) as.character(tbl$label[i])             else NULL,
+          dv_estimate         = if ("dv_estimate"         %in% names(tbl)) as.numeric(tbl$dv_estimate[i])         else NA_real_,
+          cumulative_gain     = if ("cumulative_gain"     %in% names(tbl)) as.numeric(tbl$cumulative_gain[i])     else NA_real_,
+          cumulative_gain_pct = if ("cumulative_gain_pct" %in% names(tbl)) as.numeric(tbl$cumulative_gain_pct[i]) else NA_real_,
+          marginal_gain       = if ("marginal_gain"       %in% names(tbl)) as.numeric(tbl$marginal_gain[i])       else NA_real_,
+          marginal_gain_pct   = if ("marginal_gain_pct"   %in% names(tbl)) as.numeric(tbl$marginal_gain_pct[i])   else NA_real_,
+          p_value             = if ("p_value"             %in% names(tbl)) as.numeric(tbl$p_value[i])             else NA_real_
         )
       })
     }
@@ -1422,6 +1428,26 @@ bn_report <- function(
     }, logical(1)))
   }, logical(1)))
 
+  # Strategy labels — mirror what .prioritize_build_registry() wrote into
+  # the registry. Passed through to JS so currentKey() can detect the Max
+  # strategy and force focus/weight overrides.
+  lift_pct_int <- round(lift_pct * 100)
+  lift_label            <- paste0("Moderate Lift (", lift_pct_int, "%)")
+  max_label             <- "Maximum Lift"
+  max_deprecated_label  <- "Maximum Lift (Deprecated)"
+
+  # Binary outcome detection — when every dv_estimate sits in [0, 1] the
+  # outcome is a probability (top_box / 0-1 DV). The JS render then formats
+  # Outcome Estimate, Cumulative Gain and Incremental Lift as XX.X% rather
+  # than XX.XX.
+  is_binary_outcome <- {
+    dv_vals <- unlist(lapply(lookup, function(x) {
+      vapply(x$rows, function(r) r$dv_estimate %||% NA_real_, numeric(1))
+    }))
+    dv_vals <- dv_vals[!is.na(dv_vals)]
+    length(dv_vals) > 0 && min(dv_vals) >= -1e-6 && max(dv_vals) <= 1 + 1e-6
+  }
+
   data_obj <- list(
     dims              = dims,
     active_dims       = as.list(active_dims),
@@ -1432,6 +1458,10 @@ bn_report <- function(
     marginal_threshold = marginal_threshold,
     min_base_for_boot = as.integer(min_base_for_boot),
     lift              = lift_pct,
+    lift_label        = lift_label,
+    max_label         = max_label,
+    max_deprecated_label = max_deprecated_label,
+    is_binary         = is_binary_outcome,
     lookup            = lookup
   )
 
@@ -1444,7 +1474,7 @@ bn_report <- function(
 
   # --- HTML scaffold
   dim_labels <- c(
-    strategy = "Strategy:",
+    strategy = "Analysis:",
     search   = "Search:",
     subgroup = "Subgroup:",
     focus    = "Focus:",
@@ -1467,28 +1497,60 @@ bn_report <- function(
       }, character(1)),
       collapse = ""
     )
+    warning_html <- if (dn == "focus") {
+      '<span class="priort-warning" data-for="focus"></span>'
+    } else ""
     controls <- c(controls,
       sprintf(
-        '<label>%s</label><select class="priort-ctrl" data-dim="%s">%s</select>',
-        htmltools::htmlEscape(dim_labels[[dn]]), dn, opts_html
+        paste0(
+          '<div class="priort-ctrl-cell">',
+            '<div class="priort-ctrl-row">',
+              '<label>%s</label>',
+              '<select class="priort-ctrl" data-dim="%s">%s</select>',
+            '</div>',
+            '%s',
+          '</div>'
+        ),
+        htmltools::htmlEscape(dim_labels[[dn]]), dn, opts_html, warning_html
       )
     )
-    if (dn == "focus") {
-      controls <- c(controls,
-        '<span class="priort-warning" data-for="focus"></span>')
-    }
   }
+  # Chart-mode dropdown (UI-only — controls which numbers feed the chart,
+  # doesn't touch the table lookup). Default = Percent.
+  controls <- c(controls,
+    paste0(
+      '<div class="priort-ctrl-cell">',
+        '<div class="priort-ctrl-row">',
+          '<label>Display:</label>',
+          '<select class="priort-ctrl" data-dim="chart">',
+            '<option value="Percent Change" selected>Percent Change</option>',
+            '<option value="Point Change">Point Change</option>',
+          '</select>',
+        '</div>',
+      '</div>'
+    )
+  )
   controls_html <- paste(controls, collapse = "")
 
   # Header columns (same as Excel dashboard)
+  # data-mode marks columns that belong to one Display chart mode only:
+  # "point" → shown only when Display = Point Change
+  # "percent" → shown only when Display = Percent Change
+  # No data-mode → always shown.
+  # Outcome Estimate is intentionally not rendered: in Point Change the
+  # chart and table both speak in Cumulative Gain / Incremental Lift terms,
+  # in Percent Change they speak in % terms, and Outcome Estimate doesn't
+  # belong in either view. The raw value is still in the JSON payload so
+  # the chart's tooltip could surface it later if needed.
   headers <- c(
     '<th class="sortable" data-sort="num" data-col="priority">Step</th>',
     '<th class="sortable" data-sort="text" data-col="variable">Variable</th>',
     if (has_community) '<th class="sortable" data-sort="text" data-col="community">Community</th>' else NULL,
     if (has_label)     '<th class="sortable" data-sort="text" data-col="label">Label</th>'         else NULL,
-    '<th class="sortable" data-sort="num" data-col="dv_estimate">DV Estimate</th>',
-    '<th class="sortable" data-sort="num" data-col="marginal_gain">Marginal Gain</th>',
-    '<th class="sortable" data-sort="num" data-col="marginal_gain_pct">Marginal Gain %</th>',
+    '<th class="sortable" data-sort="num" data-col="cumulative_gain" data-mode="point">Cumulative Gain</th>',
+    '<th class="sortable" data-sort="num" data-col="marginal_gain" data-mode="point">Incremental Lift</th>',
+    '<th class="sortable" data-sort="num" data-col="cumulative_gain_pct" data-mode="percent">Cumulative Gain %</th>',
+    '<th class="sortable" data-sort="num" data-col="marginal_gain_pct" data-mode="percent">Incremental Lift %</th>',
     if (has_p)         '<th class="sortable" data-sort="num" data-col="p_value">p-value</th>'     else NULL
   )
   header_row <- paste0("<tr>", paste(headers, collapse = ""), "</tr>")
@@ -1513,8 +1575,26 @@ bn_report <- function(
     '    <p class="muted">Bold italicized numbers indicate a negative relationship. ',
     'Green p-values are significant (&lt; ', sig_threshold, '); ',
     'orange are marginal (&lt; ', marginal_threshold, '); ',
-    'red are insignificant. ',
-    'Lift prioritization uses a ', round(lift_pct * 100, 1), '% distribution shift.</p>',
+    'red are insignificant.</p>',
+    '    <div class="priort-glossary muted">',
+    '      <p><b>Step</b> &mdash; Priority step number (order in which attributes were selected)</p>',
+    '      <p><b>Outcome Estimate</b> &mdash; Expected DV value with all selected attributes shifted</p>',
+    '      <p><b>Cumulative Gain</b> &mdash; Absolute increase in outcome estimate from baseline (all attributes through this step)</p>',
+    '      <p><b>Incremental Lift</b> &mdash; Absolute increase in outcome estimate from adding this attribute</p>',
+    '      <p><b>Cumulative Gain %</b> &mdash; Percentage increase from baseline through this step</p>',
+    '      <p><b>Incremental Lift %</b> &mdash; Percentage increase relative to the previous step</p>',
+    if (has_p) paste0(
+      '      <p><b>p-value</b> &mdash; Noise-floor test: proportion of bootstraps where this step’s gain &le; the noise floor</p>'
+    ) else "",
+    '      <p><b>', htmltools::htmlEscape(lift_label), '</b> &mdash; Shifts each IV’s distribution upward by ', lift_pct_int, '%, reflecting a realistic improvement scenario</p>',
+    '      <p><b>', htmltools::htmlEscape(max_label), '</b> &mdash; Sets each IV to its highest level as hard evidence, representing the theoretical ceiling</p>',
+    # The deprecated strategy is only present when bn_prioritizations() was
+    # called with include_maximum_lift_deprecated = TRUE; check the dims
+    # payload to know whether to surface the explainer.
+    if (max_deprecated_label %in% strategies) paste0(
+      '      <p><b>', htmltools::htmlEscape(max_deprecated_label), '</b> &mdash; Same as Maximum Lift but cumulative gain is the raw outcome estimate (no comparison to baseline). Provided for backward compatibility.</p>'
+    ) else "",
+    '    </div>',
     '  </div>',
     '  <script type="application/json" class="priort-data">', data_json, '</script>',
     '  <script>(function(){ initPriortDashboard("', dashboard_id, '"); })();</script>',
@@ -1532,15 +1612,33 @@ bn_report <- function(
     return('<div class="extra-empty">No prioritization results to display.</div>')
   }
 
+  # Binary-outcome detection — same heuristic as the dashboard renderer.
+  .all_dv <- function(x) {
+    if (is.data.frame(x)) return(as.numeric(x$dv_estimate))
+    if (is.list(x)) return(unlist(lapply(x, .all_dv)))
+    numeric(0)
+  }
+  dv_pool <- .all_dv(tbl_or_list)
+  dv_pool <- dv_pool[!is.na(dv_pool)]
+  is_binary_outcome <- length(dv_pool) > 0 &&
+    min(dv_pool) >= -1e-6 && max(dv_pool) <= 1 + 1e-6
+
   .render_priort_table <- function(tbl) {
     if (is.null(tbl) || !is.data.frame(tbl) || nrow(tbl) == 0) {
       return('<div class="extra-empty">No data.</div>')
     }
 
-    # Preferred display columns + order
+    # Strip the baseline (priority == 0) row — hidden from the dashboard.
+    if ("priority" %in% names(tbl)) {
+      tbl <- tbl[!(!is.na(tbl$priority) & tbl$priority == 0L), , drop = FALSE]
+    }
+
+    # Preferred display columns + order — Outcome Estimate is intentionally
+    # excluded; it doesn't appear in either Display mode of the dashboard.
     display_cols <- intersect(
       c("priority", "variable", "community", "label",
-        "dv_estimate", "marginal_gain", "marginal_gain_pct", "p_value"),
+        "cumulative_gain", "marginal_gain",
+        "cumulative_gain_pct", "marginal_gain_pct", "p_value"),
       names(tbl)
     )
     tbl <- tbl[, display_cols, drop = FALSE]
@@ -1551,9 +1649,10 @@ bn_report <- function(
       variable = "Variable",
       community = "Community",
       label = "Label",
-      dv_estimate = "DV Estimate",
-      marginal_gain = "Marginal Gain",
-      marginal_gain_pct = "Marginal Gain %",
+      cumulative_gain = "Cumulative Gain",
+      cumulative_gain_pct = "Cumulative Gain %",
+      marginal_gain = "Incremental Lift",
+      marginal_gain_pct = "Incremental Lift %",
       p_value = "p-value"
     )
 
@@ -1570,10 +1669,14 @@ bn_report <- function(
         sprintf('<span class="%s">%s</span>', cls, formatC(pv, format = "f", digits = 3))
       } else if (col == "priority") {
         formatC(as.integer(val))
-      } else if (col %in% c("marginal_gain_pct")) {
-        sprintf("%.2f%%", as.numeric(val) * 100)
-      } else if (col %in% c("dv_estimate", "marginal_gain")) {
-        formatC(as.numeric(val), format = "f", digits = 3)
+      } else if (col %in% c("cumulative_gain_pct", "marginal_gain_pct")) {
+        sprintf("%.1f%%", as.numeric(val) * 100)
+      } else if (col %in% c("dv_estimate", "cumulative_gain", "marginal_gain")) {
+        if (is_binary_outcome) {
+          sprintf("%.1f%%", as.numeric(val) * 100)
+        } else {
+          formatC(as.numeric(val), format = "f", digits = 2)
+        }
       } else {
         htmltools::htmlEscape(as.character(val))
       }
@@ -1986,12 +2089,30 @@ bn_report <- function(
     '',
     '/* Prioritization dashboard (mirrors bn_prioritize_write) */',
     '.priort-dashboard { padding: 20px; overflow-x: auto; }',
+    # Layout: same responsive grid as .impact-controls — auto-fit + minmax
+    # collapses 3 → 2 → 1 column based on viewport width, with consistent
+    # gutters between whatever columns remain.
     '.priort-controls {',
-    '  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;',
+    '  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));',
+    '  column-gap: 24px; row-gap: 10px; align-items: start;',
+    '  box-sizing: border-box; width: 100%;',
     '  margin-bottom: 16px; padding: 12px;',
     '  background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px;',
     '}',
-    '.priort-controls label { font-weight: 600; color: #333; font-size: 13px; }',
+    # Each cell stacks: (row 1) label + select inline, (row 2) warning.
+    '.priort-ctrl-cell {',
+    '  display: flex; flex-direction: column; gap: 4px;',
+    '  min-width: 0;',
+    '}',
+    '.priort-ctrl-cell:empty { display: none; }',
+    '.priort-ctrl-row {',
+    '  display: flex; align-items: center; gap: 8px; min-width: 0;',
+    '}',
+    '.priort-ctrl-row label {',
+    '  font-weight: 600; color: #333; font-size: 13px; white-space: nowrap;',
+    '  flex: 0 0 130px; text-align: right;',
+    '}',
+    '.priort-ctrl-row .priort-ctrl { flex: 1 1 auto; min-width: 0; max-width: 220px; }',
     '.priort-ctrl {',
     '  padding: 4px 8px; font-size: 13px; width: 180px;',
     '  border: 1px solid #bbb; border-radius: 3px; background: #fff;',
@@ -2000,7 +2121,13 @@ bn_report <- function(
     '.priort-ctrl.warn {',
     '  background: #FF0000; color: #FFFFFF; border-color: #FF0000;',
     '}',
-    '.priort-warning { color: #FF0000; font-weight: 700; font-size: 13px; }',
+    # Warning sits below the ctrl-row so its text can wrap to multiple lines
+    # without shoving the cell wider.
+    '.priort-warning {',
+    '  display: block; padding-left: 138px;',  # 130px label + 8px gap
+    '  color: #FF0000; font-weight: 700; font-size: 13px;',
+    '  white-space: normal; overflow-wrap: anywhere; line-height: 1.3;',
+    '}',
     '.priort-split {',
     '  display: flex; flex-direction: row; gap: 16px;',
     '  align-items: stretch;',
@@ -2061,16 +2188,17 @@ bn_report <- function(
     '  background: #fff; table-layout: auto;',
     '}',
     '.priort-table thead th {',
-    '  background: #D9D9D9; color: #222; font-weight: 700;',
+    '  background: #fafafa; color: #222; font-weight: 700;',  # match .priort-controls bg
     '  padding: 8px 10px; text-align: center; vertical-align: middle;',
     '  border: 1px solid #BFBFBF;',
-    '  white-space: normal; word-wrap: break-word;',
-    '  cursor: pointer; user-select: none; position: relative;',
+    '  white-space: normal; word-wrap: break-word; overflow-wrap: break-word;',
+    '  position: relative;',
     '}',
     '.priort-table thead th.sortable {',
+    '  cursor: pointer; user-select: none; position: relative;',
     '  padding-right: 18px;',  # room for the absolutely-positioned triangle
     '}',
-    '.priort-table thead th.sortable:hover { background: #CCCCCC; }',
+    '.priort-table thead th.sortable:hover { background: #ececec; }',  # subtle hover, slightly darker than #fafafa
     '.priort-table thead th.sortable::after {',
     '  content: ""; position: absolute; right: 4px; top: 50%;',
     '  transform: translateY(-50%);',
@@ -2105,6 +2233,18 @@ bn_report <- function(
     '.priort-footer .priort-footer-base {',
     '  margin: 0 0 4px 0; font-weight: 700; color: #222;',
     '}',
+    # Hide the off-mode metric columns. The Display dropdown adds
+    # mode-percent / mode-point on the OUTER tab-panel wrapper (.priort-
+    # panel, the element initPriortDashboard\'s `root` actually points at —
+    # the .priort-dashboard div inside doesn\'t carry the id), so the
+    # selectors anchor on .priort-panel.
+    '.priort-panel.mode-percent .priort-table th[data-mode="point"],',
+    '.priort-panel.mode-percent .priort-table td[data-mode="point"] { display: none; }',
+    '.priort-panel.mode-point   .priort-table th[data-mode="percent"],',
+    '.priort-panel.mode-point   .priort-table td[data-mode="percent"] { display: none; }',
+    '.priort-glossary { margin: 8px 0 0 0; line-height: 1.5; }',
+    '.priort-glossary p { margin: 0 0 2px 0; }',
+    '.priort-glossary b { color: #222; }',
     '',
     '/* loading spinner */',
     '.iframe-wrap { position: relative; }',
@@ -2687,9 +2827,15 @@ bn_report <- function(
     '  }',
     '',
     '  function currentKey() {',
-    '    return [currentValue("strategy"), currentValue("search"),',
-    '            currentValue("subgroup"), currentValue("focus"),',
-    '            currentValue("weight")].join("|");',
+    '    var strat = currentValue("strategy");',
+    '    // Max strategy is registered only at focus=Market, weight=Unweighted',
+    '    // (it\'s brand- and weight-invariant). Force those in the key so',
+    '    // switching to Max while other dropdowns sit elsewhere still resolves.',
+    '    var isMax = (strat === data.max_label || strat === data.max_deprecated_label);',
+    '    var focus = isMax ? "Market" : currentValue("focus");',
+    '    var weight = isMax ? "Unweighted" : currentValue("weight");',
+    '    return [strat, currentValue("search"),',
+    '            currentValue("subgroup"), focus, weight].join("|");',
     '  }',
     '',
     '  function pvalClass(pv) {',
@@ -2703,6 +2849,38 @@ bn_report <- function(
     '  var footerBase = root.querySelector(".priort-footer-base");',
     '  var focusWarn = root.querySelector(\'.priort-warning[data-for="focus"]\');',
     '  var focusSel = root.querySelector(\'.priort-ctrl[data-dim="focus"]\');',
+    '',
+    '  // Apply the Display dropdown to column visibility. Sets a class',
+    '  // mode-percent / mode-point on the dashboard root; CSS hides the',
+    '  // off-mode th/td via [data-mode="..."] selectors. Runs on every',
+    '  // render() and on the dropdown change handler.',
+    '  // When the user picks "Maximum Lift (Deprecated)" the dropdown is',
+    '  // locked to Point Change — the percent columns are NA in that',
+    '  // strategy (no comparison to baseline).',
+    '  function syncDisplayMode() {',
+    '    var stratSel = root.querySelector(\'.priort-ctrl[data-dim="strategy"]\');',
+    '    var strat = stratSel ? stratSel.value : ((data.dims.strategy && data.dims.strategy[0]) || "");',
+    '    var isDeprecated = (data.max_deprecated_label && strat === data.max_deprecated_label);',
+    '',
+    '    var disp = root.querySelector(\'.priort-ctrl[data-dim="chart"]\');',
+    '    if (disp) {',
+    '      var pctOpt = disp.querySelector(\'option[value="Percent Change"]\');',
+    '      if (pctOpt) pctOpt.disabled = isDeprecated;',
+    '      if (isDeprecated && disp.value !== "Point Change") {',
+    '        disp.value = "Point Change";',
+    '      }',
+    '      disp.disabled = isDeprecated;',
+    '    }',
+    '',
+    '    var mode = isDeprecated ? "Point Change" : (disp ? disp.value : "Percent Change");',
+    '    if (mode === "Percent Change") {',
+    '      root.classList.add("mode-percent");',
+    '      root.classList.remove("mode-point");',
+    '    } else {',
+    '      root.classList.add("mode-point");',
+    '      root.classList.remove("mode-percent");',
+    '    }',
+    '  }',
     '',
   '  function whiteToGreen(v, lo, hi) {',
     '    // Linear interpolation white (#FFFFFF) -> green (#66bd7d)',
@@ -2740,6 +2918,8 @@ bn_report <- function(
     '      return { lo: Math.min.apply(null, vals), hi: Math.max.apply(null, vals) };',
     '    }',
     '    var rDV  = rangeOf("dv_estimate");',
+    '    var rCG  = rangeOf("cumulative_gain");',
+    '    var rCGP = rangeOf("cumulative_gain_pct");',
     '    var rMG  = rangeOf("marginal_gain");',
     '    var rMGP = rangeOf("marginal_gain_pct");',
     '',
@@ -2752,22 +2932,38 @@ bn_report <- function(
     '      cells.push({cls: \'txt-col\', text: r.variable});',
     '      if (data.has_community) cells.push({cls: \'txt-col\', text: r.community == null ? "" : r.community});',
     '      if (data.has_label)     cells.push({cls: \'txt-col\', text: r.label     == null ? "" : r.label});',
-    '      // DV Estimate — white -> green gradient',
+    '      // Outcome / Cumulative Gain / Incremental Lift formatter — when the',
+    '      // outcome is binary (data.is_binary), all three render as XX.X%.',
+    '      function fmtAbs(v) {',
+    '        if (v == null) return "";',
+    '        return data.is_binary ? (v * 100).toFixed(1) + "%" : v.toFixed(2);',
+    '      }',
+    '      // Cumulative Gain — gradient + bold italic if negative (point-mode)',
     '      cells.push({',
-    '        cls: \'num-col\',',
-    '        text: r.dv_estimate == null ? "" : r.dv_estimate.toFixed(3),',
-    '        bg: rDV ? whiteToGreen(r.dv_estimate, rDV.lo, rDV.hi) : ""',
+    '        cls: \'num-col\' + (r.cumulative_gain != null && r.cumulative_gain < 0 ? \' neg\' : \'\'),',
+    '        mode: "point",',
+    '        text: fmtAbs(r.cumulative_gain),',
+    '        bg: rCG ? whiteToGreen(r.cumulative_gain, rCG.lo, rCG.hi) : ""',
     '      });',
-    '      // Marginal Gain — gradient + bold italic if negative',
+    '      // Incremental Lift — gradient + bold italic if negative (point-mode)',
     '      cells.push({',
     '        cls: \'num-col\' + (r.marginal_gain != null && r.marginal_gain < 0 ? \' neg\' : \'\'),',
-    '        text: r.marginal_gain == null ? "" : r.marginal_gain.toFixed(3),',
+    '        mode: "point",',
+    '        text: fmtAbs(r.marginal_gain),',
     '        bg: rMG ? whiteToGreen(r.marginal_gain, rMG.lo, rMG.hi) : ""',
     '      });',
-    '      // Marginal Gain % — gradient + bold italic if negative',
+    '      // Cumulative Gain % — gradient + bold italic if negative (percent-mode)',
+    '      cells.push({',
+    '        cls: \'num-col\' + (r.cumulative_gain_pct != null && r.cumulative_gain_pct < 0 ? \' neg\' : \'\'),',
+    '        mode: "percent",',
+    '        text: r.cumulative_gain_pct == null ? "" : (r.cumulative_gain_pct * 100).toFixed(1) + "%",',
+    '        bg: rCGP ? whiteToGreen(r.cumulative_gain_pct, rCGP.lo, rCGP.hi) : ""',
+    '      });',
+    '      // Incremental Lift % — gradient + bold italic if negative (percent-mode)',
     '      cells.push({',
     '        cls: \'num-col\' + (r.marginal_gain_pct != null && r.marginal_gain_pct < 0 ? \' neg\' : \'\'),',
-    '        text: r.marginal_gain_pct == null ? "" : (r.marginal_gain_pct * 100).toFixed(2) + "%",',
+    '        mode: "percent",',
+    '        text: r.marginal_gain_pct == null ? "" : (r.marginal_gain_pct * 100).toFixed(1) + "%",',
     '        bg: rMGP ? whiteToGreen(r.marginal_gain_pct, rMGP.lo, rMGP.hi) : ""',
     '      });',
     '      // p-value — green / orange / red coloring (not blackout)',
@@ -2783,10 +2979,16 @@ bn_report <- function(
     '        td.className = c.cls;',
     '        td.textContent = c.text;',
     '        if (c.bg) td.style.background = c.bg;',
+    '        if (c.mode) td.setAttribute("data-mode", c.mode);',
     '        tr.appendChild(td);',
     '      });',
     '      tbody.appendChild(tr);',
     '    });',
+    '',
+    '    // Sync the body+header column visibility to match the current Display',
+    '    // dropdown — point-mode columns hide in Percent Change, percent-mode',
+    '    // columns hide in Point Change.',
+    '    syncDisplayMode();',
     '',
     '    // --- Cumulative-effect chart (waterfall): each step\\u2019s marginal',
     '    // gain stacked on the previous step\\u2019s DV estimate.',
@@ -2849,14 +3051,49 @@ bn_report <- function(
     '    var plotW = W - pad.l - pad.r;',
     '    var plotH = H - pad.t - pad.b;',
     '',
-    '    // y range: floor at min(0, min DV); ceiling at max DV with padding',
-    '    var dvVals = rows.map(function(r) { return r.dv_estimate; })',
+    '    // Display mode: "Point Change" plots cumulative_gain (with',
+    '    // incremental lift as the bar segment) or "Percent Change" plots',
+    '    // cumulative_gain_pct × 100.',
+    '    var chartCtrl = root.querySelector(\'.priort-ctrl[data-dim="chart"]\');',
+    '    var chartMode = chartCtrl ? chartCtrl.value : "Percent Change";',
+    '    function valueOf(r) {',
+    '      if (chartMode === "Percent Change") {',
+    '        return (r.cumulative_gain_pct == null) ? null : r.cumulative_gain_pct * 100;',
+    '      }',
+    '      return r.cumulative_gain;',
+    '    }',
+    '    function valueLabel(v) {',
+    '      if (v == null || isNaN(v)) return "";',
+    '      if (chartMode === "Percent Change") return v.toFixed(1) + "%";',
+    '      return data.is_binary ? (v * 100).toFixed(1) + "%" : v.toFixed(2);',
+    '    }',
+    '',
+    '    // y range: floor at min(0, min value); ceiling at max',
+    '    var dvVals = rows.map(function(r) { return valueOf(r); })',
     '      .filter(function(v) { return v != null && !isNaN(v); });',
     '    if (dvVals.length === 0) return;',
-    '    var yMin = Math.min(0, Math.min.apply(null, dvVals));',
-    '    var yMax = Math.max.apply(null, dvVals);',
-    '    var yRange = yMax - yMin || 1;',
-    '    yMax = yMax + yRange * 0.05;',
+    '    var rawMin = Math.min(0, Math.min.apply(null, dvVals));',
+    '    var rawMax = Math.max.apply(null, dvVals);',
+    '    var rawRange = (rawMax - rawMin) || 1;',
+    '',
+    '    // Pick a "nice" tick step that produces ~4–7 gridlines, snapping',
+    '    // yMin / yMax outward so labels land on round numbers (5, 10, 0.5,',
+    '    // 1, etc.) instead of arbitrary fractions of the data range.',
+    '    function niceStep(range) {',
+    '      var rough = range / 5;',
+    '      var mag = Math.pow(10, Math.floor(Math.log10(rough)));',
+    '      var n = rough / mag;',
+    '      var step;',
+    '      if (n < 1.5) step = 1;',
+    '      else if (n < 3.5) step = 2;',
+    '      else if (n < 7.5) step = 5;',
+    '      else step = 10;',
+    '      return step * mag;',
+    '    }',
+    '    var step = niceStep(rawRange);',
+    '    var yMin = Math.floor(rawMin / step) * step;',
+    '    var yMax = Math.ceil(rawMax / step) * step;',
+    '    if (yMax === yMin) yMax = yMin + step;',
     '',
     '    function yScale(v) {',
     '      return pad.t + plotH * (1 - (v - yMin) / (yMax - yMin));',
@@ -2875,12 +3112,17 @@ bn_report <- function(
     '      return e;',
     '    }',
     '',
-    '    // gridlines + y-axis labels (5 ticks)',
-    '    for (var i = 0; i <= 4; i++) {',
-    '      var v = yMin + (yMax - yMin) * i / 4;',
+    '    // Gridlines at every `step` between yMin and yMax. Labels land on',
+    '    // round numbers (e.g. 0%, 5%, 10%, ... or 0, 0.5, 1.0, ...).',
+    '    var EPS = step * 1e-6;',
+    '    for (var v = yMin; v <= yMax + EPS; v += step) {',
     '      var y = yScale(v);',
     '      el("line", { x1: pad.l, x2: pad.l + plotW, y1: y, y2: y, "class": "grid-line" });',
-    '      el("text", { x: pad.l - 6, y: y + 3, "text-anchor": "end", "class": "ax-text" }).textContent = v.toFixed(2);',
+    '      var labelV = Math.abs(v) < EPS ? 0 : v;',
+    '      var lbl = (chartMode === "Percent Change")',
+    '        ? labelV.toFixed(0) + "%"',
+    '        : (data.is_binary ? (labelV * 100).toFixed(0) + "%" : labelV.toFixed(2));',
+    '      el("text", { x: pad.l - 6, y: y + 3, "text-anchor": "end", "class": "ax-text" }).textContent = lbl;',
     '    }',
     '    // baseline at 0 (only if 0 is within range)',
     '    if (yMin <= 0 && yMax >= 0) {',
@@ -2897,7 +3139,11 @@ bn_report <- function(
     '    var prev = 0;',
     '    var linePoints = [];',
     '',
-    '    function tooltipText(r, dv, prevVal) {',
+    '    // Tooltip shows step / variable / community plus the two metrics that',
+    '    // correspond to what the chart is rendering: Outcome Estimate +',
+    '    // Incremental Lift in Absolute mode, Cumulative Gain % + Incremental',
+    '    // Lift % in Percent mode.',
+    '    function tooltipText(r) {',
     '      var parts = [];',
     '      parts.push("Step " + (r.priority == null ? "?" : r.priority));',
     '      var name = (r.variable == null ? "" : String(r.variable));',
@@ -2907,14 +3153,20 @@ bn_report <- function(
     '        parts.push(name);',
     '      }',
     '      if (r.community != null && r.community !== "") parts.push("Community: " + r.community);',
-    '      parts.push("DV: " + dv.toFixed(3));',
-    '      var mg = (dv - prevVal);',
-    '      parts.push("Marginal Gain: " + mg.toFixed(3));',
-    '      if (r.marginal_gain_pct != null && !isNaN(r.marginal_gain_pct)) {',
-    '        parts.push("Marginal Gain %: " + (r.marginal_gain_pct * 100).toFixed(2) + "%");',
+    '      function fmtTipAbs(v) {',
+    '        if (v == null || isNaN(v)) return "";',
+    '        return data.is_binary ? (v * 100).toFixed(1) + "%" : v.toFixed(2);',
     '      }',
-    '      if (r.p_value != null && !isNaN(r.p_value)) {',
-    '        parts.push("p-value: " + r.p_value.toFixed(2));',
+    '      function fmtTipPct(v) {',
+    '        if (v == null || isNaN(v)) return "";',
+    '        return (v * 100).toFixed(1) + "%";',
+    '      }',
+    '      if (chartMode === "Percent Change") {',
+    '        if (r.cumulative_gain_pct != null) parts.push("Cumulative Gain %: " + fmtTipPct(r.cumulative_gain_pct));',
+    '        if (r.marginal_gain_pct != null) parts.push("Incremental Lift %: " + fmtTipPct(r.marginal_gain_pct));',
+    '      } else {',
+    '        if (r.cumulative_gain != null) parts.push("Cumulative Gain: " + fmtTipAbs(r.cumulative_gain));',
+    '        if (r.marginal_gain != null) parts.push("Incremental Lift: " + fmtTipAbs(r.marginal_gain));',
     '      }',
     '      return parts.join("\\n");',
     '    }',
@@ -2942,7 +3194,7 @@ bn_report <- function(
     '    }',
     '',
     '    rows.forEach(function(r, idx) {',
-    '      var dv = r.dv_estimate;',
+    '      var dv = valueOf(r);',
     '      if (dv == null || isNaN(dv)) return;',
     '      var lo = Math.min(prev, dv);',
     '      var hi = Math.max(prev, dv);',
@@ -2950,7 +3202,7 @@ bn_report <- function(
     '      var y0 = yScale(0);',
     '      var yLo = yScale(lo);',
     '      var yHi = yScale(hi);',
-    '      var tt = tooltipText(r, dv, prev);',
+    '      var tt = tooltipText(r);',
     '',
     '      // Previous (light grey base): 0 -> lo',
     '      var prevH = Math.max(0, y0 - yLo);',
@@ -2997,7 +3249,7 @@ bn_report <- function(
     '        var c = el("circle", { cx: p.x, cy: p.y, r: 3.5, "class": "cum-marker" });',
     '        bindTip(c, p.tip);',
     '        var lab = el("text", { x: p.x, y: p.y - 6, "class": "bar-label" });',
-    '        lab.textContent = p.val.toFixed(2);',
+    '        lab.textContent = valueLabel(p.val);',
     '        bindTip(lab, p.tip);',
     '      });',
     '    }',

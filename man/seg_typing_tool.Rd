@@ -22,7 +22,9 @@ seg_typing_tool(
   apply_additional_logic_to_qc = FALSE,
   apply_logic_only_to_max = TRUE,
   ui_groups = NULL,
-  use_colinear_lda = NULL
+  use_colinear_lda = NULL,
+  additional_bulk_qc_check = NULL,
+  additional_logic_advanced = NULL
 )
 }
 \arguments{
@@ -120,6 +122,48 @@ function the typing tool embeds:
 \item \code{TRUE} — always recompute via \code{\link[=coefficient_lda_colinear]{coefficient_lda_colinear()}}.
 \item \code{FALSE} — always use the pre-computed \code{lda_coefficient_function}.
 }}
+
+\item{additional_bulk_qc_check}{Optional character vector of variable names
+from \code{seg$data$with_solutions}. Each named variable is appended as an
+extra column to the right of the Bulk QC Check block on the Bulk sheet,
+under the same merged "Bulk QC Check" title. Useful for spot-checking
+classification results against known reference variables (e.g. the
+original \code{seg} column from a prior solution). Errors if any name is not
+a column of \code{seg$data$with_solutions}.}
+
+\item{additional_logic_advanced}{Optional tibble of sequential
+\code{case_when}-style reassignment rules, applied after the simple
+\code{additional_logic} / \code{additional_questions} redistributions. Columns:
+\itemize{
+\item \code{when} — either a character expression (e.g.
+\code{"(VT02 == 1 | VT03 == 1) & VT21 == 1"}) \strong{or} a one-sided formula
+(e.g. \code{~ (VT02 == 1 | VT03 == 1) & VT21 == 1}) describing the
+variable condition. Strings let you use \code{tibble::tribble} for a
+compact row-major layout; formulas require \code{tibble::tibble} with an
+explicit list-column for \code{when} (since \code{tribble} parses every
+\code{~}-prefixed cell as a column-name spec). Supported operators in
+both forms: \code{==}, \code{!=}, \code{<}, \code{<=}, \code{>}, \code{>=}, \code{&}, \code{|}, \code{!},
+\code{\%in\%}, plus parentheses. Variables must be LDA inputs or appear
+in \code{additional_questions} (an entry of
+\code{additional_questions = list(VAR = NULL)} declares a variable for
+conditions only).
+\item \code{from_lda} — \code{NA} for \strong{hard reassignment} (when \code{when} fires,
+\code{to_seg}'s probability is clamped to 1 and every other segment's
+probability to 0; classification therefore lands on \code{to_seg}
+regardless of which LDA segment the respondent originally
+resolved to); a single integer or integer vector of LDA segments
+for \strong{soft reassignment} (probability mass moves from those
+segments to \code{to_seg} when \code{when} fires — sum-to-1 preserved by
+redistribution; classification re-argmaxes).
+\item \code{to_seg} — single integer target segment. Can be an existing
+LDA seg or a new seg (extends \code{segments} like
+\code{additional_logic} / \code{additional_questions} do; new segs must be
+sequential).
+}
+Rules are applied in row order (case_when semantics: first matching
+hard rule overrides the argmax classification; soft rules all fire
+independently at the prob layer). Stacks on top of \code{additional_logic}
+and \code{additional_questions} — both can coexist.}
 }
 \value{
 Invisibly writes the workbook to disk. Returns \code{NULL}.
@@ -133,4 +177,218 @@ Bulk sheet for scoring many respondents at once. The Individual UI and
 Bulk sheets pull Survey Variable / Side A / Side B labels and the
 coefficient function from the Documentation sheet via cross-sheet
 formulas, so edits to the Documentation sheet propagate.
+}
+\examples{
+\dontrun{
+# 1. Minimal call — just polars and non-polars from the solution.
+seg \%>\% seg_typing_tool(solution_name = "LDA_kids_v11_seed")
+
+# 2. Simple post-LDA reassignment — when DM20 = 1, take Segment 6's
+#    probability and add it to Segment 1 (LDA → LDA, mass conserved).
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_kids_v11_seed",
+  additional_logic = list(
+    DM20 = tibble::tribble(
+      ~from_seg, ~value, ~to_seg,
+      6,         1,      1
+    )
+  )
+)
+
+# 3. additional_questions adds non-LDA vars with their own input blocks
+#    in Individual UI / Documentation / Bulk and reassigns to a new seg
+#    (Segment 7 here, which is auto-extended onto the segment set).
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_kids_v11_seed",
+  additional_questions = list(
+    DM26 = tibble::tribble(~from_seg, ~value, ~to_seg, 2, 1, 7),
+    DM25 = tibble::tribble(~from_seg, ~value, ~to_seg, 3, 1, 7)
+  )
+)
+
+# 4. ui_groups merges multiple LDA inputs / additional_questions into a
+#    single multi_select / mece block on the Individual UI and Doc sheets.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_kids_v11_seed",
+  ui_groups = tibble::tribble(
+    ~label,         ~type,           ~vars,                                     ~no_selection_allowed,
+    "Activities",   "multi_select",  list(c("AP06", "PL03", "PL27")),            TRUE,
+    "Child Age",    "mece",          list(c("DM20", "DM21", "DM22", "DM23")),    FALSE
+  )
+)
+
+# 5. additional_bulk_qc_check appends one or more reference columns from
+#    seg$data$with_solutions to the Bulk QC Check, plus per-var
+#    classification-comparison columns and matching freq tables.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_kids_v11_seed",
+  additional_bulk_qc_check = c("solution_kids_krikor_fix", "seg_v8")
+)
+
+# 6. Combine the simple mechanisms — additional_logic + additional_questions
+#    + ui_groups + additional_bulk_qc_check at once. Note DM20-DM24 are LDA
+#    inputs (folded into Child Age) while DM26/DM25 are additional_questions
+#    (folded into Child Gender).
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_kids_v11_seed",
+  additional_bulk_qc_check = "solution_kids_krikor_fix",
+  additional_logic = list(
+    DM20 = tibble::tribble(~from_seg, ~value, ~to_seg, 6, 1, 1)
+  ),
+  additional_questions = list(
+    DM26 = tibble::tribble(~from_seg, ~value, ~to_seg, 2, 1, 7),
+    DM25 = tibble::tribble(~from_seg, ~value, ~to_seg, 3, 1, 7)
+  ),
+  ui_groups = tibble::tribble(
+    ~label,         ~type,           ~vars,                                            ~no_selection_allowed,
+    "Activities",   "multi_select",  list(c("AP06", "PL03", "PL27")),                   TRUE,
+    "Child Age",    "mece",          list(c("DM20", "DM21", "DM22", "DM23", "DM24")),   FALSE,
+    "Child Gender", "mece",          list(c("DM26", "DM25")),                           FALSE
+  )
+)
+
+# 7. additional_logic_advanced — single hard rule (no LDA reference).
+#    When VT02 or VT03 is 1 AND VT21 or VT22 is 1, Segment 9's probability
+#    is set to 100\% and every other segment to 0\% (so classification lands
+#    on Segment 9). Variables used in the condition that aren't LDA inputs
+#    (VT21, VT22) are declared with `additional_questions = list(VAR = NULL)`
+#    so they're pulled into Bulk + Individual UI without their own
+#    reassignment rules. `when` uses the character form so the tribble
+#    row-major layout works.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_opt_seed_v30",
+  additional_questions = list(VT21 = NULL, VT22 = NULL),
+  additional_logic_advanced = tibble::tribble(
+    ~when,                                                       ~from_lda, ~to_seg,
+    "(VT02 == 1 | VT03 == 1) & (VT21 == 1 | VT22 == 1)",         NA,        9
+  )
+)
+
+# 8. additional_logic_advanced — single soft rule (LDA gated). When
+#    VT03 = 1 AND the respondent's LDA argmax is Segment 6 or 7,
+#    probability mass moves from those segments to Segment 9.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_opt_seed_v30",
+  additional_logic_advanced = tibble::tribble(
+    ~when,           ~from_lda, ~to_seg,
+    "VT03 == 1",     c(6, 7),   9
+  )
+)
+
+# 9. additional_logic_advanced — pure-LDA rename (no condition variables;
+#    just rename Segment 9 to 10 and Segment 10 to 11). Use "TRUE" for
+#    "no extra condition" — first match wins, so order matters.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_opt_seed_v30",
+  additional_logic_advanced = tibble::tribble(
+    ~when,   ~from_lda, ~to_seg,
+    "TRUE",   9,         10,
+    "TRUE",   10,        11
+  )
+)
+
+# 10. additional_logic_advanced — full case_when from a real project,
+#     mixing hard + soft rules sequentially.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_opt_seed_v30",
+  additional_questions = list(VT21 = NULL, VT22 = NULL),
+  additional_logic_advanced = tibble::tribble(
+    ~when,                                                       ~from_lda, ~to_seg,
+    "(VT02 == 1 | VT03 == 1) & (VT21 == 1 | VT22 == 1)",         NA,        9,
+    "VT03 == 1",                                                  c(6, 7),   9,
+    "TRUE",                                                       9,         10,
+    "TRUE",                                                       10,        11
+  )
+)
+
+# 11. \%in\% support inside conditions — equivalent to chained == / |.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_opt_seed_v30",
+  additional_logic_advanced = tibble::tribble(
+    ~when,                       ~from_lda, ~to_seg,
+    "VT01 \%in\% c(1, 2, 3)",      c(4, 5),   8
+  )
+)
+
+# 12. Same rules as example 10, but using formula syntax via
+#     `tibble::tibble` with an explicit list-column. Equivalent end result;
+#     pick whichever style you prefer. (Strings + tribble = compact;
+#     formulas + tibble + list-column = better IDE syntax highlighting.)
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_opt_seed_v30",
+  additional_questions = list(VT21 = NULL, VT22 = NULL),
+  additional_logic_advanced = tibble::tibble(
+    when = list(
+      ~ (VT02 == 1 | VT03 == 1) & (VT21 == 1 | VT22 == 1),
+      ~ VT03 == 1,
+      ~ TRUE,
+      ~ TRUE
+    ),
+    from_lda = list(NA, c(6, 7), 9, 10),
+    to_seg   = c(9, 9, 10, 11)
+  )
+)
+
+# 13. Stack additional_logic_advanced on top of additional_logic /
+#     additional_questions — they coexist. Soft rules from both layers
+#     redistribute mass at the prob layer; hard rules from advanced
+#     override the argmax at the very end.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_opt_seed_v30",
+  additional_questions = list(
+    VT21 = NULL,
+    VT22 = NULL,
+    DM01 = tibble::tribble(~from_seg, ~value, ~to_seg, 5, 1, 8)
+  ),
+  additional_logic = list(
+    VT01 = tibble::tribble(~from_seg, ~value, ~to_seg, 3, 1, 2)
+  ),
+  additional_logic_advanced = tibble::tribble(
+    ~when,                                                  ~from_lda, ~to_seg,
+    "(VT02 == 1 | VT03 == 1) & (VT21 == 1 | VT22 == 1)",    NA,        9,
+    "TRUE",                                                  9,         10
+  )
+)
+
+# 13. apply_additional_logic_to_qc = TRUE so the Bulk QC Check compares
+#     post-redistribution classifications on both sides (matching). Useful
+#     once you trust the redistribution logic and want a clean Class Check.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_kids_v11_seed",
+  additional_logic = list(
+    DM20 = tibble::tribble(~from_seg, ~value, ~to_seg, 6, 1, 1)
+  ),
+  apply_additional_logic_to_qc = TRUE
+)
+
+# 14. apply_logic_only_to_max = FALSE — rules fire whenever their
+#     condition matches, regardless of which segment the respondent was
+#     originally classified into. Useful for unconditional reassignments.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_kids_v11_seed",
+  additional_questions = list(
+    DM26 = tibble::tribble(~from_seg, ~value, ~to_seg, 2, 1, 7)
+  ),
+  apply_logic_only_to_max = FALSE
+)
+
+# 15. use_colinear_lda — recompute the coefficient table from the LDA fit
+#     via SVD-based scaling. Use when the closed-form Sigma_W^{-1} blows
+#     up on collinear inputs.
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_collinear_inputs_solution",
+  use_colinear_lda = TRUE
+)
+
+# 16. overwrite_left_label / overwrite_right_label / segment_names — full
+#     manual labeling override (e.g. when the spec hasn't been finalized).
+seg \%>\% seg_typing_tool(
+  solution_name = "LDA_kids_v11_seed",
+  overwrite_left_label = c("I prefer X", "I prefer Y", "..."),
+  overwrite_right_label = c("I prefer not X", "I prefer not Y", "..."),
+  segment_names = c("Adventurers", "Caretakers", "Builders", "Explorers",
+                    "Performers", "Strategists", "Free Spirits")
+)
+}
+
 }

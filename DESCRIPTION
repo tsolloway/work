@@ -69,6 +69,7 @@ Imports:
     usethis,
     uuid,
     visNetwork,
+    webshot2,
     withr,
     xfun,
     zip
@@ -77,8 +78,7 @@ Suggests:
     knitr,
     mclust,
     pak,
-    rmarkdown,
-    webshot2
+    rmarkdown
 SystemRequirements: Node.js (>= 18), npm
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)

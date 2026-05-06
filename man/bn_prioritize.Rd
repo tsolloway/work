@@ -25,6 +25,7 @@ bn_prioritize(
   weight = NULL,
   use_parallel = TRUE,
   verbose = TRUE,
+  subtract_baseline = TRUE,
   seed = 1
 )
 }
@@ -99,6 +100,14 @@ NULL (unweighted).}
 
 \item{verbose}{Logical. Print round/step/bootstrap progress messages.
 Default TRUE.}
+
+\item{subtract_baseline}{Logical. When \code{TRUE} (default) cumulative
+and incremental gains are computed as \code{dv_estimate - baseline}
+(where \code{baseline} is the no-evidence DV estimate). When
+\code{FALSE} the baseline is treated as 0 — cumulative_gain becomes
+the raw \code{dv_estimate} and the percent columns become \code{NA}.
+Used by \code{bn_prioritizations(include_maximum_lift_deprecated = TRUE)}
+for backward compatibility with the older output format.}
 
 \item{seed}{Integer. Random seed for reproducibility.}
 }

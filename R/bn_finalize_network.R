@@ -77,6 +77,11 @@
 #'   consistent colour coding. Default 0.05.
 #' @param prioritize_marginal_threshold Numeric. P-value threshold for the
 #'   "marginal" colour band stored in the prioritizations meta. Default 0.10.
+#' @param include_prioritize_max_lift_deprecated Logical. Forwarded to
+#'   \code{bn_prioritizations()}. When TRUE, runs an additional Maximum
+#'   Lift analysis with no baseline comparison (cumulative_gain ==
+#'   dv_estimate). Surfaces in the writer/report as the
+#'   "Maximum Lift (Deprecated)" strategy. Default FALSE.
 #' @param tool_tip_edge_prefix Character or NULL. Prefix for edge tooltips.
 #' @param viz_size_node_by_impact Logical. Size network nodes by impact index.
 #'   Default TRUE.
@@ -156,6 +161,7 @@ bn_finalize_network <- function(
     prioritize_noise_tail = 1/3,
     prioritize_sig_threshold = 0.05,
     prioritize_marginal_threshold = 0.10,
+    include_prioritize_max_lift_deprecated = FALSE,
     # --- Visualization ---
     tool_tip_edge_prefix = NULL,
     viz_size_node_by_impact = TRUE,
@@ -452,6 +458,7 @@ bn_finalize_network <- function(
       dictionary = dictionary,
       community_assignment = attribute_nodes,
       use_parallel = impact_parallel,
+      include_maximum_lift_deprecated = include_prioritize_max_lift_deprecated,
       seed = seed
     )
 
