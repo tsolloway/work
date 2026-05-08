@@ -15,7 +15,7 @@ bn_impact_engine(
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
   dv_metric = c("mean", "top_box"),
-  impact_shift_type = c("proportional", "absolute"),
+  impact_shift_type = c("proportional", "absolute", "headroom", "range"),
   include_base = TRUE,
   index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
   n_boot = 1,
@@ -24,6 +24,7 @@ bn_impact_engine(
   brand_names = NULL,
   weight = NULL,
   mi_boot = NULL,
+  scale_ranges = NULL,
   seed = 1
 )
 }
@@ -84,7 +85,10 @@ when shifting IV distributions:
 \code{"proportional"} (default) shifts the IV's mean by a fraction of its
 current value (e.g., 0.10 = 10 percent of current mean);
 \code{"absolute"} shifts the IV's mean by a fixed number of scale points
-(e.g., 0.10 = add 0.10 to the mean regardless of starting value).}
+(e.g., 0.10 = add 0.10 to the mean regardless of starting value);
+\code{"headroom"} shifts the mean by \code{lift} times the room
+remaining toward the requested boundary — see
+\code{bn_freq_prob_shift()} for details.}
 
 \item{include_base}{Logical. Whether to include base-size columns alongside
 brand-specific lift columns. Default \code{TRUE}.}

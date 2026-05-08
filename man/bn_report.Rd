@@ -25,8 +25,8 @@ bn_report(
   add_additional_results = FALSE,
   results_excel = NULL,
   qc_mode = FALSE,
-  outcome_display = c("absolute", "proportional"),
-  shift_type = c("absolute", "proportional")
+  outcome_display = NULL,
+  shift_type = c("absolute", "proportional", "headroom", "range")
 )
 }
 \arguments{

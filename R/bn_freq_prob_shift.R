@@ -26,11 +26,22 @@
 #'   \code{impact_shift_type}: proportional (0.1 = 10 percent of current mean) or
 #'   absolute (0.1 = add 0.1 scale points to mean).
 #' @param impact_shift_type Character. How \code{lift} is interpreted:
-#'   \code{"proportional"} (default) shifts by a fraction of the current mean;
-#'   \code{"absolute"} shifts by a fixed number of scale points. (Formerly
-#'   \code{impact_metric_type}, which was retired because it conflated this
-#'   IV-shift choice with the DV-outcome display choice in
-#'   \code{bn_impact_engine}.)
+#'   \code{"proportional"} shifts by a fraction of the current mean;
+#'   \code{"absolute"} shifts by a fixed number of scale points;
+#'   \code{"range"} shifts by \code{lift} times the IV's full range
+#'   (\code{max - min}) — symmetric in both directions, scale-fair
+#'   across IVs;
+#'   \code{"headroom"} (default) shifts by \code{lift} times the available
+#'   room in the requested direction — \code{(max - mean)} for positive
+#'   lift, \code{(mean - min)} for negative lift. Use \code{"range"} for
+#'   symmetric local sensitivity questions ("what's the response to a
+#'   small jitter around the current state"). Use \code{"headroom"} for
+#'   asymmetric improvement-direction questions ("how does the DV move
+#'   if we close X% of each IV's gap to the top"). Both are
+#'   apples-to-apples on mixed-scale batteries.
+#'   (Formerly \code{impact_metric_type}, which was retired because it
+#'   conflated this IV-shift choice with the DV-outcome display choice
+#'   in \code{bn_impact_engine}.)
 #' @param return_actual_lift Logical. If \code{TRUE}, returns a list with the shifted
 #'   probabilities plus diagnostic info (original/new/target means, actual lift).
 #'   If \code{FALSE} (default), returns just the shifted probability vector.
@@ -38,6 +49,14 @@
 #'   Must sum to 1. Requires \code{values} to also be provided.
 #' @param values Numeric vector. Scale values corresponding to each probability in
 #'   \code{p_orig}. Required when using \code{p_orig} instead of \code{freq}.
+#' @param scale_range Optional numeric vector of length 2, \code{c(min, max)}.
+#'   When provided, overrides the observed min/max of \code{values} for the
+#'   purpose of the \code{"absolute"} / \code{"headroom"} / \code{"range"}
+#'   shift calculations and the saturation check. Use this when the IV's
+#'   theoretical scale extends beyond what's observed in the data — e.g.,
+#'   a 1–5 Likert that happens to have only levels 2–5 in a subgroup, but
+#'   should still treat the range as 4. \code{NULL} (default) uses observed
+#'   min/max.
 #'
 #' @return
 #' If \code{return_actual_lift = FALSE}: a named numeric vector of shifted probabilities.
@@ -73,10 +92,11 @@ bn_freq_prob_shift <- function(
     freq = NULL,
     type = c("exponential", "linear", "quadratic"),
     lift = 0.1,
-    impact_shift_type = c("proportional", "absolute"),
+    impact_shift_type = c("headroom", "proportional", "absolute", "range"),
     return_actual_lift = FALSE,
     p_orig = NULL,
-    values = NULL
+    values = NULL,
+    scale_range = NULL
 ){
 
   type <- match.arg(type)
@@ -101,56 +121,92 @@ bn_freq_prob_shift <- function(
 
   # Original and target means
   orig_mean <- sum(values * p_orig)
-  if (impact_shift_type == "proportional") {
-    target_mean <- orig_mean * (1 + lift)
+  # Two pairs of scale extents:
+  # - val_min / val_max define the SHIFT MAGNITUDE for "absolute" /
+  #   "headroom" / "range". Comes from `scale_range` override when
+  #   provided, else observed levels.
+  # - obs_min / obs_max define the SATURATION CAP — the actual achievable
+  #   mean given the observed levels. We can't redistribute probability
+  #   to a level that isn't in the freq table, so the cap is always the
+  #   observed extremes regardless of the override.
+  obs_min <- min(values)
+  obs_max <- max(values)
+  if (!is.null(scale_range)) {
+    if (!is.numeric(scale_range) || length(scale_range) != 2) {
+      stop("`scale_range` must be a length-2 numeric vector c(min, max).")
+    }
+    val_min <- scale_range[1]
+    val_max <- scale_range[2]
   } else {
-    target_mean <- orig_mean + lift
+    val_min <- obs_min
+    val_max <- obs_max
   }
 
-  val_min <- min(values)
-  val_max <- max(values)
+  if (impact_shift_type == "proportional") {
+    target_mean <- orig_mean * (1 + lift)
+  } else if (impact_shift_type == "absolute") {
+    target_mean <- orig_mean + lift
+  } else if (impact_shift_type == "range") {
+    # "range" — symmetric: lift × (max − min) added regardless of sign.
+    # Every IV gets the same nominal jitter (in scale-fair terms) up
+    # AND down, so it's the right tool for symmetric local-sensitivity
+    # questions. Doesn't bias toward improvement (unlike headroom).
+    target_mean <- orig_mean + lift * (val_max - val_min)
+  } else {
+    # "headroom" — directional: positive lift closes a fraction of the gap
+    # to val_max, negative lift closes a fraction of the gap to val_min.
+    # Every IV moves the same proportional distance toward its own
+    # boundary, regardless of scale, so rankings on mixed batteries
+    # reflect DV responsiveness rather than scale geometry. Self-saturating:
+    # at lift = ±1 the target equals the boundary exactly.
+    headroom_dir <- if (lift >= 0) (val_max - orig_mean) else (orig_mean - val_min)
+    target_mean <- orig_mean + lift * headroom_dir
+  }
 
-  # Absolute-shift saturation: when the requested shift would push the mean
-  # past the scale's boundary, return a point-mass distribution at that
-  # boundary instead of the near-boundary clamped distribution the optimizer
-  # would otherwise produce. Matches the natural interpretation of "+0.5
-  # absolute shift" on a saturated IV — if everyone would have to be at the
-  # highest level for the requested mean to be reached, return exactly that.
-  if (impact_shift_type == "absolute") {
-    if (target_mean >= val_max) {
+  # Saturation: when the requested shift would push the mean past the
+  # scale's boundary, return a point-mass distribution at that boundary
+  # instead of the near-boundary clamped distribution the optimizer would
+  # otherwise produce. Matches the natural interpretation of "+0.5
+  # absolute shift" on a saturated IV — if everyone would have to be at
+  # the highest level for the requested mean to be reached, return
+  # exactly that. Headroom / range are also subject to saturation when
+  # the requested shift exceeds available room.
+  if (impact_shift_type %in% c("absolute", "headroom", "range")) {
+    if (target_mean >= obs_max) {
       p_sat <- numeric(length(values))
       p_sat[which.max(values)] <- 1
       names(p_sat) <- names(p_orig)
       if (isTRUE(return_actual_lift)) {
         return(list(
           p_new_val = p_sat, p_orig_val = p_orig,
-          mean_orig = orig_mean, mean_new = val_max, target_mean = val_max,
-          actual_lift = val_max - orig_mean, saturated = "max"
+          mean_orig = orig_mean, mean_new = obs_max, target_mean = target_mean,
+          actual_lift = obs_max - orig_mean, saturated = "max"
         ))
       }
       return(p_sat)
     }
-    if (target_mean <= val_min) {
+    if (target_mean <= obs_min) {
       p_sat <- numeric(length(values))
       p_sat[which.min(values)] <- 1
       names(p_sat) <- names(p_orig)
       if (isTRUE(return_actual_lift)) {
         return(list(
           p_new_val = p_sat, p_orig_val = p_orig,
-          mean_orig = orig_mean, mean_new = val_min, target_mean = val_min,
-          actual_lift = val_min - orig_mean, saturated = "min"
+          mean_orig = orig_mean, mean_new = obs_min, target_mean = target_mean,
+          actual_lift = obs_min - orig_mean, saturated = "min"
         ))
       }
       return(p_sat)
     }
   }
 
-  # Clamp target to feasible range (can't exceed min/max of scale).
-  # Proportional shifts keep the old clamp — optimizer still runs toward
-  # near-boundary target rather than pure point-mass, since proportional
-  # shifts more rarely hit the boundary at all and the smooth distribution
-  # is more informative when they don't.
-  target_mean <- max(val_min + 1e-6, min(val_max - 1e-6, target_mean))
+  # Clamp target to the achievable range (bounded by the observed levels;
+  # optimizer can't redistribute probability to a level not in the freq
+  # table). Proportional shifts keep the old clamp — optimizer still runs
+  # toward near-boundary target rather than pure point-mass, since
+  # proportional shifts rarely hit the boundary anyway and the smooth
+  # distribution is more informative when they don't.
+  target_mean <- max(obs_min + 1e-6, min(obs_max - 1e-6, target_mean))
 
 
   # ---------------------------

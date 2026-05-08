@@ -57,15 +57,22 @@ append_bn_impact_dynamic <- function(
     write_helper_sheets = TRUE,
     # Initial values for the Outcome Display + Shift Type dropdowns.
     # Defaults: "absolute" for both — keeps the dynamic dashboard aligned
-    # with the static-write defaults. Caller may override.
+    # with the static-write defaults. Caller may override; "headroom"
+    # and "range" are valid shift_type initial values when bn_impact()
+    # emitted those variants.
     outcome_display = c("absolute", "proportional"),
-    shift_type      = c("absolute", "proportional")
+    shift_type      = c("absolute", "proportional", "headroom", "range")
 ) {
 
   outcome_display <- match.arg(outcome_display)
   shift_type      <- match.arg(shift_type)
-  display_default_label <- if (outcome_display == "absolute") "Absolute" else "Proportional"
-  shift_default_label   <- if (shift_type      == "absolute") "Absolute" else "Proportional"
+  display_default_label <- if (outcome_display == "absolute") "Point Change" else "% Change"
+  shift_default_label   <- switch(shift_type,
+    "absolute"     = "Fixed Step",
+    "proportional" = "% of Current Mean",
+    "headroom"     = "% Toward Top",
+    "range"        = "% of Range"
+  )
 
   has_batteries <- !is.null(batteries) && length(batteries) > 0L
   if (has_batteries && "Variable" %in% names(table)) {
@@ -177,7 +184,7 @@ append_bn_impact_dynamic <- function(
   # ("lift_0_propdisplay"). Strip in both positions so brand name
   # extraction later sees a clean "lift_N_<brand>" form.
   .strip_display <- function(x) gsub("_(propdisplay|absdisplay)(_|$)", "\\2", x)
-  .strip_shift   <- function(x) gsub("_(propshift|absshift)(_|$)", "\\2", x)
+  .strip_shift   <- function(x) gsub("_(propshift|absshift|headshift|rangeshift)(_|$)", "\\2", x)
   base_suffixes <- unique(.strip_display(.strip_shift(metric_suffixes)))
 
   # Focus options: Market + any brand names found in lift columns. Operate on
@@ -193,49 +200,67 @@ append_bn_impact_dynamic <- function(
     focus_options <- "Market"
   }
 
-  # Metric options (base keys — display suffix appended at formula time)
+  # Metric options (base keys — display suffix appended at formula time).
+  # Labels use the bare lift parameter value ("Effect at 0.10") so they
+  # stay accurate across all Shift Type modes — the actual IV perturbation
+  # is determined by Shift Type, the dropdown just identifies the
+  # parameter value.
   metric_labels <- character(0)
   metric_keys <- character(0)
 
   for (ml in market_lift_suffixes) {
     if (ml == "lift" || ml == "lift_0") {
-      metric_labels <- c(metric_labels, "Average Lift")
+      metric_labels <- c(metric_labels, "Average Effect")
       metric_keys <- c(metric_keys, ml)
     } else {
       pct <- gsub("lift_", "", ml)
-      metric_labels <- c(metric_labels, paste0(pct, "% Lift"))
+      pct_num <- suppressWarnings(as.numeric(pct))
+      lift_val <- if (!is.na(pct_num)) format(pct_num / 100, nsmall = 2) else pct
+      metric_labels <- c(metric_labels, paste0("Effect at ", lift_val))
       metric_keys <- c(metric_keys, ml)
     }
   }
   if ("maxVmin" %in% base_suffixes) {
-    metric_labels <- c(metric_labels, "Max vs Min")
+    metric_labels <- c(metric_labels, "Best-vs-Worst Effect")
     metric_keys <- c(metric_keys, "maxVmin")
   }
   if ("mi" %in% base_suffixes) {
-    metric_labels <- c(metric_labels, "Mutual Information")
+    metric_labels <- c(metric_labels, "Explanatory Value")
     metric_keys <- c(metric_keys, "mi")
   }
 
   # Outcome-display options. Always offered when any display-variant column
   # exists (which is always, now that the engine always emits both).
   has_outcome_display <- any(grepl("_(propdisplay|absdisplay)$", metric_suffixes))
-  outcome_display_labels <- c("Proportional", "Absolute")
+  outcome_display_labels <- c("% Change", "Point Change")
   outcome_display_keys   <- c("propdisplay", "absdisplay")
 
   # Shift-type options. Offered when the impact table has columns with
-  # _propshift_ / _absshift_ tags (bn_impact Pass B). If not present (older
-  # builds or engine-only output), the dashboard falls back to not injecting
-  # the shift tag and column-name formulas won't include it.
-  has_shift_type <- any(grepl("_(propshift|absshift)_", metric_suffixes))
-  shift_type_labels <- c("Proportional", "Absolute")
-  shift_type_keys   <- c("propshift", "absshift")
+  # _propshift_ / _absshift_ / _headshift_ tags (bn_impact Pass B). If not
+  # present (older builds or engine-only output), the dashboard falls back
+  # to not injecting the shift tag and column-name formulas won't include
+  # it. Headroom is the cross-scale-comparable option (every IV moves the
+  # same fraction of its own gap to the boundary).
+  has_shift_type <- any(grepl("_(propshift|absshift|headshift|rangeshift)_", metric_suffixes))
+  shift_type_labels <- c("% of Current Mean", "Fixed Step", "% Toward Top", "% of Range")
+  shift_type_keys   <- c("propshift", "absshift", "headshift", "rangeshift")
+  # Drop any shift-type entries that aren't actually present in the
+  # column suffixes — keeps the dropdown honest if e.g. an older
+  # bn_impact run skipped the headroom variant.
+  present_shift_keys <- vapply(shift_type_keys, function(k) {
+    any(grepl(paste0("_", k, "_"), metric_suffixes))
+  }, logical(1))
+  if (any(present_shift_keys)) {
+    shift_type_labels <- shift_type_labels[present_shift_keys]
+    shift_type_keys   <- shift_type_keys[present_shift_keys]
+  }
 
   # Collapse base metric suffixes so the Metric dropdown shows one entry per
   # base (e.g. "lift_0", "maxVmin", "mi") even though the underlying columns
   # are multiplied by shift × display variants.
   .strip_variant_suffix <- function(x) {
     # Order matters: strip display first (it's the innermost suffix), then shift.
-    sub("_(propshift|absshift)", "",
+    sub("_(propshift|absshift|headshift|rangeshift)", "",
       sub("_(propdisplay|absdisplay)$", "", x))
   }
 
@@ -283,14 +308,17 @@ append_bn_impact_dynamic <- function(
   # Index description in E column
   index_descriptions <- purrr::map_chr(metric_keys, function(mk) {
     if (mk == "lift" || mk == "lift_0") {
-      "Indexed by average market lift. Average lift measures the overall influence of each attribute on the outcome by shifting each attribute level up by 5% and averaging the resulting changes."
+      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation (±5%) around each attribute's current state. The interpretation of 5% depends on the selected Shift Type."
     } else if (grepl("^lift_", mk)) {
       pct <- gsub("lift_", "", mk)
-      paste0("Indexed by ", pct, "% market lift. ", pct, "% lift measures how much the outcome changes when ", pct, "% of respondents for each attribute shift up by one level.")
+      paste0(
+        "Indexed by ", pct, "% lift. Measures how much the outcome changes when each attribute's distribution shifts by ", pct,
+        "% — the meaning of ", pct, "% follows the selected Shift Type (% of current mean, fixed step, % toward top, or % of range)."
+      )
     } else if (mk == "maxVmin") {
-      "Indexed by max vs min impact. Max vs min measures the difference in the outcome between the best-case and worst-case scenario for each attribute."
+      "Indexed by best-vs-worst effect. Measures the outcome difference between setting all respondents to the top of each attribute versus all at the bottom."
     } else if (mk == "mi") {
-      "Indexed by mutual information. Mutual information measures the strength of the relationship between each attribute and the outcome."
+      "Indexed by explanatory value. Measures the statistical strength of the relationship between each attribute and the outcome (mutual information), independent of intervention direction or shift type."
     } else {
       paste("Indexed by", mk)
     }
@@ -588,7 +616,7 @@ append_bn_impact_dynamic <- function(
   shift_is_abs_and_lift <- if (has_shift_type) {
     shift_cell_let <- num2let(shift_type_cell_col)
     paste0(
-      "AND(", shift_cell_let, shift_type_cell_row, "=\"Absolute\",",
+      "AND(", shift_cell_let, shift_type_cell_row, "=\"Fixed Step\",",
       "LEFT(", mk_lookup, ",4)=\"lift\")"
     )
   } else {
@@ -613,7 +641,7 @@ append_bn_impact_dynamic <- function(
     "IF(", red_rule, ",",
       num2let(metric_cell_col), metric_cell_row, "&\" must have a Market focus\",",
     "IF(", shift_is_abs_and_lift, ",",
-      "\"Focus does not affect this metric when shift is absolute\",",
+      "\"Focus does not affect this metric when shift is a fixed step\",",
       "\"\"))"
   )
   openxlsx::writeFormula(wb, dash_sheet, x = focus_warning_formula,
@@ -643,7 +671,7 @@ append_bn_impact_dynamic <- function(
       "IF(", weight_existing_rule, ",",
         "\"Weights don't affect this metric\",",
       "IF(", shift_is_abs_and_lift, ",",
-        "\"Weights don't affect this metric when shift is absolute\",",
+        "\"Weights don't affect this metric when shift is a fixed step\",",
         "\"\"))"
     )
     openxlsx::writeFormula(wb, dash_sheet, x = weight_warning_formula,

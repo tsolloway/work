@@ -44,7 +44,8 @@ append_bn_prioritize_guide <- function(
     boot_applied = FALSE,
     n_boot_final = NULL,
     noise_tail = NULL,
-    threshold = NULL
+    threshold = NULL,
+    impact_shift_type = "headroom"
 ) {
 
   guide_sheet <- "Guide"
@@ -196,12 +197,18 @@ append_bn_prioritize_guide <- function(
     stringsAsFactors = FALSE
   )
   if (has_strategy) {
+    lift_pct <- round(lift * 100, 1)
+    lift_explainer <- switch(impact_shift_type %||% "headroom",
+      "headroom"     = paste0("'Moderate Lift' closes ", lift_pct, "% of each attribute's gap to its top level — every attribute moves the same fraction of its own headroom, so cross-scale rankings stay comparable"),
+      "proportional" = paste0("'Moderate Lift' shifts each attribute's mean by ", lift_pct, "% of its current value"),
+      "absolute"     = paste0("'Moderate Lift' adds ", round(lift, 2), " scale points to each attribute's mean"),
+      paste0("'Moderate Lift' shifts each attribute's distribution by ", lift_pct, "%")
+    )
     ctrl_df <- rbind(ctrl_df, data.frame(
-      Control = "Strategy",
+      Control = "Analysis",
       Description = paste0(
-        "'Lift' shifts each attribute's distribution upward by ",
-        round(lift * 100, 1),
-        "% and reads the change in the outcome. 'Max' sets each attribute to its highest observed level — a best-case-scenario read."
+        lift_explainer,
+        " and reads the change in the outcome. 'Maximum Lift' sets each attribute to its highest observed level — a best-case-scenario read."
       ),
       stringsAsFactors = FALSE
     ))

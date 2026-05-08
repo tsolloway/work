@@ -121,7 +121,7 @@ bn_impact_write <- function(
     # sheet shows raw probability-point change under an additive shift.
     # Dynamic dashboards expose these as dropdowns and ignore the params.
     outcome_display = c("absolute", "proportional"),
-    shift_type      = c("absolute", "proportional"),
+    shift_type      = c("absolute", "proportional", "headroom", "range"),
     path = ".",
     wb = NULL,
     save = TRUE,
@@ -312,15 +312,18 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     lift_idx <- if (index_by == "lift_first") 1L else min(2L, length(lift))
     lift_val <- lift[lift_idx]
     if (lift_val == 0) {
-      "Indexed by average market lift. Average lift measures the overall influence of each attribute on the outcome by shifting each attribute level up by 5% and averaging the resulting changes"
+      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation (±5%) around each attribute's current state. The interpretation of 5% depends on the selected Shift Type"
     } else {
       pct <- round(lift_val * 100)
-      paste0("Indexed by ", pct, "% market lift. ", pct, "% lift measures how much the outcome changes when ", pct, "% of respondents for each attribute shift up by one level")
+      paste0(
+        "Indexed by ", pct, "% lift. Measures how much the outcome changes when each attribute's distribution shifts by ", pct,
+        "% — the meaning of ", pct, "% follows the selected Shift Type (% of current mean, fixed step, % toward top, or % of range)"
+      )
     }
   } else {
     switch(index_by,
-      "maxVmin" = "Indexed by max vs min impact. Max vs min measures the difference in the outcome between the best-case and worst-case scenario for each attribute",
-      "mi"      = "Indexed by mutual information. Mutual information measures the strength of the relationship between each attribute and the outcome",
+      "maxVmin" = "Indexed by best-vs-worst effect. Measures the outcome difference between setting all respondents to the top of each attribute versus all at the bottom",
+      "mi"      = "Indexed by explanatory value. Measures the statistical strength of the relationship between each attribute and the outcome (mutual information), independent of intervention direction or shift type",
       "none"    = NULL
     )
   }

@@ -213,6 +213,7 @@ bn_impact <- function(
     mi_boot = NULL,
     verbose = TRUE,
     use_parallel = TRUE,
+    scale_ranges = NULL,
     seed = 1
 ){
 
@@ -240,37 +241,54 @@ bn_impact <- function(
         paste0("\\1_", shift_key, "_\\2\\3"), cols)
   }
 
-  # Helper: merge two engine outputs produced with impact_shift_type =
-  # "proportional" and "absolute". Keep everything from the prop run; from
-  # the abs run take all lift-related columns (values + bootstrap stats)
-  # and bind alongside, each tagged _absshift_.
-  .merge_shift_variants <- function(prop_tbl, abs_tbl) {
+  # Helper: merge engine outputs produced with impact_shift_type =
+  # "proportional", "absolute", "headroom", and "range". Keep everything
+  # from the prop run; from each other run take only the lift columns
+  # and bind alongside, each tagged with the corresponding _<key>shift_
+  # token.
+  .merge_shift_variants <- function(prop_tbl, abs_tbl,
+                                    head_tbl = NULL, range_tbl = NULL) {
     # Rename lift columns in the prop run to include _propshift_ tag.
     prop_names <- names(prop_tbl)
     renamed_prop <- .insert_shift_suffix(prop_names, "propshift")
     names(prop_tbl) <- renamed_prop
 
-    # From abs run, extract all lift cols (values + boot stats) and tag.
-    abs_lift_cols <- grep("^lift.*_(propdisplay|absdisplay)(_.*)?$",
-      names(abs_tbl), value = TRUE)
-    if (length(abs_lift_cols) == 0) return(prop_tbl)
-    abs_lift_only <- abs_tbl[, abs_lift_cols, drop = FALSE]
-    names(abs_lift_only) <- .insert_shift_suffix(
-      names(abs_lift_only), "absshift"
-    )
+    .extract_lift_only <- function(tbl, shift_key) {
+      lift_cols <- grep("^lift.*_(propdisplay|absdisplay)(_.*)?$",
+        names(tbl), value = TRUE)
+      if (length(lift_cols) == 0) return(NULL)
+      out <- tbl[, lift_cols, drop = FALSE]
+      names(out) <- .insert_shift_suffix(names(out), shift_key)
+      out
+    }
 
-    dplyr::bind_cols(prop_tbl, abs_lift_only)
+    abs_lift_only   <- .extract_lift_only(abs_tbl,   "absshift")
+    head_lift_only  <- if (!is.null(head_tbl))  .extract_lift_only(head_tbl,  "headshift")  else NULL
+    range_lift_only <- if (!is.null(range_tbl)) .extract_lift_only(range_tbl, "rangeshift") else NULL
+
+    out <- prop_tbl
+    if (!is.null(abs_lift_only))   out <- dplyr::bind_cols(out, abs_lift_only)
+    if (!is.null(head_lift_only))  out <- dplyr::bind_cols(out, head_lift_only)
+    if (!is.null(range_lift_only)) out <- dplyr::bind_cols(out, range_lift_only)
+    out
   }
 
-  # Run the engine once per shift_type (proportional + absolute). maxVmin /
-  # mi / index values don't depend on shift_type and would be duplicates, so
-  # only the lift columns are retained from the absolute run.
+  # Run the engine once per shift_type (proportional + absolute +
+  # headroom + range). maxVmin / mi / index values don't depend on
+  # shift_type and would be duplicates, so only the lift columns are
+  # retained from the abs / head / range runs. Order kept stable: prop
+  # first (anchors index/maxVmin/mi), then abs, then head, then range —
+  # downstream regex grabs them by suffix tag.
   .dual_engine_call <- function(engine_args) {
-    prop_tbl <- do.call(bn_impact_engine,
+    prop_tbl  <- do.call(bn_impact_engine,
       c(engine_args, list(impact_shift_type = "proportional")))
-    abs_tbl  <- do.call(bn_impact_engine,
+    abs_tbl   <- do.call(bn_impact_engine,
       c(engine_args, list(impact_shift_type = "absolute")))
-    .merge_shift_variants(prop_tbl, abs_tbl)
+    head_tbl  <- do.call(bn_impact_engine,
+      c(engine_args, list(impact_shift_type = "headroom")))
+    range_tbl <- do.call(bn_impact_engine,
+      c(engine_args, list(impact_shift_type = "range")))
+    .merge_shift_variants(prop_tbl, abs_tbl, head_tbl, range_tbl)
   }
 
   if(process_subgroups){
@@ -300,6 +318,7 @@ bn_impact <- function(
         dv_metric = dv_metric,
         weight = weight,
         mi_boot = mi_boot,
+        scale_ranges = scale_ranges,
         seed = seed
       )) %>%
         setNames(glue::glue("{.y}_{names(.)}"))
@@ -344,6 +363,7 @@ bn_impact <- function(
       dv_metric = dv_metric,
       weight = weight,
       mi_boot = mi_boot,
+      scale_ranges = scale_ranges,
       seed = seed
     )) %>%
       dplyr::rename(Variable = variable)
@@ -422,6 +442,25 @@ bn_impact <- function(
       lift = lift,
       subgroups = if (process_subgroups) names(obj) else NULL,
       dv = dv_original,
+      dv_metric = dv_metric,
+      # "Outcome is dichotomous" is broader than "DV has 2 levels":
+      # a top_box analysis always produces values in [0, 1] regardless
+      # of how many DV levels the underlying variable has, because the
+      # dashboard reads P(DV = top). True binary DVs under "mean" also
+      # produce [0, 1] probabilities. Either case → Point Change reads
+      # more naturally than % Change.
+      # Downstream dashboards (bn_report, bn_impact_write) use this flag
+      # to auto-default the Outcome Display dropdown.
+      is_dichotomous_dv = {
+        if (identical(dv_metric, "top_box")) {
+          TRUE
+        } else {
+          col <- df[[unname(dv)]]
+          if (is.null(col)) FALSE
+          else if (is.factor(col)) length(levels(col)) == 2L
+          else length(unique(stats::na.omit(col))) == 2L
+        }
+      },
       brand = brand,
       brand_names = brand_names_resolved,
       min_base_for_lift = min_base_for_lift,

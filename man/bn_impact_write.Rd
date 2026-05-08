@@ -28,7 +28,7 @@ bn_impact_write(
   min_base_for_lift = NULL,
   min_base_for_sim = NULL,
   outcome_display = c("absolute", "proportional"),
-  shift_type = c("absolute", "proportional"),
+  shift_type = c("absolute", "proportional", "headroom", "range"),
   path = ".",
   wb = NULL,
   save = TRUE,

@@ -53,7 +53,10 @@
 #'   \code{"proportional"} (default) shifts the IV's mean by a fraction of its
 #'   current value (e.g., 0.10 = 10 percent of current mean);
 #'   \code{"absolute"} shifts the IV's mean by a fixed number of scale points
-#'   (e.g., 0.10 = add 0.10 to the mean regardless of starting value).
+#'   (e.g., 0.10 = add 0.10 to the mean regardless of starting value);
+#'   \code{"headroom"} shifts the mean by \code{lift} times the room
+#'   remaining toward the requested boundary — see
+#'   \code{bn_freq_prob_shift()} for details.
 #' @section Outcome-display variants:
 #'   Both proportional and absolute variants of the DV-outcome metrics are
 #'   always emitted as separate columns, so downstream writers (e.g., the
@@ -211,7 +214,7 @@ bn_impact_engine <- function(
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
     dv_metric = c("mean", "top_box"),
-    impact_shift_type = c("proportional", "absolute"),
+    impact_shift_type = c("proportional", "absolute", "headroom", "range"),
     include_base = TRUE,
     index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     n_boot = 1,
@@ -220,6 +223,7 @@ bn_impact_engine <- function(
     brand_names = NULL,
     weight = NULL,
     mi_boot = NULL,
+    scale_ranges = NULL,
     seed = 1
 ){
 
@@ -581,18 +585,23 @@ bn_impact_engine <- function(
       # Returns a numeric vector of length 2 * length(lift), interleaved as
       # (propdisplay, absdisplay) for each lift percent. Order must match
       # `lift_labels` above so the final column naming lines up.
-      compute_lift_vals <- function(freq, dv_probs) {
+      # `iv_name` is used to look up an optional scale_range override.
+      compute_lift_vals <- function(freq, dv_probs, iv_name = NULL) {
         if (sum(freq) < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
         p_observed <- as.numeric(freq) / sum(freq)
         observed_expected <- sum(dv_probs * p_observed)
+        sr <- if (!is.null(scale_ranges) && !is.null(iv_name)) scale_ranges[[iv_name]] else NULL
         purrr::map(lift, function(l) {
           use_sym <- (l == 0)
           if (use_sym) {
-            p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05, impact_shift_type = impact_shift_type)
-            p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05, impact_shift_type = impact_shift_type)
+            p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05,
+              impact_shift_type = impact_shift_type, scale_range = sr)
+            p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05,
+              impact_shift_type = impact_shift_type, scale_range = sr)
             lift_abs <- sum(dv_probs * p_up) - sum(dv_probs * p_down)
           } else {
-            p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l, impact_shift_type = impact_shift_type)
+            p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l,
+              impact_shift_type = impact_shift_type, scale_range = sr)
             lift_abs <- sum(dv_probs * p_shifted) - observed_expected
           }
           # Proportional display = absolute lift scaled by the observed
@@ -654,7 +663,7 @@ bn_impact_engine <- function(
             }
 
             # Market lift: always computed on full distribution
-            market_vals <- compute_lift_vals(freq_full, dv_probs)
+            market_vals <- compute_lift_vals(freq_full, dv_probs, iv_name = single_iv)
 
             if (is.null(brand_levels)) {
               market_vals
@@ -664,7 +673,7 @@ bn_impact_engine <- function(
                 brand_mask <- dat_boot[[brand]] == b
                 w_b <- if (!is.null(weight)) dat_boot[[weight]][brand_mask] else NULL
                 freq_b <- wtd_table(dat_boot[[single_iv]][brand_mask], w = w_b, levels = levels_v)
-                compute_lift_vals(freq_b, dv_probs)
+                compute_lift_vals(freq_b, dv_probs, iv_name = single_iv)
               }) %>%
                 unlist()
               c(market_vals, brand_vals)

@@ -48,10 +48,14 @@
 #' @param impact_lift Numeric vector. Lift fractions for impact. Default
 #'   \code{c(0, 0.1)}.
 #' @param prioritize_shift_type Character. IV shift interpretation for the
-#'   greedy prioritization path only: \code{"proportional"} (default) shifts
-#'   the IV mean by a fraction of its current value; \code{"absolute"} shifts
-#'   by a fixed number of scale points. (Impacts always precompute BOTH
-#'   variants — no parameter needed there.)
+#'   greedy prioritization path only: \code{"headroom"} (default) shifts
+#'   each IV by \code{lift} times the room remaining toward its own
+#'   boundary — same fraction of headroom for every IV, so mixed-scale
+#'   batteries (Likerts + binaries + counts) rank by DV responsiveness
+#'   rather than scale geometry. \code{"proportional"} shifts by a
+#'   fraction of the current mean; \code{"absolute"} shifts by a fixed
+#'   number of scale points. (Impacts always precompute BOTH
+#'   proportional and absolute variants — no parameter needed there.)
 #' @section Impact-metric variants:
 #'   Impacts always precompute the full cross-product of IV-shift and
 #'   DV-outcome-display variants (4 lift columns × 2 maxVmin columns + mi).
@@ -133,7 +137,7 @@ bn_finalize_network <- function(
     impact_n_boot = 1,
     impact_n_querry = 1e4,
     impact_lift = c(0, 0.1),
-    prioritize_shift_type = c("proportional", "absolute"),
+    prioritize_shift_type = c("headroom", "proportional", "absolute", "range"),
     impact_include_base = TRUE,
     # Survey-battery grouping for the "Index By: Battery" feature in the
     # impact dashboards. Named list of vectors mapping battery name -> IVs.
@@ -162,6 +166,15 @@ bn_finalize_network <- function(
     prioritize_sig_threshold = 0.05,
     prioritize_marginal_threshold = 0.10,
     include_prioritize_max_lift_deprecated = FALSE,
+    # Per-IV (min, max) ranges that drive the "absolute" / "headroom" /
+    # "range" shift magnitudes. Three valid forms:
+    #   "auto" (default): inspect the original df and build the list from
+    #     each IV's factor levels (or observed numeric range), preserving
+    #     the theoretical scale before any subgroup droplevels() narrows it.
+    #   named list: e.g. list(iv1 = c(1, 5), nps = c(0, 10)). Used as-is;
+    #     IVs absent from the list fall through to observed-levels behaviour.
+    #   NULL: no override anywhere — every shift call uses observed levels.
+    scale_ranges = "auto",
     # --- Visualization ---
     tool_tip_edge_prefix = NULL,
     viz_size_node_by_impact = TRUE,
@@ -302,6 +315,38 @@ bn_finalize_network <- function(
   if(is.null(x_ivs)) x_ivs <- x_nodes %>% setdiff(dv)
 
 
+  # --- scale_ranges auto-detection ---
+  # When scale_ranges = "auto" (default), pull each IV's range from the
+  # ORIGINAL df before any subgroup filtering / droplevels happen.
+  # Factor levels are preferred (they carry the theoretical scale even
+  # when no observation lands at the boundary), with a numeric fallback
+  # for non-factor numeric IVs. IVs whose levels don't parse as numeric
+  # (categorical labels) are skipped — bn_freq_prob_shift will fall back
+  # to observed-levels behaviour for those, which is correct.
+  if (identical(scale_ranges, "auto")) {
+    auto_ranges <- purrr::map(rlang::set_names(x_ivs), function(iv) {
+      if (!iv %in% names(df)) return(NULL)
+      col <- df[[iv]]
+      if (is.factor(col)) {
+        lv <- suppressWarnings(as.numeric(levels(col)))
+        if (any(is.na(lv))) return(NULL)
+        c(min(lv), max(lv))
+      } else if (is.numeric(col)) {
+        rng <- suppressWarnings(range(col, na.rm = TRUE))
+        if (any(!is.finite(rng))) return(NULL)
+        rng
+      } else {
+        NULL
+      }
+    })
+    auto_ranges <- auto_ranges[!purrr::map_lgl(auto_ranges, is.null)]
+    cli::cli_alert_info(
+      "scale_ranges = 'auto' → detected ranges for {length(auto_ranges)} of {length(x_ivs)} IV{?s}"
+    )
+    scale_ranges <- auto_ranges
+  }
+
+
   # --- subgroups default ---
   if(is.null(subgroups)){
     subgroups <- "Total"
@@ -422,6 +467,7 @@ bn_finalize_network <- function(
       dv_metric = dv_metric,
       weight = weight,
       mi_boot = n_boot_final,
+      scale_ranges = scale_ranges,
       use_parallel = impact_parallel,
       seed = seed
     )
@@ -459,6 +505,7 @@ bn_finalize_network <- function(
       community_assignment = attribute_nodes,
       use_parallel = impact_parallel,
       include_maximum_lift_deprecated = include_prioritize_max_lift_deprecated,
+      scale_ranges = scale_ranges,
       seed = seed
     )
 

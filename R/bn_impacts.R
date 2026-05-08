@@ -79,6 +79,7 @@ bn_impacts <- function(
     weight = NULL,
     mi_boot = 100,
     use_parallel = TRUE,
+    scale_ranges = NULL,
     seed = 1
 ) {
 
@@ -101,6 +102,7 @@ bn_impacts <- function(
     mi_boot = NULL,
     verbose = FALSE,
     use_parallel = use_parallel,
+    scale_ranges = scale_ranges,
     seed = seed
   )
 
@@ -125,6 +127,7 @@ bn_impacts <- function(
       mi_boot = NULL,
       verbose = FALSE,
       use_parallel = use_parallel,
+      scale_ranges = scale_ranges,
       seed = seed
     )
   }
@@ -152,6 +155,7 @@ bn_impacts <- function(
       mi_boot = mi_boot,
       verbose = FALSE,
       use_parallel = use_parallel,
+      scale_ranges = scale_ranges,
       seed = seed
     )
 
@@ -175,6 +179,7 @@ bn_impacts <- function(
         mi_boot = mi_boot,
         verbose = FALSE,
         use_parallel = use_parallel,
+        scale_ranges = scale_ranges,
         seed = seed
       )
     }

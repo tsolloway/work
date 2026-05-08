@@ -19,7 +19,8 @@ append_bn_prioritize_guide(
   boot_applied = FALSE,
   n_boot_final = NULL,
   noise_tail = NULL,
-  threshold = NULL
+  threshold = NULL,
+  impact_shift_type = "headroom"
 )
 }
 \arguments{

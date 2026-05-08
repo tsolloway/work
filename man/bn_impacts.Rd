@@ -26,6 +26,7 @@ bn_impacts(
   weight = NULL,
   mi_boot = 100,
   use_parallel = TRUE,
+  scale_ranges = NULL,
   seed = 1
 )
 }

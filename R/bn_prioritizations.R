@@ -32,8 +32,10 @@
 #'   p-values and to include a brand-subgroup slice as a task. Default 75.
 #' @param dv_metric Character. \code{"mean"} (default) or \code{"top_box"}.
 #' @param impact_shift_type Character. How \code{lift} is interpreted when
-#'   shifting IV distributions: \code{"proportional"} (default) or
-#'   \code{"absolute"}.
+#'   shifting IV distributions: \code{"headroom"} (default, fraction of
+#'   each IV's gap to its own boundary), \code{"proportional"} (fraction
+#'   of current mean), or \code{"absolute"} (fixed scale-point shift).
+#'   See \code{bn_freq_prob_shift()} for details.
 #' @param impact_result Optional. Output of \code{bn_impact()} passed through
 #'   to seed greedy round 1 ordering.
 #' @param threshold Numeric or NULL. Early stopping threshold. Default 0.01.
@@ -95,7 +97,7 @@ bn_prioritizations <- function(
     lift = 0.10,
     min_base_for_boot = 75,
     dv_metric = c("mean", "top_box"),
-    impact_shift_type = c("proportional", "absolute"),
+    impact_shift_type = c("headroom", "proportional", "absolute", "range"),
     impact_result = NULL,
     threshold = 0.01,
     max_rounds = NULL,
@@ -108,6 +110,7 @@ bn_prioritizations <- function(
     weight = NULL,
     use_parallel = TRUE,
     include_maximum_lift_deprecated = FALSE,
+    scale_ranges = NULL,
     seed = 1
 ) {
 
@@ -248,6 +251,7 @@ bn_prioritizations <- function(
         min_base_for_boot = min_base_for_boot,
         weight = task$wt, dictionary = dictionary,
         subtract_baseline = task$subtract_baseline %||% TRUE,
+        scale_ranges = scale_ranges,
         use_parallel = FALSE, verbose = FALSE, seed = seed
       )
     },
@@ -369,6 +373,7 @@ bn_prioritizations <- function(
     brand_names = brands_all,
     weight = weight,
     lift = lift,
+    impact_shift_type = impact_shift_type,
     base_sizes = base_sizes,
     min_base_for_boot = min_base_for_boot,
     n_boot_final = n_boot_final,

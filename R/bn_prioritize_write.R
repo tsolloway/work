@@ -115,6 +115,17 @@ bn_prioritize_write <- function(
   max_label             <- "Maximum Lift"
   max_deprecated_label  <- "Maximum Lift (Deprecated)"
 
+  # Describe what "X% lift" actually means based on the shift mode used
+  # by bn_prioritize. headroom = % of gap to ceiling closed (default);
+  # proportional = % of current mean; absolute = X scale points.
+  meta_shift_type <- result[["meta"]][["impact_shift_type"]] %||% "headroom"
+  lift_shift_explainer <- switch(meta_shift_type,
+    "headroom"     = paste0("Closes ", lift_pct_label, "% of each IV's gap to its top level — every IV moves the same fraction of its own headroom, so cross-scale rankings stay comparable"),
+    "proportional" = paste0("Shifts each IV's mean by ", lift_pct_label, "% of its current value"),
+    "absolute"     = paste0("Adds ", lift_pct_label / 100, " scale points to each IV's mean"),
+    paste0("Shifts each IV's distribution by ", lift_pct_label, "%")
+  )
+
   # ---------------------------------------------------------------------------
   # Build registry: flat list of tagged entries
   # ---------------------------------------------------------------------------
@@ -318,9 +329,9 @@ bn_prioritize_write <- function(
 
   # --- Display-mode dropdown (always shown, UI-only — doesn't touch the
   # registry / key lookup, only controls which numbers feed the chart). ---
-  # Default = "Percent Change" (cumulative gain %). "Point Change"
-  # reproduces the original DV-Estimate-based stacked chart.
-  chart_options <- c("Percent Change", "Point Change")
+  # Default = "% Change" (cumulative gain %). "Point Change" reproduces
+  # the original DV-Estimate-based stacked chart.
+  chart_options <- c("% Change", "Point Change")
   # Place chart options on _priorit_lookup right after the existing dim opts
   chart_opt_col <- opt_col
   openxlsx::writeData(wb, "_priorit_lookup", "Display",
@@ -490,7 +501,7 @@ bn_prioritize_write <- function(
     chart_warn_col <- cell_col + 1L
     chart_warn_rule <- paste0(
       "AND(", is_deprecated_expr, ",",
-              chart_cell_ref, "=\"Percent Change\")"
+              chart_cell_ref, "=\"% Change\")"
     )
     chart_warn_formula <- paste0(
       "IF(", chart_warn_rule, ",",
@@ -797,8 +808,7 @@ bn_prioritize_write <- function(
 
   footer_lines <- c(footer_lines,
     "",
-    paste0(lift_label, " \u2014 Shifts each IV's distribution upward by ", lift_pct_label,
-           "%, reflecting a realistic improvement scenario"),
+    paste0(lift_label, " \u2014 ", lift_shift_explainer),
     paste0(max_label, " \u2014 Sets each IV to its highest level as hard evidence, representing the theoretical ceiling")
   )
   # Deprecated strategy only appears when bn_prioritizations() was called
@@ -928,7 +938,8 @@ bn_prioritize_write <- function(
       boot_applied = boot_applied_guide,
       n_boot_final = meta[["n_boot_final"]],
       noise_tail = meta[["noise_tail"]],
-      threshold = meta[["threshold"]]
+      threshold = meta[["threshold"]],
+      impact_shift_type = meta_shift_type
     )
   }
 

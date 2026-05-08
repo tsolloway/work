@@ -16,7 +16,7 @@ bn_prioritize(
   lift = 0.1,
   min_base_for_boot = 75,
   dv_metric = c("mean", "top_box"),
-  impact_shift_type = c("proportional", "absolute"),
+  impact_shift_type = c("headroom", "proportional", "absolute", "range"),
   impact_result = NULL,
   threshold = 0.01,
   max_rounds = NULL,
@@ -26,6 +26,7 @@ bn_prioritize(
   use_parallel = TRUE,
   verbose = TRUE,
   subtract_baseline = TRUE,
+  scale_ranges = NULL,
   seed = 1
 )
 }
@@ -71,9 +72,13 @@ skipped. Default 75.}
 value; \code{"top_box"} uses the probability of the highest DV level.}
 
 \item{impact_shift_type}{Character. How \code{lift} is interpreted when
-shifting IV distributions: \code{"proportional"} (default) shifts by a
-fraction of the current mean; \code{"absolute"} shifts by a fixed
-number of scale points.}
+shifting IV distributions: \code{"headroom"} (default) shifts by
+\code{lift} times the available room in the requested direction
+(\code{(max - mean)} for positive lift, \code{(mean - min)} for
+negative) — every IV closes the same fraction of its own gap to
+the boundary, so cross-scale rankings are comparable;
+\code{"proportional"} shifts by a fraction of the current mean;
+\code{"absolute"} shifts by a fixed number of scale points.}
 
 \item{impact_result}{Optional. Output of \code{bn_impact()} or a tibble with
 \code{Variable} and an index column. Used to seed round 1 ordering in

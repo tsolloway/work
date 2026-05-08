@@ -8,10 +8,11 @@ bn_freq_prob_shift(
   freq = NULL,
   type = c("exponential", "linear", "quadratic"),
   lift = 0.1,
-  impact_shift_type = c("proportional", "absolute"),
+  impact_shift_type = c("headroom", "proportional", "absolute", "range"),
   return_actual_lift = FALSE,
   p_orig = NULL,
-  values = NULL
+  values = NULL,
+  scale_range = NULL
 )
 }
 \arguments{
@@ -27,11 +28,22 @@ Names are interpreted as numeric scale values. Either \code{freq} or both
 absolute (0.1 = add 0.1 scale points to mean).}
 
 \item{impact_shift_type}{Character. How \code{lift} is interpreted:
-\code{"proportional"} (default) shifts by a fraction of the current mean;
-\code{"absolute"} shifts by a fixed number of scale points. (Formerly
-\code{impact_metric_type}, which was retired because it conflated this
-IV-shift choice with the DV-outcome display choice in
-\code{bn_impact_engine}.)}
+\code{"proportional"} shifts by a fraction of the current mean;
+\code{"absolute"} shifts by a fixed number of scale points;
+\code{"range"} shifts by \code{lift} times the IV's full range
+(\code{max - min}) — symmetric in both directions, scale-fair
+across IVs;
+\code{"headroom"} (default) shifts by \code{lift} times the available
+room in the requested direction — \code{(max - mean)} for positive
+lift, \code{(mean - min)} for negative lift. Use \code{"range"} for
+symmetric local sensitivity questions ("what's the response to a
+small jitter around the current state"). Use \code{"headroom"} for
+asymmetric improvement-direction questions ("how does the DV move
+if we close X\% of each IV's gap to the top"). Both are
+apples-to-apples on mixed-scale batteries.
+(Formerly \code{impact_metric_type}, which was retired because it
+conflated this IV-shift choice with the DV-outcome display choice
+in \code{bn_impact_engine}.)}
 
 \item{return_actual_lift}{Logical. If \code{TRUE}, returns a list with the shifted
 probabilities plus diagnostic info (original/new/target means, actual lift).
@@ -42,6 +54,15 @@ Must sum to 1. Requires \code{values} to also be provided.}
 
 \item{values}{Numeric vector. Scale values corresponding to each probability in
 \code{p_orig}. Required when using \code{p_orig} instead of \code{freq}.}
+
+\item{scale_range}{Optional numeric vector of length 2, \code{c(min, max)}.
+When provided, overrides the observed min/max of \code{values} for the
+purpose of the \code{"absolute"} / \code{"headroom"} / \code{"range"}
+shift calculations and the saturation check. Use this when the IV's
+theoretical scale extends beyond what's observed in the data — e.g.,
+a 1–5 Likert that happens to have only levels 2–5 in a subgroup, but
+should still treat the range as 4. \code{NULL} (default) uses observed
+min/max.}
 }
 \value{
 If \code{return_actual_lift = FALSE}: a named numeric vector of shifted probabilities.

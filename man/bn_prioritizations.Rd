@@ -16,7 +16,7 @@ bn_prioritizations(
   lift = 0.1,
   min_base_for_boot = 75,
   dv_metric = c("mean", "top_box"),
-  impact_shift_type = c("proportional", "absolute"),
+  impact_shift_type = c("headroom", "proportional", "absolute", "range"),
   impact_result = NULL,
   threshold = 0.01,
   max_rounds = NULL,
@@ -29,6 +29,7 @@ bn_prioritizations(
   weight = NULL,
   use_parallel = TRUE,
   include_maximum_lift_deprecated = FALSE,
+  scale_ranges = NULL,
   seed = 1
 )
 }
@@ -69,8 +70,10 @@ p-values and to include a brand-subgroup slice as a task. Default 75.}
 \item{dv_metric}{Character. \code{"mean"} (default) or \code{"top_box"}.}
 
 \item{impact_shift_type}{Character. How \code{lift} is interpreted when
-shifting IV distributions: \code{"proportional"} (default) or
-\code{"absolute"}.}
+shifting IV distributions: \code{"headroom"} (default, fraction of
+each IV's gap to its own boundary), \code{"proportional"} (fraction
+of current mean), or \code{"absolute"} (fixed scale-point shift).
+See \code{bn_freq_prob_shift()} for details.}
 
 \item{impact_result}{Optional. Output of \code{bn_impact()} passed through
 to seed greedy round 1 ordering.}

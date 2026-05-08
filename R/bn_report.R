@@ -124,11 +124,18 @@ bn_report <- function(
     # the impact dashboard. Defaults: "absolute" for both — matches the
     # static-write defaults so all three views (HTML / standard / dynamic)
     # land on the same choice on first open. Users can still toggle.
-    outcome_display = c("absolute", "proportional"),
-    shift_type      = c("absolute", "proportional")
+    # Outcome Display initial value. When NULL (default) the impact
+    # dashboard auto-defaults to Point Change for dichotomous DVs and
+    # % Change otherwise. Pass "absolute" or "proportional" to override.
+    outcome_display = NULL,
+    shift_type      = c("absolute", "proportional", "headroom", "range")
 ){
 
-  outcome_display <- match.arg(outcome_display)
+  # NULL outcome_display means "auto-detect by DV type" inside the impact
+  # dashboard render. Explicit values still validated.
+  if (!is.null(outcome_display)) {
+    outcome_display <- match.arg(outcome_display, c("absolute", "proportional"))
+  }
   shift_type      <- match.arg(shift_type)
 
   # --- auto-name from title/subtitle ---
@@ -826,7 +833,7 @@ bn_report <- function(
 .bn_report_render_attribute_impacts_dashboard <- function(
     impacts, result_name, dashboard_id, is_community = FALSE,
     qc_mode = FALSE,
-    outcome_display = "absolute", shift_type = "absolute",
+    outcome_display = NULL, shift_type = "absolute",
     # When non-NULL, emit the dashboard markup with a `data-impact-data-id`
     # pointer instead of an inline `<script class="impact-data">` payload —
     # the caller is then responsible for emitting that shared script once.
@@ -884,7 +891,7 @@ bn_report <- function(
   # ("lift_0_propdisplay"). Strip in both positions so brand name
   # extraction below sees a clean "lift_N_<brand>" form.
   .strip_display <- function(x) gsub("_(propdisplay|absdisplay)(_|$)", "\\2", x)
-  .strip_shift   <- function(x) gsub("_(propshift|absshift)(_|$)", "\\2", x)
+  .strip_shift   <- function(x) gsub("_(propshift|absshift|headshift|rangeshift)(_|$)", "\\2", x)
   base_suffixes <- unique(.strip_display(.strip_shift(metric_suffixes)))
 
   all_lift_bases    <- grep("^lift", base_suffixes, value = TRUE)
@@ -896,20 +903,81 @@ bn_report <- function(
   } else character(0)
   focus_options <- c("Market", brand_names)
 
+  # Metric options use bare lift parameter values ("Effect at 0.10") so
+  # the labels stay accurate regardless of which Shift Type the user has
+  # selected — Shift Type controls the interpretation of the parameter.
   metric_info <- list()
   for (ml in market_lift_bases) {
-    label <- if (ml %in% c("lift", "lift_0")) "Average Lift"
-             else paste0(sub("lift_", "", ml), "% Lift")
+    label <- if (ml %in% c("lift", "lift_0")) {
+      "Average Effect"
+    } else {
+      pct <- sub("lift_", "", ml)
+      pct_num <- suppressWarnings(as.numeric(pct))
+      lift_val <- if (!is.na(pct_num)) format(pct_num / 100, nsmall = 2) else pct
+      paste0("Effect at ", lift_val)
+    }
     metric_info[[length(metric_info) + 1]] <- list(label = label, key = ml)
   }
   if ("maxVmin" %in% base_suffixes) {
     metric_info[[length(metric_info) + 1]] <- list(
-      label = "Max vs Min", key = "maxVmin"
+      label = "Best-vs-Worst Effect", key = "maxVmin"
     )
   }
   if ("mi" %in% base_suffixes) {
     metric_info[[length(metric_info) + 1]] <- list(
-      label = "Mutual Information", key = "mi"
+      label = "Explanatory Value", key = "mi"
+    )
+  }
+
+  # ------------------------------------------------------------------
+  # "Assess" preset map — the new high-level dropdown that drives
+  # Analysis + Shift Type with curated combos. Each entry describes
+  # one preset (Current / Improvement / Maximum) and which Analysis
+  # metric_key / Shift Type key to set when the user picks it.
+  #
+  # Presets are only added when the data actually supports them:
+  #   - Current: requires an "Average Effect" metric (lift / lift_0)
+  #   - Improvement: requires a non-zero lift metric (closest to 10%)
+  #   - Maximum: requires a maxVmin metric
+  # If none of the three is available, the dropdown is hidden entirely.
+  # ------------------------------------------------------------------
+  .find_average_key <- function() {
+    candidates <- c("lift_0", "lift")
+    hit <- intersect(candidates, market_lift_bases)
+    if (length(hit) > 0) hit[1] else NA_character_
+  }
+  .find_improvement_key <- function() {
+    # Pick the lift_<N> closest to N = 10 (Effect at 0.10 preferred).
+    nz <- setdiff(market_lift_bases, c("lift", "lift_0"))
+    if (length(nz) == 0) return(NA_character_)
+    pcts <- suppressWarnings(as.numeric(sub("^lift_", "", nz)))
+    valid <- !is.na(pcts)
+    if (!any(valid)) return(NA_character_)
+    nz <- nz[valid]; pcts <- pcts[valid]
+    nz[which.min(abs(pcts - 10))]
+  }
+  preset_map <- list()
+  avg_key <- .find_average_key()
+  if (!is.na(avg_key)) {
+    preset_map[["Current Impact"]] <- list(
+      metric = avg_key, shift = "rangeshift",
+      question = "What is happening?"
+    )
+  }
+  imp_key <- .find_improvement_key()
+  if (!is.na(imp_key)) {
+    preset_map[["Intervention Impact"]] <- list(
+      metric = imp_key, shift = "headshift",
+      question = "What should we do?"
+    )
+  }
+  if ("maxVmin" %in% base_suffixes) {
+    # Shift type doesn\'t affect maxVmin; pick rangeshift as a stable
+    # default so the dropdown lands on a defined value when switching
+    # to this preset.
+    preset_map[["Maximum Impact"]] <- list(
+      metric = "maxVmin", shift = "rangeshift",
+      question = "What is possible?"
     )
   }
 
@@ -917,8 +985,18 @@ bn_report <- function(
   # column exists (which is always, post-Pass-A) — matches Excel.
   has_outcome_display <- any(grepl("_(propdisplay|absdisplay)$", metric_suffixes))
 
-  # Shift Type (Pass B) offered when _propshift / _absshift tags exist.
-  has_shift_type <- any(grepl("_(propshift|absshift)_", metric_suffixes))
+  # Shift Type (Pass B) offered when _propshift / _absshift / _headshift
+  # / _rangeshift tags exist on lift columns.
+  has_shift_type <- any(grepl("_(propshift|absshift|headshift|rangeshift)_", metric_suffixes))
+
+  # Auto-default Outcome Display by DV type: dichotomous DVs read more
+  # naturally as raw probability points (Point Change / "absdisplay"),
+  # everything else as % change. Only fires when caller didn\'t pass an
+  # explicit outcome_display; explicit values are respected.
+  is_dichotomous_dv <- isTRUE(meta[["is_dichotomous_dv"]])
+  if (is.null(outcome_display)) {
+    outcome_display <- if (is_dichotomous_dv) "absolute" else "proportional"
+  }
 
   # In community mode, Community IS the id column, so no secondary Community
   # column; there's also no Label.
@@ -1002,6 +1080,10 @@ bn_report <- function(
     has_battery       = has_battery,
     has_label         = has_label,
     battery_groups    = battery_group_ivs,
+    # Assess preset map — JS reads this on Assess dropdown change to
+    # set the Analysis (data-dim="metric") and Shift Type (data-dim="shift")
+    # dropdowns. Empty list => no Assess dropdown rendered.
+    presets           = preset_map,
     # Bootstrap mode: bn_impact emits per-metric `<col>_p_value` columns
     # when impact_n_boot > 1. When TRUE, the JS blackout rule looks up the
     # bootstrap p-value of whichever metric is currently selected, instead
@@ -1071,10 +1153,10 @@ bn_report <- function(
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label>Outcome Display:</label>',
+          '<label>Outcome:</label>',
           '<select class="impact-ctrl" data-dim="display">',
-            '<option value="absdisplay"', abs_sel, '>Absolute</option>',
-            '<option value="propdisplay"', prop_sel, '>Proportional</option>',
+            '<option value="propdisplay"', prop_sel, '>% Change</option>',
+            '<option value="absdisplay"', abs_sel, '>Point Change</option>',
           '</select>',
         '</div>',
         '<span class="impact-warning" data-for="display"></span>',
@@ -1084,17 +1166,23 @@ bn_report <- function(
 
   # Shift Type dropdown (Pass B). Controls how the lift metric interprets
   # the IV distribution shift. MaxVmin/mi are shift-invariant; JS suppresses
-  # the effect when those metrics are selected.
+  # the effect when those metrics are selected. "Headroom" is the most
+  # comparable cross-scale option (every IV moves the same fraction of its
+  # own gap to the boundary).
   shift_ctrl <- if (has_shift_type) {
-    abs_sel  <- if (shift_type == "absolute")     " selected" else ""
-    prop_sel <- if (shift_type == "proportional") " selected" else ""
+    abs_sel   <- if (shift_type == "absolute")     " selected" else ""
+    prop_sel  <- if (shift_type == "proportional") " selected" else ""
+    head_sel  <- if (shift_type == "headroom")     " selected" else ""
+    range_sel <- if (shift_type == "range")        " selected" else ""
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
           '<label>Shift Type:</label>',
           '<select class="impact-ctrl" data-dim="shift">',
-            '<option value="absshift"', abs_sel, '>Absolute</option>',
-            '<option value="propshift"', prop_sel, '>Proportional</option>',
+            '<option value="propshift"',  prop_sel,  '>% of Current Mean</option>',
+            '<option value="absshift"',   abs_sel,   '>Fixed Step</option>',
+            '<option value="headshift"',  head_sel,  '>% Toward Top</option>',
+            '<option value="rangeshift"', range_sel, '>% of Range</option>',
           '</select>',
         '</div>',
         '<span class="impact-warning" data-for="shift"></span>',
@@ -1205,12 +1293,33 @@ bn_report <- function(
   paste0(
     '<div class="impact-dashboard" data-dashboard-id="', dashboard_id, '"', shared_attr, '>',
     '  <div class="impact-controls">',
-    '    <div class="impact-ctrl-cell">',
-    '      <div class="impact-ctrl-row">',
-    '        <label>Analysis:</label>',
-    '        <select class="impact-ctrl" data-dim="metric">', metric_options_html, '</select>',
-    '      </div>',
-    '    </div>',
+    # Row 1 (framing / scope controls): Assess, Index By, Focus, Outcome Display, Weight.
+    # Assess drives Row 2; Index By / Focus filter the table; Outcome
+    # Display picks the units; Weight toggles unweighted/weighted view.
+    # Assess is only emitted when at least one preset is supported by
+    # the data. "Current Impact" is selected by default.
+    if (length(preset_map) > 0) {
+      assess_names <- names(preset_map)
+      assess_options_html <- paste0(
+        paste0('<option value="', assess_names, '"',
+               ifelse(assess_names == "Current Impact", " selected", ""),
+               '>', assess_names, '</option>',
+               collapse = ""),
+        '<option value="Custom">Custom</option>'
+      )
+      paste0(
+        '    <div class="impact-ctrl-cell">',
+          '<div class="impact-ctrl-row">',
+            '<label>Assess:</label>',
+            '<select class="impact-ctrl" data-dim="assess">', assess_options_html, '</select>',
+          '</div>',
+          # Question feedback — JS populates with the matching preset\'s
+          # question (e.g. "What is happening?"). Empty when on Custom.
+          '<span class="impact-warning warn-grey assess-feedback"></span>',
+        '</div>'
+      )
+    } else "",
+    '    ', indexby_ctrl,
     '    <div class="impact-ctrl-cell">',
     '      <div class="impact-ctrl-row">',
     '        <label>Focus:</label>',
@@ -1218,10 +1327,19 @@ bn_report <- function(
     '      </div>',
     '      <span class="impact-warning" data-for="focus"></span>',
     '    </div>',
-    '    ', indexby_ctrl,
-    '    ', weight_ctrl,
     '    ', display_ctrl,
-    '    ', shift_ctrl,
+    '    ', weight_ctrl,
+    # Math controls Assess drives. Marked .assess-driven so they hide
+    # when the Assess dropdown is on a preset (Current / Intervention /
+    # Maximum Impact) and only reveal on Custom. Inline with the framing
+    # controls — auto-fit grid wraps as needed.
+    '    <div class="impact-ctrl-cell assess-driven">',
+    '      <div class="impact-ctrl-row">',
+    '        <label>Analysis:</label>',
+    '        <select class="impact-ctrl" data-dim="metric">', metric_options_html, '</select>',
+    '      </div>',
+    '    </div>',
+    '    ', sub('class="impact-ctrl-cell', 'class="impact-ctrl-cell assess-driven', shift_ctrl, fixed = TRUE),
     '  </div>',
     '  <div class="impact-table-wrap">',
     '    <table class="impact-table">',
@@ -1436,6 +1554,17 @@ bn_report <- function(
   max_label             <- "Maximum Lift"
   max_deprecated_label  <- "Maximum Lift (Deprecated)"
 
+  # Describe the lift action in terms of the actual shift mode used
+  # (headroom / proportional / absolute). Default to headroom semantics
+  # if no shift_type was stored on meta (older results).
+  meta_shift_type <- meta[["impact_shift_type"]] %||% "headroom"
+  lift_shift_explainer <- switch(meta_shift_type,
+    "headroom"     = paste0("Closes ", lift_pct_int, "% of each IV’s gap to its top level — every IV moves the same fraction of its own headroom, so cross-scale rankings stay comparable"),
+    "proportional" = paste0("Shifts each IV’s mean by ", lift_pct_int, "% of its current value"),
+    "absolute"     = paste0("Adds ", lift_pct_int / 100, " scale points to each IV’s mean"),
+    paste0("Shifts each IV’s distribution by ", lift_pct_int, "%")
+  )
+
   # Binary outcome detection — when every dv_estimate sits in [0, 1] the
   # outcome is a probability (top_box / 0-1 DV). The JS render then formats
   # Outcome Estimate, Cumulative Gain and Incremental Lift as XX.X% rather
@@ -1523,7 +1652,7 @@ bn_report <- function(
         '<div class="priort-ctrl-row">',
           '<label>Display:</label>',
           '<select class="priort-ctrl" data-dim="chart">',
-            '<option value="Percent Change" selected>Percent Change</option>',
+            '<option value="% Change" selected>% Change</option>',
             '<option value="Point Change">Point Change</option>',
           '</select>',
         '</div>',
@@ -1566,6 +1695,15 @@ bn_report <- function(
     '      </table>',
     '    </div>',
     '    <div class="priort-chart-wrap">',
+    paste0(
+      '      <button type="button" class="priort-download-btn" title="Download chart as PNG">',
+      # Image icon — same SVG the network view\'s Download PNG button uses
+      # (bn_visNetwork_deliverable_interactivity.R icons.image). Reused
+      # here so all "download chart as PNG" affordances in the report look
+      # identical.
+      '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 512 512" fill="currentColor"><path d="M0 96c0-35.3 28.7-64 64-64h384c35.3 0 64 28.7 64 64v320c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6h96 32H424c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z"/></svg>',
+      '</button>'
+    ),
     '      <svg class="priort-chart" xmlns="http://www.w3.org/2000/svg"></svg>',
     '      <div class="priort-tooltip" style="display:none;"></div>',
     '    </div>',
@@ -1586,7 +1724,7 @@ bn_report <- function(
     if (has_p) paste0(
       '      <p><b>p-value</b> &mdash; Noise-floor test: proportion of bootstraps where this step’s gain &le; the noise floor</p>'
     ) else "",
-    '      <p><b>', htmltools::htmlEscape(lift_label), '</b> &mdash; Shifts each IV’s distribution upward by ', lift_pct_int, '%, reflecting a realistic improvement scenario</p>',
+    '      <p><b>', htmltools::htmlEscape(lift_label), '</b> &mdash; ', htmltools::htmlEscape(lift_shift_explainer), '</p>',
     '      <p><b>', htmltools::htmlEscape(max_label), '</b> &mdash; Sets each IV to its highest level as hard evidence, representing the theoretical ceiling</p>',
     # The deprecated strategy is only present when bn_prioritizations() was
     # called with include_maximum_lift_deprecated = TRUE; check the dims
@@ -1976,11 +2114,22 @@ bn_report <- function(
     # 2, and mobile collapses to 1. Gutters stay equal between whatever
     # columns remain. box-sizing keeps padding inside the declared width.
     '.impact-controls {',
-    '  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));',
+    '  display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));',
     '  column-gap: 24px; row-gap: 10px; align-items: start;',
     '  box-sizing: border-box; width: 100%;',
     '  margin-bottom: 16px; padding: 12px;',
     '  background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px;',
+    '}',
+    # When Assess is on a preset (Current / Intervention / Maximum
+    # Impact), the underlying controls it drives (Analysis + Shift Type)
+    # hide. They reappear on Custom so the user can tune freely. JS
+    # toggles `.assess-preset` on the dashboard root.
+    '.impact-dashboard.assess-preset .impact-ctrl-cell.assess-driven { display: none; }',
+    # Assess feedback question — grey italic, sits under the Assess
+    # dropdown, parallels the existing impact-warning styling.
+    '.impact-warning.assess-feedback {',
+    '  display: block; padding-left: 108px;',  # match label gutter (100 + 8)
+    '  margin-top: 2px; line-height: 1.3;',
     '}',
     # Each cell stacks: (row 1) label + select inline, (row 2) warning.
     # min-width: 0 is required so the cell can shrink below its content's
@@ -1998,13 +2147,13 @@ bn_report <- function(
     '}',
     '.impact-ctrl-row label {',
     '  font-weight: 600; color: #333; font-size: 13px; white-space: nowrap;',
-    '  flex: 0 0 130px; text-align: right;',
+    '  flex: 0 0 100px; text-align: right;',
     '}',
-    '.impact-ctrl-row .impact-ctrl { flex: 1 1 auto; min-width: 0; max-width: 220px; }',
+    '.impact-ctrl-row .impact-ctrl { flex: 1 1 auto; min-width: 0; max-width: 240px; }',
     # Warning sits below the ctrl-row so its text can wrap to multiple
     # lines without shoving the cell wider.
     '.impact-warning {',
-    '  display: block; padding-left: 138px;',  # 130px label + 8px gap
+    '  display: block; padding-left: 108px;',  # 100px label + 8px gap
     '  white-space: normal; overflow-wrap: anywhere; line-height: 1.3;',
     '}',
     '.impact-ctrl {',
@@ -2161,6 +2310,23 @@ bn_report <- function(
     '  background: #fff; border: 1px solid #d8d8d8; border-radius: 8px;',
     '  padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);',
     '}',
+    # Download-PNG affordance — visually matches the network view\'s vis-button
+    # (bn_visNetwork_deliverable_interactivity.R btnStyle) but icon-only:
+    # square, same border / radius / hover, anchored to the chart card
+    # top-right.
+    '.priort-download-btn {',
+    '  position: absolute; top: 10px; right: 10px; z-index: 2;',
+    '  width: 34px; height: 34px; padding: 0;',
+    '  background: transparent; color: black;',
+    '  border: 1px solid rgb(204, 204, 204); border-radius: 6px;',
+    '  cursor: pointer; box-sizing: border-box;',
+    '  display: flex; align-items: center; justify-content: center;',
+    '  flex-shrink: 0;',
+    '}',
+    '.priort-download-btn:hover { background: #f0f0f0; border-color: #999; }',
+    '.priort-download-btn:active { background: #e0e0e0; }',
+    # Inline SVG icon — inherits currentColor and stays vertically aligned.
+    '.priort-download-btn svg { display: block; }',
     '.priort-tooltip,',
     '.impact-tooltip {',
     '  position: fixed; pointer-events: none; z-index: 1000;',
@@ -2567,8 +2733,9 @@ bn_report <- function(
     '    var isLiftMetric = mkey && mkey !== "maxVmin" && mkey !== "mi";',
     '    var shiftAbsAndLift = (shiftVal === "absshift") && isLiftMetric;',
     '',
-    '    // 6. Focus warning: red if any subgroup base is below minimum.',
-    '    // Grey italic note when shift=absolute + lift (focus does not affect).',
+    '    // 6. Focus warning: grey italic in both cases —',
+    '    //   (a) any subgroup base below minimum (results not calculated)',
+    '    //   (b) shift=fixed step + lift metric (focus does not affect)',
     '    var focusWarn = root.querySelector(\'.impact-warning[data-for="focus"]\');',
     '    if (focusWarn) {',
     '      var focusSel = root.querySelector(\'.impact-ctrl[data-dim="focus"]\');',
@@ -2584,11 +2751,11 @@ bn_report <- function(
     '        });',
     '        if (minBaseAll != null && minBaseAll < data.min_base_for_lift) {',
     '          focusWarn.textContent = "Results not calculated because base is below " + data.min_base_for_lift;',
-    '          focusSel.classList.add("warn");',
+    '          focusWarn.classList.add("warn-grey");',
     '        }',
     '      }',
     '      if (!focusWarn.textContent && shiftAbsAndLift) {',
-    '        focusWarn.textContent = "Focus does not affect this metric when shift is absolute";',
+    '        focusWarn.textContent = "Focus does not affect this metric when shift is a fixed step";',
     '        focusWarn.classList.add("warn-grey");',
     '      }',
     '    }',
@@ -2601,7 +2768,7 @@ bn_report <- function(
     '        weightWarn.textContent = "Weights don\\u2019t affect this metric";',
     '        weightWarn.classList.add("warn-grey");',
     '      } else if (shiftAbsAndLift) {',
-    '        weightWarn.textContent = "Weights don\\u2019t affect this metric when shift is absolute";',
+    '        weightWarn.textContent = "Weights don\\u2019t affect this metric when shift is a fixed step";',
     '        weightWarn.classList.add("warn-grey");',
     '      } else {',
     '        weightWarn.textContent = "";',
@@ -2645,17 +2812,17 @@ bn_report <- function(
     '  function metricDescription(mkey) {',
     '    if (!mkey) return "";',
     '    if (mkey === "lift" || mkey === "lift_0") {',
-    '      return "Indexed by average market lift. Average lift measures the overall influence of each attribute on the outcome by shifting each attribute level up by 5% and averaging the resulting changes.";',
+    '      return "Indexed by average effect. Measures the outcome\\u2019s sensitivity to a small symmetric perturbation (\\u00b15%) around each attribute\\u2019s current state. The interpretation of 5% depends on the selected Shift Type.";',
     '    }',
     '    if (mkey.indexOf("lift_") === 0) {',
     '      var pct = mkey.replace("lift_", "");',
-    '      return "Indexed by " + pct + "% market lift. " + pct + "% lift measures how much the outcome changes when " + pct + "% of respondents for each attribute shift up by one level.";',
+    '      return "Indexed by " + pct + "% lift. Measures how much the outcome changes when each attribute\\u2019s distribution shifts by " + pct + "% \\u2014 the meaning of " + pct + "% follows the selected Shift Type (% of current mean, fixed step, % toward top, or % of range).";',
     '    }',
     '    if (mkey === "maxVmin") {',
-    '      return "Indexed by max vs min impact. Max vs min measures the difference in the outcome between the best-case and worst-case scenario for each attribute.";',
+    '      return "Indexed by best-vs-worst effect. Measures the outcome difference between setting all respondents to the top of each attribute versus all at the bottom.";',
     '    }',
     '    if (mkey === "mi") {',
-    '      return "Indexed by mutual information. Mutual information measures the strength of the relationship between each attribute and the outcome.";',
+    '      return "Indexed by explanatory value. Measures the statistical strength of the relationship between each attribute and the outcome (mutual information), independent of intervention direction or shift type.";',
     '    }',
     '    return "Indexed by " + mkey;',
     '  }',
@@ -2680,8 +2847,99 @@ bn_report <- function(
     '    return "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")";',
     '  }',
     '',
+    '  // Assess preset dropdown — drives Analysis (metric) and Shift Type',
+    '  // to one of three curated combos. Selecting Custom unhides those',
+    '  // dropdowns and leaves them user-tunable. Toggling metric or shift',
+    '  // directly auto-flips Assess back to Custom so the visible state',
+    '  // and the underlying controls stay in sync.',
+    '  var assessSel = root.querySelector(\'.priort-ctrl[data-dim="assess"]\') ||',
+    '                  root.querySelector(\'.impact-ctrl[data-dim="assess"]\');',
+    '  var metricSel = root.querySelector(\'.impact-ctrl[data-dim="metric"]\');',
+    '  var shiftSel  = root.querySelector(\'.impact-ctrl[data-dim="shift"]\');',
+    '  var assessFeedback = root.querySelector(".assess-feedback");',
+    '',
+    '  function applyPreset(presetName) {',
+    '    if (!data.presets || !data.presets[presetName]) return;',
+    '    var p = data.presets[presetName];',
+    '    var changed = false;',
+    '    if (metricSel && p.metric && metricSel.value !== p.metric) {',
+    '      metricSel.value = p.metric;',
+    '      changed = true;',
+    '    }',
+    '    if (shiftSel && p.shift && shiftSel.value !== p.shift) {',
+    '      shiftSel.value = p.shift;',
+    '      changed = true;',
+    '    }',
+    '    if (changed) update();',
+    '  }',
+    '',
+    '  function presetMatchingCurrent() {',
+    '    if (!data.presets) return null;',
+    '    var mv = metricSel ? metricSel.value : null;',
+    '    var sv = shiftSel  ? shiftSel.value  : null;',
+    '    var keys = Object.keys(data.presets);',
+    '    for (var i = 0; i < keys.length; i++) {',
+    '      var p = data.presets[keys[i]];',
+    '      var metricOk = !p.metric || p.metric === mv;',
+    '      var shiftOk  = !p.shift  || p.shift  === sv || !shiftSel;',
+    '      if (metricOk && shiftOk) return keys[i];',
+    '    }',
+    '    return null;',
+    '  }',
+    '',
+    '  // Reflect the Assess state visually: hide row 2 (Analysis + Shift)',
+    '  // when on a preset, show on Custom. Populate the feedback span',
+    '  // with the matching preset\'s question.',
+    '  function applyAssessVisualState() {',
+    '    if (!assessSel) return;',
+    '    var dash = root.classList.contains("impact-dashboard")',
+    '      ? root',
+    '      : (root.querySelector(".impact-dashboard") || root);',
+    '    var v = assessSel.value;',
+    '    if (v === "Custom") {',
+    '      dash.classList.remove("assess-preset");',
+    '    } else {',
+    '      dash.classList.add("assess-preset");',
+    '    }',
+    '    if (assessFeedback) {',
+    '      var q = (data.presets && data.presets[v] && data.presets[v].question) || "";',
+    '      assessFeedback.textContent = q;',
+    '    }',
+    '  }',
+    '',
+    '  function syncAssessFromControls() {',
+    '    if (!assessSel) return;',
+    '    var match = presetMatchingCurrent();',
+    '    assessSel.value = match || "Custom";',
+    '    applyAssessVisualState();',
+    '  }',
+    '',
+    '  if (assessSel) {',
+    '    assessSel.addEventListener("change", function() {',
+    '      if (assessSel.value !== "Custom") {',
+    '        applyPreset(assessSel.value);',
+    '      }',
+    '      applyAssessVisualState();',
+    '    });',
+    '    // On initial render, if the dropdown is set to a preset (default',
+    '    // is "Now"), apply that preset to the underlying controls so the',
+    '    // table loads against the right metric/shift.',
+    '    if (assessSel.value && assessSel.value !== "Custom") {',
+    '      applyPreset(assessSel.value);',
+    '    }',
+    '    applyAssessVisualState();',
+    '  }',
+    '',
     '  root.querySelectorAll(".impact-ctrl").forEach(function(sel) {',
-    '    sel.addEventListener("change", update);',
+    '    var dim = sel.getAttribute("data-dim");',
+    '    sel.addEventListener("change", function() {',
+    '      // Direct edits to metric / shift bump Assess to Custom (unless',
+    '      // the new combo happens to match another preset).',
+    '      if (assessSel && (dim === "metric" || dim === "shift")) {',
+    '        syncAssessFromControls();',
+    '      }',
+    '      update();',
+    '    });',
     '  });',
     '',
     '  // --- Sortable headers ---',
@@ -2864,7 +3122,7 @@ bn_report <- function(
     '',
     '    var disp = root.querySelector(\'.priort-ctrl[data-dim="chart"]\');',
     '    if (disp) {',
-    '      var pctOpt = disp.querySelector(\'option[value="Percent Change"]\');',
+    '      var pctOpt = disp.querySelector(\'option[value="% Change"]\');',
     '      if (pctOpt) pctOpt.disabled = isDeprecated;',
     '      if (isDeprecated && disp.value !== "Point Change") {',
     '        disp.value = "Point Change";',
@@ -2872,8 +3130,8 @@ bn_report <- function(
     '      disp.disabled = isDeprecated;',
     '    }',
     '',
-    '    var mode = isDeprecated ? "Point Change" : (disp ? disp.value : "Percent Change");',
-    '    if (mode === "Percent Change") {',
+    '    var mode = isDeprecated ? "Point Change" : (disp ? disp.value : "% Change");',
+    '    if (mode === "% Change") {',
     '      root.classList.add("mode-percent");',
     '      root.classList.remove("mode-point");',
     '    } else {',
@@ -3052,19 +3310,19 @@ bn_report <- function(
     '    var plotH = H - pad.t - pad.b;',
     '',
     '    // Display mode: "Point Change" plots cumulative_gain (with',
-    '    // incremental lift as the bar segment) or "Percent Change" plots',
+    '    // incremental lift as the bar segment) or "% Change" plots',
     '    // cumulative_gain_pct × 100.',
     '    var chartCtrl = root.querySelector(\'.priort-ctrl[data-dim="chart"]\');',
-    '    var chartMode = chartCtrl ? chartCtrl.value : "Percent Change";',
+    '    var chartMode = chartCtrl ? chartCtrl.value : "% Change";',
     '    function valueOf(r) {',
-    '      if (chartMode === "Percent Change") {',
+    '      if (chartMode === "% Change") {',
     '        return (r.cumulative_gain_pct == null) ? null : r.cumulative_gain_pct * 100;',
     '      }',
     '      return r.cumulative_gain;',
     '    }',
     '    function valueLabel(v) {',
     '      if (v == null || isNaN(v)) return "";',
-    '      if (chartMode === "Percent Change") return v.toFixed(1) + "%";',
+    '      if (chartMode === "% Change") return v.toFixed(1) + "%";',
     '      return data.is_binary ? (v * 100).toFixed(1) + "%" : v.toFixed(2);',
     '    }',
     '',
@@ -3119,7 +3377,7 @@ bn_report <- function(
     '      var y = yScale(v);',
     '      el("line", { x1: pad.l, x2: pad.l + plotW, y1: y, y2: y, "class": "grid-line" });',
     '      var labelV = Math.abs(v) < EPS ? 0 : v;',
-    '      var lbl = (chartMode === "Percent Change")',
+    '      var lbl = (chartMode === "% Change")',
     '        ? labelV.toFixed(0) + "%"',
     '        : (data.is_binary ? (labelV * 100).toFixed(0) + "%" : labelV.toFixed(2));',
     '      el("text", { x: pad.l - 6, y: y + 3, "text-anchor": "end", "class": "ax-text" }).textContent = lbl;',
@@ -3161,7 +3419,7 @@ bn_report <- function(
     '        if (v == null || isNaN(v)) return "";',
     '        return (v * 100).toFixed(1) + "%";',
     '      }',
-    '      if (chartMode === "Percent Change") {',
+    '      if (chartMode === "% Change") {',
     '        if (r.cumulative_gain_pct != null) parts.push("Cumulative Gain %: " + fmtTipPct(r.cumulative_gain_pct));',
     '        if (r.marginal_gain_pct != null) parts.push("Incremental Lift %: " + fmtTipPct(r.marginal_gain_pct));',
     '      } else {',
@@ -3259,6 +3517,96 @@ bn_report <- function(
     '  root.querySelectorAll(".priort-ctrl").forEach(function(sel) {',
     '    sel.addEventListener("change", render);',
     '  });',
+    '',
+    '  // Download-PNG button — serializes the SVG with inline styles +',
+    '  // a white background, draws it onto a 2× canvas for retina-quality',
+    '  // rasterization, and triggers a file download. Filename includes',
+    '  // the active strategy / focus so multiple downloads stay distinct.',
+    '  function downloadChartPng() {',
+    '    var svg = root.querySelector(".priort-chart");',
+    '    if (!svg) return;',
+    '    var rect = svg.getBoundingClientRect();',
+    '    var W = Math.round(rect.width || svg.clientWidth || 800);',
+    '    var H = Math.round(rect.height || svg.clientHeight || 480);',
+    '    if (W === 0 || H === 0) return;',
+    '',
+    '    // Clone the SVG and inline the styles. The chart elements use CSS',
+    '    // classes that resolve via the page stylesheet — once the SVG is',
+    '    // serialized into a standalone image, those classes have no rules',
+    '    // unless we embed them inside the SVG.',
+    '    var clone = svg.cloneNode(true);',
+    '    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");',
+    '    clone.setAttribute("width", W);',
+    '    clone.setAttribute("height", H);',
+    '    clone.setAttribute("viewBox", "0 0 " + W + " " + H);',
+    '',
+    '    var styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");',
+    '    styleEl.textContent = ',
+    '      ".ax-line { stroke: #888; stroke-width: 1; }" +',
+    '      ".grid-line { stroke: #e0e0e0; stroke-width: 1; }" +',
+    '      ".ax-text { fill: #555; font-size: 11px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; }" +',
+    '      ".bar-prev { fill: #D9D9D9; }" +',
+    '      ".bar-incr { fill: #595959; }" +',
+    '      ".cum-line { stroke: #595959; stroke-width: 2; fill: none; }" +',
+    '      ".cum-marker { fill: #595959; stroke: #595959; }" +',
+    '      ".bar-label { fill: #333; font-size: 11px; text-anchor: middle; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; }" +',
+    '      ".x-label { fill: #333; font-size: 11px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; }";',
+    '    clone.insertBefore(styleEl, clone.firstChild);',
+    '',
+    '    // White background — SVG is transparent by default and a',
+    '    // checkerboard PNG would look broken in slides / docs.',
+    '    var bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");',
+    '    bgRect.setAttribute("width", "100%");',
+    '    bgRect.setAttribute("height", "100%");',
+    '    bgRect.setAttribute("fill", "#ffffff");',
+    '    clone.insertBefore(bgRect, clone.firstChild);',
+    '',
+    '    var serializer = new XMLSerializer();',
+    '    var svgStr = serializer.serializeToString(clone);',
+    '    var svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });',
+    '    var url = URL.createObjectURL(svgBlob);',
+    '',
+    '    var img = new Image();',
+    '    img.onload = function() {',
+    '      var scale = 2;  // 2× for retina-quality',
+    '      var canvas = document.createElement("canvas");',
+    '      canvas.width  = W * scale;',
+    '      canvas.height = H * scale;',
+    '      var ctx = canvas.getContext("2d");',
+    '      ctx.scale(scale, scale);',
+    '      ctx.drawImage(img, 0, 0, W, H);',
+    '      URL.revokeObjectURL(url);',
+    '',
+    '      // Build a sensible filename from the active dropdowns.',
+    '      function slug(s) {',
+    '        return (s || "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "chart";',
+    '      }',
+    '      var parts = ["prioritization"];',
+    '      var stratSel = root.querySelector(\'.priort-ctrl[data-dim="strategy"]\');',
+    '      if (stratSel) parts.push(slug(stratSel.value));',
+    '      var sgSel = root.querySelector(\'.priort-ctrl[data-dim="subgroup"]\');',
+    '      if (sgSel && sgSel.value !== "Total") parts.push(slug(sgSel.value));',
+    '      var focusSel = root.querySelector(\'.priort-ctrl[data-dim="focus"]\');',
+    '      if (focusSel && focusSel.value !== "Market") parts.push(slug(focusSel.value));',
+    '      var fname = parts.join("_") + ".png";',
+    '',
+    '      canvas.toBlob(function(blob) {',
+    '        if (!blob) return;',
+    '        var pngUrl = URL.createObjectURL(blob);',
+    '        var a = document.createElement("a");',
+    '        a.href = pngUrl;',
+    '        a.download = fname;',
+    '        document.body.appendChild(a);',
+    '        a.click();',
+    '        document.body.removeChild(a);',
+    '        URL.revokeObjectURL(pngUrl);',
+    '      }, "image/png");',
+    '    };',
+    '    img.onerror = function() { URL.revokeObjectURL(url); };',
+    '    img.src = url;',
+    '  }',
+    '  var dlBtn = root.querySelector(".priort-download-btn");',
+    '  if (dlBtn) dlBtn.addEventListener("click", downloadChartPng);',
     '',
     '  // Redraw chart when the panel becomes visible (e.g., user clicks the',
     '  // Prioritization tab for the first time after page load — the SVG was',

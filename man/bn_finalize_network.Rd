@@ -27,7 +27,7 @@ bn_finalize_network(
   impact_n_boot = 1,
   impact_n_querry = 10000,
   impact_lift = c(0, 0.1),
-  prioritize_shift_type = c("proportional", "absolute"),
+  prioritize_shift_type = c("headroom", "proportional", "absolute", "range"),
   impact_include_base = TRUE,
   batteries = NULL,
   battery_groups = NULL,
@@ -39,7 +39,8 @@ bn_finalize_network(
   prioritize_noise_tail = 1/3,
   prioritize_sig_threshold = 0.05,
   prioritize_marginal_threshold = 0.1,
-  prioritize_include_maximum_lift_deprecated = FALSE,
+  include_prioritize_max_lift_deprecated = FALSE,
+  scale_ranges = "auto",
   tool_tip_edge_prefix = NULL,
   viz_size_node_by_impact = TRUE,
   viz_include_dv = FALSE,
@@ -114,10 +115,14 @@ attribute/community, weighted/unweighted impact tables. Default TRUE.}
 \code{c(0, 0.1)}.}
 
 \item{prioritize_shift_type}{Character. IV shift interpretation for the
-greedy prioritization path only: \code{"proportional"} (default) shifts
-the IV mean by a fraction of its current value; \code{"absolute"} shifts
-by a fixed number of scale points. (Impacts always precompute BOTH
-variants — no parameter needed there.)}
+greedy prioritization path only: \code{"headroom"} (default) shifts
+each IV by \code{lift} times the room remaining toward its own
+boundary — same fraction of headroom for every IV, so mixed-scale
+batteries (Likerts + binaries + counts) rank by DV responsiveness
+rather than scale geometry. \code{"proportional"} shifts by a
+fraction of the current mean; \code{"absolute"} shifts by a fixed
+number of scale points. (Impacts always precompute BOTH
+proportional and absolute variants — no parameter needed there.)}
 
 \item{impact_include_base}{Logical. Include base sizes in impact tables.
 Default TRUE.}
@@ -148,7 +153,7 @@ consistent colour coding. Default 0.05.}
 \item{prioritize_marginal_threshold}{Numeric. P-value threshold for the
 "marginal" colour band stored in the prioritizations meta. Default 0.10.}
 
-\item{prioritize_include_maximum_lift_deprecated}{Logical. Forwarded to
+\item{include_prioritize_max_lift_deprecated}{Logical. Forwarded to
 \code{bn_prioritizations()}. When TRUE, runs an additional Maximum
 Lift analysis with no baseline comparison (cumulative_gain ==
 dv_estimate). Surfaces in the writer/report as the

@@ -20,7 +20,8 @@ append_bn_unified_guide(
   lift = 0.1,
   min_base_for_lift = 100,
   min_base_for_sim = 100,
-  min_base_for_boot = 100
+  min_base_for_boot = 100,
+  impact_shift_type = "headroom"
 )
 }
 \arguments{

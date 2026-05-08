@@ -269,7 +269,8 @@ bn_write <- function(
       min_base_for_sim  = min_base_for_sim %||% min_base_for_lift %||%
         impact_meta[["min_base_for_lift"]] %||% 100L,
       min_base_for_boot = min_base_for_boot %||%
-        priort_meta[["min_base_for_boot"]] %||% 100L
+        priort_meta[["min_base_for_boot"]] %||% 100L,
+      impact_shift_type = priort_meta[["impact_shift_type"]] %||% "headroom"
     )
   } else if (has_impacts) {
     # Impacts only — mirror the arg extraction done by bn_impact_write.
