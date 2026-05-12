@@ -1,8 +1,9 @@
 :root {
-  --header-bg: #1a1a2e;
-  --accent-color: #4361ee;
+  --header-bg: #ffffff;
+  --header-text: #333333;
+  --accent-color: #333333;
   --icon-bg: #ffffff;
-  --icon-border: #000000;
+  --icon-border: #e0e0e0;
 }
 
 * {
@@ -18,8 +19,8 @@ html, body {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: #f0f2f5;
-  color: #1a1a2e;
+  background: #fafafa;
+  color: #333;
 }
 
 /* ===== Library View ===== */
@@ -31,21 +32,23 @@ body {
 
 header {
   background: var(--header-bg);
-  color: white;
-  padding: 24px 32px;
+  color: var(--header-text);
+  padding: 20px 32px 12px;
+  border-bottom: 2px solid #333;
   -webkit-app-region: drag;
   flex-shrink: 0;
 }
 
 header h1 {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .subtitle {
   font-size: 13px;
-  color: #8888aa;
-  margin-top: 4px;
+  font-weight: 400;
+  color: #666;
+  margin-top: 2px;
 }
 
 main {
@@ -62,43 +65,45 @@ main {
 }
 
 .app-card {
-  background: white;
-  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
   padding: 20px;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: background 0.15s, border-color 0.15s;
   position: relative;
-  border: 2px solid transparent;
 }
 
 .app-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  border-color: var(--accent-color);
+  background: #f7f7f7;
+  border-color: #333;
 }
 
 .app-card .app-icon {
   width: 48px;
   height: 48px;
   background: var(--icon-bg);
-  border: 2px solid var(--icon-border);
-  border-radius: 12px;
+  border: 1px solid var(--icon-border);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  color: white;
+  color: #333;
   margin-bottom: 12px;
 }
 
 .app-card .app-icon.has-initial {
-  background: linear-gradient(135deg, var(--accent-color), #3a0ca3);
-  border: none;
+  background: #f0f0f0;
+  border: 1px solid #e0e0e0;
+  color: #333;
+  font-weight: 600;
 }
 
 .app-card .app-name {
   font-size: 15px;
   font-weight: 600;
+  color: #333;
   margin-bottom: 4px;
   word-break: break-word;
 }
@@ -123,8 +128,8 @@ main {
 .app-actions button {
   width: 28px;
   height: 28px;
-  border: none;
-  background: #f0f2f5;
+  border: 1px solid #e0e0e0;
+  background: #fff;
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
@@ -132,18 +137,20 @@ main {
   align-items: center;
   justify-content: center;
   color: #666;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
   -webkit-app-region: no-drag;
 }
 
 .app-actions button:hover {
-  background: #e0e2e5;
-  color: #1a1a2e;
+  background: #f0f0f0;
+  color: #222;
+  border-color: #ccc;
 }
 
 .app-actions button.delete:hover {
   background: #fee;
-  color: #e74c3c;
+  color: #c0392b;
+  border-color: #f5c6c6;
 }
 
 .app-card.loading {
@@ -158,11 +165,11 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.8);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--accent-color);
+  color: #333;
 }
 
 /* ---- Empty State ---- */
@@ -177,24 +184,28 @@ main {
 }
 
 .empty-icon {
-  width: 80px;
-  height: 80px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent-color) 15%, white);
-  color: var(--accent-color);
-  font-size: 40px;
+  background: #f0f0f0;
+  color: #444;
+  font-size: 36px;
+  font-weight: 300;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .empty-state h2 {
-  font-size: 20px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
   margin-bottom: 8px;
 }
 
 .empty-state p {
+  font-size: 13px;
   color: #888;
   margin-bottom: 20px;
 }
@@ -204,16 +215,16 @@ main {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   background: var(--accent-color);
-  color: white;
-  font-size: 28px;
+  color: #fff;
+  font-size: 26px;
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: background 0.15s, box-shadow 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -222,8 +233,8 @@ main {
 }
 
 .fab:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+  background: color-mix(in srgb, var(--accent-color) 85%, black);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 }
 
 /* ===== App View ===== */
@@ -235,11 +246,12 @@ main {
 
 #app-bar {
   background: var(--header-bg);
-  color: white;
-  padding: 10px 16px;
+  color: var(--header-text);
+  padding: 8px 16px;
+  border-bottom: 1px solid #ddd;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-shrink: 0;
   -webkit-app-region: drag;
 }
@@ -249,8 +261,9 @@ main {
 }
 
 #app-bar-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
+  color: var(--header-text);
 }
 
 #app-frame {
@@ -261,38 +274,47 @@ main {
 
 /* ---- Buttons ---- */
 .btn {
-  padding: 8px 18px;
-  border-radius: 8px;
-  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #333;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn:hover {
+  background: #f0f0f0;
 }
 
 .btn-primary {
   background: var(--accent-color);
-  color: white;
+  border-color: var(--accent-color);
+  color: #fff;
 }
 
 .btn-primary:hover {
   background: color-mix(in srgb, var(--accent-color) 85%, black);
+  border-color: color-mix(in srgb, var(--accent-color) 85%, black);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
+  background: #fff;
+  border-color: #ccc;
+  color: #333;
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: #f0f0f0;
 }
 
 /* ---- Modal ---- */
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -300,31 +322,36 @@ main {
 }
 
 .modal-content {
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
+  background: #fff;
+  padding: 20px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
   width: 360px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .modal-content h3 {
-  margin-bottom: 16px;
-  color: #1a1a2e;
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 14px;
 }
 
 .input {
   width: 100%;
-  padding: 10px 12px;
-  border: 2px solid #ddd;
-  border-radius: 8px;
-  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid #bbb;
+  border-radius: 3px;
+  background: #fff;
+  font-size: 13px;
+  color: #333;
   outline: none;
   margin-bottom: 16px;
   transition: border-color 0.15s;
 }
 
 .input:focus {
-  border-color: var(--accent-color);
+  border-color: #333;
 }
 
 .modal-actions {
@@ -333,22 +360,13 @@ main {
   justify-content: flex-end;
 }
 
-.modal-actions .btn-secondary {
-  background: #e0e2e5;
-  color: #333;
-}
-
-.modal-actions .btn-secondary:hover {
-  background: #d0d2d5;
-}
-
 /* ---- Drop Overlay ---- */
 #drop-overlay {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-  border: 3px dashed var(--accent-color);
-  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 2px dashed #333;
+  border-radius: 8px;
   margin: 8px;
   display: none;
   align-items: center;
@@ -363,15 +381,16 @@ main {
 
 .drop-overlay-content {
   text-align: center;
-  color: var(--accent-color);
+  color: #333;
 }
 
 .drop-overlay-icon {
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
-  font-size: 36px;
+  background: #f0f0f0;
+  color: #444;
+  font-size: 32px;
   font-weight: 300;
   display: flex;
   align-items: center;
@@ -380,8 +399,9 @@ main {
 }
 
 .drop-overlay-content p {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
+  color: #333;
 }
 
 /* ---- Loading Overlay (R startup spinner) ---- */
@@ -389,34 +409,34 @@ main {
   position: absolute;
   inset: 0;
   top: 40px; /* below the app bar */
-  background: #f0f2f5;
+  background: #fafafa;
   display: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 14px;
   z-index: 10;
 }
 
 .loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #ddd;
-  border-top-color: var(--accent-color);
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #333;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .loading-app-name {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #333;
   margin-top: 4px;
 }
 
 .loading-text {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: #888;
 }
 

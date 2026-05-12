@@ -2,8 +2,9 @@
   "appName": "App Launcher",
   "headerTitle": "App Launcher",
   "headerSubtitle": "Load and run Shiny apps",
-  "headerBackground": "#1a1a2e",
-  "accentColor": "#4361ee",
+  "headerBackground": "#ffffff",
+  "headerText": "#333333",
+  "accentColor": "#333333",
   "icon": null,
   "fileExtension": "resondex"
 }

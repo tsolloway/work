@@ -235,6 +235,11 @@ bn_prioritize <- function(
   # ===========================================================================
   # 5. Search
   # ===========================================================================
+  # Round 1 individual ordering — set inside the greedy branch and read
+  # later by the bootstrap noise-tail logic. NULL when the path didn't
+  # populate it (e.g., exhaustive search), in which case the bootstrap
+  # falls back to the legacy "tail of survivors" noise definition.
+  round1_order <- NULL
   if (search == "greedy") {
     # =========================================================================
     # Greedy forward selection
@@ -427,6 +432,47 @@ bn_prioritize <- function(
     weight_vec <- if (!is.null(weight)) df[[weight]] else NULL
     boot_gains <- matrix(NA_real_, nrow = n_boot_final, ncol = n_steps)
 
+    # ---- Noise tail composition ---------------------------------------------
+    # Tail is built from sub-threshold (rejected) IVs first, ordered by their
+    # Round 1 individual effect (strongest first — IVs that almost made the
+    # cut). Quota is `max(3, floor(n_total * noise_tail))`, computed against
+    # the FULL IV count so the noise estimate is anchored to the dataset
+    # rather than the surviving step count. If rejected < quota, the
+    # remainder is topped up with the bottom-by-step-number survivors
+    # (preserves the legacy "weakest survivors" fallback). For exhaustive
+    # search there's no Round 1 ordering — fall back to the old tail-based
+    # noise definition.
+    survivor_ivs <- unique(unlist(final_combos))
+    n_total <- length(ivs)
+    # Quota anchored to total IV count (Tyler\'s spec), not step count.
+    # With small datasets (n_total <= 4) drop the floor of 3 so we don\'t
+    # try to use more noise samples than IVs exist.
+    noise_quota <- if (n_total <= 4) {
+      max(1, floor(n_total * noise_tail))
+    } else {
+      max(3, floor(n_total * noise_tail))
+    }
+    noise_quota <- min(noise_quota, n_total)
+    if (!is.null(round1_order)) {
+      rejected_ranked  <- setdiff(round1_order, survivor_ivs)
+      take_rej         <- min(noise_quota, length(rejected_ranked))
+      noise_rejected   <- if (take_rej > 0) rejected_ranked[seq_len(take_rej)] else character(0)
+      topup_n          <- max(0L, noise_quota - length(noise_rejected))
+      topup_n          <- min(topup_n, n_steps)
+      noise_topup_steps <- if (topup_n > 0) seq.int(n_steps - topup_n + 1, n_steps) else integer(0)
+    } else {
+      noise_rejected    <- character(0)
+      topup_n           <- min(noise_quota, n_steps)
+      noise_topup_steps <- if (topup_n > 0) seq.int(n_steps - topup_n + 1, n_steps) else integer(0)
+    }
+    n_noise_rej <- length(noise_rejected)
+    noise_extra <- if (n_noise_rej > 0) {
+      matrix(NA_real_, nrow = n_boot_final, ncol = n_noise_rej,
+             dimnames = list(NULL, noise_rejected))
+    } else {
+      NULL
+    }
+
     if (verbose) cli::cli_progress_bar("Bootstrap", total = n_boot_final)
 
     # ---- Lift-strategy precomputation (fixed-grain bootstrap) ---------------
@@ -445,7 +491,10 @@ bn_prioritize <- function(
     # non-monotone p-values. See
     # https://github.com/... (bn_prioritize p-value fix) for history.
     if (strategy != "max") {
-      all_ivs_in_combos <- unique(unlist(final_combos))
+      # Include rejected noise IVs alongside the survivor IVs so their
+      # priors are precomputed too (each will be evaluated as
+      # `survivors_combo + iv_j` in the bootstrap loop).
+      all_ivs_in_combos <- unique(c(unlist(final_combos), noise_rejected))
       # Original-grain prior for each IV — fixed across bootstraps.
       orig_priors <- purrr::map(rlang::set_names(all_ivs_in_combos), function(iv) {
         as.numeric(
@@ -464,6 +513,11 @@ bn_prioritize <- function(
       boot_idx <- sample(nrow(fit_df), replace = TRUE)
       boot_df <- fit_df[boot_idx, , drop = FALSE]
       boot_w <- if (!is.null(weight_vec)) weight_vec[boot_idx] else NULL
+
+      # For computing rejected-IV noise gains (added on top of full
+      # survivor combo) — closures created here so both strategy branches
+      # can fill `noise_extra` consistently below.
+      eval_noise_after_survivors <- NULL
 
       if (strategy == "max") {
         # Max-strategy bootstrap still refits on the resampled df. At the
@@ -488,6 +542,13 @@ bn_prioritize <- function(
           ev <- ivs_max[combo]
           .query_dv(boot_grain, evidence = ev)
         })
+        # Noise IVs evaluated against the full survivor combo with hard
+        # evidence at each rejected IV's max level.
+        survivor_full <- final_combos[[length(final_combos)]]
+        eval_noise_after_survivors <- function(iv_j) {
+          ev <- ivs_max[c(survivor_full, iv_j)]
+          .query_dv(boot_grain, evidence = ev)
+        }
       } else {
         # Lift strategy: bootstrap only the IV frequency distribution. Use
         # the ORIGINAL grain (and its priors) — don't refit. This isolates
@@ -516,30 +577,66 @@ bn_prioritize <- function(
             sum(as.numeric(names(dist)) * as.numeric(dist))
           }
         })
+        survivor_full <- final_combos[[length(final_combos)]]
+        eval_noise_after_survivors <- function(iv_j) {
+          combo_full <- c(survivor_full, iv_j)
+          ev <- purrr::map(combo_full, ~boot_likelihoods[[.x]]) %>%
+            stats::setNames(combo_full)
+          updated <- suppressMessages(gRain::setEvidence(grain_bn, evidence = ev))
+          dist <- suppressMessages(gRain::querygrain(updated, nodes = dv, simplify = TRUE))
+          if (dv_metric == "top_box") {
+            dist %>% dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+          } else {
+            sum(as.numeric(names(dist)) * as.numeric(dist))
+          }
+        }
       }
 
       # Marginal gains: baseline → step 1 → step 2 → ...
       cumulative <- c(boot_baseline, combo_estimates)
       boot_gains[b, ] <- diff(cumulative)
+
+      # Per-iteration noise gains for each rejected IV in the noise tail:
+      # (survivors_combo + iv_j) − survivors_combo. Reuses the survivor
+      # combo's already-computed estimate as the baseline.
+      if (n_noise_rej > 0 && !is.null(eval_noise_after_survivors)) {
+        survivor_full_estimate <- combo_estimates[length(combo_estimates)]
+        for (j in seq_len(n_noise_rej)) {
+          iv_j <- noise_rejected[j]
+          full_est <- eval_noise_after_survivors(iv_j)
+          noise_extra[b, j] <- full_est - survivor_full_estimate
+        }
+      }
     }
 
     if (verbose) cli::cli_progress_done()
 
-    # Noise floor: average gain of the tail Q steps per bootstrap
-    if (n_steps <= 4) {
-      n_tail <- 1
+    # Noise floor — built from rejected (sub-threshold) IVs first, then
+    # topped up with the bottom-by-step survivors when fewer rejected
+    # IVs exist than the quota. Per-iteration mean is computed by
+    # combining the rejected-IV gains (`noise_extra`) with the topped-up
+    # survivor step gains (`boot_gains[, noise_topup_steps]`).
+    has_rejected_noise <- !is.null(noise_extra) && ncol(noise_extra) > 0
+    has_topup_noise    <- length(noise_topup_steps) > 0
+
+    noise_per_iter <- if (has_rejected_noise && has_topup_noise) {
+      combined <- cbind(noise_extra, boot_gains[, noise_topup_steps, drop = FALSE])
+      rowMeans(combined, na.rm = TRUE)
+    } else if (has_rejected_noise) {
+      rowMeans(noise_extra, na.rm = TRUE)
+    } else if (has_topup_noise) {
+      rowMeans(boot_gains[, noise_topup_steps, drop = FALSE], na.rm = TRUE)
     } else {
-      n_tail <- max(3, floor(n_steps * noise_tail))
+      # Defensive fallback — shouldn\'t normally hit this path
+      rep(NA_real_, n_boot_final)
     }
-    tail_cols <- seq(n_steps - n_tail + 1, n_steps)
 
     result$p_value <- purrr::map_dbl(seq_len(n_steps), function(k) {
       gains_k <- boot_gains[, k]
-      noise_k <- rowMeans(boot_gains[, tail_cols, drop = FALSE])
-      valid <- which(!is.na(gains_k) & !is.na(noise_k))
+      valid <- which(!is.na(gains_k) & !is.na(noise_per_iter))
       if (length(valid) < 2) return(NA_real_)
       # Proportion of bootstraps where step k's gain <= its noise floor
-      round(mean(gains_k[valid] <= noise_k[valid]), 5)
+      round(mean(gains_k[valid] <= noise_per_iter[valid]), 5)
     })
   } else if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs < min_base_for_boot) {
     if (verbose) cli::cli_alert_warning("Skipping bootstrap: base too small (n = {n_obs}, minimum = {min_base_for_boot})")

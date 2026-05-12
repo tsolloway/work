@@ -25,8 +25,10 @@ bn_report(
   add_additional_results = FALSE,
   results_excel = NULL,
   qc_mode = FALSE,
-  outcome_display = NULL,
-  shift_type = c("absolute", "proportional", "headroom", "range")
+  impact_outcome_display = NULL,
+  shift_type = c("absolute", "proportional", "headroom", "range"),
+  add_prioritization_pvalue = FALSE,
+  prioritize_display = NULL
 )
 }
 \arguments{
@@ -120,6 +122,23 @@ that computed values line up with expectations, spotting outliers,
 cross-referencing Excel). Intentionally off for client-facing reports
 so the displayed integer indices aren't shadowed by scientific-notation
 hover text. Default \code{FALSE}.}
+
+\item{impact_outcome_display}{Character or \code{NULL}. Initial value of the
+impact dashboard's Outcome dropdown — \code{"Point Change"} or \code{"\% Change"}.
+\code{NULL} (default) auto-detects from the DV type (dichotomous outcomes
+default to \code{"Point Change"}, continuous outcomes default to
+\code{"\% Change"}). Pass an explicit string to override.}
+
+\item{add_prioritization_pvalue}{Logical. If \code{TRUE}, the prioritization
+dashboard table includes its \code{p-value} column (current behavior). If
+\code{FALSE} (default), the p-value column is removed from the prioritization
+table.}
+
+\item{prioritize_display}{Character or \code{NULL}. Initial value of the
+prioritization Display dropdown — \code{"Point Change"} or \code{"\% Change"}.
+\code{NULL} (default) auto-detects from the DV type (dichotomous outcomes
+default to \code{"Point Change"}, continuous outcomes default to
+\code{"\% Change"}). Pass an explicit string to override the auto-detection.}
 }
 \value{
 The file path (invisibly).

@@ -26,6 +26,12 @@
 #'   bootstrap was applied. Default FALSE.
 #' @param mi_boot Integer or NULL. Number of community-MI bootstrap replicates
 #'   (if \code{mi_boot_applied}).
+#' @param impact_outcome_display Character or NULL. Initial value of the
+#'   Attribute Drivers Outcome dropdown — \code{"Point Change"} (raw DV-unit
+#'   delta) or \code{"\% Change"} (scaled by baseline DV).
+#' @param add_impacts_by_battery Logical. When TRUE (default), per-battery
+#'   "AD - <name>" dashboards are emitted alongside the main Attribute Drivers
+#'   tab. When FALSE, only the main tab is written.
 #'
 #' @return The modified workbook object (invisibly).
 #'
@@ -71,7 +77,7 @@ append_bn_impact_guide <- function(
   s_tech_body <- openxlsx::createStyle(fontSize = 11, wrapText = TRUE,
                                        valign = "top")
   s_tech_hdr  <- openxlsx::createStyle(fontSize = 11, textDecoration = "bold",
-                                       valign = "top")
+                                       valign = "top", wrapText = TRUE)
 
   # Layout: two columns only. Column B = label (narrower), column C =
   # description/content (wide). The only merges in the sheet are the section
@@ -191,7 +197,12 @@ append_bn_impact_guide <- function(
   )
   tabs_df <- rbind(tabs_df, data.frame(
     Tab = "Attribute Drivers",
-    Description = "Ranks individual attributes by how strongly they influence the outcome. The main results tab.",
+    Description = "Ranks individual attributes by how strongly they influence the outcome. The main tab indexing across all attributes.",
+    stringsAsFactors = FALSE
+  ))
+  tabs_df <- rbind(tabs_df, data.frame(
+    Tab = "AD - <battery> (optional)",
+    Description = "Per-battery tabs (one per defined battery, and one per battery group), each indexed WITHIN that battery's IVs.",
     stringsAsFactors = FALSE
   ))
   if (has_community) {
@@ -225,26 +236,56 @@ append_bn_impact_guide <- function(
       stringsAsFactors = FALSE
     )
     ctrl_df <- rbind(ctrl_df, data.frame(
-      Control = "Subgroup",
-      Description = "Limits results to a specific segment of respondents (e.g., a demographic or behavioural cut). 'Total' shows everyone.",
+      Control = "Assess",
+      Description = paste(
+        "High-level lens selector. Three presets curate the Analysis and Shift Type controls into common analytical questions:",
+        "'Current Impact' — Average Effect + % of Range shift. Answers: 'What is happening?'",
+        "'Intervention Impact' — Effect at the configured fraction + % Toward Top. Answers: 'What should we do?'",
+        "'Maximum Impact' — Best-vs-Worst Effect + % of Range. Answers: 'What is possible?'",
+        "'Custom' — Unlocks the Analysis and Shift Type dropdowns for manual control.",
+        "When a preset is selected, the Analysis and Shift Type cells grey out and display 'Fixed to X when Assess is Y' feedback indicating which combination is currently driving the table.",
+        sep = " "
+      ),
+      stringsAsFactors = FALSE
+    ))
+    ctrl_df <- rbind(ctrl_df, data.frame(
+      Control = "Analysis",
+      Description = "Switches what the numbers represent: an effect at the current state ('Average Effect'), an effect at a defined intervention magnitude ('Effect at X'), the best-case-to-worst-case range ('Best-vs-Worst Effect'), or relationship-strength ('Explanatory Value').",
       stringsAsFactors = FALSE
     ))
     if (has_brands) {
       ctrl_df <- rbind(ctrl_df, data.frame(
         Control = "Focus",
-        Description = "'Market' uses the whole sample within the chosen subgroup. Selecting a brand uses only that brand's respondents, so you see the drivers for that brand's customers.",
+        Description = "'Market' analyzes the overall market performance, while selecting a brand uses only that brand's performance.",
         stringsAsFactors = FALSE
       ))
     }
     ctrl_df <- rbind(ctrl_df, data.frame(
-      Control = "Metric",
-      Description = "Switches what the numbers represent: the no-shift baseline impact, the 10% lift scenario, the best-case-to-worst-case range (MaxVmin), or mutual information (statistical dependency strength).",
+      Control = "Subgroup",
+      Description = "Limits results to a specific segment of respondents (e.g., a demographic or behavioural cut). 'Total' shows everyone.",
+      stringsAsFactors = FALSE
+    ))
+    ctrl_df <- rbind(ctrl_df, data.frame(
+      Control = "Shift Type",
+      Description = paste(
+        "Controls how each attribute's distribution is reshaped when an effect is computed. Four options:",
+        "'% of Current Mean' — each attribute's average shifts by a percentage of where it currently sits. Attributes already rated high move more in absolute terms; low-rated attributes move less.",
+        "'Fixed Step' — every attribute's average shifts by the same fixed amount on the scale, regardless of where it currently sits.",
+        "'% Toward Top' — each attribute closes a percentage of the gap between its current average and the top of its scale. Attributes near the ceiling barely move; attributes with room to grow move more. Most natural when asking 'what if everyone got a little closer to the ideal?'.",
+        "'% of Range' — each attribute moves by a percentage of its scale's full width (max minus min). Same absolute movement for every attribute, normalised to the scale.",
+        sep = " "
+      ),
+      stringsAsFactors = FALSE
+    ))
+    ctrl_df <- rbind(ctrl_df, data.frame(
+      Control = "Outcome",
+      Description = "Controls how impact values are formatted. '% Change' scales each value by baseline DV (relative read); 'Point Change' shows the raw DV-unit delta (absolute read).",
       stringsAsFactors = FALSE
     ))
     if (has_weights) {
       ctrl_df <- rbind(ctrl_df, data.frame(
         Control = "Weight",
-        Description = "Toggles between weighted and unweighted results. Weighting influences mean shifts (Lift), not relationship-strength metrics (MaxVmin, MI). The control turns red when a non-affected metric is selected.",
+        Description = "Toggles between weighted and unweighted results. Weighting influences effect-based metrics (Average Effect, Effect at X), not relationship-strength metrics (Best-vs-Worst Effect, Explanatory Value). The control turns red when a non-affected metric is selected.",
         stringsAsFactors = FALSE
       ))
     }
@@ -263,7 +304,7 @@ append_bn_impact_guide <- function(
   )
   cols_df <- rbind(cols_df, data.frame(
     Column = "Variable / Label",
-    Description = "The attribute being measured. The Label is the human-readable version from the dictionary.",
+    Description = "The attribute being measured.",
     stringsAsFactors = FALSE
   ))
   if (has_community) {
@@ -278,22 +319,11 @@ append_bn_impact_guide <- function(
     Description = "A relative ranking score where the top attribute in view is anchored at 100. Use this to compare attributes against each other quickly.",
     stringsAsFactors = FALSE
   ))
-  cols_df <- rbind(cols_df, data.frame(
-    Column = "Lift",
-    Description = "Expected change in the outcome (in probability points or mean score) from shifting the attribute's distribution by the selected percentage. A lift of 0.05 means a 5-point move in the outcome.",
-    stringsAsFactors = FALSE
-  ))
-  cols_df <- rbind(cols_df, data.frame(
-    Column = "MaxVmin",
-    Description = "The theoretical ceiling: the outcome difference between this attribute's best and worst levels. Useful to bound potential impact, regardless of where respondents currently sit.",
-    stringsAsFactors = FALSE
-  ))
-  cols_df <- rbind(cols_df, data.frame(
-    Column = "MI / p-value",
-    Description = "Mutual information is the statistical strength of the attribute-outcome relationship; the p-value says how confident we are that relationship is real (smaller is more confident).",
-    stringsAsFactors = FALSE
-  ))
   .write_labelled(cols_df)
+
+  .write_para(
+    "The Total Impact row aggregates each attribute's absolute impact into one summary. Its format follows the Outcome dropdown: '3.5%' when Outcome = % Change, '0.10' when Outcome = Point Change."
+  )
 
   # ---------------------------------------------------------------------------
   # Section 4: Simulator
@@ -327,7 +357,7 @@ append_bn_impact_guide <- function(
     if (has_brands) {
       sim_df <- rbind(sim_df, data.frame(
         Step = "4. Focus",
-        Description = "Whether to simulate using the whole market's distribution or a specific brand's. Brands with fewer than the minimum sample size are shown with a red warning and blank values.",
+        Description = "Whether to simulate using the whole market's performance or a specific brand's performance. Brands with fewer than the minimum sample size are shown with a red warning and blank values.",
         stringsAsFactors = FALSE
       ))
     }
@@ -348,9 +378,9 @@ append_bn_impact_guide <- function(
   .write_para(engine_note)
 
   index_note <- switch(index_by,
-    "lift_first"  = "The Index column ranks attributes by their first lift value (the baseline-variation impact), with mutual information as a secondary tie-breaker.",
-    "lift_second" = "The Index column ranks attributes by the second lift value (e.g., 10% shift), with mutual information as a secondary tie-breaker.",
-    "maxVmin"     = "The Index column ranks attributes by their MaxVmin score — the best-minus-worst outcome range.",
+    "lift_first"  = "The Index column ranks attributes by their first effect value (the baseline-variation impact), with mutual information as a secondary tie-breaker.",
+    "lift_second" = "The Index column ranks attributes by the second effect value (e.g., 10% shift), with mutual information as a secondary tie-breaker.",
+    "maxVmin"     = "The Index column ranks attributes by their Best-vs-Worst score — the best-minus-worst outcome range.",
     "mi"          = "The Index column ranks attributes by their mutual information with the outcome.",
     "none"        = NULL,
     NULL
@@ -360,7 +390,7 @@ append_bn_impact_guide <- function(
   if (!is.null(min_base_for_lift)) {
     .write_para(
       paste0(
-        "Brand-specific lift values require at least ", min_base_for_lift,
+        "Brand-specific effect values require at least ", min_base_for_lift,
         " respondents in that brand x subgroup slice. Smaller slices appear blank rather than unreliable."
       )
     )
@@ -413,9 +443,9 @@ append_bn_impact_guide <- function(
   )
 
   .write_tech(
-    "MaxVmin",
+    "Best-vs-Worst",
     paste(
-      "For each attribute X, MaxVmin is the difference in the outcome between",
+      "For each attribute X, Best-vs-Worst is the difference in the outcome between",
       "its best and worst observed level, under exact Bayesian inference on",
       "the fitted network. In top-box mode it is the probability of the",
       "maximum DV level given X at its maximum, minus the same probability",
@@ -427,23 +457,24 @@ append_bn_impact_guide <- function(
   )
 
   .write_tech(
-    "Probability Lift",
+    "Probability Shift",
     paste(
-      "Lift accounts for the observed distribution of respondents on the",
-      "attribute. Let p_obs be the attribute's current (optionally weighted)",
+      "The shift accounts for the observed distribution of respondents on",
+      "the attribute. Let p_obs be the attribute's current (optionally weighted)",
       "frequency distribution, and p_shift be the same distribution after an",
       "exponential tilt that shifts its mean by the requested percentage",
       "(proportional) or by a fixed number of scale points (absolute). Let",
       "q(x) be the conditional target: the probability of the top DV level",
       "given X = x, or the expected DV given X = x in mean mode, computed by",
-      "exact inference on the network. Lift is then the difference between",
-      "the expected target under the shifted distribution and the expected",
-      "target under the observed distribution: sum over x of q(x) * p_shift(x)",
-      "minus sum over x of q(x) * p_obs(x). When the requested lift is zero,",
-      "the reported value is a symmetric sensitivity: the difference between",
-      "a +5% and a -5% tilt. When a brand is specified, p_obs and p_shift are",
-      "computed from the brand's rows while q(x) is shared across brands",
-      "because the brand variable does not enter the network."
+      "exact inference on the network. The shift is then the difference",
+      "between the expected target under the shifted distribution and the",
+      "expected target under the observed distribution: sum over x of",
+      "q(x) * p_shift(x) minus sum over x of q(x) * p_obs(x). When the",
+      "requested shift is zero, the reported value is a symmetric",
+      "sensitivity: the difference between a +5% and a -5% tilt. When a",
+      "brand is specified, p_obs and p_shift are computed from the brand's",
+      "rows while q(x) is shared across brands because the brand variable",
+      "does not enter the network."
     )
   )
 
@@ -452,13 +483,13 @@ append_bn_impact_guide <- function(
     paste(
       "When a weight variable is provided, the observed frequency distribution",
       "p_obs is computed as the sum of weights within each level rather than",
-      "the raw count. Weighting therefore propagates into Lift, which depends",
-      "on p_obs. It does not propagate into MaxVmin or the conditional target",
-      "q(x), because those come from the network's conditional probability",
-      "tables, which are fitted as unweighted Bayesian posteriors. Mutual",
-      "information and its p-values depend on joint sample counts and are",
-      "also unweighted. The Weight control in the dashboard reflects this:",
-      "it is gated to lift-type metrics."
+      "the raw count. Weighting therefore propagates into the shift-based",
+      "metrics, which depend on p_obs. It does not propagate into Best-vs-Worst",
+      "or the conditional target q(x), because those come from the network's",
+      "conditional probability tables, which are fitted as unweighted",
+      "Bayesian posteriors. Mutual information and its p-values depend on",
+      "joint sample counts and are also unweighted. The Weight control in",
+      "the dashboard reflects this: it is gated to shift-based metrics."
     )
   )
 
@@ -539,7 +570,7 @@ append_bn_impact_guide <- function(
       "The Index column rescales a chosen metric so the top-ranked attribute",
       "in the current view is anchored at 100 and all others are proportional.",
       "Possible anchors are the primary or secondary lift value (with mutual",
-      "information as a tie-breaker), MaxVmin, or mutual information directly.",
+      "information as a tie-breaker), Best-vs-Worst, or mutual information directly.",
       "The choice is a presentation decision and does not affect the",
       "underlying estimates. Indexing is applied within each subgroup",
       "independently."
@@ -568,7 +599,7 @@ append_bn_impact_guide <- function(
     "Base-size thresholds",
     paste0(
       "Brand-by-subgroup slices with fewer than ", min_base_for_lift,
-      " respondents are blanked in the main dashboard. Lift values return",
+      " respondents are blanked in the main dashboard. Effect values return",
       " missing rather than being computed on sparse frequency distributions,",
       " which would otherwise produce estimates dominated by the Bayesian",
       " prior rather than the observed data.",

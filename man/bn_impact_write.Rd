@@ -27,13 +27,14 @@ bn_impact_write(
   very_hide_all = TRUE,
   min_base_for_lift = NULL,
   min_base_for_sim = NULL,
-  outcome_display = c("absolute", "proportional"),
+  impact_outcome_display = NULL,
   shift_type = c("absolute", "proportional", "headroom", "range"),
   path = ".",
   wb = NULL,
   save = TRUE,
   add_guide = TRUE,
-  add_images = TRUE
+  add_images = TRUE,
+  add_impacts_by_battery = TRUE
 )
 }
 \arguments{
@@ -127,6 +128,12 @@ outputs for that focus. Slices below this threshold are blanked and listed
 on a warning sheet. If NULL, inherits from \code{min_base_for_lift} (which
 itself falls back to \code{meta$min_base_for_lift} or 75).}
 
+\item{impact_outcome_display}{Character or NULL. Initial value of the
+impact dashboard's Outcome dropdown — either \code{"Point Change"} or
+\code{"\% Change"}. When NULL (default), auto-detects from the DV type:
+dichotomous outcomes get \code{"Point Change"}, continuous outcomes get
+\code{"\% Change"}. Pass an explicit string to override.}
+
 \item{path}{Character. Directory to write workbook to. Default \code{"."}.}
 
 \item{wb}{openxlsx workbook object or NULL. When NULL (default), a new
@@ -147,6 +154,12 @@ rendered and inserted via \code{append_bn_network_maps()}. When FALSE,
 the network map step is skipped entirely — used by \code{bn_write()},
 which calls \code{append_bn_network_maps()} separately so the tab
 ordering places network maps after the prioritization section.}
+
+\item{add_impacts_by_battery}{Logical. When TRUE (default), per-battery
+\verb{AD - <name>} dashboards are emitted alongside the main Attribute
+Drivers tab — one per battery (and one per battery group) with
+within-battery indexing. When FALSE, only the main Attribute Drivers
+tab is written. Has no effect when no batteries are defined upstream.}
 }
 \value{
 Workbook object (invisibly).

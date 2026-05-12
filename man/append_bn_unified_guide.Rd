@@ -17,11 +17,11 @@ append_bn_unified_guide(
   sim_dv_only = FALSE,
   sig_threshold = 0.05,
   marginal_threshold = 0.1,
-  lift = 0.1,
   min_base_for_lift = 100,
   min_base_for_sim = 100,
   min_base_for_boot = 100,
-  impact_shift_type = "headroom"
+  impact_shift_type = "headroom",
+  add_prioritization_pvalue = FALSE
 )
 }
 \arguments{
@@ -48,9 +48,25 @@ append_bn_unified_guide(
 
 \item{sig_threshold, marginal_threshold}{P-value bands.}
 
-\item{lift}{Lift fraction used in prioritization.}
-
 \item{min_base_for_lift, min_base_for_sim, min_base_for_boot}{Base thresholds.}
+
+\item{add_prioritization_pvalue}{Logical. When TRUE, the prioritization
+table includes its p-value column AND the guide includes the
+"Prioritization bootstrap p-values" technical section. When FALSE
+(default), both the column and the explanatory section are omitted.}
+
+\item{impact_outcome_display}{Character or NULL. Initial value of the
+Attribute Drivers Outcome dropdown — \code{"Point Change"} (raw DV-unit
+delta) or \code{"\% Change"} (scaled by baseline DV).}
+
+\item{prioritize_display}{Character or NULL. Initial value of the
+prioritization Display dropdown — \code{"Point Change"} or \code{"\% Change"}.
+NULL (default) auto-detects from DV type: dichotomous -> "Point Change",
+continuous -> "\% Change".}
+
+\item{add_impacts_by_battery}{Logical. When TRUE (default), per-battery
+"AD - \if{html}{\out{<name>}}" dashboards are emitted alongside the main Attribute Drivers
+tab. When FALSE, only the main tab is written.}
 }
 \value{
 The modified workbook object (invisibly).

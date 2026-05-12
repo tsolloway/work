@@ -88,6 +88,16 @@
 #'   the network map step is skipped entirely — used by \code{bn_write()},
 #'   which calls \code{append_bn_network_maps()} separately so the tab
 #'   ordering places network maps after the prioritization section.
+#' @param impact_outcome_display Character or NULL. Initial value of the
+#'   impact dashboard's Outcome dropdown — either `"Point Change"` or
+#'   `"% Change"`. When NULL (default), auto-detects from the DV type:
+#'   dichotomous outcomes get `"Point Change"`, continuous outcomes get
+#'   `"% Change"`. Pass an explicit string to override.
+#' @param add_impacts_by_battery Logical. When TRUE (default), per-battery
+#'   `AD - <name>` dashboards are emitted alongside the main Attribute
+#'   Drivers tab — one per battery (and one per battery group) with
+#'   within-battery indexing. When FALSE, only the main Attribute Drivers
+#'   tab is written. Has no effect when no batteries are defined upstream.
 #'
 #' @return Workbook object (invisibly).
 #'
@@ -117,21 +127,40 @@ bn_impact_write <- function(
     min_base_for_sim = NULL,
     # Static-write display variants. Only consulted when wb_type = "standard"
     # — they pick which precomputed lift column drives the displayed index.
-    # Defaults: absolute outcome display + absolute IV shift, so the static
-    # sheet shows raw probability-point change under an additive shift.
-    # Dynamic dashboards expose these as dropdowns and ignore the params.
-    outcome_display = c("absolute", "proportional"),
+    # `impact_outcome_display = NULL` (default) auto-detects from the DV
+    # type: dichotomous → "Point Change"; continuous → "% Change". Explicit
+    # values ("Point Change" / "% Change") are respected. Dynamic dashboards
+    # still expose these as dropdowns; the initial selected value follows
+    # the same auto-detection.
+    impact_outcome_display = NULL,
     shift_type      = c("absolute", "proportional", "headroom", "range"),
     path = ".",
     wb = NULL,
     save = TRUE,
     add_guide = TRUE,
-    add_images = TRUE
+    add_images = TRUE,
+    # When TRUE (default), per-battery `AD - <name>` dashboards are emitted
+    # alongside the main Attribute Drivers tab. When FALSE, only the main
+    # tab is written. Has no effect when no batteries are defined upstream.
+    add_impacts_by_battery = TRUE
 ){
 
   wb_type <- match.arg(wb_type)
-  outcome_display <- match.arg(outcome_display)
-  shift_type      <- match.arg(shift_type)
+  shift_type <- match.arg(shift_type)
+
+  # Resolve impact_outcome_display: NULL auto-detects from DV type;
+  # explicit "Point Change" / "% Change" override. Translate to the
+  # internal "absolute" / "proportional" vocabulary used by the engine
+  # and downstream column-name plumbing.
+  if (is.null(impact_outcome_display)) {
+    is_dichotomous <- isTRUE(bn_impact_result[["meta"]][["is_dichotomous_dv"]])
+    outcome_display <- if (is_dichotomous) "absolute" else "proportional"
+  } else {
+    impact_outcome_display <- match.arg(impact_outcome_display,
+      c("Point Change", "% Change"))
+    outcome_display <- if (impact_outcome_display == "Point Change")
+      "absolute" else "proportional"
+  }
 
   # Accept either the full bn_finalize_network() object or just bn_subgroups
   if (!is.null(bn_obj) && "bn_subgroups" %in% names(bn_obj)) {
@@ -312,17 +341,16 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     lift_idx <- if (index_by == "lift_first") 1L else min(2L, length(lift))
     lift_val <- lift[lift_idx]
     if (lift_val == 0) {
-      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation (±5%) around each attribute's current state. The interpretation of 5% depends on the selected Shift Type"
+      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation around each attribute's current state"
     } else {
       pct <- round(lift_val * 100)
       paste0(
-        "Indexed by ", pct, "% lift. Measures how much the outcome changes when each attribute's distribution shifts by ", pct,
-        "% — the meaning of ", pct, "% follows the selected Shift Type (% of current mean, fixed step, % toward top, or % of range)"
+        "Indexed by ", pct, "% improvement. Measures how much the outcome changes when each attribute's distribution shifts by ", pct, "%"
       )
     }
   } else {
     switch(index_by,
-      "maxVmin" = "Indexed by best-vs-worst effect. Measures the outcome difference between setting all respondents to the top of each attribute versus all at the bottom",
+      "maxVmin" = "Indexed by best-vs-worst effect. Measures the outcome difference between the top of each attribute versus the bottom",
       "mi"      = "Indexed by explanatory value. Measures the statistical strength of the relationship between each attribute and the outcome (mutual information), independent of intervention direction or shift type",
       "none"    = NULL
     )
@@ -578,8 +606,10 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     # Per-battery dashboards. Each tab shows only its battery's IVs and
     # indexes within that battery; they share the Results/_lookup sheets
     # written by the main call above (write_helper_sheets = FALSE). Sheet
-    # name truncated to Excel's 31-character limit.
-    if (!is.null(batteries) && length(batteries) > 0L) {
+    # name truncated to Excel's 31-character limit. Gated by
+    # `add_impacts_by_battery`.
+    if (isTRUE(add_impacts_by_battery) &&
+        !is.null(batteries) && length(batteries) > 0L) {
       for (b_name in names(batteries)) {
         prefix <- "AD - "
         max_name_len <- 31L - nchar(prefix)
@@ -610,8 +640,10 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
 
     # Per-group dashboards. Each tab shows the union of its component
     # batteries' IVs and indexes within that union. Same shared Results
-    # /_lookup sheets as the per-battery tabs.
-    if (has_battery_groups) {
+    # /_lookup sheets as the per-battery tabs. Gated by
+    # `add_impacts_by_battery` — same toggle controls both per-battery
+    # and per-group tabs (they're conceptually the same family of views).
+    if (isTRUE(add_impacts_by_battery) && has_battery_groups) {
       for (g_name in names(battery_groups)) {
         prefix <- "AD - "
         max_name_len <- 31L - nchar(prefix)

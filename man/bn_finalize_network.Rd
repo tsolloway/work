@@ -26,13 +26,13 @@ bn_finalize_network(
   impact_index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
   impact_n_boot = 1,
   impact_n_querry = 10000,
-  impact_lift = c(0, 0.1),
+  impact_lift = c(0, 0.25),
   prioritize_shift_type = c("headroom", "proportional", "absolute", "range"),
   impact_include_base = TRUE,
   batteries = NULL,
   battery_groups = NULL,
   do_prioritizations = TRUE,
-  prioritize_lift = 0.1,
+  prioritize_lift = 0.25,
   prioritize_ivs_excluded = NULL,
   prioritize_threshold = 0.01,
   prioritize_max_rounds = NULL,
@@ -112,7 +112,7 @@ attribute/community, weighted/unweighted impact tables. Default TRUE.}
 \item{impact_n_querry}{Integer. Query sample size. Default 1e4.}
 
 \item{impact_lift}{Numeric vector. Lift fractions for impact. Default
-\code{c(0, 0.1)}.}
+\code{c(0, 0.25)}.}
 
 \item{prioritize_shift_type}{Character. IV shift interpretation for the
 greedy prioritization path only: \code{"headroom"} (default) shifts
@@ -131,7 +131,7 @@ Default TRUE.}
 to produce prioritization analysis. Default TRUE.}
 
 \item{prioritize_lift}{Numeric. Lift fraction for prioritization. Default
-0.10.}
+0.25.}
 
 \item{prioritize_ivs_excluded}{Character vector or NULL. Variables to exclude
 from prioritization. Default NULL.}

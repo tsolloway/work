@@ -17,8 +17,21 @@
 #' @param wb_type \code{"dynamic"} or \code{"standard"}.
 #' @param sim_dv_only Logical. Simulator restricted to DV only.
 #' @param sig_threshold,marginal_threshold P-value bands.
-#' @param lift Lift fraction used in prioritization.
 #' @param min_base_for_lift,min_base_for_sim,min_base_for_boot Base thresholds.
+#' @param impact_outcome_display Character or NULL. Initial value of the
+#'   Attribute Drivers Outcome dropdown — \code{"Point Change"} (raw DV-unit
+#'   delta) or \code{"\% Change"} (scaled by baseline DV).
+#' @param prioritize_display Character or NULL. Initial value of the
+#'   prioritization Display dropdown — \code{"Point Change"} or \code{"\% Change"}.
+#'   NULL (default) auto-detects from DV type: dichotomous -> "Point Change",
+#'   continuous -> "% Change".
+#' @param add_prioritization_pvalue Logical. When TRUE, the prioritization
+#'   table includes its p-value column AND the guide includes the
+#'   "Prioritization bootstrap p-values" technical section. When FALSE
+#'   (default), both the column and the explanatory section are omitted.
+#' @param add_impacts_by_battery Logical. When TRUE (default), per-battery
+#'   "AD - <name>" dashboards are emitted alongside the main Attribute Drivers
+#'   tab. When FALSE, only the main tab is written.
 #'
 #' @return The modified workbook object (invisibly).
 #'
@@ -36,12 +49,50 @@ append_bn_unified_guide <- function(
     sim_dv_only = FALSE,
     sig_threshold = 0.05,
     marginal_threshold = 0.10,
-    lift = 0.10,
     min_base_for_lift = 100,
     min_base_for_sim = 100,
     min_base_for_boot = 100,
-    impact_shift_type = "headroom"
+    impact_shift_type = "headroom",
+    add_prioritization_pvalue = FALSE
 ) {
+
+  # Detect whether bootstrap p-values exist in the prioritization data —
+  # any non-NA p_value across any greedy result tibble means the bootstrap
+  # was actually run.
+  boot_applied_in_data <- FALSE
+  if (!is.null(prioritizations)) {
+    for (nm in setdiff(names(prioritizations), "meta")) {
+      tbl <- prioritizations[[nm]]
+      if (is.data.frame(tbl) && "p_value" %in% names(tbl) &&
+          any(!is.na(tbl[["p_value"]]))) {
+        boot_applied_in_data <- TRUE
+        break
+      }
+      # Subgroup-nested list form: walk one level deeper.
+      if (is.list(tbl) && !is.data.frame(tbl)) {
+        for (sub in tbl) {
+          if (is.list(sub) && !is.null(sub$tbl) &&
+              "p_value" %in% names(sub$tbl) &&
+              any(!is.na(sub$tbl[["p_value"]]))) {
+            boot_applied_in_data <- TRUE
+            break
+          }
+        }
+        if (boot_applied_in_data) break
+      }
+    }
+  }
+  # Show the p-value technical section only when bootstrap was actually
+  # run AND the dashboard exposes the column (add_prioritization_pvalue =
+  # TRUE). When the column is hidden, the guide reader will never see a
+  # p-value, so no need to explain.
+  show_priort_pvalue_section <- isTRUE(add_prioritization_pvalue) &&
+    isTRUE(boot_applied_in_data)
+
+  # Default lift now lives on result$meta$lift (set by bn_finalize_network).
+  # Pull from impacts/prioritizations meta when available, fall back to 0.10.
+  meta <- impacts$meta %||% prioritizations$meta %||% list()
+  lift <- meta[["lift"]] %||% 0.10
 
   wb_type <- match.arg(wb_type)
 
@@ -64,7 +115,7 @@ append_bn_unified_guide <- function(
   s_tech_body <- openxlsx::createStyle(fontSize = 11, wrapText = TRUE,
                                        valign = "top")
   s_tech_hdr  <- openxlsx::createStyle(fontSize = 11, textDecoration = "bold",
-                                       valign = "top")
+                                       valign = "top", wrapText = TRUE)
 
   col_left  <- 2L
   col_right <- 3L
@@ -86,9 +137,8 @@ append_bn_unified_guide <- function(
   }
 
   # -- Header (title + subtitle) — no borders --
-  dv_bit <- if (!is.null(dv_display)) paste0(" of ", dv_display) else ""
   openxlsx::writeData(wb, guide_sheet,
-    paste0("How to Read This Network Drivers Workbook", dv_bit),
+    "How to Read This Network Drivers Workbook",
     startRow = r, startCol = col_left)
   openxlsx::addStyle(wb, guide_sheet, s_title, rows = r,
     cols = col_left:col_end, gridExpand = TRUE, stack = TRUE)
@@ -168,9 +218,14 @@ append_bn_unified_guide <- function(
   .write_h2("What's in this workbook")
   tabs_df <- data.frame(
     Tab = "Attribute Drivers",
-    Description = "Ranks individual attributes by how strongly they influence the outcome. The main results tab.",
+    Description = "Ranks individual attributes by how strongly they influence the outcome. The main tab indexing across all attributes.",
     stringsAsFactors = FALSE
   )
+  tabs_df <- rbind(tabs_df, data.frame(
+    Tab = "AD - <battery> (optional)",
+    Description = "Per-battery tabs (one per defined battery, and one per battery group), each indexed WITHIN that battery's IVs.",
+    stringsAsFactors = FALSE
+  ))
   if (has_community) {
     tabs_df <- rbind(tabs_df, data.frame(
       Tab = "Community Drivers",
@@ -202,41 +257,73 @@ append_bn_unified_guide <- function(
     )
 
     ctrl_df <- data.frame(
-      Control = "Subgroup",
-      Description = "Limits results to a specific segment of respondents. 'Total' uses everyone.",
+      Control = "Assess (Attribute / Community Drivers)",
+      Description = paste(
+        "High-level lens selector. Three presets curate the Analysis and Shift Type controls into common analytical questions:",
+        "'Current Impact' — Average Effect + % of Range shift. Answers: 'What is happening?'",
+        "'Intervention Impact' — Effect at the configured fraction + % Toward Top. Answers: 'What should we do?'",
+        "'Maximum Impact' — Best-vs-Worst Effect + % of Range. Answers: 'What is possible?'",
+        "'Custom' — Unlocks the Analysis and Shift Type dropdowns for manual control.",
+        "When a preset is selected, the Analysis and Shift Type cells grey out and display 'Fixed to X when Assess is Y' feedback indicating which combination is currently driving the table.",
+        sep = " "
+      ),
       stringsAsFactors = FALSE
     )
+    ctrl_df <- rbind(ctrl_df, data.frame(
+      Control = "Analysis (Attribute / Community Drivers)",
+      Description = "Switches what the numbers represent: an effect at the current state ('Average Effect'), an effect at a defined intervention magnitude ('Effect at X'), the best-case-to-worst-case range ('Best-vs-Worst Effect'), or relationship-strength ('Explanatory Value').",
+      stringsAsFactors = FALSE
+    ))
     if (has_brands) {
       ctrl_df <- rbind(ctrl_df, data.frame(
         Control = "Focus",
-        Description = "'Market' uses the whole sample within the chosen subgroup. Selecting a brand uses only that brand's respondents.",
+        Description = "'Market' analyzes the overall market performance, while selecting a brand uses only that brand's performance.",
         stringsAsFactors = FALSE
       ))
     }
     ctrl_df <- rbind(ctrl_df, data.frame(
-      Control = "Metric (Attribute / Community Drivers)",
-      Description = "Switches what the numbers represent: baseline impact, a lift scenario, the best-case-to-worst-case range (MaxVmin), or mutual information.",
+      Control = "Subgroup",
+      Description = "Limits results to a specific segment of respondents. 'Total' uses everyone.",
+      stringsAsFactors = FALSE
+    ))
+    ctrl_df <- rbind(ctrl_df, data.frame(
+      Control = "Shift Type (Attribute / Community Drivers)",
+      Description = paste(
+        "Controls how each attribute's distribution is reshaped when an effect is computed. Four options:",
+        "'% of Current Mean' — each attribute's average shifts by a percentage of where it currently sits. Attributes already rated high move more in absolute terms; low-rated attributes move less.",
+        "'Fixed Step' — every attribute's average shifts by the same fixed amount on the scale, regardless of where it currently sits.",
+        "'% Toward Top' — each attribute closes a percentage of the gap between its current average and the top of its scale. Attributes near the ceiling barely move; attributes with room to grow move more. Most natural when asking 'what if everyone got a little closer to the ideal?'.",
+        "'% of Range' — each attribute moves by a percentage of its scale's full width (max minus min). Same absolute movement for every attribute, normalised to the scale.",
+        sep = " "
+      ),
+      stringsAsFactors = FALSE
+    ))
+    ctrl_df <- rbind(ctrl_df, data.frame(
+      Control = "Outcome (Attribute / Community Drivers)",
+      Description = "Controls how impact values are formatted. '% Change' scales each value by baseline DV (relative read); 'Point Change' shows the raw DV-unit delta (absolute read).",
       stringsAsFactors = FALSE
     ))
     if (has_weights) {
       ctrl_df <- rbind(ctrl_df, data.frame(
         Control = "Weight",
-        Description = "Toggles between weighted and unweighted results. Weighting influences mean shifts (Lift), not relationship-strength metrics (MaxVmin, MI).",
+        Description = "Toggles between weighted and unweighted results. Weighting influences effect-based metrics (Average Effect, Effect at X), not relationship-strength metrics (Best-vs-Worst Effect, Explanatory Value).",
         stringsAsFactors = FALSE
       ))
     }
-    lift_pct <- round(lift * 100, 1)
-    lift_explainer <- switch(impact_shift_type %||% "headroom",
-      "headroom"     = paste0("'Moderate Lift' closes ", lift_pct, "% of each attribute's gap to its top level — every attribute moves the same fraction of its own headroom, so cross-scale rankings stay comparable"),
-      "proportional" = paste0("'Moderate Lift' shifts each attribute's mean by ", lift_pct, "% of its current value"),
-      "absolute"     = paste0("'Moderate Lift' adds ", round(lift, 2), " scale points to each attribute's mean"),
-      paste0("'Moderate Lift' shifts each attribute's distribution by ", lift_pct, "%")
+    moderate_explainer <- switch(impact_shift_type %||% "headroom",
+      "headroom"     = "'Moderate Lift (XX%)' closes XX% of each attribute's gap to its top level — every attribute moves the same fraction of its own headroom, so cross-scale rankings stay comparable — and reads the cumulative change in the outcome at each priority step.",
+      "proportional" = "'Moderate Lift (XX%)' shifts each attribute's mean by XX% of its current value and reads the cumulative change in the outcome at each priority step.",
+      "absolute"     = "'Moderate Lift (XX%)' adds XX scale points to each attribute's mean and reads the cumulative change in the outcome at each priority step.",
+      "rangeshift"   = "'Moderate Lift (XX%)' shifts each attribute's mean by XX% of its scale's range (max minus min) and reads the cumulative change in the outcome at each priority step.",
+      "range"        = "'Moderate Lift (XX%)' shifts each attribute's mean by XX% of its scale's range (max minus min) and reads the cumulative change in the outcome at each priority step.",
+      "'Moderate Lift (XX%)' shifts each attribute's distribution by XX% and reads the cumulative change in the outcome at each priority step."
     )
     ctrl_df <- rbind(ctrl_df, data.frame(
       Control = "Analysis (Prioritization)",
-      Description = paste0(
-        lift_explainer,
-        " and reads the change in the outcome. 'Maximum Lift' sets each attribute to its highest observed level."
+      Description = paste(
+        moderate_explainer,
+        "'Maximum Lift' sets each attribute to its highest observed level (full saturation) — showing the upper bound the network could produce if every priority were taken to its top — and reads the cumulative outcome at each step. Use it to benchmark the maximum achievable change.",
+        sep = " "
       ),
       stringsAsFactors = FALSE
     ))
@@ -250,7 +337,7 @@ append_bn_unified_guide <- function(
 
   cols_df <- data.frame(
     Column = "Variable / Label",
-    Description = "The attribute being measured. The Label is the human-readable version from the dictionary.",
+    Description = "The attribute being measured.",
     stringsAsFactors = FALSE
   )
   if (has_community) {
@@ -265,22 +352,11 @@ append_bn_unified_guide <- function(
     Description = "A relative ranking score where the top attribute in view is anchored at 100.",
     stringsAsFactors = FALSE
   ))
-  cols_df <- rbind(cols_df, data.frame(
-    Column = "Lift",
-    Description = "Expected change in the outcome from shifting the attribute's distribution by the selected percentage.",
-    stringsAsFactors = FALSE
-  ))
-  cols_df <- rbind(cols_df, data.frame(
-    Column = "MaxVmin",
-    Description = "The theoretical ceiling: the outcome difference between this attribute's best and worst levels.",
-    stringsAsFactors = FALSE
-  ))
-  cols_df <- rbind(cols_df, data.frame(
-    Column = "MI / p-value",
-    Description = "Mutual information is the statistical strength of the attribute-outcome relationship; the p-value says how confident we are that relationship is real (smaller is more confident).",
-    stringsAsFactors = FALSE
-  ))
   .write_labelled(cols_df)
+
+  .write_para(
+    "The Total Impact row aggregates each attribute's absolute impact into one summary. Its format follows the Outcome dropdown: '3.5%' when Outcome = % Change, '0.10' when Outcome = Point Change."
+  )
 
   # ---------------------------------------------------------------------------
   # Reading the Prioritization table
@@ -305,11 +381,6 @@ append_bn_unified_guide <- function(
     ))
   }
   prior_cols_df <- rbind(prior_cols_df, data.frame(
-    Column = "DV Estimate",
-    Description = "The expected outcome after shifting this step's attribute (and all preceding ones) according to the chosen strategy.",
-    stringsAsFactors = FALSE
-  ))
-  prior_cols_df <- rbind(prior_cols_df, data.frame(
     Column = "Marginal Gain",
     Description = "How much the DV Estimate moved compared to the previous step — the incremental value this attribute adds.",
     stringsAsFactors = FALSE
@@ -319,14 +390,19 @@ append_bn_unified_guide <- function(
     Description = "Marginal gain as a percentage of the previous step's DV Estimate. Used for the early-stopping rule.",
     stringsAsFactors = FALSE
   ))
-  prior_cols_df <- rbind(prior_cols_df, data.frame(
-    Column = "p-value",
-    Description = paste0(
-      "How confident we are this step's gain is real. Smaller is stronger; green below ",
-      sig_threshold, ", yellow below ", marginal_threshold, "."
-    ),
-    stringsAsFactors = FALSE
-  ))
+  # p-value row only when the column is actually shown in the dashboard
+  # AND the bootstrap was run. Mirrors the gating in the technical-appendix
+  # bootstrap section.
+  if (isTRUE(show_priort_pvalue_section)) {
+    prior_cols_df <- rbind(prior_cols_df, data.frame(
+      Column = "p-value",
+      Description = paste0(
+        "How confident we are this step's gain is real. Smaller is stronger; green below ",
+        sig_threshold, ", yellow below ", marginal_threshold, "."
+      ),
+      stringsAsFactors = FALSE
+    ))
+  }
   .write_labelled(prior_cols_df)
 
   # ---------------------------------------------------------------------------
@@ -335,6 +411,15 @@ append_bn_unified_guide <- function(
   .write_h2("The cumulative-effect chart (Prioritization tab)")
   .write_para(
     "Each bar shows one step's marginal gain stacked on top of the previous step's DV estimate. The top of the final bar is the expected outcome after all selected steps have been applied — the fastest way to see which steps contribute most."
+  )
+  .write_para(
+    "The chart's Y-axis is anchored at 0 so that the cumulative gain (or cumulative gain %) bars always start from baseline. Earlier versions anchored the axis at baseline_DV - margin, which clipped bars for continuous DVs."
+  )
+  .write_para(
+    "Bar values are formatted with one decimal when below 1% (e.g., '0.3%') and as integers when at or above 1% (e.g., '12%')."
+  )
+  .write_para(
+    "The Display dropdown defaults to 'Point Change' for dichotomous DVs (probability points read naturally) and '% Change' for continuous DVs (% of baseline reads better). Override via the Display dropdown."
   )
 
   # ---------------------------------------------------------------------------
@@ -364,7 +449,7 @@ append_bn_unified_guide <- function(
     if (has_brands) {
       sim_df <- rbind(sim_df, data.frame(
         Step = "4. Focus",
-        Description = "Simulate using the whole market's distribution or a specific brand's. Brands below the minimum sample size are flagged with a red warning and blank values.",
+        Description = "Simulate using the whole market's performance or a specific brand's performance. Brands below the minimum sample size are flagged with a red warning and blank values.",
         stringsAsFactors = FALSE
       ))
     }
@@ -413,9 +498,9 @@ append_bn_unified_guide <- function(
   )
 
   .write_tech(
-    "MaxVmin",
+    "Best-vs-Worst",
     paste(
-      "For each attribute X, MaxVmin is the difference in the outcome",
+      "For each attribute X, Best-vs-Worst is the difference in the outcome",
       "between its best and worst observed level, under exact Bayesian",
       "inference on the fitted network. This captures the theoretical",
       "ceiling of the attribute's influence, independent of where",
@@ -424,17 +509,18 @@ append_bn_unified_guide <- function(
   )
 
   .write_tech(
-    "Probability Lift",
+    "Probability Shift",
     paste(
-      "Lift accounts for the observed distribution of respondents on the",
-      "attribute. The observed frequency distribution p_obs is shifted by",
-      "an exponential tilt that raises its mean by the requested percentage",
-      "(proportional) or by a fixed number of scale points (absolute). The",
-      "reported lift is the difference between the expected target under",
-      "the shifted distribution and the expected target under the observed",
-      "distribution. When a brand is specified, p_obs is computed from the",
-      "brand's rows while the conditional target is shared across brands",
-      "because the brand variable does not enter the network."
+      "The shift accounts for the observed distribution of respondents on",
+      "the attribute. The observed frequency distribution p_obs is shifted",
+      "by an exponential tilt that raises its mean by the requested",
+      "percentage (proportional) or by a fixed number of scale points",
+      "(absolute). The reported shift is the difference between the",
+      "expected target under the shifted distribution and the expected",
+      "target under the observed distribution. When a brand is specified,",
+      "p_obs is computed from the brand's rows while the conditional",
+      "target is shared across brands because the brand variable does not",
+      "enter the network."
     )
   )
 
@@ -443,10 +529,10 @@ append_bn_unified_guide <- function(
     paste(
       "When a weight variable is provided, the observed frequency",
       "distribution is computed as the sum of weights within each level",
-      "rather than the raw count. Weighting therefore propagates into Lift.",
-      "It does not propagate into MaxVmin or mutual information, which come",
-      "from the network's conditional probability tables (fitted as",
-      "unweighted Bayesian posteriors)."
+      "rather than the raw count. Weighting therefore propagates into the",
+      "shift-based metrics. It does not propagate into Best-vs-Worst or mutual",
+      "information, which come from the network's conditional probability",
+      "tables (fitted as unweighted Bayesian posteriors)."
     )
   )
 
@@ -479,26 +565,28 @@ append_bn_unified_guide <- function(
     )
   )
 
-  .write_tech(
-    "Prioritization bootstrap p-values",
-    paste(
-      "After the greedy search completes, significance of each step is",
-      "assessed by bootstrapping the rows. For each replicate the",
-      "conditional probability tables are re-fitted on the fixed structure",
-      "and the selected attributes are re-queried in the same order. Each",
-      "step's p-value is the fraction of replicates where its marginal gain",
-      "was at or below a noise-floor estimate — the average gain across the",
-      "tail steps of the selected path, where additional value is expected",
-      "to be indistinguishable from noise."
+  if (isTRUE(show_priort_pvalue_section)) {
+    .write_tech(
+      "Prioritization bootstrap p-values",
+      paste(
+        "After the greedy search completes, significance of each step is",
+        "assessed by bootstrapping the rows. For each replicate the",
+        "conditional probability tables are re-fitted on the fixed structure",
+        "and the selected attributes are re-queried in the same order. Each",
+        "step's p-value is the fraction of replicates where its marginal gain",
+        "was at or below a noise-floor estimate — the average gain across the",
+        "tail steps of the selected path, where additional value is expected",
+        "to be indistinguishable from noise."
+      )
     )
-  )
+  }
 
   .write_tech(
     "Indexing",
     paste(
       "The Index column rescales a chosen metric so the top-ranked",
       "attribute in the current view is anchored at 100 and all others are",
-      "proportional. Possible anchors include a lift value, MaxVmin, or",
+      "proportional. Possible anchors include a lift value, Best-vs-Worst, or",
       "mutual information. Indexing is applied within each subgroup",
       "independently."
     )

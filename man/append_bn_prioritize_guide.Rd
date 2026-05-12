@@ -12,7 +12,6 @@ append_bn_prioritize_guide(
   has_subgroups = FALSE,
   has_strategy = FALSE,
   has_community = FALSE,
-  lift = 0.1,
   sig_threshold = 0.05,
   marginal_threshold = 0.1,
   min_base_for_boot = 100,
@@ -20,7 +19,9 @@ append_bn_prioritize_guide(
   n_boot_final = NULL,
   noise_tail = NULL,
   threshold = NULL,
-  impact_shift_type = "headroom"
+  impact_shift_type = "headroom",
+  meta = list(),
+  add_prioritization_pvalue = FALSE
 )
 }
 \arguments{
@@ -37,8 +38,6 @@ append_bn_prioritize_guide(
 \item{has_strategy}{Logical. Whether multiple strategies (lift/max) exist.}
 
 \item{has_community}{Logical. Whether community labels appear in the table.}
-
-\item{lift}{Numeric. Lift fraction used for the lift strategy (e.g., 0.10).}
 
 \item{sig_threshold}{Numeric. P-value threshold for the "significant"
 colour band.}
@@ -58,6 +57,17 @@ actually run (i.e., \code{n_boot_final > 1}).}
 the noise floor.}
 
 \item{threshold}{Numeric or NULL. Early-stopping threshold (fraction).}
+
+\item{add_prioritization_pvalue}{Logical. When TRUE AND the bootstrap
+actually ran (\code{boot_applied}), the guide includes the
+"Bootstrap p-values" and "Why compare to a noise floor" technical
+sections. When FALSE (default) or when the bootstrap didn't run, both
+sections are omitted (the reader never sees a p-value column either).}
+
+\item{prioritize_display}{Character or NULL. Initial value of the
+prioritization Display dropdown — \code{"Point Change"} or \code{"\% Change"}.
+NULL (default) auto-detects from DV type: dichotomous -> "Point Change",
+continuous -> "\% Change".}
 }
 \value{
 The modified workbook object (invisibly).

@@ -72,6 +72,20 @@
 #'     slots get no button.
 #'   * An unnamed list/vector — matched to `results` by position; trailing
 #'     unmatched slots get no button.
+#' @param add_prioritization_pvalue Logical. If `TRUE`, the prioritization
+#'   dashboard table includes its `p-value` column (current behavior). If
+#'   `FALSE` (default), the p-value column is removed from the prioritization
+#'   table.
+#' @param impact_outcome_display Character or `NULL`. Initial value of the
+#'   impact dashboard's Outcome dropdown — `"Point Change"` or `"% Change"`.
+#'   `NULL` (default) auto-detects from the DV type (dichotomous outcomes
+#'   default to `"Point Change"`, continuous outcomes default to
+#'   `"% Change"`). Pass an explicit string to override.
+#' @param prioritize_display Character or `NULL`. Initial value of the
+#'   prioritization Display dropdown — `"Point Change"` or `"% Change"`.
+#'   `NULL` (default) auto-detects from the DV type (dichotomous outcomes
+#'   default to `"Point Change"`, continuous outcomes default to
+#'   `"% Change"`). Pass an explicit string to override the auto-detection.
 #' @param qc_mode Logical. Enables QC-mode affordances in the HTML report
 #'   — currently: hover tooltips on Impact dashboard cells that expose the
 #'   underlying raw metric value and unrounded index (useful for validating
@@ -120,22 +134,32 @@ bn_report <- function(
     add_additional_results = FALSE,
     results_excel = NULL,
     qc_mode = FALSE,
-    # Initial values for the Outcome Display + Shift Type dropdowns on
-    # the impact dashboard. Defaults: "absolute" for both — matches the
-    # static-write defaults so all three views (HTML / standard / dynamic)
-    # land on the same choice on first open. Users can still toggle.
-    # Outcome Display initial value. When NULL (default) the impact
-    # dashboard auto-defaults to Point Change for dichotomous DVs and
-    # % Change otherwise. Pass "absolute" or "proportional" to override.
-    outcome_display = NULL,
-    shift_type      = c("absolute", "proportional", "headroom", "range")
+    # Initial value for the impact dashboard's Outcome dropdown. NULL
+    # (default) auto-detects from the DV type: dichotomous DVs land on
+    # "Point Change"; continuous DVs land on "% Change". Pass "Point Change"
+    # or "% Change" to override. Translated internally to the engine's
+    # "absolute" / "proportional" vocabulary.
+    impact_outcome_display = NULL,
+    shift_type      = c("absolute", "proportional", "headroom", "range"),
+    # When TRUE, the prioritization dashboard table includes a p-value column
+    # (current behavior). When FALSE (default), the p-value column is hidden
+    # entirely from the prioritization table.
+    add_prioritization_pvalue = FALSE,
+    # Initial Display value for the prioritization dashboard. NULL (default)
+    # auto-detects from the DV type (dichotomous -> "Point Change",
+    # continuous -> "% Change"). Pass an explicit string to override.
+    prioritize_display = NULL
 ){
 
-  # NULL outcome_display means "auto-detect by DV type" inside the impact
-  # dashboard render. Explicit values still validated.
-  if (!is.null(outcome_display)) {
-    outcome_display <- match.arg(outcome_display, c("absolute", "proportional"))
-  }
+  # NULL impact_outcome_display means "auto-detect by DV type" inside the
+  # impact dashboard render. Explicit values ("Point Change" / "% Change")
+  # are validated and translated to the engine's "absolute" / "proportional"
+  # internal vocabulary that downstream code expects.
+  outcome_display <- if (!is.null(impact_outcome_display)) {
+    impact_outcome_display <- match.arg(impact_outcome_display,
+      c("Point Change", "% Change"))
+    if (impact_outcome_display == "Point Change") "absolute" else "proportional"
+  } else NULL
   shift_type      <- match.arg(shift_type)
 
   # --- auto-name from title/subtitle ---
@@ -541,7 +565,9 @@ bn_report <- function(
             priort_html <- .bn_report_render_prioritization_dashboard(
               prioritizations_res, result_name = name, dashboard_id = priort_id,
               sig_threshold = priort_meta[["sig_threshold"]] %||% 0.05,
-              marginal_threshold = priort_meta[["marginal_threshold"]] %||% 0.10
+              marginal_threshold = priort_meta[["marginal_threshold"]] %||% 0.10,
+              add_prioritization_pvalue = add_prioritization_pvalue,
+              prioritize_display = prioritize_display
             )
             extras_buttons <- c(extras_buttons, glue::glue(
               '    <button class="tab-btn" onclick="switchTab(this, \'{priort_id}\')">Prioritization</button>'
@@ -1248,13 +1274,15 @@ bn_report <- function(
     "</tr>")
 
   # Body row template — one <tr> per row; index cells populated by JS.
+  # data-col attributes mirror the header so CSS column-width / responsive
+  # rules can target both th and td uniformly.
   body_rows <- vapply(seq_along(data_obj$rows_unweighted), function(i) {
     row <- data_obj$rows_unweighted[[i]]
     leading_cells <- c(
-      sprintf('<td class="txt-col">%s</td>', htmltools::htmlEscape(row$id)),
-      if (has_community) sprintf('<td class="txt-col">%s</td>',
+      sprintf('<td class="txt-col" data-col="id">%s</td>', htmltools::htmlEscape(row$id)),
+      if (has_community) sprintf('<td class="txt-col" data-col="community">%s</td>',
         htmltools::htmlEscape(row$community %||% "")) else NULL,
-      if (has_label)     sprintf('<td class="txt-col">%s</td>',
+      if (has_label)     sprintf('<td class="txt-col" data-col="label">%s</td>',
         htmltools::htmlEscape(row$label %||% "")) else NULL
     )
     sg_cells <- vapply(sgs, function(sg) {
@@ -1315,7 +1343,7 @@ bn_report <- function(
           '</div>',
           # Question feedback — JS populates with the matching preset\'s
           # question (e.g. "What is happening?"). Empty when on Custom.
-          '<span class="impact-warning warn-grey assess-feedback"></span>',
+          '<span class="impact-warning assess-feedback"></span>',
         '</div>'
       )
     } else "",
@@ -1342,7 +1370,9 @@ bn_report <- function(
     '    ', sub('class="impact-ctrl-cell', 'class="impact-ctrl-cell assess-driven', shift_ctrl, fixed = TRUE),
     '  </div>',
     '  <div class="impact-table-wrap">',
-    '    <table class="impact-table">',
+    paste0('    <table class="impact-table',
+           if (isTRUE(is_community)) ' community-mode' else '',
+           '">'),
     '      <thead>', header_row, '</thead>',
     '      <tbody>', paste(body_rows, collapse = ""), '</tbody>',
     '      <tfoot>', total_row, base_row, '</tfoot>',
@@ -1465,7 +1495,9 @@ bn_report <- function(
 #' @noRd
 .bn_report_render_prioritization_dashboard <- function(
     priort, result_name, dashboard_id,
-    sig_threshold = 0.05, marginal_threshold = 0.10
+    sig_threshold = 0.05, marginal_threshold = 0.10,
+    add_prioritization_pvalue = FALSE,
+    prioritize_display = NULL
 ) {
   registry <- tryCatch(.prioritize_build_registry(priort),
     error = function(e) list())
@@ -1545,6 +1577,8 @@ bn_report <- function(
       !is.null(r$p_value) && !is.na(r$p_value)
     }, logical(1)))
   }, logical(1)))
+  # User-facing override: hide the p-value column unless explicitly opted in
+  has_p <- isTRUE(add_prioritization_pvalue) && has_p
 
   # Strategy labels — mirror what .prioritize_build_registry() wrote into
   # the registry. Passed through to JS so currentKey() can detect the Max
@@ -1645,15 +1679,27 @@ bn_report <- function(
     )
   }
   # Chart-mode dropdown (UI-only — controls which numbers feed the chart,
-  # doesn't touch the table lookup). Default = Percent.
+  # doesn't touch the table lookup). Default flips to "Point Change" when
+  # the DV is dichotomous (every dv_estimate in [0, 1]) — point changes
+  # read more naturally in probability terms than as a % of a probability.
+  # User can override via `prioritize_display` ("Point Change" / "% Change").
+  resolved_display <- if (!is.null(prioritize_display)) {
+    match.arg(prioritize_display, c("% Change", "Point Change"))
+  } else if (isTRUE(is_binary_outcome)) {
+    "Point Change"
+  } else {
+    "% Change"
+  }
+  pct_selected   <- if (resolved_display == "% Change")   " selected" else ""
+  point_selected <- if (resolved_display == "Point Change") " selected" else ""
   controls <- c(controls,
     paste0(
       '<div class="priort-ctrl-cell">',
         '<div class="priort-ctrl-row">',
           '<label>Display:</label>',
           '<select class="priort-ctrl" data-dim="chart">',
-            '<option value="% Change" selected>% Change</option>',
-            '<option value="Point Change">Point Change</option>',
+            '<option value="% Change"', pct_selected, '>% Change</option>',
+            '<option value="Point Change"', point_selected, '>Point Change</option>',
           '</select>',
         '</div>',
       '</div>'
@@ -2125,11 +2171,14 @@ bn_report <- function(
     # hide. They reappear on Custom so the user can tune freely. JS
     # toggles `.assess-preset` on the dashboard root.
     '.impact-dashboard.assess-preset .impact-ctrl-cell.assess-driven { display: none; }',
-    # Assess feedback question — grey italic, sits under the Assess
-    # dropdown, parallels the existing impact-warning styling.
+    # Assess feedback question — black italic, sits under the Assess
+    # dropdown. Overrides the parent .impact-warning red and the
+    # .warn-grey grey so the question reads as informational, not a
+    # warning. Italic is kept to differentiate from regular body text.
     '.impact-warning.assess-feedback {',
     '  display: block; padding-left: 108px;',  # match label gutter (100 + 8)
     '  margin-top: 2px; line-height: 1.3;',
+    '  color: #000; font-weight: 400; font-style: italic;',
     '}',
     # Each cell stacks: (row 1) label + select inline, (row 2) warning.
     # min-width: 0 is required so the cell can shrink below its content's
@@ -2149,7 +2198,7 @@ bn_report <- function(
     '  font-weight: 600; color: #333; font-size: 13px; white-space: nowrap;',
     '  flex: 0 0 100px; text-align: right;',
     '}',
-    '.impact-ctrl-row .impact-ctrl { flex: 1 1 auto; min-width: 0; max-width: 240px; }',
+    '.impact-ctrl-row .impact-ctrl { flex: 1 1 auto; min-width: 0; max-width: 200px; }',
     # Warning sits below the ctrl-row so its text can wrap to multiple
     # lines without shoving the cell wider.
     '.impact-warning {',
@@ -2193,8 +2242,50 @@ bn_report <- function(
     '.col-resize-handle:hover { background: rgba(0,0,0,0.15); }',
     '.impact-table.resizing { cursor: col-resize; user-select: none; }',
     '.impact-table.resizing * { cursor: col-resize !important; user-select: none !important; }',
-    '.impact-table thead th.metric-col {',
-    '  width: 100px; min-width: 100px; max-width: 100px;',
+    # Per-column min/max widths — replaces the previous fixed-100px metric
+    # rule and adds sensible bands for the leading text columns. data-col
+    # attributes are emitted on both th and td so the rules apply to all
+    # cells. Long Label / Community text wraps within the max width
+    # instead of dragging the column out wider.
+    '.impact-table th[data-col="id"], .impact-table td[data-col="id"] {',
+    '  min-width: 80px; max-width: 140px;',
+    '}',
+    # In community mode the id column carries community names ("Effortless
+    # Interaction") rather than short IV IDs ("func_7"), so let it grow.
+    '.impact-table.community-mode th[data-col="id"],',
+    '.impact-table.community-mode td[data-col="id"] {',
+    '  min-width: 160px; max-width: 280px;',
+    '  white-space: normal; word-wrap: break-word;',
+    '}',
+    '.impact-table th[data-col="community"], .impact-table td[data-col="community"] {',
+    '  min-width: 120px; max-width: 200px;',
+    '  overflow: hidden; text-overflow: ellipsis;',
+    '}',
+    '.impact-table th[data-col="label"], .impact-table td[data-col="label"] {',
+    '  min-width: 200px; max-width: 380px;',
+    '  white-space: normal; word-wrap: break-word; overflow-wrap: break-word;',
+    '}',
+    '.impact-table thead th.metric-col, .impact-table tbody td.idx-cell {',
+    '  min-width: 70px; max-width: 110px;',
+    '}',
+    # Tier-2 responsive breakpoints. Below 1100px (typical tablet
+    # landscape) hide the Community column to free width. Below 768px
+    # (tablet portrait / mobile) also hide the Label column — Variable
+    # plus the metric columns are the minimum useful set. Above 1400px
+    # let the Label expand and metric columns grow modestly.
+    '@media (max-width: 1100px) {',
+    '  .impact-table th[data-col="community"], .impact-table td[data-col="community"] { display: none; }',
+    '}',
+    '@media (max-width: 768px) {',
+    '  .impact-table th[data-col="label"], .impact-table td[data-col="label"] { display: none; }',
+    '}',
+    '@media (min-width: 1400px) {',
+    '  .impact-table th[data-col="label"], .impact-table td[data-col="label"] {',
+    '    max-width: 480px;',
+    '  }',
+    '  .impact-table thead th.metric-col, .impact-table tbody td.idx-cell {',
+    '    max-width: 130px;',
+    '  }',
     '}',
     '.impact-table thead th.sortable {',
     '  cursor: pointer; user-select: none; position: relative;',
@@ -2242,7 +2333,7 @@ bn_report <- function(
     # collapses 3 → 2 → 1 column based on viewport width, with consistent
     # gutters between whatever columns remain.
     '.priort-controls {',
-    '  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));',
+    '  display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));',
     '  column-gap: 24px; row-gap: 10px; align-items: start;',
     '  box-sizing: border-box; width: 100%;',
     '  margin-bottom: 16px; padding: 12px;',
@@ -2259,9 +2350,9 @@ bn_report <- function(
     '}',
     '.priort-ctrl-row label {',
     '  font-weight: 600; color: #333; font-size: 13px; white-space: nowrap;',
-    '  flex: 0 0 130px; text-align: right;',
+    '  flex: 0 0 100px; text-align: right;',
     '}',
-    '.priort-ctrl-row .priort-ctrl { flex: 1 1 auto; min-width: 0; max-width: 220px; }',
+    '.priort-ctrl-row .priort-ctrl { flex: 1 1 auto; min-width: 0; max-width: 200px; }',
     '.priort-ctrl {',
     '  padding: 4px 8px; font-size: 13px; width: 180px;',
     '  border: 1px solid #bbb; border-radius: 3px; background: #fff;',
@@ -2273,7 +2364,7 @@ bn_report <- function(
     # Warning sits below the ctrl-row so its text can wrap to multiple lines
     # without shoving the cell wider.
     '.priort-warning {',
-    '  display: block; padding-left: 138px;',  # 130px label + 8px gap
+    '  display: block; padding-left: 108px;',  # 100px label + 8px gap
     '  color: #FF0000; font-weight: 700; font-size: 13px;',
     '  white-space: normal; overflow-wrap: anywhere; line-height: 1.3;',
     '}',
@@ -2705,6 +2796,9 @@ bn_report <- function(
     '      }',
     '',
     '      // 4. Total Impact = sum(|raw|) / count (only for lift-type metrics)',
+    '      // Outcome-aware format: Point Change ("absdisplay") -> decimal',
+    '      // (e.g. "0.10"), % Change ("propdisplay") -> percent ("3.5%").',
+    '      // Mirrors the Excel dashboard total_impact behavior.',
     '      var tiCell = root.querySelector(\'td.ti-cell[data-sg="\' + sg + \'"]\');',
     '      if (tiCell) {',
     '        if (mkey && (mkey === "maxVmin" || mkey === "mi")) {',
@@ -2713,7 +2807,10 @@ bn_report <- function(
     '          tiCell.textContent = "";',
     '        } else {',
     '          var ti = sum / rows.length;',
-    '          tiCell.textContent = (ti * 100).toFixed(1) + "%";',
+    '          var displayKey = currentValue("display") || "propdisplay";',
+    '          tiCell.textContent = (displayKey === "absdisplay")',
+    '            ? ti.toFixed(2)',
+    '            : (ti * 100).toFixed(1) + "%";',
     '        }',
     '      }',
     '',
@@ -2804,22 +2901,41 @@ bn_report <- function(
     '    // 8. Index note below the table',
     '    var note = root.querySelector(".index-note");',
     '    if (note) {',
-    '      var desc = metricDescription(mkey);',
+    '      var desc = metricDescription(mkey, shiftVal);',
     '      note.textContent = desc;',
     '    }',
     '  }',
     '',
-    '  function metricDescription(mkey) {',
+    '  // Sentence fragment describing what an N% lift means under the',
+    '  // current Shift Type. Used as a tail clause on the index note.',
+    '  function shiftMeaningSentence(pct, shiftKey) {',
+    '    var k = shiftKey || "propshift";',
+    '    var n = parseFloat(pct);',
+    '    var step = isFinite(n) ? (n / 100).toFixed(2) : "0.10";',
+    '    if (k === "propshift") {',
+    '      return "Each attribute\\u2019s mean is shifted by " + pct + "% of its current value.";',
+    '    } else if (k === "absshift") {',
+    '      return "Each attribute\\u2019s mean is shifted by " + step + " scale points (a fixed step).";',
+    '    } else if (k === "headshift") {',
+    '      return "Each attribute closes " + pct + "% of its gap to the top of its scale.";',
+    '    } else if (k === "rangeshift") {',
+    '      return "Each attribute\\u2019s mean is shifted by " + pct + "% of its scale\\u2019s range.";',
+    '    }',
+    '    return "";',
+    '  }',
+    '',
+    '  function metricDescription(mkey, shiftKey) {',
     '    if (!mkey) return "";',
     '    if (mkey === "lift" || mkey === "lift_0") {',
-    '      return "Indexed by average effect. Measures the outcome\\u2019s sensitivity to a small symmetric perturbation (\\u00b15%) around each attribute\\u2019s current state. The interpretation of 5% depends on the selected Shift Type.";',
+    '      return "Indexed by average effect. Measures the outcome\\u2019s sensitivity to a small symmetric perturbation around each attribute\\u2019s current state.";',
     '    }',
     '    if (mkey.indexOf("lift_") === 0) {',
     '      var pct = mkey.replace("lift_", "");',
-    '      return "Indexed by " + pct + "% lift. Measures how much the outcome changes when each attribute\\u2019s distribution shifts by " + pct + "% \\u2014 the meaning of " + pct + "% follows the selected Shift Type (% of current mean, fixed step, % toward top, or % of range).";',
+    '      var head = "Indexed by " + pct + "% improvement. Measures how much the outcome changes when each attribute\\u2019s distribution shifts by " + pct + "%. ";',
+    '      return head + shiftMeaningSentence(pct, shiftKey);',
     '    }',
     '    if (mkey === "maxVmin") {',
-    '      return "Indexed by best-vs-worst effect. Measures the outcome difference between setting all respondents to the top of each attribute versus all at the bottom.";',
+    '      return "Indexed by best-vs-worst effect. Measures the outcome difference between the top of each attribute versus the bottom.";',
     '    }',
     '    if (mkey === "mi") {',
     '      return "Indexed by explanatory value. Measures the statistical strength of the relationship between each attribute and the outcome (mutual information), independent of intervention direction or shift type.";',
@@ -3320,10 +3436,18 @@ bn_report <- function(
     '      }',
     '      return r.cumulative_gain;',
     '    }',
+    '    // Percent-label rule: integer when |x| >= 1% (bar height already',
+    '    // conveys magnitude; trailing decimals add visual noise), 1 decimal',
+    '    // when |x| < 1% (preserves precision so sub-percent values don\\u2019t',
+    '    // collapse to "0%"). Point-change for continuous DVs stays at 2',
+    '    // decimals (raw scale units).',
+    '    function fmtPctLabel(pct) {',
+    '      return (Math.abs(pct) >= 1 ? pct.toFixed(0) : pct.toFixed(1)) + "%";',
+    '    }',
     '    function valueLabel(v) {',
     '      if (v == null || isNaN(v)) return "";',
-    '      if (chartMode === "% Change") return v.toFixed(1) + "%";',
-    '      return data.is_binary ? (v * 100).toFixed(1) + "%" : v.toFixed(2);',
+    '      if (chartMode === "% Change") return fmtPctLabel(v);',
+    '      return data.is_binary ? fmtPctLabel(v * 100) : v.toFixed(2);',
     '    }',
     '',
     '    // y range: floor at min(0, min value); ceiling at max',

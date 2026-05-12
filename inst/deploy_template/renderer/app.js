@@ -254,6 +254,9 @@ async function applyConfig() {
 
   const root = document.documentElement;
   root.style.setProperty("--accent-color", config.accentColor);
+  if (config.headerText) {
+    root.style.setProperty("--header-text", config.headerText);
+  }
 
   const bg = config.headerBackground;
   const isColor = /^(#|rgb|hsl|hwb|lab|lch|oklch|oklab|transparent|inherit|currentColor)/.test(bg.trim());

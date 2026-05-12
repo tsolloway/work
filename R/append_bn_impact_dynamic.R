@@ -265,6 +265,78 @@ append_bn_impact_dynamic <- function(
   }
 
   # ---------------------------------------------------------------------------
+  # Assess preset map — high-level dropdown that drives Analysis (metric) +
+  # Shift Type. Mirrors the HTML dashboard's Assess control. Each preset
+  # binds a (metric_key, shift_key) pair plus a one-sentence question that
+  # surfaces below the dropdown. Presets are only built when the data
+  # supports them; if none are built, the Assess dropdown is suppressed.
+  #   Current Impact      → Average Effect (lift_0 / lift)  + Range shift
+  #   Intervention Impact → Effect at 0.10 (or closest)     + Headroom shift
+  #   Maximum Impact      → Best-vs-Worst (maxVmin)         + Range shift
+  # ---------------------------------------------------------------------------
+  .find_avg_metric_key <- function() {
+    candidates <- c("lift_0", "lift")
+    hit <- intersect(candidates, market_lift_suffixes)
+    if (length(hit) > 0) hit[1] else NA_character_
+  }
+  .find_intervention_metric_key <- function() {
+    nz <- setdiff(market_lift_suffixes, c("lift", "lift_0"))
+    if (length(nz) == 0) return(NA_character_)
+    pcts <- suppressWarnings(as.numeric(sub("^lift_", "", nz)))
+    valid <- !is.na(pcts)
+    if (!any(valid)) return(NA_character_)
+    nz <- nz[valid]; pcts <- pcts[valid]
+    nz[which.min(abs(pcts - 10))]
+  }
+  preset_labels    <- character(0)
+  preset_metric_keys <- character(0)
+  preset_shift_keys  <- character(0)
+  preset_questions <- character(0)
+  .avg_key <- .find_avg_metric_key()
+  if (!is.na(.avg_key)) {
+    preset_labels       <- c(preset_labels, "Current Impact")
+    preset_metric_keys  <- c(preset_metric_keys, .avg_key)
+    preset_shift_keys   <- c(preset_shift_keys, "rangeshift")
+    preset_questions    <- c(preset_questions, "What is happening?")
+  }
+  .imp_key <- .find_intervention_metric_key()
+  if (!is.na(.imp_key)) {
+    preset_labels       <- c(preset_labels, "Intervention Impact")
+    preset_metric_keys  <- c(preset_metric_keys, .imp_key)
+    preset_shift_keys   <- c(preset_shift_keys, "headshift")
+    preset_questions    <- c(preset_questions, "What should we do?")
+  }
+  if ("maxVmin" %in% base_suffixes) {
+    preset_labels       <- c(preset_labels, "Maximum Impact")
+    preset_metric_keys  <- c(preset_metric_keys, "maxVmin")
+    # Shift type is irrelevant for maxVmin; pick rangeshift so the
+    # underlying Shift Type cell lands on a valid option.
+    preset_shift_keys   <- c(preset_shift_keys, "rangeshift")
+    preset_questions    <- c(preset_questions, "What is possible?")
+  }
+  # Only emit Assess if (a) at least one preset was found AND (b) the engine
+  # actually emitted shift-type variants. Without shift_type variants the
+  # preset's shift_key has nothing to bind to.
+  has_assess <- length(preset_labels) > 0 && has_shift_type
+  # Drop preset shift keys that aren't actually present in the data; if a
+  # required shift is missing, drop the whole preset rather than landing
+  # the user on an invalid Shift Type cell.
+  if (has_assess) {
+    keep <- preset_shift_keys %in% shift_type_keys
+    preset_labels       <- preset_labels[keep]
+    preset_metric_keys  <- preset_metric_keys[keep]
+    preset_shift_keys   <- preset_shift_keys[keep]
+    preset_questions    <- preset_questions[keep]
+    has_assess <- length(preset_labels) > 0
+  }
+  # "Custom" is always offered as an escape hatch when Assess is shown so
+  # users can manually drive the underlying Analysis + Shift Type controls.
+  assess_labels    <- if (has_assess) c(preset_labels, "Custom")    else character(0)
+  assess_metric_keys <- if (has_assess) c(preset_metric_keys, "")   else character(0)
+  assess_shift_keys  <- if (has_assess) c(preset_shift_keys, "")    else character(0)
+  assess_questions <- if (has_assess) c(preset_questions, "")       else character(0)
+
+  # ---------------------------------------------------------------------------
   # Sheet 1: Dashboard (created first so it appears first)
   # ---------------------------------------------------------------------------
   openxlsx::addWorksheet(wb, dash_sheet, gridLines = FALSE)
@@ -308,15 +380,14 @@ append_bn_impact_dynamic <- function(
   # Index description in E column
   index_descriptions <- purrr::map_chr(metric_keys, function(mk) {
     if (mk == "lift" || mk == "lift_0") {
-      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation (±5%) around each attribute's current state. The interpretation of 5% depends on the selected Shift Type."
+      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation around each attribute's current state."
     } else if (grepl("^lift_", mk)) {
       pct <- gsub("lift_", "", mk)
       paste0(
-        "Indexed by ", pct, "% lift. Measures how much the outcome changes when each attribute's distribution shifts by ", pct,
-        "% — the meaning of ", pct, "% follows the selected Shift Type (% of current mean, fixed step, % toward top, or % of range)."
+        "Indexed by ", pct, "% improvement. Measures how much the outcome changes when each attribute's distribution shifts by ", pct, "%."
       )
     } else if (mk == "maxVmin") {
-      "Indexed by best-vs-worst effect. Measures the outcome difference between setting all respondents to the top of each attribute versus all at the bottom."
+      "Indexed by best-vs-worst effect. Measures the outcome difference between the top of each attribute versus the bottom."
     } else if (mk == "mi") {
       "Indexed by explanatory value. Measures the statistical strength of the relationship between each attribute and the outcome (mutual information), independent of intervention direction or shift type."
     } else {
@@ -328,8 +399,24 @@ append_bn_impact_dynamic <- function(
     openxlsx::writeData(wb, lookup_sheet, index_descriptions[di], startRow = di + 1, startCol = 5)
   }
 
-  # Sequential column counter for remaining lookup columns (after E = Index descriptions)
-  lk_col <- 6L
+  # Per-metric lift % (used by the dynamic shift sentence formula). Empty
+  # for non-lift metrics and for the "Average Effect" / lift_0 case
+  # (which doesn\'t carry a shift sentence).
+  index_pcts <- purrr::map_chr(metric_keys, function(mk) {
+    if (mk == "lift" || mk == "lift_0") return("")
+    if (!grepl("^lift_", mk)) return("")
+    pct <- gsub("lift_", "", mk)
+    pct_num <- suppressWarnings(as.numeric(pct))
+    if (is.na(pct_num)) "" else as.character(pct_num)
+  })
+  openxlsx::writeData(wb, lookup_sheet, "Index Pct", startRow = 1, startCol = 6)
+  for (di in seq_along(index_pcts)) {
+    openxlsx::writeData(wb, lookup_sheet, index_pcts[di], startRow = di + 1, startCol = 6)
+  }
+  index_pct_col <- 6L
+
+  # Sequential column counter for remaining lookup columns (after F = Index Pct)
+  lk_col <- 7L
 
   # Weight options (if weighted results available)
   weight_opt_col <- NULL
@@ -349,7 +436,7 @@ append_bn_impact_dynamic <- function(
   outcome_display_key_col <- NULL
   if (has_outcome_display) {
     outcome_display_opt_col <- lk_col
-    openxlsx::writeData(wb, lookup_sheet, "Outcome Display", startRow = 1, startCol = lk_col)
+    openxlsx::writeData(wb, lookup_sheet, "Outcome", startRow = 1, startCol = lk_col)
     for (oi in seq_along(outcome_display_labels)) {
       openxlsx::writeData(wb, lookup_sheet, outcome_display_labels[oi],
         startRow = oi + 1, startCol = lk_col)
@@ -366,9 +453,10 @@ append_bn_impact_dynamic <- function(
     lk_col <- lk_col + 1L
   }
 
-  # Shift-type options (Pass B). Labels column + keys column.
+  # Shift-type options (Pass B). Labels column + keys column + sentence column.
   shift_type_opt_col <- NULL
   shift_type_key_col <- NULL
+  shift_sentence_col <- NULL
   if (has_shift_type) {
     shift_type_opt_col <- lk_col
     openxlsx::writeData(wb, lookup_sheet, "Shift Type", startRow = 1, startCol = lk_col)
@@ -384,6 +472,77 @@ append_bn_impact_dynamic <- function(
     for (oi in seq_along(shift_type_keys)) {
       openxlsx::writeData(wb, lookup_sheet, shift_type_keys[oi],
         startRow = oi + 1, startCol = lk_col)
+    }
+    lk_col <- lk_col + 1L
+
+    # Shift-type sentence templates — appended to the index footer when
+    # the active metric is a numeric lift (lift_5, lift_10, etc.). The
+    # `{pct}` placeholder gets substituted in the footer formula with
+    # the metric\'s lift % (from the Index Pct column).
+    shift_sentence_col <- lk_col
+    shift_sentences <- vapply(shift_type_keys, function(k) {
+      switch(k,
+        "propshift"  = "Each attribute's mean is shifted by {pct}% of its current value.",
+        "absshift"   = "Each attribute's mean is shifted by 0.{pct} scale points (a fixed step).",
+        "headshift"  = "Each attribute closes {pct}% of its gap to the top of its scale.",
+        "rangeshift" = "Each attribute's mean is shifted by {pct}% of its scale's range.",
+        ""
+      )
+    }, character(1))
+    openxlsx::writeData(wb, lookup_sheet, "Shift Sentence",
+      startRow = 1, startCol = lk_col)
+    for (oi in seq_along(shift_sentences)) {
+      openxlsx::writeData(wb, lookup_sheet, shift_sentences[oi],
+        startRow = oi + 1, startCol = lk_col)
+    }
+    lk_col <- lk_col + 1L
+  }
+
+  # Assess preset lookup. Three parallel columns:
+  #   - Assess Label (e.g., "Current Impact" / "Custom")
+  #   - Assess Metric Key (e.g., "lift_0" / "")
+  #   - Assess Shift Key  (e.g., "rangeshift" / "")
+  #   - Assess Question   (e.g., "What is happening?" / "")
+  # Empty values for the "Custom" row tell the dashboard formulas to fall
+  # back to the user-controlled Analysis + Shift Type dropdown cells.
+  assess_label_col       <- NULL
+  assess_metric_key_col  <- NULL
+  assess_shift_key_col   <- NULL
+  assess_question_col    <- NULL
+  if (has_assess) {
+    assess_label_col <- lk_col
+    openxlsx::writeData(wb, lookup_sheet, "Assess",
+      startRow = 1, startCol = lk_col)
+    for (ai in seq_along(assess_labels)) {
+      openxlsx::writeData(wb, lookup_sheet, assess_labels[ai],
+        startRow = ai + 1, startCol = lk_col)
+    }
+    lk_col <- lk_col + 1L
+
+    assess_metric_key_col <- lk_col
+    openxlsx::writeData(wb, lookup_sheet, "Assess Metric",
+      startRow = 1, startCol = lk_col)
+    for (ai in seq_along(assess_metric_keys)) {
+      openxlsx::writeData(wb, lookup_sheet, assess_metric_keys[ai],
+        startRow = ai + 1, startCol = lk_col)
+    }
+    lk_col <- lk_col + 1L
+
+    assess_shift_key_col <- lk_col
+    openxlsx::writeData(wb, lookup_sheet, "Assess Shift",
+      startRow = 1, startCol = lk_col)
+    for (ai in seq_along(assess_shift_keys)) {
+      openxlsx::writeData(wb, lookup_sheet, assess_shift_keys[ai],
+        startRow = ai + 1, startCol = lk_col)
+    }
+    lk_col <- lk_col + 1L
+
+    assess_question_col <- lk_col
+    openxlsx::writeData(wb, lookup_sheet, "Assess Question",
+      startRow = 1, startCol = lk_col)
+    for (ai in seq_along(assess_questions)) {
+      openxlsx::writeData(wb, lookup_sheet, assess_questions[ai],
+        startRow = ai + 1, startCol = lk_col)
     }
     lk_col <- lk_col + 1L
   }
@@ -493,6 +652,37 @@ append_bn_impact_dynamic <- function(
     border = "Bottom", borderStyle = "thin", halign = "left"
   )
 
+  # Assess dropdown — high-level "what question are we answering" control.
+  # Drives Analysis (metric_key) + Shift Type (shift_key) when set to a
+  # preset; falls back to user control when set to "Custom". The cell to
+  # the right of the Assess dropdown carries the matching feedback question
+  # ("What is happening?" / "What should we do?" / "What is possible?").
+  assess_cell_col <- NULL
+  assess_cell_row <- NULL
+  if (has_assess) {
+    assess_cell_col <- cell_col
+    assess_cell_row <- current_row
+    openxlsx::writeData(wb, dash_sheet, "Assess: ",
+      startRow = current_row, startCol = label_col)
+    openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
+      rows = current_row, cols = label_col, stack = TRUE)
+    # Initial value: first preset (typically "Current Impact") so the
+    # dashboard lands on a curated combo on first open.
+    openxlsx::writeData(wb, dash_sheet, preset_labels[1],
+      startRow = current_row, startCol = cell_col)
+    openxlsx::addStyle(wb, dash_sheet, style = dropdown_cell_style,
+      rows = current_row, cols = cell_col, stack = TRUE)
+
+    assess_range <- paste0(lookup_sheet, "!$",
+      num2let(assess_label_col), "$2:$",
+      num2let(assess_label_col), "$",
+      length(assess_labels) + 1)
+    openxlsx::dataValidation(wb, dash_sheet,
+      col = cell_col, rows = current_row,
+      type = "list", value = assess_range)
+    current_row <- current_row + 1L
+  }
+
   # Metric dropdown
   metric_cell_col <- cell_col
   metric_cell_row <- current_row
@@ -546,7 +736,7 @@ append_bn_impact_dynamic <- function(
   if (has_outcome_display) {
     outcome_display_cell_col <- cell_col
     outcome_display_cell_row <- current_row
-    openxlsx::writeData(wb, dash_sheet, "Outcome Display: ",
+    openxlsx::writeData(wb, dash_sheet, "Outcome: ",
       startRow = current_row, startCol = label_col)
     openxlsx::addStyle(wb, dash_sheet, style = styles$dropdown_label,
       rows = current_row, cols = label_col, stack = TRUE)
@@ -597,16 +787,100 @@ append_bn_impact_dynamic <- function(
 
   # (No Index By dropdown — per-battery views are separate tabs.)
 
+  # When Assess is on a preset, the Analysis (Metric) and Shift Type
+  # dropdowns are mathematically overridden by the preset — grey out their
+  # label + cell to signal that they're inactive. Excel can't hide rows
+  # mid-sheet on a dropdown change, so this is the visual stand-in for the
+  # HTML dashboard's `display:none` on `.assess-driven` rows.
+  if (has_assess) {
+    assess_active_rule <- paste0(
+      "$", num2let(assess_cell_col), "$", assess_cell_row, "<>\"Custom\""
+    )
+    grey_inactive <- openxlsx::createStyle(
+      fontColour = "#BFBFBF", textDecoration = "italic"
+    )
+    # Metric (Analysis) row — label + cell
+    openxlsx::conditionalFormatting(wb, dash_sheet,
+      cols = c(label_col, metric_cell_col), rows = metric_cell_row,
+      style = grey_inactive, type = "expression", rule = assess_active_rule)
+    # Shift Type row — label + cell (only when emitted)
+    if (has_shift_type) {
+      openxlsx::conditionalFormatting(wb, dash_sheet,
+        cols = c(label_col, shift_type_cell_col), rows = shift_type_cell_row,
+        style = grey_inactive, type = "expression", rule = assess_active_rule)
+    }
+  }
+
   # Build metric key lookup formula
   dash_sheet_escaped <- gsub("'", "''", dash_sheet)
   metric_cell_abs <- paste0("'", dash_sheet_escaped, "'!$", num2let(metric_cell_col), "$", metric_cell_row)
-  mk_lookup <- paste0(
+  # Effective metric key — what the dashboard's data formulas treat as the
+  # current Analysis. When Assess is on a preset (Current / Intervention /
+  # Maximum Impact), the preset's metric_key wins; on Custom (or when no
+  # Assess dropdown was emitted), the user's Analysis dropdown wins.
+  metric_label_lookup <- paste0(
     "INDEX(", lookup_sheet, "!$C$2:$C$", length(metric_labels) + 1,
     ",MATCH(", metric_cell_abs, ",", lookup_sheet, "!$B$2:$B$", length(metric_labels) + 1, ",0))"
   )
+  if (has_assess) {
+    assess_cell_abs <- paste0("'", dash_sheet_escaped, "'!$",
+      num2let(assess_cell_col), "$", assess_cell_row)
+    # Same-sheet ref (used by data formulas on this sheet — both
+    # `assess_cell_abs` and `assess_ref` point at the same cell, but
+    # `assess_ref` is shorter for in-sheet formulas).
+    assess_ref <- paste0("$", num2let(assess_cell_col), "$", assess_cell_row)
+    preset_metric_key_lookup <- paste0(
+      "INDEX(", lookup_sheet, "!$", num2let(assess_metric_key_col), "$2:$",
+      num2let(assess_metric_key_col), "$", length(assess_labels) + 1, ",",
+      "MATCH(", assess_cell_abs, ",",
+      lookup_sheet, "!$", num2let(assess_label_col), "$2:$",
+      num2let(assess_label_col), "$", length(assess_labels) + 1, ",0))"
+    )
+    preset_shift_key_lookup <- paste0(
+      "INDEX(", lookup_sheet, "!$", num2let(assess_shift_key_col), "$2:$",
+      num2let(assess_shift_key_col), "$", length(assess_labels) + 1, ",",
+      "MATCH(", assess_cell_abs, ",",
+      lookup_sheet, "!$", num2let(assess_label_col), "$2:$",
+      num2let(assess_label_col), "$", length(assess_labels) + 1, ",0))"
+    )
+    mk_lookup <- paste0(
+      "IF(", assess_cell_abs, "=\"Custom\",", metric_label_lookup, ",",
+      preset_metric_key_lookup, ")"
+    )
+  } else {
+    mk_lookup <- metric_label_lookup
+  }
 
-  # Warning column = next column after the dropdown cell
-  warning_col <- cell_col + 1L
+  # Warning column = next visible column after the dropdown cell.
+  # Attribute mode (n_leading >= 2): cell_col sits in the leading-column area
+  # (e.g., col C), so cell_col + 1 lands in a visible leading column (col D).
+  # Community mode (n_leading < 2): cell_col sits on index_cols_pos[1] (e.g.
+  # col E), so cell_col + 1 is raw_metric_cols[2] (hidden) and cell_col + 2
+  # is p_val_cols[2] (hidden). Skip past both to the next visible index col
+  # at cell_col + 3 so the feedback actually renders.
+  warning_col <- if (n_leading >= 2L) cell_col + 1L else cell_col + 3L
+
+  # Assess feedback — italic grey question text to the right of the Assess
+  # dropdown cell ("What is happening?" / "What should we do?" / "What is
+  # possible?" / blank for Custom). Mirrors the HTML dashboard's
+  # `.assess-feedback` span.
+  if (has_assess) {
+    assess_question_lookup <- paste0(
+      "INDEX(", lookup_sheet, "!$", num2let(assess_question_col), "$2:$",
+      num2let(assess_question_col), "$", length(assess_labels) + 1, ",",
+      "MATCH(", assess_cell_abs, ",",
+      lookup_sheet, "!$", num2let(assess_label_col), "$2:$",
+      num2let(assess_label_col), "$", length(assess_labels) + 1, ",0))"
+    )
+    openxlsx::writeFormula(wb, dash_sheet, x = assess_question_lookup,
+      startRow = assess_cell_row, startCol = warning_col)
+    # Black italic — feedback is informational, not a warning.
+    black_italic_assess <- openxlsx::createStyle(
+      fontColour = "#000000", textDecoration = "italic"
+    )
+    openxlsx::addStyle(wb, dash_sheet, style = black_italic_assess,
+      rows = assess_cell_row, cols = warning_col, stack = TRUE)
+  }
 
   # Pass-B grey-out rule: when Shift Type = Absolute AND metric is a lift,
   # focus AND weight have no mathematical effect on the lift value (the
@@ -698,19 +972,72 @@ append_bn_impact_dynamic <- function(
 
   # Shift Type warning — grey italic "doesn't affect this metric" when
   # metric = maxVmin or mi (neither is computed via bn_freq_prob_shift).
+  # When Assess is on a preset, the user's Shift Type cell is overridden
+  # by the preset, so the feedback flips to "Fixed to <shift_label> when
+  # Assess is <preset_label>" so the user understands why their dropdown
+  # selection is greyed out.
   if (has_shift_type) {
     shift_warn_rule <- paste0(
       "OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\")"
     )
-    shift_warning_formula <- paste0(
-      "IF(", shift_warn_rule, ",",
-        "\"Shift type doesn't affect this metric\",\"\")"
-    )
+    if (has_assess) {
+      # Look up the preset's shift LABEL by matching the preset's shift_key
+      # against the shift_type_keys column, then indexing the labels column.
+      preset_shift_label_lookup <- paste0(
+        "INDEX(", lookup_sheet, "!$", num2let(shift_type_opt_col), "$2:$",
+        num2let(shift_type_opt_col), "$", length(shift_type_labels) + 1, ",",
+        "MATCH(", preset_shift_key_lookup, ",",
+        lookup_sheet, "!$", num2let(shift_type_key_col), "$2:$",
+        num2let(shift_type_key_col), "$", length(shift_type_keys) + 1, ",0))"
+      )
+      shift_warning_formula <- paste0(
+        "IF(", assess_ref, "<>\"Custom\",",
+          "\"Fixed to \"&", preset_shift_label_lookup,
+          "&\" when Assess is \"&", assess_ref, ",",
+        "IF(", shift_warn_rule, ",",
+          "\"Shift type doesn't affect this metric\",\"\"))"
+      )
+    } else {
+      shift_warning_formula <- paste0(
+        "IF(", shift_warn_rule, ",",
+          "\"Shift type doesn't affect this metric\",\"\")"
+      )
+    }
     openxlsx::writeFormula(wb, dash_sheet, x = shift_warning_formula,
       startRow = shift_type_cell_row, startCol = warning_col)
     openxlsx::conditionalFormatting(wb, dash_sheet,
       cols = warning_col, rows = shift_type_cell_row,
       style = grey_italic, type = "expression", rule = shift_warn_rule)
+    # Always-grey when Assess is on a preset (overrides shift_warn_rule
+    # priority since preset feedback subsumes the maxVmin/mi note).
+    if (has_assess) {
+      openxlsx::conditionalFormatting(wb, dash_sheet,
+        cols = warning_col, rows = shift_type_cell_row,
+        style = grey_italic, type = "expression",
+        rule = paste0(assess_ref, "<>\"Custom\""))
+    }
+  }
+
+  # Analysis (Metric) warning — when Assess is on a preset, the user's
+  # Analysis cell is overridden, so write a feedback line stating which
+  # metric the dashboard is fixed to and why.
+  if (has_assess) {
+    preset_metric_label_lookup <- paste0(
+      "INDEX(", lookup_sheet, "!$B$2:$B$", length(metric_labels) + 1, ",",
+      "MATCH(", preset_metric_key_lookup, ",",
+      lookup_sheet, "!$C$2:$C$", length(metric_labels) + 1, ",0))"
+    )
+    metric_warning_formula <- paste0(
+      "IF(", assess_ref, "<>\"Custom\",",
+        "\"Fixed to \"&", preset_metric_label_lookup,
+        "&\" when Assess is \"&", assess_ref, ",\"\")"
+    )
+    openxlsx::writeFormula(wb, dash_sheet, x = metric_warning_formula,
+      startRow = metric_cell_row, startCol = warning_col)
+    openxlsx::conditionalFormatting(wb, dash_sheet,
+      cols = warning_col, rows = metric_cell_row,
+      style = grey_italic, type = "expression",
+      rule = paste0(assess_ref, "<>\"Custom\""))
   }
 
   # Dynamic Focus column in _lookup
@@ -851,17 +1178,31 @@ append_bn_impact_dynamic <- function(
     display_suffix <- "\"\""
   }
 
-  # Shift tag resolves to "propshift" or "absshift" based on the Shift Type
-  # dropdown — only used for lift columns (maxVmin and mi are shift-invariant).
+  # (`assess_ref` and `preset_shift_key_lookup` were defined upstream in
+  # the mk_lookup wrapping block, which now also populates them so the
+  # warning-column section ahead of this code can reference them.)
+
+  # Shift tag resolves to "propshift" / "absshift" / "headshift" /
+  # "rangeshift" based on the Shift Type dropdown — only used for lift
+  # columns (maxVmin and mi are shift-invariant). When Assess is on a
+  # preset, the preset's shift_key wins over the user's Shift Type cell.
   if (has_shift_type) {
     shift_ref <- paste0("$", num2let(shift_type_cell_col), "$", shift_type_cell_row)
-    shift_key <- paste0(
+    user_shift_key <- paste0(
       "INDEX(", lookup_sheet, "!$", num2let(shift_type_key_col), "$2:$",
       num2let(shift_type_key_col), "$", length(shift_type_keys) + 1,
       ",MATCH(", shift_ref, ",",
       lookup_sheet, "!$", num2let(shift_type_opt_col), "$2:$",
       num2let(shift_type_opt_col), "$", length(shift_type_labels) + 1, ",0))"
     )
+    if (has_assess) {
+      shift_key <- paste0(
+        "IF(", assess_ref, "=\"Custom\",", user_shift_key, ",",
+        preset_shift_key_lookup, ")"
+      )
+    } else {
+      shift_key <- user_shift_key
+    }
     lift_shift_suffix <- paste0("&\"_\"&", shift_key)
   } else {
     lift_shift_suffix <- "\"\""
@@ -903,9 +1244,21 @@ append_bn_impact_dynamic <- function(
     )
   }
 
-  mk <- paste0(
+  user_mk <- paste0(
     "INDEX(", metric_key_col, ",MATCH(", metric_ref, ",", metric_key_range, ",0))"
   )
+  # When Assess is on a preset (Current / Intervention / Maximum Impact),
+  # the preset's metric_key replaces the user's Analysis dropdown selection
+  # for table-data formulas. On Custom (or when no Assess dropdown was
+  # emitted), fall back to the user's choice.
+  if (has_assess) {
+    mk <- paste0(
+      "IF(", assess_ref, "=\"Custom\",", user_mk, ",",
+      preset_metric_key_lookup, ")"
+    )
+  } else {
+    mk <- user_mk
+  }
 
   for (sg_i in seq_along(sgs)) {
     sg <- sgs[sg_i]
@@ -1066,15 +1419,31 @@ append_bn_impact_dynamic <- function(
       } else {
         "1"
       }
-      ti_formula <- paste0(
-        "IFERROR(SUMPRODUCT((", mask_range, "=", mask_lit, ")",
+      ti_value <- paste0(
+        "SUMPRODUCT((", mask_range, "=", mask_lit, ")",
           "*ABS(INDEX(", results_all_rows, ",0,", match_col, ")))",
-        "/COUNTIF(", mask_range, ",", mask_lit, "),\"\")"
+        "/COUNTIF(", mask_range, ",", mask_lit, ")"
+      )
+    } else {
+      ti_value <- paste0(sum_expr, "/ROWS(", results_count_ref, ")")
+    }
+
+    # Outcome-aware number format: % when Outcome="% Change", decimal otherwise.
+    # Excel's conditional formatting can't toggle numFmt, so we wrap the
+    # value in TEXT() and switch only the format string via IF. The value
+    # expression is evaluated once. The cell becomes display-only (no
+    # downstream formulas reference Total Impact, so this is safe).
+    if (has_outcome_display) {
+      outcome_ref <- paste0("$", num2let(outcome_display_cell_col), "$",
+                            outcome_display_cell_row)
+      ti_formula <- paste0(
+        "IFERROR(IF(", sum_expr, "=0,\"\",",
+          "TEXT(", ti_value, ",IF(", outcome_ref, "=\"Point Change\",\"0.00\",\"0.0%\"))",
+        "),\"\")"
       )
     } else {
       ti_formula <- paste0(
-        "IFERROR(IF(", sum_expr, "=0,\"\",",
-        sum_expr, "/ROWS(", results_count_ref, ")),\"\")"
+        "IFERROR(IF(", sum_expr, "=0,\"\",", ti_value, "),\"\")"
       )
     }
     openxlsx::writeFormula(wb, dash_sheet, x = ti_formula,
@@ -1127,9 +1496,46 @@ append_bn_impact_dynamic <- function(
   # Dynamic footer (one blank row after table)
   footer_start <- base_row + 2
   index_desc_range <- paste0(lookup_sheet, "!$E$2:$E$", length(metric_labels) + 1)
+  index_pct_range  <- paste0(lookup_sheet, "!$F$2:$F$", length(metric_labels) + 1)
+
+  # Lift-metric tail: when the active metric has a non-empty Index Pct
+  # (i.e., it\'s lift_5 / lift_10 / etc., not lift_0 / maxVmin / mi),
+  # append a sentence describing what that % means under the current
+  # Shift Type. Built by SUBSTITUTE-ing the metric\'s lift % into the
+  # selected shift\'s sentence template (with `{pct}` placeholder).
+  #
+  # We match by KEY (not label) so Assess presets resolve correctly: the
+  # `mk` formula already evaluates to the effective metric_key (preset's
+  # or user's), and `shift_key` to the effective shift_key.
+  shift_tail <- if (has_shift_type && !is.null(shift_sentence_col)) {
+    shift_keys_range <- paste0(
+      lookup_sheet, "!$", num2let(shift_type_key_col), "$2:$",
+      num2let(shift_type_key_col), "$", length(shift_type_keys) + 1
+    )
+    shift_sentence_range <- paste0(
+      lookup_sheet, "!$", num2let(shift_sentence_col), "$2:$",
+      num2let(shift_sentence_col), "$", length(shift_type_labels) + 1
+    )
+    metric_pct_lookup <- paste0(
+      "INDEX(", index_pct_range, ",MATCH(", mk, ",", metric_key_col, ",0))"
+    )
+    shift_sentence_lookup <- paste0(
+      "INDEX(", shift_sentence_range, ",MATCH(",
+      shift_key, ",", shift_keys_range, ",0))"
+    )
+    paste0(
+      "&IF(", metric_pct_lookup, "<>\"\",",
+        "\" \"&SUBSTITUTE(", shift_sentence_lookup, ",\"{pct}\",",
+        metric_pct_lookup, "),\"\")"
+    )
+  } else {
+    ""
+  }
+
   footer_formula <- paste0(
     "\"", engine_footer, ". \"&INDEX(", index_desc_range,
-    ",MATCH(", metric_ref, ",", metric_key_range, ",0))"
+    ",MATCH(", mk, ",", metric_key_col, ",0))",
+    shift_tail
   )
   openxlsx::writeFormula(wb, dash_sheet, x = footer_formula,
     startRow = footer_start, startCol = col_data_start)

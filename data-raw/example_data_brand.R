@@ -200,6 +200,26 @@ for (v in all_vars) {
   example_data_brand[[v]] <- likert_mat[, v]
 }
 
+# --- Swap field data between selected pairs ---
+# Field names stay the same; the underlying data values are exchanged
+# between each pair, so each column inherits the other's distribution.
+# Used to deliberately introduce label/data mismatch for testing label
+# integrity in downstream pipelines.
+.swap_pairs <- list(
+  c("bp_trustworthy", "bp_reputable"),
+  c("bp_honest", "bp_environmentally_friendly"),
+  c("bp_high_quality", "bp_affordable"),
+  c("bp_high_quality", "bp_worth_the_price"),
+  c("bp_cool", "bp_honest")
+)
+for (pair in .swap_pairs) {
+  a <- pair[1]; b <- pair[2]
+  tmp <- example_data_brand[[a]]
+  example_data_brand[[a]] <- example_data_brand[[b]]
+  example_data_brand[[b]] <- tmp
+}
+rm(.swap_pairs, pair, a, b, tmp)
+
 # --- Dictionary ---
 labels_map <- c(
   bp_high_quality = "High Quality",

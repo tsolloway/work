@@ -46,7 +46,7 @@
 #' @param impact_n_boot Integer. Bootstrap replicates for impact. Default 1.
 #' @param impact_n_querry Integer. Query sample size. Default 1e4.
 #' @param impact_lift Numeric vector. Lift fractions for impact. Default
-#'   \code{c(0, 0.1)}.
+#'   \code{c(0, 0.25)}.
 #' @param prioritize_shift_type Character. IV shift interpretation for the
 #'   greedy prioritization path only: \code{"headroom"} (default) shifts
 #'   each IV by \code{lift} times the room remaining toward its own
@@ -66,7 +66,7 @@
 #' @param do_prioritizations Logical. If TRUE, run \code{bn_prioritizations()}
 #'   to produce prioritization analysis. Default TRUE.
 #' @param prioritize_lift Numeric. Lift fraction for prioritization. Default
-#'   0.10.
+#'   0.25.
 #' @param prioritize_ivs_excluded Character vector or NULL. Variables to exclude
 #'   from prioritization. Default NULL.
 #' @param prioritize_threshold Numeric or NULL. Early stopping threshold for
@@ -136,7 +136,7 @@ bn_finalize_network <- function(
     impact_index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     impact_n_boot = 1,
     impact_n_querry = 1e4,
-    impact_lift = c(0, 0.1),
+    impact_lift = c(0, 0.25),
     prioritize_shift_type = c("headroom", "proportional", "absolute", "range"),
     impact_include_base = TRUE,
     # Survey-battery grouping for the "Index By: Battery" feature in the
@@ -158,7 +158,7 @@ bn_finalize_network <- function(
     battery_groups = NULL,
     # --- Prioritization ---
     do_prioritizations = TRUE,
-    prioritize_lift = 0.10,
+    prioritize_lift = 0.25,
     prioritize_ivs_excluded = NULL,
     prioritize_threshold = 0.01,
     prioritize_max_rounds = NULL,

@@ -58,6 +58,14 @@ bootstrap was applied. Default FALSE.}
 
 \item{mi_boot}{Integer or NULL. Number of community-MI bootstrap replicates
 (if \code{mi_boot_applied}).}
+
+\item{impact_outcome_display}{Character or NULL. Initial value of the
+Attribute Drivers Outcome dropdown — \code{"Point Change"} (raw DV-unit
+delta) or \code{"\% Change"} (scaled by baseline DV).}
+
+\item{add_impacts_by_battery}{Logical. When TRUE (default), per-battery
+"AD - \if{html}{\out{<name>}}" dashboards are emitted alongside the main Attribute Drivers
+tab. When FALSE, only the main tab is written.}
 }
 \value{
 The modified workbook object (invisibly).

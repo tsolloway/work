@@ -137,13 +137,14 @@ deploy_check_prerequisites <- function() {
 #' Write launcher.config.json
 #'
 #' @param config_path Path where to write the file.
-#' @param app_name,version,header_title,header_subtitle,header_background,accent_color,icon,file_extension
+#' @param app_name,version,header_title,header_subtitle,header_background,header_text,accent_color,icon,file_extension
 #'   The branding parameters.
 #'
 #' @noRd
 .deploy_write_launcher_config <- function(config_path, app_name, version,
                                   header_title, header_subtitle,
-                                  header_background, accent_color, icon,
+                                  header_background, header_text,
+                                  accent_color, icon,
                                   file_extension) {
   config <- list(
     appName = app_name,
@@ -152,6 +153,7 @@ deploy_check_prerequisites <- function() {
     headerTitle = header_title,
     headerSubtitle = header_subtitle,
     headerBackground = header_background,
+    headerText = header_text,
     accentColor = accent_color,
     icon = icon,
     fileExtension = file_extension

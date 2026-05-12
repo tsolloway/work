@@ -50,7 +50,24 @@
 #'   prioritization dashboard. If NULL, inherits from
 #'   \code{prioritizations$meta} (set by \code{bn_finalize_network()} /
 #'   \code{bn_prioritizations()}); falls back to 0.05 / 0.10.
-#' @param lift Lift fraction used in the prioritization analysis (for footer).
+#' @param add_prioritization_pvalue Logical. When TRUE, the prioritization
+#'   dashboard includes its p-value column (current behavior). When FALSE
+#'   (default), the p-value column is removed from the prioritization table.
+#' @param add_impacts_by_battery Logical. When TRUE (default), per-battery
+#'   `AD - <name>` dashboards are emitted alongside the main Attribute
+#'   Drivers tab — one per battery (and one per battery group) with
+#'   within-battery indexing. When FALSE, only the main Attribute Drivers
+#'   tab is written. Has no effect when no batteries are defined upstream.
+#' @param impact_outcome_display Character or NULL. Initial value of the
+#'   impact dashboard's Outcome dropdown — either `"Point Change"` or
+#'   `"% Change"`. When NULL (default), auto-detects from the DV type:
+#'   dichotomous outcomes get `"Point Change"`, continuous outcomes get
+#'   `"% Change"`. Pass an explicit string to override.
+#' @param prioritize_display Character or NULL. Initial value of the
+#'   prioritization Display dropdown — either `"Point Change"` or
+#'   `"% Change"`. When NULL (default), auto-detects from the DV type:
+#'   dichotomous outcomes get `"Point Change"`, continuous outcomes get
+#'   `"% Change"`. Pass an explicit string to override.
 #' @param path Character. Directory to write the workbook to.
 #'
 #' @return A list (invisibly) with:
@@ -96,21 +113,47 @@ bn_write <- function(
     min_base_for_boot = NULL,
     sig_threshold = NULL,
     marginal_threshold = NULL,
-    lift = 0.10,
     # Static-write index variants — only consulted when wb_type="standard".
-    # Defaults: absolute outcome display + absolute IV shift. Forwarded to
+    # `impact_outcome_display = NULL` (default) auto-detects from the DV type:
+    # dichotomous DVs (top-box probability / 0-1 outcomes) default to
+    # "Point Change" (probability points read more naturally than % of a
+    # probability); continuous DVs default to "% Change". Explicit values
+    # ("Point Change" / "% Change") are respected. Forwarded to
     # bn_impact_write.
-    outcome_display = c("absolute", "proportional"),
+    impact_outcome_display = NULL,
     shift_type      = c("absolute", "proportional"),
+    # When TRUE, the prioritization table includes a p-value column
+    # (current behavior). When FALSE (default), the p-value column is hidden
+    # from the prioritization dashboard.
+    add_prioritization_pvalue = FALSE,
+    # When TRUE (default), per-battery `AD - <name>` dashboards are emitted
+    # alongside the main Attribute Drivers tab — one per battery (and one
+    # per battery group). When FALSE, only the main tab is written. The
+    # per-battery dashboards add ~1-2 seconds per battery and visible tab
+    # count grows fast, so toggle off for leaner files.
+    add_impacts_by_battery = TRUE,
+    # Initial Display value on the prioritization dashboard. NULL (default)
+    # auto-detects from the DV type (dichotomous -> "Point Change",
+    # continuous -> "% Change"). Pass "Point Change" or "% Change" to
+    # override. Forwarded to bn_prioritize_write.
+    prioritize_display = NULL,
     path = "."
 ) {
 
   wb_type <- match.arg(wb_type)
-  outcome_display <- match.arg(outcome_display)
-  shift_type      <- match.arg(shift_type)
+  shift_type <- match.arg(shift_type)
 
   impacts <- obj[["impacts"]]
   prioritizations <- obj[["prioritizations"]]
+
+  # impact_outcome_display is passed through to bn_impact_write, which owns
+  # the validation + translation to the engine's "absolute"/"proportional"
+  # vocabulary. We just defensively match.arg here so an invalid value
+  # errors early at the bn_write boundary rather than deep inside.
+  if (!is.null(impact_outcome_display)) {
+    impact_outcome_display <- match.arg(impact_outcome_display,
+      c("Point Change", "% Change"))
+  }
 
   has_impacts <- !is.null(impacts)
   has_prioritizations <- !is.null(prioritizations)
@@ -190,8 +233,9 @@ bn_write <- function(
       very_hide_all      = very_hide_all,
       min_base_for_lift  = min_base_for_lift,
       min_base_for_sim   = min_base_for_sim,
-      outcome_display    = outcome_display,
+      impact_outcome_display = impact_outcome_display,
       shift_type         = shift_type,
+      add_impacts_by_battery = add_impacts_by_battery,
       path               = path,
       wb                 = wb,
       save               = FALSE,
@@ -215,13 +259,14 @@ bn_write <- function(
       combo_width        = combo_width,
       sig_threshold      = sig_threshold,
       marginal_threshold = marginal_threshold,
-      lift               = lift,
       min_base_for_boot  = min_base_for_boot,
       very_hide_all      = very_hide_all,
       path               = path,
       wb                 = wb,
       save               = FALSE,
-      add_guide          = FALSE       # deferred — see end of bn_write
+      add_guide          = FALSE,      # deferred — see end of bn_write
+      add_prioritization_pvalue = add_prioritization_pvalue,
+      prioritize_display = prioritize_display
     )
   }
 
@@ -264,13 +309,13 @@ bn_write <- function(
       sim_dv_only = sim_dv_only,
       sig_threshold = sig_threshold,
       marginal_threshold = marginal_threshold,
-      lift = lift,
       min_base_for_lift = min_base_for_lift %||% impact_meta[["min_base_for_lift"]] %||% 100L,
       min_base_for_sim  = min_base_for_sim %||% min_base_for_lift %||%
         impact_meta[["min_base_for_lift"]] %||% 100L,
       min_base_for_boot = min_base_for_boot %||%
         priort_meta[["min_base_for_boot"]] %||% 100L,
-      impact_shift_type = priort_meta[["impact_shift_type"]] %||% "headroom"
+      impact_shift_type = priort_meta[["impact_shift_type"]] %||% "headroom",
+      add_prioritization_pvalue = add_prioritization_pvalue
     )
   } else if (has_impacts) {
     # Impacts only — mirror the arg extraction done by bn_impact_write.
@@ -315,7 +360,7 @@ bn_write <- function(
         !identical(priort_meta[["subgroups"]], "Total"),
       has_strategy = has_strategy_g,
       has_community = has_community_g,
-      lift = lift,
+      meta = priort_meta,
       sig_threshold = sig_threshold %||% priort_meta[["sig_threshold"]] %||% 0.05,
       marginal_threshold = marginal_threshold %||% priort_meta[["marginal_threshold"]] %||% 0.10,
       min_base_for_boot = min_base_for_boot %||% priort_meta[["min_base_for_boot"]] %||% 100L,
@@ -323,7 +368,8 @@ bn_write <- function(
         isTRUE(priort_meta[["n_boot_final"]] > 1),
       n_boot_final = priort_meta[["n_boot_final"]],
       noise_tail = priort_meta[["noise_tail"]],
-      threshold = priort_meta[["threshold"]]
+      threshold = priort_meta[["threshold"]],
+      add_prioritization_pvalue = add_prioritization_pvalue
     )
   }
 

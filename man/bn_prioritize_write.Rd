@@ -21,7 +21,9 @@ bn_prioritize_write(
   path = ".",
   wb = NULL,
   save = TRUE,
-  add_guide = TRUE
+  add_guide = TRUE,
+  add_prioritization_pvalue = FALSE,
+  prioritize_display = NULL
 )
 }
 \arguments{
@@ -85,6 +87,17 @@ When FALSE, the workbook is returned without saving.}
 \item{add_guide}{Logical. When TRUE (default), a Guide tab is appended.
 When FALSE, no Guide is added — used by \code{bn_write()} which builds
 a single unified Guide for the combined workbook.}
+
+\item{add_prioritization_pvalue}{Logical. When TRUE, the prioritization
+table includes its p-value column (current behavior). When FALSE
+(default), the p-value column is removed from the prioritization table.}
+
+\item{prioritize_display}{Character or NULL. Initial value of the
+prioritization Display dropdown — either \code{"Point Change"} or
+\code{"\% Change"}. When NULL (default), the value is auto-detected from
+the DV type: dichotomous outcomes default to \code{"Point Change"},
+continuous outcomes default to \code{"\% Change"}. Pass an explicit string
+to override the auto-detection.}
 }
 \value{
 Workbook object (invisibly).

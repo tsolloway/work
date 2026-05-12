@@ -9,8 +9,9 @@ deploy_launcher(
   version = "1.0.0",
   header_title = app_name,
   header_subtitle = "Load and run Shiny apps",
-  header_background = "#1a1a2e",
-  accent_color = "#4361ee",
+  header_background = "#ffffff",
+  header_text = "#333333",
+  accent_color = "#333333",
   icon = NULL,
   file_extension = "resondex",
   r_home = NULL,
@@ -35,12 +36,18 @@ launcher's header bar. Defaults to \code{app_name}.}
 header title. Defaults to \code{"Load and run Shiny apps"}.}
 
 \item{header_background}{Character. The header background, specified as
-either a CSS color value (e.g., \code{"#1a1a2e"}, \code{"rgb(26,26,46)"}), a
+either a CSS color value (e.g., \code{"#ffffff"}, \code{"rgb(255,255,255)"}), a
 path to a local image file (e.g., \code{"assets/header-bg.png"}), or a URL.
-Defaults to \code{"#1a1a2e"}.}
+Defaults to \code{"#ffffff"} (matches the neutral \code{bn_report} aesthetic).}
+
+\item{header_text}{Character. Hex color code for the header title and
+subtitle text. Set to a light color (e.g., \code{"#ffffff"}) when using a
+dark \code{header_background}. Defaults to \code{"#333333"}.}
 
 \item{accent_color}{Character. Hex color code for accent and interactive
-elements. Defaults to \code{"#4361ee"}.}
+elements (FAB, primary buttons). Defaults to \code{"#333333"} for a neutral
+look that matches \code{bn_report}; pass a brand color (e.g., \code{"#4361ee"})
+for a more vibrant launcher.}
 
 \item{icon}{Character or \code{NULL}. Path to a local application icon file or
 a URL to one. Accepts \code{.png}, \code{.jpg}, \code{.icns}, or \code{.ico}. If \code{NULL},

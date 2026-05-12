@@ -50,6 +50,15 @@
 #' @param add_guide Logical. When TRUE (default), a Guide tab is appended.
 #'   When FALSE, no Guide is added — used by \code{bn_write()} which builds
 #'   a single unified Guide for the combined workbook.
+#' @param add_prioritization_pvalue Logical. When TRUE, the prioritization
+#'   table includes its p-value column (current behavior). When FALSE
+#'   (default), the p-value column is removed from the prioritization table.
+#' @param prioritize_display Character or NULL. Initial value of the
+#'   prioritization Display dropdown — either `"Point Change"` or
+#'   `"% Change"`. When NULL (default), the value is auto-detected from
+#'   the DV type: dichotomous outcomes default to `"Point Change"`,
+#'   continuous outcomes default to `"% Change"`. Pass an explicit string
+#'   to override the auto-detection.
 #'
 #' @return Workbook object (invisibly).
 #'
@@ -73,7 +82,15 @@ bn_prioritize_write <- function(
     path = ".",
     wb = NULL,
     save = TRUE,
-    add_guide = TRUE
+    add_guide = TRUE,
+    # When TRUE, the prioritization table includes a p-value column (current
+    # behavior). When FALSE (default), the p-value column is removed.
+    add_prioritization_pvalue = FALSE,
+    # Initial value of the prioritization Display dropdown. When NULL
+    # (default), auto-detects from the DV: dichotomous outcomes get
+    # "Point Change"; continuous outcomes get "% Change". Pass an explicit
+    # string ("Point Change" or "% Change") to override.
+    prioritize_display = NULL
 ) {
 
   # Resolve min_base threshold for the base/warning display next to Focus.
@@ -151,6 +168,8 @@ bn_prioritize_write <- function(
   has_p <- any(purrr::map_lgl(registry, function(e) {
     !is.null(e$tbl) && "p_value" %in% names(e$tbl)
   }))
+  # User-facing override: hide the p-value column unless explicitly opted in.
+  has_p <- isTRUE(add_prioritization_pvalue) && has_p
   has_community <- any(purrr::map_lgl(registry, function(e) {
     !is.null(e$tbl) && "community" %in% names(e$tbl)
   }))
@@ -329,9 +348,18 @@ bn_prioritize_write <- function(
 
   # --- Display-mode dropdown (always shown, UI-only — doesn't touch the
   # registry / key lookup, only controls which numbers feed the chart). ---
-  # Default = "% Change" (cumulative gain %). "Point Change" reproduces
-  # the original DV-Estimate-based stacked chart.
+  # Default = "% Change" (cumulative gain %) for continuous DVs, flipping
+  # to "Point Change" when the DV is dichotomous (probability outcome —
+  # the % of a probability is awkward, so raw point change reads better).
   chart_options <- c("% Change", "Point Change")
+  # User override wins; otherwise auto-detect from DV.
+  chart_default <- if (!is.null(prioritize_display)) {
+    match.arg(prioritize_display, chart_options)
+  } else if (isTRUE(is_binary_outcome)) {
+    "Point Change"
+  } else {
+    "% Change"
+  }
   # Place chart options on _priorit_lookup right after the existing dim opts
   chart_opt_col <- opt_col
   openxlsx::writeData(wb, "_priorit_lookup", "Display",
@@ -347,7 +375,7 @@ bn_prioritize_write <- function(
     startRow = current_row, startCol = label_col)
   openxlsx::addStyle(wb, dash, style = styles$dropdown_label,
     rows = current_row, cols = label_col, stack = TRUE)
-  openxlsx::writeData(wb, dash, chart_options[1],
+  openxlsx::writeData(wb, dash, chart_default,
     startRow = current_row, startCol = cell_col)
   openxlsx::addStyle(wb, dash, style = styles$dropdown_cell,
     rows = current_row, cols = cell_col, stack = TRUE)
@@ -931,7 +959,7 @@ bn_prioritize_write <- function(
       has_subgroups = "subgroup" %in% active_dims,
       has_strategy = "strategy" %in% active_dims,
       has_community = has_community,
-      lift = lift,
+      meta = meta,
       sig_threshold = sig_threshold,
       marginal_threshold = marginal_threshold,
       min_base_for_boot = min_base_for_boot,
@@ -939,7 +967,8 @@ bn_prioritize_write <- function(
       n_boot_final = meta[["n_boot_final"]],
       noise_tail = meta[["noise_tail"]],
       threshold = meta[["threshold"]],
-      impact_shift_type = meta_shift_type
+      impact_shift_type = meta_shift_type,
+      add_prioritization_pvalue = add_prioritization_pvalue
     )
   }
 
@@ -957,16 +986,15 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   # 7. Add chart via openxlsx2 (reload → insert chart XML → re-save)
   # ---------------------------------------------------------------------------
-  # Compute axis minimum from default data set baseline (priority == 0 row)
+  # Axis minimum — the chart plots cumulative_gain / cumulative_gain_pct
+  # (and their incremental siblings), all of which start at 0 by definition.
+  # An axis_min anchored to dv_estimate (baseline) clips the bars invisibly
+  # for continuous DVs where baseline >> 0. Hard-pin to 0 until we redo the
+  # chart to render absolute dv_estimate (where a baseline-floor would make
+  # sense). See bn_prioritize_write.R refactor backlog.
   default_tbl <- registry[[1]]$tbl
-  baseline <- default_tbl$dv_estimate[1]
-  n_steps <- nrow(default_tbl)
-  if (n_steps > 2) {
-    axis_min <- floor((baseline - 0.5) / 0.25) * 0.25
-  } else {
-    axis_min <- floor((baseline - 0.2) / 0.1) * 0.1
-  }
-  axis_min <- max(0, axis_min)
+  baseline    <- default_tbl$dv_estimate[1]
+  axis_min    <- 0
 
   # max_rows includes the baseline row in the dashboard, but the chart
   # data sheet skips baseline (chart_data_rows = data_rows[-1]), so the

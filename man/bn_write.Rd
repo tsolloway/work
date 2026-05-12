@@ -31,9 +31,11 @@ bn_write(
   min_base_for_boot = NULL,
   sig_threshold = NULL,
   marginal_threshold = NULL,
-  lift = 0.1,
-  outcome_display = c("absolute", "proportional"),
+  impact_outcome_display = NULL,
   shift_type = c("absolute", "proportional"),
+  add_prioritization_pvalue = FALSE,
+  add_impacts_by_battery = TRUE,
+  prioritize_display = NULL,
   path = "."
 )
 }
@@ -95,7 +97,27 @@ prioritization dashboard. If NULL, inherits from
 \code{prioritizations$meta} (set by \code{bn_finalize_network()} /
 \code{bn_prioritizations()}); falls back to 0.05 / 0.10.}
 
-\item{lift}{Lift fraction used in the prioritization analysis (for footer).}
+\item{impact_outcome_display}{Character or NULL. Initial value of the
+impact dashboard's Outcome dropdown — either \code{"Point Change"} or
+\code{"\% Change"}. When NULL (default), auto-detects from the DV type:
+dichotomous outcomes get \code{"Point Change"}, continuous outcomes get
+\code{"\% Change"}. Pass an explicit string to override.}
+
+\item{add_prioritization_pvalue}{Logical. When TRUE, the prioritization
+dashboard includes its p-value column (current behavior). When FALSE
+(default), the p-value column is removed from the prioritization table.}
+
+\item{add_impacts_by_battery}{Logical. When TRUE (default), per-battery
+\verb{AD - <name>} dashboards are emitted alongside the main Attribute
+Drivers tab — one per battery (and one per battery group) with
+within-battery indexing. When FALSE, only the main Attribute Drivers
+tab is written. Has no effect when no batteries are defined upstream.}
+
+\item{prioritize_display}{Character or NULL. Initial value of the
+prioritization Display dropdown — either \code{"Point Change"} or
+\code{"\% Change"}. When NULL (default), auto-detects from the DV type:
+dichotomous outcomes get \code{"Point Change"}, continuous outcomes get
+\code{"\% Change"}. Pass an explicit string to override.}
 
 \item{path}{Character. Directory to write the workbook to.}
 }

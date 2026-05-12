@@ -12,7 +12,6 @@
 #' @param has_subgroups Logical. Whether a Subgroup control exists.
 #' @param has_strategy Logical. Whether multiple strategies (lift/max) exist.
 #' @param has_community Logical. Whether community labels appear in the table.
-#' @param lift Numeric. Lift fraction used for the lift strategy (e.g., 0.10).
 #' @param sig_threshold Numeric. P-value threshold for the "significant"
 #'   colour band.
 #' @param marginal_threshold Numeric. P-value threshold for the "marginal"
@@ -25,6 +24,15 @@
 #' @param noise_tail Numeric or NULL. Fraction of tail steps used to estimate
 #'   the noise floor.
 #' @param threshold Numeric or NULL. Early-stopping threshold (fraction).
+#' @param prioritize_display Character or NULL. Initial value of the
+#'   prioritization Display dropdown — \code{"Point Change"} or \code{"\% Change"}.
+#'   NULL (default) auto-detects from DV type: dichotomous -> "Point Change",
+#'   continuous -> "% Change".
+#' @param add_prioritization_pvalue Logical. When TRUE AND the bootstrap
+#'   actually ran (\code{boot_applied}), the guide includes the
+#'   "Bootstrap p-values" and "Why compare to a noise floor" technical
+#'   sections. When FALSE (default) or when the bootstrap didn't run, both
+#'   sections are omitted (the reader never sees a p-value column either).
 #'
 #' @return The modified workbook object (invisibly).
 #'
@@ -37,7 +45,6 @@ append_bn_prioritize_guide <- function(
     has_subgroups = FALSE,
     has_strategy = FALSE,
     has_community = FALSE,
-    lift = 0.10,
     sig_threshold = 0.05,
     marginal_threshold = 0.10,
     min_base_for_boot = 100,
@@ -45,8 +52,19 @@ append_bn_prioritize_guide <- function(
     n_boot_final = NULL,
     noise_tail = NULL,
     threshold = NULL,
-    impact_shift_type = "headroom"
+    impact_shift_type = "headroom",
+    meta = list(),
+    add_prioritization_pvalue = FALSE
 ) {
+
+  # Default lift now lives on result$meta$lift (set by bn_finalize_network).
+  # Caller may pass it via `meta`; fall back to 0.10 when absent.
+  lift <- meta[["lift"]] %||% 0.10
+
+  # Bootstrap p-value gating — used in two places (Reading the table cols
+  # and Technical Appendix bootstrap section). Compute up front so both
+  # call sites share a single condition.
+  show_pvalue_section <- isTRUE(add_prioritization_pvalue) && isTRUE(boot_applied)
 
   guide_sheet <- "Guide"
   openxlsx::addWorksheet(wb, guide_sheet, tabColour = "#2E75B6", gridLines = FALSE)
@@ -68,7 +86,7 @@ append_bn_prioritize_guide <- function(
   s_tech_body <- openxlsx::createStyle(fontSize = 11, wrapText = TRUE,
                                        valign = "top")
   s_tech_hdr  <- openxlsx::createStyle(fontSize = 11, textDecoration = "bold",
-                                       valign = "top")
+                                       valign = "top", wrapText = TRUE)
 
   col_left  <- 2L
   col_right <- 3L
@@ -91,7 +109,7 @@ append_bn_prioritize_guide <- function(
 
   # -- Header (title + subtitle) — no borders --
   openxlsx::writeData(wb, guide_sheet,
-    "How to Read This Prioritization Workbook",
+    "How to Read This Network Drivers Workbook",
     startRow = r, startCol = col_left)
   openxlsx::addStyle(wb, guide_sheet, s_title, rows = r,
     cols = col_left:col_end, gridExpand = TRUE, stack = TRUE)
@@ -197,11 +215,13 @@ append_bn_prioritize_guide <- function(
     stringsAsFactors = FALSE
   )
   if (has_strategy) {
-    lift_pct <- round(lift * 100, 1)
+    lift_pct <- round((meta[["lift"]] %||% 0.10) * 100, 1)
     lift_explainer <- switch(impact_shift_type %||% "headroom",
       "headroom"     = paste0("'Moderate Lift' closes ", lift_pct, "% of each attribute's gap to its top level — every attribute moves the same fraction of its own headroom, so cross-scale rankings stay comparable"),
       "proportional" = paste0("'Moderate Lift' shifts each attribute's mean by ", lift_pct, "% of its current value"),
       "absolute"     = paste0("'Moderate Lift' adds ", round(lift, 2), " scale points to each attribute's mean"),
+      "rangeshift"   = paste0("'Moderate Lift' shifts each attribute's mean by ", lift_pct, "% of its scale's range (max minus min)"),
+      "range"        = paste0("'Moderate Lift' shifts each attribute's mean by ", lift_pct, "% of its scale's range (max minus min)"),
       paste0("'Moderate Lift' shifts each attribute's distribution by ", lift_pct, "%")
     )
     ctrl_df <- rbind(ctrl_df, data.frame(
@@ -264,11 +284,6 @@ append_bn_prioritize_guide <- function(
     ))
   }
   cols_df <- rbind(cols_df, data.frame(
-    Column = "DV Estimate",
-    Description = "The expected value of the outcome after shifting the current step's attribute (and all preceding attributes) according to the chosen strategy.",
-    stringsAsFactors = FALSE
-  ))
-  cols_df <- rbind(cols_df, data.frame(
     Column = "Marginal Gain",
     Description = "How much the DV Estimate moved compared to the previous step. This is the incremental value the current attribute adds on top of what's already been layered in.",
     stringsAsFactors = FALSE
@@ -278,15 +293,20 @@ append_bn_prioritize_guide <- function(
     Description = "The marginal gain expressed as a percentage of the previous step's DV Estimate. Used for the early-stopping rule: the search stops once a step's relative gain falls below the threshold.",
     stringsAsFactors = FALSE
   ))
-  cols_df <- rbind(cols_df, data.frame(
-    Column = "p-value",
-    Description = paste0(
-      "How confident we are that this step's gain is real signal rather than noise. Smaller is stronger; cells are shaded green below ",
-      sig_threshold, " and yellow below ", marginal_threshold,
-      ". A blank p-value means the bootstrap wasn't applied to this slice (typically because the sample size was too small)."
-    ),
-    stringsAsFactors = FALSE
-  ))
+  # p-value row only when the column is actually shown in the dashboard
+  # AND the bootstrap was run. Mirrors the gating in the technical-appendix
+  # bootstrap section.
+  if (isTRUE(show_pvalue_section)) {
+    cols_df <- rbind(cols_df, data.frame(
+      Column = "p-value",
+      Description = paste0(
+        "How confident we are that this step's gain is real signal rather than noise. Smaller is stronger; cells are shaded green below ",
+        sig_threshold, " and yellow below ", marginal_threshold,
+        ". A blank p-value means the bootstrap wasn't applied to this slice (typically because the sample size was too small)."
+      ),
+      stringsAsFactors = FALSE
+    ))
+  }
   .write_labelled(cols_df)
 
   # ---------------------------------------------------------------------------
@@ -295,6 +315,18 @@ append_bn_prioritize_guide <- function(
   .write_h2("The cumulative-effect chart")
   .write_para(
     "The chart on the right of the Prioritization tab visualises the same data as the table. Each bar shows one step's marginal gain, stacked on top of the previous step. The top of the final bar is the DV Estimate after all selected steps have been applied. It's the fastest way to see which steps contribute most to the total build-up."
+  )
+  .write_para(
+    "The chart's Y-axis is anchored at 0 so that the cumulative gain (or cumulative gain %) bars always start from baseline. Earlier versions anchored the axis at baseline_DV - margin, which clipped bars for continuous DVs."
+  )
+  .write_para(
+    "Bar values are formatted with one decimal when below 1% (e.g., '0.3%') and as integers when at or above 1% (e.g., '12%')."
+  )
+  .write_para(
+    "The Display dropdown defaults to 'Point Change' for dichotomous DVs (probability points read naturally) and '% Change' for continuous DVs (% of baseline reads better). Override with the prioritize_display parameter."
+  )
+  .write_para(
+    "By default the p-value column is hidden (add_prioritization_pvalue = FALSE). Pass add_prioritization_pvalue = TRUE to surface it."
   )
 
   # ---------------------------------------------------------------------------
@@ -339,7 +371,7 @@ append_bn_prioritize_guide <- function(
     paste0(
       "For each attribute X, the observed (optionally weighted) frequency",
       " distribution of X is shifted by an exponential tilt that raises its",
-      " mean by ", round(lift * 100, 1), "% (proportional) or by a fixed",
+      " mean by ", round((meta[["lift"]] %||% 0.10) * 100, 1), "% (proportional) or by a fixed",
       " number of scale points (absolute). Under this shifted distribution",
       " of X — and the shifted distributions of every previously-selected",
       " attribute — the network produces a new expected outcome. This",
@@ -382,8 +414,10 @@ append_bn_prioritize_guide <- function(
     )
   )
 
-  # Bootstrap — dynamic based on whether it actually ran
-  if (isTRUE(boot_applied)) {
+  # Bootstrap section — only emit when the p-value column is exposed in
+  # the dashboard AND the bootstrap actually ran. Uses the
+  # `show_pvalue_section` flag computed at function top.
+  if (show_pvalue_section) {
     .write_tech(
       "Bootstrap p-values",
       paste0(
@@ -402,31 +436,19 @@ append_bn_prioritize_guide <- function(
         " across resamples."
       )
     )
-  } else {
+
     .write_tech(
-      "Bootstrap p-values",
+      "Why compare to a noise floor (not zero)",
       paste(
-        "The bootstrap was not applied to this run — no p-values are",
-        "reported. When enabled, the rows are resampled with replacement",
-        "and the already-selected attributes are re-queried per replicate.",
-        "Each step's p-value is then the fraction of replicates where that",
-        "step's marginal gain was at or below a noise-floor estimate based",
-        "on the tail of the selected path."
+        "A step's marginal gain can be positive simply because any new",
+        "evidence adds some information. Comparing to zero would flag almost",
+        "every step as 'significant'. The noise floor — the average gain of",
+        "the tail steps, where the search has effectively run out of real",
+        "signal — gives a more useful bar: a step is meaningful only when it",
+        "outperforms what the search looks like once it's scraping the bottom."
       )
     )
   }
-
-  .write_tech(
-    "Why compare to a noise floor (not zero)",
-    paste(
-      "A step's marginal gain can be positive simply because any new",
-      "evidence adds some information. Comparing to zero would flag almost",
-      "every step as 'significant'. The noise floor — the average gain of",
-      "the tail steps, where the search has effectively run out of real",
-      "signal — gives a more useful bar: a step is meaningful only when it",
-      "outperforms what the search looks like once it's scraping the bottom."
-    )
-  )
 
   .write_tech(
     "Base-size threshold",

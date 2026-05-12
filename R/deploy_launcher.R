@@ -16,11 +16,16 @@
 #' @param header_subtitle Character. The subtitle text displayed below the
 #'   header title. Defaults to `"Load and run Shiny apps"`.
 #' @param header_background Character. The header background, specified as
-#'   either a CSS color value (e.g., `"#1a1a2e"`, `"rgb(26,26,46)"`), a
+#'   either a CSS color value (e.g., `"#ffffff"`, `"rgb(255,255,255)"`), a
 #'   path to a local image file (e.g., `"assets/header-bg.png"`), or a URL.
-#'   Defaults to `"#1a1a2e"`.
+#'   Defaults to `"#ffffff"` (matches the neutral `bn_report` aesthetic).
+#' @param header_text Character. Hex color code for the header title and
+#'   subtitle text. Set to a light color (e.g., `"#ffffff"`) when using a
+#'   dark `header_background`. Defaults to `"#333333"`.
 #' @param accent_color Character. Hex color code for accent and interactive
-#'   elements. Defaults to `"#4361ee"`.
+#'   elements (FAB, primary buttons). Defaults to `"#333333"` for a neutral
+#'   look that matches `bn_report`; pass a brand color (e.g., `"#4361ee"`)
+#'   for a more vibrant launcher.
 #' @param icon Character or `NULL`. Path to a local application icon file or
 #'   a URL to one. Accepts `.png`, `.jpg`, `.icns`, or `.ico`. If `NULL`,
 #'   the bundled Resondex logo is used.
@@ -96,8 +101,9 @@ deploy_launcher <- function(
     version = "1.0.0",
     header_title = app_name,
     header_subtitle = "Load and run Shiny apps",
-    header_background = "#1a1a2e",
-    accent_color = "#4361ee",
+    header_background = "#ffffff",
+    header_text = "#333333",
+    accent_color = "#333333",
     icon = NULL,
     file_extension = "resondex",
     r_home = NULL,
@@ -113,6 +119,7 @@ deploy_launcher <- function(
     is.character(header_title), nchar(header_title) > 0,
     is.character(header_subtitle),
     is.character(header_background),
+    is.character(header_text), nchar(header_text) > 0,
     is.character(accent_color),
     is.character(file_extension), nchar(file_extension) > 0,
     is.logical(cleanup)
@@ -230,6 +237,7 @@ deploy_launcher <- function(
     header_title = header_title,
     header_subtitle = header_subtitle,
     header_background = header_background,
+    header_text = header_text,
     accent_color = accent_color,
     icon = icon_rel,
     file_extension = file_extension
