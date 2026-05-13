@@ -84,7 +84,8 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         chevronRight: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 320 512\" fill=\"currentColor\"><path d=\"M310.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L242.7 256 105.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z\"/></svg>',
         minus: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M432 256c0 17.7-14.3 32-32 32H48c-17.7 0-32-14.3-32-32s14.3-32 32-32h352c17.7 0 32 14.3 32 32z\"/></svg>',
         plus: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32v144H48c-17.7 0-32 14.3-32 32s14.3 32 32 32h144v144c0 17.7 14.3 32 32 32s32-14.3 32-32V288h144c17.7 0 32-14.3 32-32s-14.3-32-32-32H256V80z\"/></svg>',
-        expand: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M32 32C14.3 32 0 46.3 0 64v96c0 17.7 14.3 32 32 32s32-14.3 32-32V96h64c17.7 0 32-14.3 32-32s-14.3-32-32-32H32zM64 416H32V352c0-17.7-14.3-32-32-32s-32 14.3-32 32v96c0 17.7 14.3 32 32 32h96c17.7 0 32-14.3 32-32s-14.3-32-32-32zm320-320h-64c-17.7 0-32 14.3-32 32s14.3 32 32 32h64v64c0 17.7 14.3 32 32 32s32-14.3 32-32V64c0-17.7-14.3-32-32-32zm32 320V352c0-17.7-14.3-32-32-32s-32 14.3-32 32v64h-64c-17.7 0-32 14.3-32 32s14.3 32 32 32h96c17.7 0 32-14.3 32-32z\"/></svg>'
+        expand: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 448 512\" fill=\"currentColor\"><path d=\"M32 32C14.3 32 0 46.3 0 64v96c0 17.7 14.3 32 32 32s32-14.3 32-32V96h64c17.7 0 32-14.3 32-32s-14.3-32-32-32H32zM64 416H32V352c0-17.7-14.3-32-32-32s-32 14.3-32 32v96c0 17.7 14.3 32 32 32h96c17.7 0 32-14.3 32-32s-14.3-32-32-32zm320-320h-64c-17.7 0-32 14.3-32 32s14.3 32 32 32h64v64c0 17.7 14.3 32 32 32s32-14.3 32-32V64c0-17.7-14.3-32-32-32zm32 320V352c0-17.7-14.3-32-32-32s-32 14.3-32 32v64h-64c-17.7 0-32 14.3-32 32s14.3 32 32 32h96c17.7 0 32-14.3 32-32z\"/></svg>',
+        fullscreen: '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 512 512\" fill=\"currentColor\"><path d=\"M344 0H488c13.3 0 24 10.7 24 24V168c0 9.7-5.8 18.5-14.8 22.2s-19.3 1.7-26.2-5.2l-39-39-87 87c-9.4 9.4-24.6 9.4-33.9 0l-32-32c-9.4-9.4-9.4-24.6 0-33.9l87-87L327 41c-6.9-6.9-8.9-17.2-5.2-26.2S334.3 0 344 0zM168 512H24c-13.3 0-24-10.7-24-24V344c0-9.7 5.8-18.5 14.8-22.2s19.3-1.7 26.2 5.2l39 39 87-87c9.4-9.4 24.6-9.4 33.9 0l32 32c9.4 9.4 9.4 24.6 0 33.9l-87 87 39 39c6.9 6.9 8.9 17.2 5.2 26.2s-12.5 14.8-22.2 14.8z\"/></svg>'
       };
 
       // shared button dimensions
@@ -160,8 +161,34 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       });
       zoomPad.appendChild(zoomInBtn);
       var fitBtn = makeNavBtn(icons.expand);
+      fitBtn.title = 'Fit to View';
       fitBtn.addEventListener('click', function() { network.fit({ animation: { duration: 300 } }); });
       zoomPad.appendChild(fitBtn);
+
+      // Fullscreen toggle — rightmost button in the bottom-right zoomPad.
+      // Iframe must be marked allowfullscreen by the parent for
+      // requestFullscreen to succeed in a sandboxed context. Camera state
+      // (scale / position) is left for vis.js to handle natively on
+      // resize — interfering with moveTo here caused flicker on entry
+      // and a wrong-scale snap on exit.
+      var fsBtn = makeNavBtn(icons.fullscreen);
+      fsBtn.title = 'Toggle Fullscreen';
+      fsBtn.addEventListener('click', function() {
+        if (document.fullscreenElement) {
+          var exit = document.exitFullscreen ||
+                     document.webkitExitFullscreen ||
+                     document.mozCancelFullScreen ||
+                     document.msExitFullscreen;
+          if (exit) { try { exit.call(document); } catch(e) {} }
+        } else {
+          var el = document.documentElement;
+          var req = el.requestFullscreen || el.webkitRequestFullscreen ||
+                    el.mozRequestFullScreen || el.msRequestFullscreen;
+          if (req) { try { req.call(el); } catch(e) {} }
+        }
+      });
+      zoomPad.appendChild(fsBtn);
+
       document.body.appendChild(zoomPad);
 
       // -------------------- Custom Select Dropdown --------------------

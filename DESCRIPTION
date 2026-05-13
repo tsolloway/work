@@ -74,11 +74,13 @@ Imports:
     xfun,
     zip
 Suggests:
+    fontawesome,
     kernlab,
     knitr,
     mclust,
     pak,
-    rmarkdown
+    rmarkdown,
+    rsvg
 SystemRequirements: Node.js (>= 18), npm
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)

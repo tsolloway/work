@@ -93,8 +93,10 @@ deploy_write_app <- function(app, app_dir) {
 #' @param app_name Character or `NULL`. A human-readable display name for the
 #'   app. Used to derive the bundle filename (slugified). If `NULL`, the name
 #'   is derived from the app directory name.
-#' @param icon Character or `NULL`. Path to a local `.png` or `.jpg` image
-#'   file, or a URL to one. Included as the app's icon inside the bundle.
+#' @param icon Character, `shiny::icon()` tag, or `NULL`. A local `.png` /
+#'   `.jpg` path, a URL to one, or a [shiny::icon()] tag (Font Awesome) which
+#'   will be rendered to PNG via [fontawesome::fa_png()]. Included as the
+#'   app's icon inside the bundle.
 #' @param icon_background Character. CSS color for the icon background on the
 #'   app card. Defaults to `"#ffffff"`.
 #' @param icon_border Character. CSS color for the icon border on the app
@@ -208,10 +210,8 @@ deploy_build_bundle <- function(
   slug <- gsub("^-|-$", "", slug)
 
   # ---- Resolve icon ----
-  if (!is.null(icon)) {
-    icon <- .deploy_resolve_file_or_url(icon, label = "icon",
-                                        valid_extensions = c("png", "jpg", "jpeg"))
-  }
+  icon <- .deploy_resolve_icon(icon, label = "icon",
+                               valid_extensions = c("png", "jpg", "jpeg"))
 
   # ---- Create bundle staging directory ----
   cli::cli_alert_info("Creating bundle...")

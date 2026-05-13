@@ -49,9 +49,10 @@ elements (FAB, primary buttons). Defaults to \code{"#333333"} for a neutral
 look that matches \code{bn_report}; pass a brand color (e.g., \code{"#4361ee"})
 for a more vibrant launcher.}
 
-\item{icon}{Character or \code{NULL}. Path to a local application icon file or
-a URL to one. Accepts \code{.png}, \code{.jpg}, \code{.icns}, or \code{.ico}. If \code{NULL},
-the bundled Resondex logo is used.}
+\item{icon}{Character, \code{shiny::icon()} tag, or \code{NULL}. A local application
+icon path (\code{.png}, \code{.jpg}, \code{.icns}, \code{.ico}), a URL to one, or a
+\code{\link[shiny:icon]{shiny::icon()}} tag (Font Awesome) which will be rendered to PNG via
+\code{\link[fontawesome:fa_png]{fontawesome::fa_png()}}. If \code{NULL}, the bundled Resondex logo is used.}
 
 \item{file_extension}{Character. The custom file extension (without dot)
 that the launcher accepts. Defaults to \code{"resondex"}.}

@@ -223,7 +223,7 @@ app_deliverable <- function(
   ui <- do.call(
     bslib::page_navbar,
     c(
-      list(title = title, theme = theme, header = header),
+      list(title = title, theme = theme, header = header, fillable = TRUE),
       all_tabs,
       list(bslib::nav_spacer()),
       state_nav_items,

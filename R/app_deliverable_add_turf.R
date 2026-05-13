@@ -107,7 +107,7 @@ app_deliverable_add_turf <- function(
   base_sizes <- .turf_compute_bases(raw, subgroups, subgroup_names)
 
   # ---- Trim raw to only the columns the module needs at runtime ----
-  keep_cols <- unique(c("uuid", vars, subgroup_names))
+  keep_cols <- unique(c(vars, subgroup_names))
   if (!is.null(weight)) keep_cols <- c(keep_cols, weight)
   raw <- raw[, keep_cols, drop = FALSE]
 

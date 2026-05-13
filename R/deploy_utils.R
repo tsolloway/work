@@ -57,6 +57,62 @@ deploy_check_prerequisites <- function() {
 #'
 #' @return Character path to a local file.
 #' @noRd
+.deploy_resolve_icon <- function(icon, label = "icon",
+                                 valid_extensions = c("png", "jpg", "jpeg")) {
+  if (is.null(icon)) return(NULL)
+
+  # A shiny::icon() tag (Font Awesome) — render to PNG via fontawesome::fa_png().
+  if (inherits(icon, "shiny.tag")) {
+    cls <- icon$attribs$class %||% ""
+    # Strip style prefixes (fa-solid / fa-regular / fa-brands / fa-light /
+    # fa-thin / fa-duotone / fa-sharp) so the icon-name capture below doesn't
+    # grab one of them by accident.
+    cls_clean <- gsub("\\bfa-(solid|regular|brands|light|thin|duotone|sharp)\\b",
+                      "", cls)
+    m <- regmatches(cls_clean, regexpr("\\bfa-[a-z0-9-]+", cls_clean))
+    if (length(m) == 0 || !nzchar(m)) {
+      cli::cli_abort(c(
+        "Could not extract a Font Awesome icon name from {.arg {label}}.",
+        "i" = "Expected a {.fn shiny::icon} tag with a {.code fa-<name>} class.",
+        "x" = "Got class: {.val {cls}}"
+      ))
+    }
+    fa_name <- sub("^fa-", "", m)
+
+    if (!requireNamespace("fontawesome", quietly = TRUE)) {
+      cli::cli_abort(c(
+        "Rendering a Font Awesome icon requires the {.pkg fontawesome} package.",
+        "i" = 'Install with {.code install.packages("fontawesome")}.'
+      ))
+    }
+    tmp <- tempfile(fileext = ".png")
+    tryCatch(
+      fontawesome::fa_png(name = fa_name, file = tmp, width = 512),
+      error = function(e) {
+        cli::cli_abort(c(
+          "Failed to render Font Awesome icon {.val {fa_name}} to PNG.",
+          "i" = "{conditionMessage(e)}",
+          "i" = 'You may need to install {.pkg rsvg}: {.code install.packages("rsvg")}.'
+        ))
+      }
+    )
+    cli::cli_alert_success("Rendered Font Awesome icon {.val {fa_name}} to PNG.")
+    return(tmp)
+  }
+
+  # Character path or URL — delegate to the generic file/url resolver.
+  if (is.character(icon)) {
+    return(.deploy_resolve_file_or_url(icon, label = label,
+                                       valid_extensions = valid_extensions))
+  }
+
+  cli::cli_abort(c(
+    "{.arg {label}} must be a character path/URL or a {.fn shiny::icon} tag.",
+    "x" = "Got an object of class {.cls {class(icon)[1]}}."
+  ))
+}
+
+
 .deploy_resolve_file_or_url <- function(value, label = "file", valid_extensions = NULL) {
   if (grepl("^https?://", value)) {
     cli::cli_alert_info("Downloading {label} from URL...")
@@ -469,16 +525,27 @@ deploy_recommended_packages <- function() {
   # Replace all occurrences of the original path with ${R_HOME_DIR}
   # EXCEPT the first assignment line, which we handle specially
 
-  # Step 1: Replace the first R_HOME_DIR= assignment
-  patched <- original
+  # Step 1: Replace the first R_HOME_DIR= assignment with a self-referencing,
+  # path-of-this-script-derived value. The original line may be quoted
+  # (`R_HOME_DIR="<path>"`) on macOS Homebrew or unquoted on Linux — handle
+  # both via a regex with optional quotes.
+  esc <- function(x) gsub("([][.\\\\^$*+?(){}|])", "\\\\\\1", x, perl = TRUE)
+  pattern <- paste0("R_HOME_DIR=\"?", esc(original_r_home), "\"?")
   patched <- sub(
-    paste0("R_HOME_DIR=", original_r_home),
-    "R_HOME_DIR=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"",
-    patched,
-    fixed = TRUE
+    pattern,
+    'R_HOME_DIR="$(cd "$(dirname "$0")/.." \\&\\& pwd)"',
+    original,
+    perl = TRUE
   )
+  if (identical(patched, original)) {
+    cli::cli_alert_warning(
+      "Could not locate R_HOME_DIR={.path {original_r_home}} in bin/R; ",
+      "leaving the script unpatched. The bundled R may fail to launch."
+    )
+    return(invisible(NULL))
+  }
 
-  # Step 2: Replace all remaining hardcoded paths with ${R_HOME_DIR}
+  # Step 2: Replace all remaining hardcoded paths with ${R_HOME_DIR}.
   patched <- gsub(original_r_home, "${R_HOME_DIR}", patched, fixed = TRUE)
 
   # Step 3: Remove the WARNING block about ignoring R_HOME — we want to

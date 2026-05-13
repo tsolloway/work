@@ -26,9 +26,10 @@
 #'   elements (FAB, primary buttons). Defaults to `"#333333"` for a neutral
 #'   look that matches `bn_report`; pass a brand color (e.g., `"#4361ee"`)
 #'   for a more vibrant launcher.
-#' @param icon Character or `NULL`. Path to a local application icon file or
-#'   a URL to one. Accepts `.png`, `.jpg`, `.icns`, or `.ico`. If `NULL`,
-#'   the bundled Resondex logo is used.
+#' @param icon Character, `shiny::icon()` tag, or `NULL`. A local application
+#'   icon path (`.png`, `.jpg`, `.icns`, `.ico`), a URL to one, or a
+#'   [shiny::icon()] tag (Font Awesome) which will be rendered to PNG via
+#'   [fontawesome::fa_png()]. If `NULL`, the bundled Resondex logo is used.
 #' @param file_extension Character. The custom file extension (without dot)
 #'   that the launcher accepts. Defaults to `"resondex"`.
 #' @param r_home Character or `NULL`. Path to the R installation to bundle.
@@ -150,8 +151,8 @@ deploy_launcher <- function(
       icon <- NULL
     }
   } else {
-    icon <- .deploy_resolve_file_or_url(icon, label = "icon",
-                                        valid_extensions = c("png", "jpg", "jpeg", "icns", "ico"))
+    icon <- .deploy_resolve_icon(icon, label = "icon",
+                                 valid_extensions = c("png", "jpg", "jpeg", "icns", "ico"))
   }
 
   # ---- Resolve header_background if it's an image URL ----

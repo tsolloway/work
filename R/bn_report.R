@@ -331,7 +331,7 @@ bn_report <- function(
         '<div class="iframe-wrap" data-widget="{widget_b64}">',
         '<div class="spinner-overlay"><div class="spinner"><div class="spinner-bar"></div><div class="spinner-bar"></div><div class="spinner-bar"></div></div></div>',
         '<iframe style="width: 100%; height: 70vh; border: none;" ',
-        'sandbox="allow-scripts allow-downloads">',
+        'sandbox="allow-scripts allow-downloads" allowfullscreen>',
         '</iframe></div>'
       )
     } else {
@@ -343,7 +343,7 @@ bn_report <- function(
         '<div class="spinner-overlay"><div class="spinner"><div class="spinner-bar"></div><div class="spinner-bar"></div><div class="spinner-bar"></div></div></div>',
         '<iframe src="{widget_rel}" ',
         'style="width: 100%; height: 70vh; border: none;" ',
-        'sandbox="allow-scripts allow-downloads">',
+        'sandbox="allow-scripts allow-downloads" allowfullscreen>',
         '</iframe></div>'
       )
     }
@@ -856,18 +856,14 @@ bn_report <- function(
 # pass is_community = TRUE for the latter (no Variable/Label columns; the
 # leading column is "Community" instead).
 #' @noRd
-.bn_report_render_attribute_impacts_dashboard <- function(
-    impacts, result_name, dashboard_id, is_community = FALSE,
-    qc_mode = FALSE,
-    outcome_display = NULL, shift_type = "absolute",
-    # When non-NULL, emit the dashboard markup with a `data-impact-data-id`
-    # pointer instead of an inline `<script class="impact-data">` payload —
-    # the caller is then responsible for emitting that shared script once.
-    # This dedupe lets a single JSON payload back N type-panel copies of
-    # the same dashboard (one per layout), cutting bn_report file size
-    # dramatically when add_additional_results = TRUE.
-    shared_data_id = NULL
-) {
+# --- internal: parse impact-table metadata --------------------------------
+# Pure data-prep extracted from .bn_report_render_attribute_impacts_dashboard
+# so other consumers (the app_deliverable_network_drivers Shiny module) can
+# reuse the dimension-parsing logic without re-rendering the bn_report HTML
+# dashboard. Returns NULL when the requested table is empty/absent — caller
+# decides how to handle that.
+#' @noRd
+.bn_report_impacts_metadata <- function(impacts, is_community = FALSE) {
   if (isTRUE(is_community)) {
     tbl   <- impacts[["table_community"]]
     tbl_w <- impacts[["table_community_weighted"]]
@@ -881,14 +877,13 @@ bn_report <- function(
   }
 
   if (is.null(tbl) || !is.data.frame(tbl) || nrow(tbl) == 0) {
-    return('<div class="extra-empty">No impact results.</div>')
+    return(NULL)
   }
 
   meta <- impacts[["meta"]] %||% list()
   has_weights <- !is.null(tbl_w)
   min_base_for_lift <- meta[["min_base_for_lift"]] %||% 75L
 
-  # --- Parse dimensions from column names (mirrors append_bn_impact_dynamic)
   all_cols <- names(tbl)
   sgs <- meta[["subgroups"]]
   if (is.null(sgs) || length(sgs) == 0) sgs <- "Total"
@@ -899,23 +894,9 @@ bn_report <- function(
 
   sg1 <- sgs[1]
   sg1_cols <- all_cols[startsWith(all_cols, paste0(sg1, "_"))]
-  # Strip bootstrap-stat columns when inferring metric structure — those
-  # are sibling stats (mean/sd/se/t/ci_low/ci_high/p_value), not distinct
-  # metrics. Otherwise has_outcome_display / has_shift_type detection
-  # picks up false positives from `<metric>_propdisplay_p_value` etc.
   sg1_cols <- sg1_cols[!grepl("_(sd|se|t|ci_low|ci_high|p_value)$", sg1_cols)]
   metric_suffixes <- sub(paste0("^", sg1, "_"), "", sg1_cols)
 
-  # After the Pass-A outcome-display split, lift / maxVmin columns carry a
-  # "_propdisplay" or "_absdisplay" suffix in the engine output. For the
-  # HTML dashboard we expose the variant choice via an Outcome Display
-  # dropdown; metric_info carries the BASE metric names (e.g. "lift_0",
-  # "maxVmin", "mi") and JS composes the full column name at render time
-  # from base + focus + display.
-  # Display tag can appear mid-string on brand lift columns
-  # ("lift_0_propdisplay_Bing") or at the end on market lift columns
-  # ("lift_0_propdisplay"). Strip in both positions so brand name
-  # extraction below sees a clean "lift_N_<brand>" form.
   .strip_display <- function(x) gsub("_(propdisplay|absdisplay)(_|$)", "\\2", x)
   .strip_shift   <- function(x) gsub("_(propshift|absshift|headshift|rangeshift)(_|$)", "\\2", x)
   base_suffixes <- unique(.strip_display(.strip_shift(metric_suffixes)))
@@ -929,9 +910,6 @@ bn_report <- function(
   } else character(0)
   focus_options <- c("Market", brand_names)
 
-  # Metric options use bare lift parameter values ("Effect at 0.10") so
-  # the labels stay accurate regardless of which Shift Type the user has
-  # selected — Shift Type controls the interpretation of the parameter.
   metric_info <- list()
   for (ml in market_lift_bases) {
     label <- if (ml %in% c("lift", "lift_0")) {
@@ -955,25 +933,12 @@ bn_report <- function(
     )
   }
 
-  # ------------------------------------------------------------------
-  # "Assess" preset map — the new high-level dropdown that drives
-  # Analysis + Shift Type with curated combos. Each entry describes
-  # one preset (Current / Improvement / Maximum) and which Analysis
-  # metric_key / Shift Type key to set when the user picks it.
-  #
-  # Presets are only added when the data actually supports them:
-  #   - Current: requires an "Average Effect" metric (lift / lift_0)
-  #   - Improvement: requires a non-zero lift metric (closest to 10%)
-  #   - Maximum: requires a maxVmin metric
-  # If none of the three is available, the dropdown is hidden entirely.
-  # ------------------------------------------------------------------
   .find_average_key <- function() {
     candidates <- c("lift_0", "lift")
     hit <- intersect(candidates, market_lift_bases)
     if (length(hit) > 0) hit[1] else NA_character_
   }
   .find_improvement_key <- function() {
-    # Pick the lift_<N> closest to N = 10 (Effect at 0.10 preferred).
     nz <- setdiff(market_lift_bases, c("lift", "lift_0"))
     if (length(nz) == 0) return(NA_character_)
     pcts <- suppressWarnings(as.numeric(sub("^lift_", "", nz)))
@@ -998,41 +963,18 @@ bn_report <- function(
     )
   }
   if ("maxVmin" %in% base_suffixes) {
-    # Shift type doesn\'t affect maxVmin; pick rangeshift as a stable
-    # default so the dropdown lands on a defined value when switching
-    # to this preset.
     preset_map[["Maximum Impact"]] <- list(
       metric = "maxVmin", shift = "rangeshift",
       question = "What is possible?"
     )
   }
 
-  # Outcome Display is offered whenever any _propdisplay / _absdisplay
-  # column exists (which is always, post-Pass-A) — matches Excel.
   has_outcome_display <- any(grepl("_(propdisplay|absdisplay)$", metric_suffixes))
+  has_shift_type      <- any(grepl("_(propshift|absshift|headshift|rangeshift)_", metric_suffixes))
+  is_dichotomous_dv   <- isTRUE(meta[["is_dichotomous_dv"]])
+  has_community       <- (!isTRUE(is_community)) && ("Community" %in% names(tbl))
+  has_label           <- (!isTRUE(is_community)) && ("Label"     %in% names(tbl))
 
-  # Shift Type (Pass B) offered when _propshift / _absshift / _headshift
-  # / _rangeshift tags exist on lift columns.
-  has_shift_type <- any(grepl("_(propshift|absshift|headshift|rangeshift)_", metric_suffixes))
-
-  # Auto-default Outcome Display by DV type: dichotomous DVs read more
-  # naturally as raw probability points (Point Change / "absdisplay"),
-  # everything else as % change. Only fires when caller didn\'t pass an
-  # explicit outcome_display; explicit values are respected.
-  is_dichotomous_dv <- isTRUE(meta[["is_dichotomous_dv"]])
-  if (is.null(outcome_display)) {
-    outcome_display <- if (is_dichotomous_dv) "absolute" else "proportional"
-  }
-
-  # In community mode, Community IS the id column, so no secondary Community
-  # column; there's also no Label.
-  has_community <- (!isTRUE(is_community)) && ("Community" %in% names(tbl))
-  has_label     <- (!isTRUE(is_community)) && ("Label"     %in% names(tbl))
-
-  # Battery grouping (Index By feature). meta$batteries is stamped by
-  # bn_finalize_network when the user provides a `batteries` arg or when
-  # bn_engine was called with a named-list `ivs`. Only meaningful in the
-  # attribute view — communities aren't battery-aligned.
   batteries <- meta[["batteries"]]
   battery_groups <- meta[["battery_groups"]]
   has_battery <- (!isTRUE(is_community)) && !is.null(batteries) &&
@@ -1045,15 +987,91 @@ bn_report <- function(
     }
     iv2b
   } else NULL
-  # Group membership lookup — mirrors `iv_to_battery` but flattens each
-  # group's component batteries to its IV union. Embedded in the data
-  # payload so the JS Index By filter can pick rows for a group selection.
   battery_group_ivs <- if (has_battery && !is.null(battery_groups) &&
                            length(battery_groups) > 0L) {
     lapply(battery_groups, function(comp) {
       unname(unique(unlist(batteries[comp], use.names = FALSE)))
     })
   } else NULL
+
+  list(
+    tbl                 = tbl,
+    tbl_w               = tbl_w,
+    id_col_name         = id_col_name,
+    id_col_label        = id_col_label,
+    meta                = meta,
+    has_weights         = has_weights,
+    min_base_for_lift   = min_base_for_lift,
+    is_dichotomous_dv   = is_dichotomous_dv,
+    sgs                 = sgs,
+    metric_info         = metric_info,
+    focus_options       = focus_options,
+    preset_map          = preset_map,
+    has_outcome_display = has_outcome_display,
+    has_shift_type      = has_shift_type,
+    has_community       = has_community,
+    has_label           = has_label,
+    has_battery         = has_battery,
+    batteries           = batteries,
+    battery_groups      = battery_groups,
+    iv_to_battery       = iv_to_battery,
+    battery_group_ivs   = battery_group_ivs,
+    market_lift_bases   = market_lift_bases,
+    brand_lift_bases    = brand_lift_bases,
+    base_suffixes       = base_suffixes,
+    metric_suffixes     = metric_suffixes
+  )
+}
+
+
+.bn_report_render_attribute_impacts_dashboard <- function(
+    impacts, result_name, dashboard_id, is_community = FALSE,
+    qc_mode = FALSE,
+    outcome_display = NULL, shift_type = "absolute",
+    # When non-NULL, emit the dashboard markup with a `data-impact-data-id`
+    # pointer instead of an inline `<script class="impact-data">` payload —
+    # the caller is then responsible for emitting that shared script once.
+    # This dedupe lets a single JSON payload back N type-panel copies of
+    # the same dashboard (one per layout), cutting bn_report file size
+    # dramatically when add_additional_results = TRUE.
+    shared_data_id = NULL
+) {
+  m <- .bn_report_impacts_metadata(impacts, is_community = is_community)
+  if (is.null(m)) {
+    return('<div class="extra-empty">No impact results.</div>')
+  }
+  # Unpack metadata into local names so the rest of the function (the
+  # rendering layer) reads the same as before the refactor.
+  tbl                 <- m$tbl
+  tbl_w               <- m$tbl_w
+  id_col_name         <- m$id_col_name
+  id_col_label        <- m$id_col_label
+  meta                <- m$meta
+  has_weights         <- m$has_weights
+  min_base_for_lift   <- m$min_base_for_lift
+  is_dichotomous_dv   <- m$is_dichotomous_dv
+  sgs                 <- m$sgs
+  metric_info         <- m$metric_info
+  focus_options       <- m$focus_options
+  preset_map          <- m$preset_map
+  has_outcome_display <- m$has_outcome_display
+  has_shift_type      <- m$has_shift_type
+  has_community       <- m$has_community
+  has_label           <- m$has_label
+  has_battery         <- m$has_battery
+  batteries           <- m$batteries
+  battery_groups      <- m$battery_groups
+  iv_to_battery       <- m$iv_to_battery
+  battery_group_ivs   <- m$battery_group_ivs
+  metric_suffixes     <- m$metric_suffixes
+  all_cols <- names(tbl)
+
+  # Auto-default Outcome Display by DV type when caller didn't pass an
+  # explicit value: dichotomous DVs read more naturally as raw probability
+  # points (Point Change / absdisplay), everything else as % change.
+  if (is.null(outcome_display)) {
+    outcome_display <- if (is_dichotomous_dv) "absolute" else "proportional"
+  }
 
   # Per-subgroup column allow-list: in bootstrap mode the table can carry
   # thousands of `<col>_<stat>` columns (mean, sd, se, t, ci_low, ci_high,
@@ -1485,40 +1503,27 @@ bn_report <- function(
 }
 
 
-# --- internal: full Prioritization dashboard (HTML + inline JS) ------------
-# Mirrors the bn_prioritize_write dynamic dashboard: Analysis, Search,
-# Subgroup, Focus, Weight dropdowns (only those with multiple values are
-# shown); one row per priority step; conditional formatting on p-values
-# (green < sig_threshold, orange < marginal_threshold, blackout otherwise)
-# and bold-italic for negative marginal gain; Base display + warning next
-# to the Focus dropdown.
+# --- internal: parse prioritization registry metadata ----------------------
+# Pure data-prep extracted from .bn_report_render_prioritization_dashboard
+# so the app_deliverable_network_drivers Shiny module can reuse the
+# dimension-parsing logic. Returns NULL when there are no prioritization
+# results in the registry.
 #' @noRd
-.bn_report_render_prioritization_dashboard <- function(
-    priort, result_name, dashboard_id,
-    sig_threshold = 0.05, marginal_threshold = 0.10,
-    add_prioritization_pvalue = FALSE,
-    prioritize_display = NULL
-) {
+.bn_report_prio_metadata <- function(priort,
+                                     add_prioritization_pvalue = FALSE) {
   registry <- tryCatch(.prioritize_build_registry(priort),
     error = function(e) list())
-  if (length(registry) == 0) {
-    return('<div class="extra-empty">No prioritization results.</div>')
-  }
+  if (length(registry) == 0) return(NULL)
 
   meta <- priort[["meta"]] %||% list()
   min_base_for_boot <- meta[["min_base_for_boot"]] %||% 100L
   lift_pct <- meta[["lift"]] %||% 0.10
 
-  # --- Collect unique dimension values in a stable order
   strategies <- unique(vapply(registry, function(e) e$strategy %||% "", character(1)))
   searches   <- unique(vapply(registry, function(e) e$search   %||% "", character(1)))
   subgroups  <- unique(vapply(registry, function(e) e$subgroup %||% "", character(1)))
   focuses    <- unique(vapply(registry, function(e) e$focus    %||% "", character(1)))
   weights    <- unique(vapply(registry, function(e) e$weight   %||% "", character(1)))
-
-  # as.list() on each vector prevents jsonlite::toJSON(auto_unbox = TRUE)
-  # from collapsing single-value dimensions to scalar strings (which would
-  # break data.dims[dim][0] lookups in JS).
   dims <- list(
     strategy = as.list(strategies),
     search   = as.list(searches),
@@ -1526,15 +1531,12 @@ bn_report <- function(
     focus    = as.list(focuses),
     weight   = as.list(weights)
   )
-  # A control is "active" if it has > 1 unique value (show the dropdown)
   active_dims <- names(dims)[vapply(dims, length, integer(1)) > 1]
 
-  # --- Build lookup: key = "strategy|search|subgroup|focus|weight" -> data
   lookup <- list()
   for (e in registry) {
     key <- paste(e$strategy, e$search, e$subgroup, e$focus, e$weight, sep = "|")
     tbl <- e$tbl
-    # Strip the baseline (priority == 0) row — hidden from the dashboard.
     if (!is.null(tbl) && is.data.frame(tbl) && "priority" %in% names(tbl)) {
       tbl <- tbl[!(!is.na(tbl$priority) & tbl$priority == 0L), , drop = FALSE]
     }
@@ -1562,35 +1564,25 @@ bn_report <- function(
     )
   }
 
-  # Flag presence of optional columns across any tibble
   has_community <- any(vapply(lookup, function(x) {
     length(x$rows) > 0 && !is.null(x$rows[[1]]$community)
   }, logical(1)))
   has_label <- any(vapply(lookup, function(x) {
     length(x$rows) > 0 && !is.null(x$rows[[1]]$label)
   }, logical(1)))
-  # Check ANY row (not just row 1) — the baseline / priority-0 row has
-  # p_value = NA by design even when bootstrap p-values were computed.
-  has_p <- any(vapply(lookup, function(x) {
+  has_p_data <- any(vapply(lookup, function(x) {
     if (length(x$rows) == 0) return(FALSE)
     any(vapply(x$rows, function(r) {
       !is.null(r$p_value) && !is.na(r$p_value)
     }, logical(1)))
   }, logical(1)))
-  # User-facing override: hide the p-value column unless explicitly opted in
-  has_p <- isTRUE(add_prioritization_pvalue) && has_p
+  has_p <- isTRUE(add_prioritization_pvalue) && has_p_data
 
-  # Strategy labels — mirror what .prioritize_build_registry() wrote into
-  # the registry. Passed through to JS so currentKey() can detect the Max
-  # strategy and force focus/weight overrides.
   lift_pct_int <- round(lift_pct * 100)
   lift_label            <- paste0("Moderate Lift (", lift_pct_int, "%)")
   max_label             <- "Maximum Lift"
   max_deprecated_label  <- "Maximum Lift (Deprecated)"
 
-  # Describe the lift action in terms of the actual shift mode used
-  # (headroom / proportional / absolute). Default to headroom semantics
-  # if no shift_type was stored on meta (older results).
   meta_shift_type <- meta[["impact_shift_type"]] %||% "headroom"
   lift_shift_explainer <- switch(meta_shift_type,
     "headroom"     = paste0("Closes ", lift_pct_int, "% of each IV’s gap to its top level — every IV moves the same fraction of its own headroom, so cross-scale rankings stay comparable"),
@@ -1599,10 +1591,6 @@ bn_report <- function(
     paste0("Shifts each IV’s distribution by ", lift_pct_int, "%")
   )
 
-  # Binary outcome detection — when every dv_estimate sits in [0, 1] the
-  # outcome is a probability (top_box / 0-1 DV). The JS render then formats
-  # Outcome Estimate, Cumulative Gain and Incremental Lift as XX.X% rather
-  # than XX.XX.
   is_binary_outcome <- {
     dv_vals <- unlist(lapply(lookup, function(x) {
       vapply(x$rows, function(r) r$dv_estimate %||% NA_real_, numeric(1))
@@ -1610,6 +1598,67 @@ bn_report <- function(
     dv_vals <- dv_vals[!is.na(dv_vals)]
     length(dv_vals) > 0 && min(dv_vals) >= -1e-6 && max(dv_vals) <= 1 + 1e-6
   }
+
+  list(
+    meta                  = meta,
+    dims                  = dims,
+    active_dims           = active_dims,
+    lookup                = lookup,
+    has_community         = has_community,
+    has_label             = has_label,
+    has_p                 = has_p,
+    has_p_data            = has_p_data,
+    min_base_for_boot     = as.integer(min_base_for_boot),
+    lift                  = lift_pct,
+    lift_label            = lift_label,
+    max_label             = max_label,
+    max_deprecated_label  = max_deprecated_label,
+    is_binary             = is_binary_outcome,
+    lift_shift_explainer  = lift_shift_explainer,
+    meta_shift_type       = meta_shift_type
+  )
+}
+
+
+# --- internal: full Prioritization dashboard (HTML + inline JS) ------------
+# Mirrors the bn_prioritize_write dynamic dashboard: Analysis, Search,
+# Subgroup, Focus, Weight dropdowns (only those with multiple values are
+# shown); one row per priority step; conditional formatting on p-values
+# (green < sig_threshold, orange < marginal_threshold, blackout otherwise)
+# and bold-italic for negative marginal gain; Base display + warning next
+# to the Focus dropdown.
+#' @noRd
+.bn_report_render_prioritization_dashboard <- function(
+    priort, result_name, dashboard_id,
+    sig_threshold = 0.05, marginal_threshold = 0.10,
+    add_prioritization_pvalue = FALSE,
+    prioritize_display = NULL
+) {
+  pm <- .bn_report_prio_metadata(priort, add_prioritization_pvalue)
+  if (is.null(pm)) {
+    return('<div class="extra-empty">No prioritization results.</div>')
+  }
+  # Unpack metadata into local names so the rest of the function (the
+  # rendering layer) reads the same as before the refactor.
+  meta                 <- pm$meta
+  dims                 <- pm$dims
+  active_dims          <- pm$active_dims
+  lookup               <- pm$lookup
+  has_community        <- pm$has_community
+  has_label            <- pm$has_label
+  has_p                <- pm$has_p
+  min_base_for_boot    <- pm$min_base_for_boot
+  lift_pct             <- pm$lift
+  lift_label           <- pm$lift_label
+  max_label            <- pm$max_label
+  max_deprecated_label <- pm$max_deprecated_label
+  is_binary_outcome    <- pm$is_binary
+  lift_shift_explainer <- pm$lift_shift_explainer
+  strategies           <- unlist(dims$strategy)
+  searches             <- unlist(dims$search)
+  subgroups            <- unlist(dims$subgroup)
+  focuses              <- unlist(dims$focus)
+  weights              <- unlist(dims$weight)
 
   data_obj <- list(
     dims              = dims,

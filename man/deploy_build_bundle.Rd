@@ -28,8 +28,10 @@ directory.}
 app. Used to derive the bundle filename (slugified). If \code{NULL}, the name
 is derived from the app directory name.}
 
-\item{icon}{Character or \code{NULL}. Path to a local \code{.png} or \code{.jpg} image
-file, or a URL to one. Included as the app's icon inside the bundle.}
+\item{icon}{Character, \code{shiny::icon()} tag, or \code{NULL}. A local \code{.png} /
+\code{.jpg} path, a URL to one, or a \code{\link[shiny:icon]{shiny::icon()}} tag (Font Awesome) which
+will be rendered to PNG via \code{\link[fontawesome:fa_png]{fontawesome::fa_png()}}. Included as the
+app's icon inside the bundle.}
 
 \item{icon_background}{Character. CSS color for the icon background on the
 app card. Defaults to \code{"#ffffff"}.}
