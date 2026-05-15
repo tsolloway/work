@@ -83,12 +83,16 @@
   } else rep(NA_real_, length(visible))
 
   # Per-subgroup: index = round(|raw| / mean(|raw|) * 100) over visible
-  # rows; NA for blacked-out cells. Also compute Total Impact and Base for
-  # the footer row.
+  # rows. Insufficient-base rows render BLANK (NA in idx). Insignificant
+  # rows keep their actual numeric value but are flagged in `insig_mat`
+  # so the renderer can style them black-on-white-text. Also compute
+  # Total Impact and Base for the footer row.
   total_impact_per_sg <- character(length(sgs))
   base_per_sg        <- character(length(sgs))
   names(total_impact_per_sg) <- sgs
   names(base_per_sg)         <- sgs
+  insig_mat <- matrix(FALSE, nrow = length(visible), ncol = length(sgs))
+  colnames(insig_mat) <- sgs
 
   for (i in seq_along(sgs)) {
     sg <- sgs[[i]]
@@ -103,8 +107,12 @@
     }
     raw_visible <- suppressWarnings(as.numeric(tbl[[col]][visible]))
     abs_visible <- abs(raw_visible)
-    abs_visible[is.na(abs_visible)] <- 0
-    mean_abs <- if (length(abs_visible) > 0) mean(abs_visible) else 0
+    # NAs (insufficient-base rows) participate as 0 in the mean
+    # denominator, but are preserved as NA in `abs_visible` so the
+    # per-row idx propagates NA → blank cell rather than "0".
+    mean_abs_input <- abs_visible
+    mean_abs_input[is.na(mean_abs_input)] <- 0
+    mean_abs <- if (length(mean_abs_input) > 0) mean(mean_abs_input) else 0
 
     # Resolve p-values: per-metric column if bootstrap mode, else static.
     pcol <- paste0(col, "_p_value")
@@ -114,13 +122,15 @@
       static_pvals_visible
     }
     insig <- !is.na(pvals) & pvals > sig_threshold
+    insig_mat[, i] <- insig
 
     idx <- if (mean_abs == 0) {
       rep(NA_real_, length(visible))
     } else {
       round(abs_visible / mean_abs * 100)
     }
-    idx[insig] <- NA_real_
+    # Don't NA out insig cells — keep their value; renderer reads
+    # insig_mat to apply the black-cell-with-white-text style instead.
     out_list[[sg]] <- idx
 
     # Total Impact = mean of |raw| across visible rows, formatted by
@@ -168,6 +178,7 @@
   if (length(visible) == 1) signs <- matrix(signs, nrow = 1)
   attr(out, "raw_signs") <- signs
   attr(out, "subgroup_cols") <- sgs
+  attr(out, "insig_mask") <- insig_mat
   out
 }
 
@@ -214,49 +225,88 @@
     }
   }
 
+  # Tooltip-on-label helper. Returns a <span> wrapped in a bslib tooltip
+  # for use as a selectInput's `label` arg — hovering the label text
+  # triggers the tooltip, hovering the dropdown does not.
+  tt <- function(label_text, tip_text) {
+    bslib::tooltip(
+      htmltools::span(
+        label_text,
+        style = "cursor: help; border-bottom: 1px dotted #999;"
+      ),
+      tip_text,
+      placement = "right"
+    )
+  }
+  # Uniform-spacing wrapper. Class `netdrv-ctrl-wrap` is paired with a
+  # CSS rule (in .network_drivers_module_css) that zeroes the inner
+  # .form-group's bottom margin so this wrapper's margin alone controls
+  # the gap between controls. Wrap goes INSIDE conditionalPanel for
+  # toggleable controls — when the panel is hidden, the wrapper is too,
+  # so no empty 12px gap is left behind.
+  cw <- function(...) {
+    shiny::div(class = "netdrv-ctrl-wrap", ...)
+  }
+
   # Assess preset — high-level dropdown that drives Analysis (metric) +
-  # Shift Type to one of the curated combos. Adds "Custom" so users can
-  # tune the underlying controls directly.
+  # Shift Type to one of the curated combos. Adds "Custom Impact" so
+  # users can tune the underlying controls directly.
   inputs <- list()
   metric_shift_cond <- NULL
   if (length(m$preset_map) > 0) {
-    assess_choices <- c(names(m$preset_map), "Custom")
+    assess_choices <- c(names(m$preset_map), "Custom Impact")
     inputs <- c(inputs, list(
-      shiny::selectInput(ns(paste0(prefix, "_assess")), "Assess:",
-                         choices = assess_choices,
-                         selected = assess_choices[1])
+      cw(shiny::selectInput(
+        ns(paste0(prefix, "_assess")),
+        label = tt("Assess:",
+                   "Preset driver analyses that address specific questions."),
+        choices = assess_choices,
+        selected = assess_choices[1]
+      ))
     ))
-    metric_shift_cond <- sprintf("input['%s'] === 'Custom'",
+    metric_shift_cond <- sprintf("input['%s'] === 'Custom Impact'",
                                  ns(paste0(prefix, "_assess")))
   }
   metric_input <- shiny::selectInput(
-    ns(paste0(prefix, "_metric")), "Analysis:",
+    ns(paste0(prefix, "_metric")),
+    label = tt("Analysis:",
+               "The metric used to score impact."),
     choices = metric_choices, selected = default_metric
   )
   if (!is.null(metric_shift_cond)) {
     inputs <- c(inputs, list(
-      shiny::conditionalPanel(condition = metric_shift_cond, metric_input)
+      shiny::conditionalPanel(condition = metric_shift_cond, cw(metric_input))
     ))
   } else {
-    inputs <- c(inputs, list(metric_input))
+    inputs <- c(inputs, list(cw(metric_input)))
   }
   if (length(focus_choices) > 1) {
     inputs <- c(inputs, list(
-      shiny::selectInput(ns(paste0(prefix, "_focus")),   "Focus:",
-                         choices = focus_choices, selected = focus_choices[1])
+      cw(shiny::selectInput(
+        ns(paste0(prefix, "_focus")),
+        label = tt("Focus:",
+                   "‘Market’ analyzes overall performance, while a brand uses only that brand’s."),
+        choices = focus_choices, selected = focus_choices[1]
+      ))
     ))
   }
   if (m$has_outcome_display) {
     inputs <- c(inputs, list(
-      shiny::selectInput(ns(paste0(prefix, "_display")), "Outcome:",
-                         choices = c("% Change" = "propdisplay",
-                                     "Point Change" = "absdisplay"),
-                         selected = default_outcome)
+      cw(shiny::selectInput(
+        ns(paste0(prefix, "_display")),
+        label = tt("Outcome:",
+                   "How outcome change is displayed — relative vs absolute point change."),
+        choices = c("% Change" = "propdisplay",
+                    "Point Change" = "absdisplay"),
+        selected = default_outcome
+      ))
     ))
   }
   if (m$has_shift_type) {
     shift_input <- shiny::selectInput(
-      ns(paste0(prefix, "_shift")), "Shift Type:",
+      ns(paste0(prefix, "_shift")),
+      label = tt("Shift Type:",
+                 "How each attribute’s movement is calculated when computing impact."),
       choices = c("% of Current Mean" = "propshift",
                   "Fixed Step"        = "absshift",
                   "% Toward Top"      = "headshift",
@@ -265,22 +315,30 @@
     )
     if (!is.null(metric_shift_cond)) {
       inputs <- c(inputs, list(
-        shiny::conditionalPanel(condition = metric_shift_cond, shift_input)
+        shiny::conditionalPanel(condition = metric_shift_cond, cw(shift_input))
       ))
     } else {
-      inputs <- c(inputs, list(shift_input))
+      inputs <- c(inputs, list(cw(shift_input)))
     }
   }
   if (m$has_weights) {
     inputs <- c(inputs, list(
-      shiny::selectInput(ns(paste0(prefix, "_weight")),  "Weight:",
-                         choices = weight_choices, selected = "Unweighted")
+      cw(shiny::selectInput(
+        ns(paste0(prefix, "_weight")),
+        label = tt("Weight:",
+                   "Whether weights are applied when calculating impacts."),
+        choices = weight_choices, selected = "Unweighted"
+      ))
     ))
   }
   if (include_indexby && m$has_battery && length(index_choices) > 1) {
     inputs <- c(inputs, list(
-      shiny::selectInput(ns(paste0(prefix, "_indexby")), "Index By:",
-                         choices = index_choices, selected = "All")
+      cw(shiny::selectInput(
+        ns(paste0(prefix, "_indexby")),
+        label = tt("Index By:",
+                   "Filter rows to a battery or group; the index is re-normalised within the visible rows."),
+        choices = index_choices, selected = "All"
+      ))
     ))
   }
 
@@ -304,25 +362,176 @@
   }
   if (length(index_choices) <= 1) return(NULL)
   view_js <- sprintf("input['%s']", view_input_id)
+  indexby_label <- bslib::tooltip(
+    htmltools::span(
+      "Index By:",
+      style = "cursor: help; border-bottom: 1px dotted #999;"
+    ),
+    "Filter rows to a battery or group; the index is re-normalised within the visible rows.",
+    placement = "right"
+  )
   shiny::conditionalPanel(
     condition = sprintf("%s === '%s'", view_js, view_value),
-    shiny::selectInput(ns(paste0(prefix, "_indexby")), "Index By:",
-                       choices = index_choices, selected = "All")
+    shiny::div(
+      class = "netdrv-ctrl-wrap",
+      shiny::selectInput(ns(paste0(prefix, "_indexby")),
+                         label = indexby_label,
+                         choices = index_choices, selected = "All")
+    )
   )
 }
 
 
-# ---- UI: DT renderer with color coding -------------------------------------
+# ---- Pure text: control-feedback (assess question + dim warnings) ----------
 
 #' @noRd
-.network_drivers_impacts_dt <- function(display, metadata,
-                                        marginal_threshold = 0.20,
-                                        sig_threshold = 0.05) {
+.network_drivers_impacts_min_base_for_focus <- function(metadata, focus) {
+  tbl <- metadata$tbl
+  if (is.null(tbl) || nrow(tbl) == 0) return(NA_real_)
+  base_key <- paste0("base_", focus)
+  bases <- vapply(metadata$sgs, function(sg) {
+    col <- paste0(sg, "_", base_key)
+    if (col %in% names(tbl)) suppressWarnings(as.numeric(tbl[[col]][1])) else NA_real_
+  }, numeric(1))
+  bases <- bases[!is.na(bases)]
+  if (length(bases) == 0) return(NA_real_)
+  min(bases)
+}
+
+#' @noRd
+.network_drivers_impacts_assess_question <- function(metadata, assess_value) {
+  if (is.null(assess_value) || identical(assess_value, "Custom Impact")) return("")
+  pm <- metadata$preset_map
+  if (is.null(pm) || is.null(pm[[assess_value]])) return("")
+  pm[[assess_value]]$question %||% ""
+}
+
+#' @noRd
+.network_drivers_impacts_warning <- function(dim, metric_key, shift_type,
+                                             focus, metadata) {
+  if (is.null(metric_key) || !nzchar(metric_key)) return("")
+  is_lift <- !metric_key %in% c("maxVmin", "mi")
+  shift_abs_lift <- identical(shift_type, "absshift") && is_lift
+
+  if (identical(dim, "focus")) {
+    # (a) base below minimum — only meaningful for non-Market focus + lift
+    if (!is.null(focus) && nzchar(focus) && focus != "Market" && is_lift) {
+      base_min <- .network_drivers_impacts_min_base_for_focus(metadata, focus)
+      min_req <- as.integer(metadata$min_base_for_lift %||% 75L)
+      if (!is.na(base_min) && base_min < min_req) {
+        return(sprintf("Results not calculated because base is below %d", min_req))
+      }
+    }
+    # (b) focus has no effect when shift = fixed step
+    if (shift_abs_lift) {
+      return("Focus does not affect this metric when shift is a fixed step")
+    }
+    return("")
+  }
+  if (identical(dim, "weight")) {
+    if (metric_key %in% c("maxVmin", "mi")) {
+      return("Weights don’t affect this metric")
+    }
+    if (shift_abs_lift) {
+      return("Weights don’t affect this metric when shift is a fixed step")
+    }
+    return("")
+  }
+  if (identical(dim, "display")) {
+    if (identical(metric_key, "mi")) {
+      return("Outcome display doesn’t affect this metric")
+    }
+    return("")
+  }
+  if (identical(dim, "shift")) {
+    if (metric_key %in% c("maxVmin", "mi")) {
+      return("Shift type doesn’t affect this metric")
+    }
+    return("")
+  }
+  ""
+}
+
+
+# ---- Pure text: index-note describing the current metric/shift -------------
+
+#' @noRd
+.network_drivers_impacts_shift_meaning <- function(pct, shift_key) {
+  k <- shift_key %||% "propshift"
+  n <- suppressWarnings(as.numeric(pct))
+  step <- if (is.finite(n)) sprintf("%.2f", n / 100) else "0.10"
+  switch(k,
+    propshift  = sprintf("Each attribute’s mean is shifted by %s%% of its current value.", pct),
+    absshift   = sprintf("Each attribute’s mean is shifted by %s scale points (a fixed step).", step),
+    headshift  = sprintf("Each attribute closes %s%% of its gap to the top of its scale.", pct),
+    rangeshift = sprintf("Each attribute’s mean is shifted by %s%% of its scale’s range.", pct),
+    ""
+  )
+}
+
+#' @noRd
+.network_drivers_impacts_metric_description <- function(metric_key, shift_key) {
+  if (is.null(metric_key) || !nzchar(metric_key)) return("")
+  if (metric_key %in% c("lift", "lift_0")) {
+    return("Indexed by average effect. Measures the outcome’s sensitivity to a small symmetric perturbation around each attribute’s current state.")
+  }
+  if (startsWith(metric_key, "lift_")) {
+    pct <- sub("^lift_", "", metric_key)
+    head <- sprintf("Indexed by %s%% improvement. Measures how much the outcome changes when each attribute’s distribution shifts by %s%%. ",
+                   pct, pct)
+    return(paste0(head, .network_drivers_impacts_shift_meaning(pct, shift_key)))
+  }
+  if (identical(metric_key, "maxVmin")) {
+    return("Indexed by best-vs-worst effect. Measures the outcome difference between the top of each attribute versus the bottom.")
+  }
+  if (identical(metric_key, "mi")) {
+    return("Indexed by explanatory value. Measures the statistical strength of the relationship between each attribute and the outcome (mutual information), independent of intervention direction or shift type.")
+  }
+  paste0("Indexed by ", metric_key)
+}
+
+#' @noRd
+.network_drivers_impacts_footer_notes <- function(metadata, metric_key,
+                                                  shift_type,
+                                                  sig_threshold = 0.10) {
+  index_note <- .network_drivers_impacts_metric_description(metric_key, shift_type)
+  min_base <- metadata$min_base_for_lift %||% 75L
+  htmltools::tagList(
+    htmltools::div(
+      class = "impact-footer",
+      style = paste(
+        "margin-top: 12px;",
+        "padding: 4px 10px 10px 10px;",
+        "font-size: 12px;",
+        "color: #555;"
+      ),
+      htmltools::p(
+        index_note,
+        style = "margin: 0 0 4px 0; font-style: italic;"
+      ),
+      htmltools::p(
+        style = "margin: 0; color: #888;",
+        sprintf(
+          "Bold italicized index means a negative relationship. Black cells mean an insignificant relationship (p > %s). Blank cells are not calculated due to insufficient base (below %d).",
+          format(sig_threshold, nsmall = 2),
+          as.integer(min_base)
+        )
+      )
+    )
+  )
+}
+
+
+# ---- UI: reactable renderer with per-column color gradient -----------------
+
+#' @noRd
+.network_drivers_impacts_reactable <- function(display, metadata,
+                                               marginal_threshold = 0.20,
+                                               sig_threshold = 0.05) {
   if (is.null(display) || nrow(display) == 0) {
-    return(DT::datatable(
+    return(reactable::reactable(
       data.frame(Message = "No impact results."),
-      options = list(dom = "t", paging = FALSE),
-      rownames = FALSE, selection = "none"
+      pagination = FALSE, sortable = FALSE
     ))
   }
   sg_cols <- attr(display, "subgroup_cols") %||% setdiff(
@@ -339,129 +548,161 @@
   attr(display_clean, "total_impact") <- NULL
   attr(display_clean, "base") <- NULL
 
-  # Build a custom container with <thead> AND a <tfoot> populated with
-  # Total Impact + Base rows. The first cell of each footer row spans the
-  # leading text columns ("Variable" / optional "Community" / "Label").
-  # Header text gets underscores replaced with spaces for prettier display
-  # ("Gen_Z" → "Gen Z"); the underlying data frame column names stay
-  # untouched so `formatStyle(col)` etc. still target them correctly.
-  col_names    <- names(display_clean)
-  display_cols <- gsub("_", " ", col_names, fixed = TRUE)
-  n_leading    <- length(col_names) - length(sg_cols)
-  if (n_leading < 1) n_leading <- 1
-  th <- htmltools::tags$th
-  tr <- htmltools::tags$tr
-  # Footer cells tagged with class + data-sg so a custom-message handler
-  # can update them in place after replaceData (matching bn_report's
-  # behavior of recomputing Total Impact / Base on every input change).
-  container <- htmltools::withTags(
-    table(
-      class = "display",
-      thead(do.call(tr, lapply(display_cols, function(c) th(c)))),
-      tfoot(
-        do.call(tr, c(
-          list(th("Total Impact",
-                  colspan = n_leading,
-                  style = "text-align:left; font-weight:600;")),
-          lapply(sg_cols, function(sg) {
-            th(total_impact[[sg]] %||% "",
-               class = "ti-cell",
-               `data-sg` = sg,
-               style = "text-align:center; font-weight:600;")
-          })
-        )),
-        do.call(tr, c(
-          list(th("Base",
-                  colspan = n_leading,
-                  style = "text-align:left; font-weight:600;")),
-          lapply(sg_cols, function(sg) {
-            th(base_vals[[sg]] %||% "",
-               class = "base-cell",
-               `data-sg` = sg,
-               style = "text-align:center; font-weight:600;")
-          })
-        ))
+  # Excel red → yellow → green color ramp.
+  color_pal <- grDevices::colorRamp(c("#F8696B", "#FFEB84", "#63BE7B"))
+
+  # Build a per-column R style function that closes over the column's
+  # min/max, per-row sign, and per-row insignificance flag. Reactable R
+  # style functions receive (value, index) — index is the 1-based row
+  # position in the underlying data, which we use to look up signs and
+  # insig flags. Three rendering modes per cell:
+  #   1. Insignificant (p > 0.10) → black bg, white text (overrides all)
+  #   2. NA value (insufficient base) → no styling, blank cell
+  #   3. Normal value → red→yellow→green gradient + bold/italic if negative
+  raw_signs_mat <- attr(display, "raw_signs")
+  insig_mask    <- attr(display, "insig_mask")
+  make_color_style <- function(col_values, col_signs, col_insig) {
+    # Exclude insig cells from the gradient min/max so they don't
+    # distort the scale (their displayed value is hidden anyway).
+    if (!is.null(col_insig) && length(col_insig) == length(col_values)) {
+      col_values_g <- ifelse(col_insig, NA_real_, col_values)
+    } else {
+      col_values_g <- col_values
+    }
+    finite <- col_values_g[is.finite(col_values_g)]
+    has_gradient <- length(finite) > 0 && min(finite) != max(finite)
+    vmin <- if (has_gradient) min(finite) else NA_real_
+    vmax <- if (has_gradient) max(finite) else NA_real_
+    function(value, index) {
+      style <- list(textAlign = "center")
+      # 1. Insignificant cells: black bg + white text. Overrides everything.
+      is_insig <- !is.null(col_insig) &&
+                  index >= 1 && index <= length(col_insig) &&
+                  isTRUE(col_insig[[index]])
+      if (is_insig) {
+        style$background <- "#000"
+        style$color      <- "#fff"
+        return(style)
+      }
+      # 2. Normal value: gradient
+      if (has_gradient && !is.na(value)) {
+        normalized <- (value - vmin) / (vmax - vmin)
+        normalized <- max(0, min(1, normalized))
+        style$background <- grDevices::rgb(color_pal(normalized),
+                                           maxColorValue = 255)
+      }
+      # 3. Negative-sign overlay (italic/bold) — applied on top of gradient
+      sign_val <- if (!is.null(col_signs) &&
+                      index >= 1 && index <= length(col_signs)) {
+        col_signs[[index]]
+      } else 0L
+      if (isTRUE(sign_val < 0)) {
+        style$fontWeight <- "bold"
+        style$fontStyle  <- "italic"
+      }
+      if (length(style) == 1) return(NULL)  # only textAlign, nothing to apply
+      style
+    }
+  }
+
+  # Two-row footer per cell: Total Impact value on top, Base on bottom.
+  # Stacked via flex column. Reactable doesn't natively support multiple
+  # footer rows so we put both into a single footer cell.
+  make_two_row_footer <- function(top, bottom) {
+    htmltools::div(
+      style = "display: flex; flex-direction: column; line-height: 1.4;",
+      htmltools::div(top,    style = "font-weight: 600;"),
+      htmltools::div(bottom, style = "font-weight: 500; color: #555;")
+    )
+  }
+
+  # Build colDefs — leading text cols (auto-content width via minWidth, no
+  # max so they grow to fit content), then subgroup cols at fixed 90px.
+  col_defs <- list()
+  id_col <- metadata$id_col_label
+  if (id_col %in% names(display_clean)) {
+    col_defs[[id_col]] <- reactable::colDef(
+      name = id_col,
+      minWidth = 80,
+      footer = make_two_row_footer("Total Impact", "Base")
+    )
+  }
+  if (metadata$has_community && "Community" %in% names(display_clean)) {
+    col_defs[["Community"]] <- reactable::colDef(
+      name = "Community",
+      minWidth = 120,
+      footer = make_two_row_footer("", "")
+    )
+  }
+  if (metadata$has_label && "Label" %in% names(display_clean)) {
+    col_defs[["Label"]] <- reactable::colDef(
+      name = "Label",
+      minWidth = 120,
+      footer = make_two_row_footer("", "")
+    )
+  }
+  for (i in seq_along(sg_cols)) {
+    col <- sg_cols[[i]]
+    pretty_label <- gsub("_", " ", col, fixed = TRUE)
+    col_signs <- if (!is.null(raw_signs_mat) && i <= ncol(raw_signs_mat)) {
+      raw_signs_mat[, i]
+    } else NULL
+    col_insig <- if (!is.null(insig_mask) && i <= ncol(insig_mask)) {
+      insig_mask[, i]
+    } else NULL
+    col_defs[[col]] <- reactable::colDef(
+      name      = pretty_label,
+      align     = "center",
+      minWidth  = 70,
+      style     = make_color_style(display_clean[[col]], col_signs, col_insig),
+      footer    = make_two_row_footer(
+        total_impact[[col]] %||% "",
+        base_vals[[col]]    %||% ""
+      ),
+      footerStyle = list(textAlign = "center")
+    )
+  }
+
+  default_sorted <- if (length(sg_cols) > 0) {
+    stats::setNames(list("desc"), sg_cols[1])
+  } else NULL
+
+  reactable::reactable(
+    display_clean,
+    columns         = col_defs,
+    defaultSorted   = default_sorted,
+    pagination      = FALSE,
+    sortable        = TRUE,
+    resizable       = TRUE,
+    bordered        = FALSE,
+    highlight       = TRUE,
+    # Reactable fills its flex parent (the .flex-1 wrapper inside
+    # card_body). The footer takes its natural height beneath; no
+    # need to reserve a fixed amount via maxHeight — the flex column
+    # in card_body handles the split dynamically.
+    height          = "100%",
+    style           = list(height = "100%"),
+    theme           = reactable::reactableTheme(
+      borderColor   = "var(--bs-card-border-color, #dee2e6)",
+      stripedColor  = "transparent",
+      highlightColor = "var(--bs-secondary-bg, #f0f0f0)",
+      cellPadding   = "8px 10px",
+      style         = list(
+        fontFamily  = "inherit",
+        fontSize    = "14px"
+      ),
+      headerStyle   = list(
+        fontWeight  = "600",
+        background  = "var(--bs-body-bg, #fff)"
+      ),
+      footerStyle   = list(
+        background  = "var(--bs-tertiary-bg, #f8f9fa)",
+        borderTop   = "1px solid var(--bs-border-color, #dee2e6)"
       )
     )
   )
-
-  sg_targets <- which(names(display_clean) %in% sg_cols) - 1L
-  first_sg_target <- if (length(sg_targets) > 0) sg_targets[1] else NULL
-
-  # Per-column 3-color gradient applied via drawCallback so it re-runs
-  # on every draw, including after replaceData (when control inputs
-  # change). Each subgroup column computes its own min/mid/max from the
-  # currently visible cells and paints backgrounds via interpolation
-  # between #F8696B (red), #FFEB84 (yellow), #63BE7B (green) — Excel's
-  # default 3-color-scale palette.
-  sg_targets_js <- paste0("[", paste(sg_targets, collapse = ","), "]")
-  draw_cb <- DT::JS(
-    "function(settings) {",
-    "  var api = this.api();",
-    "  var sgCols = ", sg_targets_js, ";",
-    "  function hex2rgb(h) {",
-    "    return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];",
-    "  }",
-    "  function interp(a, b, t) {",
-    "    return 'rgb(' + Math.round(a[0]+(b[0]-a[0])*t) + ',' +",
-    "                   Math.round(a[1]+(b[1]-a[1])*t) + ',' +",
-    "                   Math.round(a[2]+(b[2]-a[2])*t) + ')';",
-    "  }",
-    "  var red = hex2rgb('#F8696B'),",
-    "      yel = hex2rgb('#FFEB84'),",
-    "      grn = hex2rgb('#63BE7B');",
-    "  sgCols.forEach(function(ci) {",
-    "    var data = api.column(ci).data().toArray()",
-    "      .map(function(v) { return parseFloat(v); })",
-    "      .filter(function(v) { return !isNaN(v); });",
-    "    if (data.length === 0) return;",
-    "    var min = Math.min.apply(null, data),",
-    "        max = Math.max.apply(null, data),",
-    "        mid = (min + max) / 2;",
-    "    api.cells(null, ci).every(function() {",
-    "      var cell = this.node();",
-    "      var v = parseFloat(this.data());",
-    "      if (isNaN(v) || min === max) { cell.style.backgroundColor = ''; return; }",
-    "      var color;",
-    "      if (v <= mid) {",
-    "        var t = (mid - min) === 0 ? 0 : (v - min) / (mid - min);",
-    "        color = interp(red, yel, t);",
-    "      } else {",
-    "        var t = (max - mid) === 0 ? 1 : (v - mid) / (max - mid);",
-    "        color = interp(yel, grn, t);",
-    "      }",
-    "      cell.style.backgroundColor = color;",
-    "    });",
-    "  });",
-    "}"
-  )
-  options_list <- list(
-    dom = "t",
-    paging = FALSE,
-    pageLength = nrow(display_clean),
-    scrollX = TRUE,
-    scrollY = "100%",
-    scrollCollapse = FALSE,
-    autoWidth = TRUE,
-    drawCallback = draw_cb,
-    columnDefs = list(
-      list(className = "dt-center", targets = sg_targets),
-      list(width = "90px",          targets = sg_targets)
-    )
-  )
-  if (!is.null(first_sg_target)) {
-    # Sort the first subgroup column descending on initial load.
-    options_list$order <- list(list(first_sg_target, "desc"))
-  }
-
-  DT::datatable(
-    display_clean,
-    container = container,
-    rownames = FALSE,
-    selection = "none",
-    class = "row-border hover",
-    options = options_list
-  )
 }
+
+
 
 

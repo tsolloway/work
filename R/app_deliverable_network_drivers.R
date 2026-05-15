@@ -193,7 +193,10 @@ app_deliverable_network_drivers <- function(
 
   # ---- head_tags: bn_report JS for embedded dashboards + parent-side
   # listener that forwards iframe postMessage layouts to a Shiny input.
+  # `shinyjs::useShinyjs()` registers the shinyjs JS bridge so server-side
+  # `shinyjs::disable()` / `enable()` calls reach the browser.
   head_tags <- list(
+    shinyjs::useShinyjs(),
     shiny::tags$script(shiny::HTML(.bn_report_js(save_name = NULL))),
     shiny::tags$script(shiny::HTML(.network_drivers_parent_listener_js(id)))
   )
@@ -313,7 +316,25 @@ app_deliverable_network_drivers <- function(
     layout_panel,
     imp_sidebar,
     ia_indexby,
-    pm_sidebar
+    pm_sidebar,
+    # Divider + workbook download — styled identically to the
+    # Outcome Estimate Show/Hide button (small, white background, thin
+    # border, full sidebar width). `downloadButton` adds its own icon
+    # by default; we suppress it with icon = NULL so the button matches
+    # the show/hide one exactly.
+    htmltools::hr(style = "margin: 12px 0;"),
+    shiny::downloadButton(
+      ns(paste0(rid, "_download_workbook")),
+      label = "Download Workbook",
+      icon  = NULL,
+      class = "btn-sm",
+      style = paste(
+        "background-color: #fff;",
+        "border: 1px solid #ced4da;",
+        "color: #212529;",
+        "width: 100%;"
+      )
+    )
   )
 
   # Build nav_panels in the order Attribute / Community / Membership /
@@ -343,25 +364,120 @@ app_deliverable_network_drivers <- function(
                  DT::DTOutput(ns(paste0(rid, "_membership_table"))))
     )))
   }
+  # Flex column on card_body: reactable area grows to fill the space
+  # left after the footer takes its natural height. Eliminates the
+  # different-cap-vs-different-footer mismatch (impacts has a small
+  # footer, prio has a large glossary) — both cards end up the same
+  # height, both internally scroll their tables to fit.
+  flex_card_body_style <- paste(
+    "display: flex; flex-direction: column;",
+    "height: 100%; min-height: 0;"
+  )
   if (has_impacts_attr) {
     panels <- c(panels, list(bslib::nav_panel(
       title = "Attribute Impacts", value = "impacts_attr",
-      DT::DTOutput(ns(paste0(rid, "_ia_dt")),
-                   width = "100%", height = "100%")
+      bslib::card(
+        full_screen = TRUE,
+        max_height  = "80vh",
+        bslib::card_header(
+          shiny::uiOutput(ns(paste0(rid, "_ia_title")), inline = TRUE),
+          class = "fw-semibold"
+        ),
+        bslib::card_body(
+          padding = 0,
+          style = flex_card_body_style,
+          shiny::div(
+            style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
+            reactable::reactableOutput(ns(paste0(rid, "_ia_dt")),
+                                       width = "100%", height = "100%")
+          ),
+          shiny::div(
+            style = "flex: 0 0 auto;",
+            shiny::uiOutput(ns(paste0(rid, "_ia_footer")))
+          )
+        )
+      )
     )))
   }
   if (has_impacts_comm) {
     panels <- c(panels, list(bslib::nav_panel(
       title = "Community Impacts", value = "impacts_comm",
-      DT::DTOutput(ns(paste0(rid, "_ic_dt")),
-                   width = "100%", height = "100%")
+      bslib::card(
+        full_screen = TRUE,
+        max_height  = "80vh",
+        bslib::card_header(
+          shiny::uiOutput(ns(paste0(rid, "_ic_title")), inline = TRUE),
+          class = "fw-semibold"
+        ),
+        bslib::card_body(
+          padding = 0,
+          style = flex_card_body_style,
+          shiny::div(
+            style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
+            reactable::reactableOutput(ns(paste0(rid, "_ic_dt")),
+                                       width = "100%", height = "100%")
+          ),
+          shiny::div(
+            style = "flex: 0 0 auto;",
+            shiny::uiOutput(ns(paste0(rid, "_ic_footer")))
+          )
+        )
+      )
     )))
   }
   if (has_prio) {
+    # Side-by-side table + chart layout via layout_columns. Flip to
+    # FALSE to debug the table card in isolation.
+    enable_chart <- TRUE
+
+    table_card <- bslib::card(
+      full_screen = TRUE,
+      max_height  = "80vh",
+      bslib::card_header(
+        shiny::uiOutput(ns(paste0(rid, "_pm_title")), inline = TRUE),
+        class = "fw-semibold"
+      ),
+      bslib::card_body(
+        padding = 0,
+        style = flex_card_body_style,
+        shiny::div(
+          style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
+          reactable::reactableOutput(ns(paste0(rid, "_pm_dt")),
+                                     width = "100%", height = "100%")
+        ),
+        shiny::div(
+          style = "flex: 0 0 auto;",
+          shiny::uiOutput(ns(paste0(rid, "_pm_footer")))
+        )
+      )
+    )
+
+    chart_card <- bslib::card(
+      full_screen = TRUE,
+      max_height  = "80vh",
+      bslib::card_header("Prioritization Chart", class = "fw-semibold"),
+      bslib::card_body(
+        padding = 0,
+        plotly::plotlyOutput(ns(paste0(rid, "_pm_chart")),
+                             width = "100%", height = "500px")
+      )
+    )
+
+    prio_body <- if (isTRUE(enable_chart)) {
+      bslib::layout_columns(
+        col_widths = bslib::breakpoints(
+          md  = c(12, 12),
+          xxl = c(7, 5)
+        ),
+        table_card, chart_card
+      )
+    } else {
+      table_card
+    }
+
     panels <- c(panels, list(bslib::nav_panel(
       title = "Prioritization", value = "prioritization",
-      DT::DTOutput(ns(paste0(rid, "_pm_dt")),
-                   width = "100%", height = "100%")
+      prio_body
     )))
   }
 
@@ -620,12 +736,13 @@ app_deliverable_network_drivers <- function(
         })
       }
 
-      # ---- Impact dashboards: native sidebar inputs + reactive DT ----
+      # ---- Impact dashboards: native sidebar inputs + reactable ----
       # Shared control inputs (`_imp_*`) drive BOTH attribute and community
       # impact dashboards. The attribute table additionally reads
       # `_ia_indexby` (community has no Index By since it has no batteries).
       shared_prefix <- paste0(rid, "_imp")
-      bind_impacts_dt <- function(meta, dt_out_id, indexby_input_id = NULL) {
+      bind_impacts_dt <- function(meta, dt_out_id, footer_out_id,
+                                  indexby_input_id = NULL) {
         if (is.null(meta)) return(invisible(NULL))
 
         display_reactive <- shiny::reactive({
@@ -648,48 +765,90 @@ app_deliverable_network_drivers <- function(
           )
         })
 
-        # Initial render only — uses isolate() so subsequent input
-        # changes don't re-trigger the full DT re-render (which causes
-        # the flicker). We use replaceData via the proxy below for
-        # those updates.
-        output[[dt_out_id]] <- DT::renderDT({
-          disp <- shiny::isolate(display_reactive())
-          .network_drivers_impacts_dt(disp, meta)
+        # Full re-render on every input change. Reactable handles this
+        # without the visible flicker DT had — the React-based diffing
+        # only patches changed rows, and the colDef-level style/footer
+        # functions naturally recompute. No need for proxies / custom
+        # message handlers.
+        output[[dt_out_id]] <- reactable::renderReactable({
+          disp <- display_reactive()
+          .network_drivers_impacts_reactable(disp, meta)
         })
 
-        # In-place updates on input change. Color scale recomputes via
-        # drawCallback (lives in DT options). Footer cells (Total Impact
-        # / Base) recompute via a separate custom-message handler that
-        # writes to the th.ti-cell / th.base-cell elements after the
-        # replaceData call has triggered a redraw.
-        proxy <- DT::dataTableProxy(dt_out_id)
-        shiny::observeEvent(display_reactive(), {
-          disp <- display_reactive()
-          if (is.null(disp) || nrow(disp) == 0) return()
-          DT::replaceData(proxy, disp, resetPaging = FALSE,
-                          rownames = FALSE)
-          ti   <- attr(disp, "total_impact")
-          base <- attr(disp, "base")
-          if (!is.null(ti) || !is.null(base)) {
-            session$sendCustomMessage("netdrv_dt_footer", list(
-              id           = ns(dt_out_id),
-              total_impact = as.list(ti %||% list()),
-              base         = as.list(base %||% list())
-            ))
-          }
-        }, ignoreInit = TRUE)
+        # Footer notes: index-meaning paragraph + static formatting legend.
+        # Re-renders on metric/shift change so the index-meaning sentence
+        # always describes what the visible numbers mean.
+        output[[footer_out_id]] <- shiny::renderUI({
+          metric_key <- input[[paste0(shared_prefix, "_metric")]]
+          shift_t    <- input[[paste0(shared_prefix, "_shift")]] %||% "propshift"
+          if (is.null(metric_key)) return(NULL)
+          .network_drivers_impacts_footer_notes(meta, metric_key, shift_t)
+        })
       }
       # Attribute table: shared inputs + attr-only Index By
       bind_impacts_dt(
         dash$impacts_attr_meta,
-        dt_out_id = paste0(rid, "_ia_dt"),
+        dt_out_id        = paste0(rid, "_ia_dt"),
+        footer_out_id    = paste0(rid, "_ia_footer"),
         indexby_input_id = paste0(rid, "_ia_indexby")
       )
       # Community table: shared inputs only (no Index By)
       bind_impacts_dt(
         dash$impacts_comm_meta,
-        dt_out_id = paste0(rid, "_ic_dt")
+        dt_out_id     = paste0(rid, "_ic_dt"),
+        footer_out_id = paste0(rid, "_ic_footer")
       )
+
+      # Sidebar feedback: dynamic warnings/questions that mirror
+      # bn_report's per-control hints. Registered once per result against
+      # the shared `_imp_*` inputs. Each warning is a tiny renderUI that
+      # reads the relevant inputs + metadata and emits text (or "" to hide).
+      shared_meta_warn <- dash$impacts_attr_meta %||% dash$impacts_comm_meta
+      if (!is.null(shared_meta_warn)) {
+        # Card titles: "{Assess value}: <em>{Question}</em>" for impact tables.
+        # Falls back to bare Assess value (e.g., "Custom Impact") when no question.
+        make_title <- function(out_id) {
+          output[[out_id]] <- shiny::renderUI({
+            v <- input[[paste0(shared_prefix, "_assess")]] %||% ""
+            q <- .network_drivers_impacts_assess_question(shared_meta_warn, v)
+            if (nzchar(v) && nzchar(q)) {
+              htmltools::tagList(
+                htmltools::HTML(paste0(htmltools::htmlEscape(v), ": ")),
+                htmltools::tags$em(q)
+              )
+            } else {
+              htmltools::HTML(htmltools::htmlEscape(v))
+            }
+          })
+        }
+        if (!is.null(dash$impacts_attr_meta)) make_title(paste0(rid, "_ia_title"))
+        if (!is.null(dash$impacts_comm_meta)) make_title(paste0(rid, "_ic_title"))
+
+        # Disable inert controls — when a control's value would have no
+        # effect on the displayed metric, grey it out via shinyjs.
+        # Conditions mirror the advisory rules from bn_report:
+        #   - shift = absshift + lift metric → focus/weight inert
+        #   - metric = mi/maxVmin → shift inert; weight inert
+        #   - metric = mi → display inert
+        shiny::observe({
+          metric_key <- input[[paste0(shared_prefix, "_metric")]]
+          shift_t    <- input[[paste0(shared_prefix, "_shift")]]   %||% "propshift"
+          if (is.null(metric_key)) return()
+          is_lift <- !metric_key %in% c("maxVmin", "mi")
+          shift_abs_lift <- identical(shift_t, "absshift") && is_lift
+
+          set_disabled <- function(dim, disabled) {
+            id <- paste0(shared_prefix, "_", dim)
+            if (isTRUE(disabled)) shinyjs::disable(id) else shinyjs::enable(id)
+          }
+          set_disabled("focus",
+                       metric_key %in% c("maxVmin", "mi") || shift_abs_lift)
+          set_disabled("display", identical(metric_key, "mi"))
+          set_disabled("shift",   metric_key %in% c("maxVmin", "mi"))
+          set_disabled("weight",
+                       metric_key %in% c("maxVmin", "mi") || shift_abs_lift)
+        })
+      }
 
       # Assess preset auto-flip — registered ONCE per result against the
       # shared `_imp_*` inputs (Assess + metric + shift live in the
@@ -704,7 +863,7 @@ app_deliverable_network_drivers <- function(
         shift_in  <- paste0(shared_prefix, "_shift")
         shiny::observeEvent(input[[assess_id]], {
           preset_name <- input[[assess_id]]
-          if (is.null(preset_name) || preset_name == "Custom") return()
+          if (is.null(preset_name) || preset_name == "Custom Impact") return()
           preset <- shared_meta_srv$preset_map[[preset_name]]
           if (is.null(preset)) return()
           if (!is.null(preset$metric) &&
@@ -722,6 +881,11 @@ app_deliverable_network_drivers <- function(
           list(input[[metric_in]],
                if (shared_meta_srv$has_shift_type) input[[shift_in]] else NULL)
         }, {
+          # If user is on Custom Impact, leave them there even if their
+          # current metric/shift happen to match a preset. They went into
+          # Custom intentionally; auto-flipping back yanks the Analysis
+          # control out from under them.
+          if (identical(input[[assess_id]], "Custom Impact")) return()
           cur_m <- input[[metric_in]]
           cur_s <- if (shared_meta_srv$has_shift_type) input[[shift_in]] else NULL
           matched <- NULL
@@ -732,7 +896,7 @@ app_deliverable_network_drivers <- function(
                          identical(cur_s, p$shift)
             if (metric_ok && shift_ok) { matched <- nm; break }
           }
-          new_assess <- matched %||% "Custom"
+          new_assess <- matched %||% "Custom Impact"
           if (!identical(input[[assess_id]], new_assess)) {
             shiny::updateSelectInput(session, assess_id,
                                      selected = new_assess)
@@ -740,11 +904,24 @@ app_deliverable_network_drivers <- function(
         }, ignoreInit = TRUE)
       }
 
-      # ---- Prioritization: native sidebar inputs + reactive DT -----------
+      # ---- Prioritization: native sidebar inputs + reactable -----------
       if (!is.null(dash$prio_meta)) {
         pm <- dash$prio_meta
         pm_prefix <- paste0(rid, "_pm")
         pm_dt_id  <- paste0(rid, "_pm_dt")
+
+        # Outcome Estimate visibility — toggled by an actionButton.
+        # Default FALSE = hidden (matches bn_write + bn_report).
+        show_estimate_rv <- shiny::reactiveVal(FALSE)
+        show_estimate_id <- paste0(pm_prefix, "_show_estimate")
+        shiny::observeEvent(input[[show_estimate_id]], {
+          new_val <- !show_estimate_rv()
+          show_estimate_rv(new_val)
+          shiny::updateActionButton(
+            session, show_estimate_id,
+            label = if (new_val) "Hide" else "Show"
+          )
+        }, ignoreInit = TRUE)
 
         prio_display_reactive <- shiny::reactive({
           .network_drivers_prio_data(
@@ -753,27 +930,93 @@ app_deliverable_network_drivers <- function(
             search   = input[[paste0(pm_prefix, "_search")]],
             subgroup = input[[paste0(pm_prefix, "_subgroup")]],
             focus    = input[[paste0(pm_prefix, "_focus")]],
-            weight   = input[[paste0(pm_prefix, "_weight")]]
+            weight   = input[[paste0(pm_prefix, "_weight")]],
+            outcome  = input[[paste0(pm_prefix, "_outcome")]]
           )
         })
 
-        output[[pm_dt_id]] <- DT::renderDT({
-          disp <- shiny::isolate(prio_display_reactive())
-          .network_drivers_prio_dt(
+        output[[pm_dt_id]] <- reactable::renderReactable({
+          disp <- prio_display_reactive()
+          .network_drivers_prio_reactable(
             disp, pm,
             sig_threshold = sig_threshold,
+            marginal_threshold = marginal_threshold,
+            show_estimate = show_estimate_rv()
+          )
+        })
+
+        # Footer notes: Base + p-value legend + glossary (mirrors bn_report).
+        # Glossary items show only when their column is visible in the
+        # table OR (for strategy items) when the user's Analysis selection
+        # matches that strategy.
+        output[[paste0(rid, "_pm_footer")]] <- shiny::renderUI({
+          .network_drivers_prio_footer_notes(
+            prio_display_reactive(),
+            metadata        = pm,
+            show_estimate   = show_estimate_rv(),
+            current_strategy = input[[paste0(pm_prefix, "_strategy")]],
+            sig_threshold    = sig_threshold,
             marginal_threshold = marginal_threshold
           )
         })
 
-        prio_proxy <- DT::dataTableProxy(pm_dt_id)
-        shiny::observeEvent(prio_display_reactive(), {
-          disp <- prio_display_reactive()
-          if (is.null(disp) || nrow(disp) == 0) return()
-          DT::replaceData(prio_proxy, disp, resetPaging = FALSE,
-                          rownames = FALSE)
-        }, ignoreInit = TRUE)
+        # Prioritization chart: stacked-bar waterfall (Previous + Incremental)
+        # plus a cumulative line. Reuses the SAME display data so it stays
+        # in sync with the Outcome (% Change / Point Change) toggle.
+        # Modebar matches turf's: download PNG named for the chart, no
+        # plotly logo, custom button set via plotly_modebar().
+        output[[paste0(rid, "_pm_chart")]] <- plotly::renderPlotly({
+          theme_v <- input[[paste0(pm_prefix, "_chart_theme")]] %||% "Default"
+          .network_drivers_prio_chart(
+            prio_display_reactive(), pm,
+            theme = theme_v
+          ) %>%
+            plotly::config(
+              displaylogo = FALSE,
+              modeBarButtons = plotly_modebar("Prioritization Chart")
+            )
+        })
+
+        # Dynamic card title: "Prioritization: <em>{analysis}</em>".
+        # Reads the strategy dim (which our UI labels "Analysis").
+        # Falls back to bare "Prioritization" when strategy is unset
+        # or there's only one option (no meaningful selection to show).
+        output[[paste0(rid, "_pm_title")]] <- shiny::renderUI({
+          strat <- input[[paste0(pm_prefix, "_strategy")]] %||% ""
+          if (!nzchar(strat)) {
+            return(htmltools::HTML("Prioritization"))
+          }
+          pretty <- gsub("_", " ", strat, fixed = TRUE)
+          htmltools::tagList(
+            htmltools::HTML("Prioritization: "),
+            htmltools::tags$em(pretty)
+          )
+        })
       }
+
+      # ---- Workbook download ------------------------------------------
+      # bn_write writes the BN result to an .xlsx in the working
+      # directory and returns the saved path (S3-classed list whose
+      # as.character() yields the path). For the download handler we
+      # run bn_write inside a tempdir so the file lands somewhere we
+      # can then copy to Shiny's download target.
+      output[[paste0(rid, "_download_workbook")]] <- shiny::downloadHandler(
+        filename = function() {
+          paste0(result_name, " - Network Drivers.xlsx")
+        },
+        content = function(file) {
+          tmp <- tempfile(pattern = paste0(rid, "_wb_"))
+          dir.create(tmp)
+          old_wd <- setwd(tmp)
+          on.exit({ setwd(old_wd); unlink(tmp, recursive = TRUE) }, add = TRUE)
+          out <- bn_write(result, file_name = result_name)
+          saved <- as.character(out)[1]
+          if (!file.exists(saved)) {
+            saved <- file.path(tmp, basename(saved))
+          }
+          file.copy(saved, file, overwrite = TRUE)
+        }
+      )
 
       # Layout change → JS toggles which network slot is visible (within
       # both Attribute and Community tab panels — only the active tab
@@ -1183,6 +1426,14 @@ app_deliverable_network_drivers <- function(
   paste0(
     "#", id, " .network-drivers-dashboard { padding: 16px; }\n",
     "#", id, " .network-drivers-membership { padding: 8px 12px; }\n",
+    # Sidebar control spacing: every selectInput is wrapped in a
+    # .netdrv-ctrl-wrap div. Zero out the inner .form-group's bottom
+    # margin so the wrapper alone controls vertical rhythm. UNSCOPED
+    # via #<id> won't work because layout_sidebar can render the sidebar
+    # outside the module's id'd container; .netdrv-ctrl-wrap is unique
+    # enough to be safe page-wide.
+    ".netdrv-ctrl-wrap { margin-bottom: 12px; }\n",
+    ".netdrv-ctrl-wrap .form-group { margin-bottom: 0; }\n",
     "#", id, " .network-drivers-membership table.dataTable td .node-pill {\n",
     "  display: inline-block; padding: 2px 8px; margin: 2px;\n",
     "  background: #f0f0f0; border-radius: 12px;\n",
@@ -1212,6 +1463,23 @@ app_deliverable_network_drivers <- function(
     # like it's inside a bslib::card without the actual card element
     # (saves a layer in the DOM). Uses theme CSS variables so it tracks
     # dark mode automatically.
+    # Fill propagation for navset_underline → tab-pane → card →
+    # reactable. Without this, the inner panels don't have a defined
+    # height, so reactable's `height = "100%"` resolves against an
+    # undefined parent and the table falls back to content size (which
+    # then doesn't respond to viewport resize).
+    ".nav-underline + .tab-content {",
+    "  flex: 1 1 auto;",
+    "  min-height: 0;",
+    "  display: flex;",
+    "  flex-direction: column;",
+    "}\n",
+    ".nav-underline + .tab-content > .tab-pane.active {",
+    "  flex: 1 1 auto;",
+    "  min-height: 0;",
+    "  display: flex;",
+    "  flex-direction: column;",
+    "}\n",
     ".dataTables_wrapper {",
     "  height: calc(100% - 1rem);",
     "  max-height: 85vh;",

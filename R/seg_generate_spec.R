@@ -75,7 +75,7 @@ seg_generate_spec <- function(
     "IF(", cp, ",",
       "E", r, "&\" = case_when(\"&G", r, "&\" \"&H", r, "&\" ~ 1, is.na(\"&G", r, "&\") ~ 0, .default = 0)\",",
     "IF(", hc, ",",
-      "E", r, "&\" = as.integer(if_any(c(\"&G", r, "&\"), ~ .x == \"&H", r, "&\" & !is.na(.x)))\",",
+      "E", r, "&\" = as.integer(if_any(c(\"&G", r, "&\"), ~ replace_na(.x, 0) %in% \"&H", r, "&\"))\",",
     "E", r, "&\" = recode_values(\"&G", r, "&\", \"&H", r, "&\" ~ 1, default = 0)\"))))))")
 
   # ZF=0 tree: NAs propagate
@@ -91,7 +91,7 @@ seg_generate_spec <- function(
     "IF(", cp, ",",
       "E", r, "&\" = case_when(\"&G", r, "&\" \"&H", r, "&\" ~ 1, .default = 0)\",",
     "IF(", hc, ",",
-      "E", r, "&\" = as.integer(if_any(c(\"&G", r, "&\"), ~ .x == \"&H", r, "&\"))\",",
+      "E", r, "&\" = as.integer(if_any(c(\"&G", r, "&\"), ~ .x %in% \"&H", r, "&\"))\",",
     "E", r, "&\" = recode_values(\"&G", r, "&\", \"&H", r, "&\" ~ 1, NA ~ NA, default = 0)\"))))))")
 
   paste0("IF(G", r, "=\"\",\"\",IF(I", r, "=1,", zf, ",", nozf, "))")

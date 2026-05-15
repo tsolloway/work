@@ -12,7 +12,8 @@
 .network_drivers_prio_data <- function(metadata,
                                        strategy = NULL, search = NULL,
                                        subgroup = NULL, focus = NULL,
-                                       weight = NULL) {
+                                       weight = NULL,
+                                       outcome = NULL) {
   pm <- metadata
   if (is.null(pm)) return(NULL)
 
@@ -33,6 +34,17 @@
   if (is.null(entry) || length(entry$rows) == 0) return(NULL)
   rows <- entry$rows
 
+  # Display-mode switch: "% Change" (propdisplay) shows ratio columns
+  # (cumulative_gain_pct / marginal_gain_pct) under "Cumulative Gain %"
+  # / "Incremental Lift %" headers. "Point Change" (absdisplay) shows
+  # absolute columns (cumulative_gain / marginal_gain) under bare
+  # "Cumulative Gain" / "Incremental Lift" headers. Mirrors the
+  # bn_write Excel + bn_report HTML behaviour.
+  outcome_disp <- outcome %||% "propdisplay"
+  is_pct_mode  <- identical(outcome_disp, "propdisplay")
+  cum_label  <- if (is_pct_mode) "Cumulative Gain %"  else "Cumulative Gain"
+  incr_label <- if (is_pct_mode) "Incremental Lift %" else "Incremental Lift"
+
   # Convert list-of-lists to a tidy data frame.
   out_list <- list(
     Priority    = vapply(rows, function(r) r$priority %||% NA_integer_, integer(1)),
@@ -45,19 +57,23 @@
     out_list[["Label"]] <- vapply(rows, function(r) r$label %||% NA_character_, character(1))
   }
   out_list[["Outcome Estimate"]] <- vapply(rows, function(r) r$dv_estimate %||% NA_real_, numeric(1))
-  out_list[["Cumulative Gain"]]  <- vapply(rows, function(r) r$cumulative_gain %||% NA_real_, numeric(1))
-  out_list[["Marginal Gain"]]    <- vapply(rows, function(r) r$marginal_gain %||% NA_real_, numeric(1))
+  if (is_pct_mode) {
+    out_list[[cum_label]]  <- vapply(rows, function(r) r$cumulative_gain_pct %||% NA_real_, numeric(1))
+    out_list[[incr_label]] <- vapply(rows, function(r) r$marginal_gain_pct   %||% NA_real_, numeric(1))
+  } else {
+    out_list[[cum_label]]  <- vapply(rows, function(r) r$cumulative_gain %||% NA_real_, numeric(1))
+    out_list[[incr_label]] <- vapply(rows, function(r) r$marginal_gain   %||% NA_real_, numeric(1))
+  }
   if (pm$has_p) {
     out_list[["p-value"]] <- vapply(rows, function(r) r$p_value %||% NA_real_, numeric(1))
   }
-  attr_obj <- list(
-    n_obs = entry$n_obs,
-    is_binary = pm$is_binary
-  )
   out <- as.data.frame(out_list, stringsAsFactors = FALSE,
                        check.names = FALSE)
-  attr(out, "n_obs") <- entry$n_obs
-  attr(out, "is_binary") <- pm$is_binary
+  attr(out, "n_obs")           <- entry$n_obs
+  attr(out, "is_binary")       <- pm$is_binary
+  attr(out, "outcome_display") <- outcome_disp
+  attr(out, "cum_label")       <- cum_label
+  attr(out, "incr_label")      <- incr_label
   out
 }
 
@@ -75,27 +91,109 @@
 
   dim_labels <- c(
     strategy = "Analysis:",
-    search   = "Search:",
     subgroup = "Subgroup:",
     focus    = "Focus:",
     weight   = "Weight:"
   )
+  dim_tips <- c(
+    strategy = "The prioritization strategy used to rank attributes.",
+    subgroup = "Which subgroup the prioritization was computed against.",
+    focus    = "‘Market’ analyzes overall performance, while a brand uses only that brand’s.",
+    weight   = "Whether weights are applied when calculating prioritization."
+  )
+  # `search` dim is always "greedy" out of bn_finalize_network → never
+  # active. Drop it so it can't be surfaced even if someone hand-built a
+  # mixed-search registry.
+  active_dims <- setdiff(pm$active_dims, "search")
+
+  # Tooltip-on-label helper — same pattern as impacts.
+  tt <- function(label_text, tip_text) {
+    bslib::tooltip(
+      htmltools::span(
+        label_text,
+        style = "cursor: help; border-bottom: 1px dotted #999;"
+      ),
+      tip_text,
+      placement = "right"
+    )
+  }
+  # Uniform-spacing wrapper — same pattern as impacts.
+  cw <- function(...) shiny::div(class = "netdrv-ctrl-wrap", ...)
 
   inputs <- list()
-  for (dn in pm$active_dims) {
+  for (dn in active_dims) {
     opts <- vapply(pm$dims[[dn]], function(x) as.character(x), character(1))
     # Pretty-print: replace underscores with spaces in the visible label
     pretty_labels <- gsub("_", " ", opts, fixed = TRUE)
     choices <- stats::setNames(opts, pretty_labels)
     inputs <- c(inputs, list(
-      shiny::selectInput(
+      cw(shiny::selectInput(
         ns(paste0(prefix, "_", dn)),
-        label = dim_labels[[dn]] %||% paste0(dn, ":"),
+        label = tt(dim_labels[[dn]] %||% paste0(dn, ":"),
+                   dim_tips[[dn]]   %||% paste0("The ", dn, " dimension.")),
         choices = choices,
         selected = opts[1]
-      )
+      ))
     ))
   }
+  # Outcome control — display-only toggle between % and absolute formatting.
+  # Only meaningful when the dependent variable is a proportion / binary
+  # outcome (values bounded in [0, 1]); for continuous outcomes the
+  # decimal display is the only sensible option, so the control is
+  # omitted entirely.
+  if (isTRUE(pm$is_binary)) {
+    inputs <- c(inputs, list(
+      cw(shiny::selectInput(
+        ns(paste0(prefix, "_outcome")),
+        label = tt("Outcome:",
+                   "How outcome change is displayed — relative vs absolute point change."),
+        choices = c("% Change" = "propdisplay",
+                    "Point Change" = "absdisplay"),
+        selected = "propdisplay"
+      ))
+    ))
+  }
+  # Show / hide the Outcome Estimate column. Defaults OFF to match
+  # bn_write (hidden) and bn_report (omitted entirely). Formatted like
+  # the other controls: tooltip-wrapped "Outcome Estimate:" label on
+  # top, action button ("Show" / "Hide") on the row below. Server
+  # tracks state in a reactiveVal and flips the button label.
+  est_btn_id <- ns(paste0(prefix, "_show_estimate"))
+  inputs <- c(inputs, list(
+    cw(shiny::div(
+      class = "form-group shiny-input-container",
+      htmltools::tags$label(
+        `for`  = est_btn_id,
+        class  = "control-label",
+        tt("Outcome Estimate:",
+           "Predicted outcome value at each step.")
+      ),
+      shiny::div(
+        shiny::actionButton(
+          est_btn_id,
+          label = "Show",
+          class = "btn-sm",
+          style = paste(
+            "background-color: #fff;",
+            "border: 1px solid #ced4da;",
+            "color: #212529;"
+          ),
+          width = "100%"
+        )
+      )
+    ))
+  ))
+
+  # Chart theme — drives the prioritization chart's plotly_theme().
+  inputs <- c(inputs, list(
+    cw(shiny::selectInput(
+      ns(paste0(prefix, "_chart_theme")),
+      label = tt("Chart Theme:",
+                 "Visual theme applied to the prioritization chart."),
+      choices = plotly_theme_names(),
+      selected = "Default"
+    ))
+  ))
   if (length(inputs) == 0) return(NULL)
   shiny::conditionalPanel(
     condition = cond,
@@ -104,72 +202,409 @@
 }
 
 
-# ---- UI: DT renderer with p-value coloring ---------------------------------
+# ---- UI: reactable renderer with p-value coloring --------------------------
 
 #' @noRd
-.network_drivers_prio_dt <- function(display, metadata,
-                                     sig_threshold = 0.05,
-                                     marginal_threshold = 0.10) {
+.network_drivers_prio_reactable <- function(display, metadata,
+                                            sig_threshold = 0.05,
+                                            marginal_threshold = 0.10,
+                                            show_estimate = FALSE) {
   if (is.null(display) || nrow(display) == 0) {
-    return(DT::datatable(
+    return(reactable::reactable(
       data.frame(Message = "No prioritization results."),
-      options = list(dom = "t", paging = FALSE),
-      rownames = FALSE, selection = "none"
+      pagination = FALSE, sortable = FALSE
     ))
   }
-  is_binary <- isTRUE(attr(display, "is_binary"))
+  is_binary    <- isTRUE(attr(display, "is_binary"))
+  outcome_disp <- attr(display, "outcome_display") %||% "propdisplay"
+  cum_label    <- attr(display, "cum_label")  %||% "Cumulative Gain"
+  incr_label   <- attr(display, "incr_label") %||% "Incremental Lift"
+  n_obs        <- attr(display, "n_obs")
+  is_pct_mode  <- identical(outcome_disp, "propdisplay")
+
+  # Drop Outcome Estimate column when toggled off. Preserves attrs so
+  # downstream metadata (n_obs, etc.) is intact.
+  if (!isTRUE(show_estimate) && "Outcome Estimate" %in% names(display)) {
+    keep_attrs <- attributes(display)
+    display <- display[, setdiff(names(display), "Outcome Estimate"), drop = FALSE]
+    keep_attrs$names <- names(display)
+    keep_attrs$row.names <- attr(display, "row.names")
+    attributes(display) <- keep_attrs
+  }
+
   numeric_cols <- intersect(
-    c("Outcome Estimate", "Cumulative Gain", "Marginal Gain", "p-value"),
+    c("Outcome Estimate", cum_label, incr_label, "p-value"),
     names(display)
   )
-  pct_cols <- if (is_binary) {
-    intersect(c("Outcome Estimate", "Cumulative Gain", "Marginal Gain"),
-              names(display))
+  # Percent formatting for the GAIN columns only (Cumulative, Incremental):
+  #   - % Change mode (any DV): render as XX.X%
+  #   - Point Change + binary DV: raw values bounded 0–1 → render as XX.X%
+  #   - Point Change + continuous DV: raw values in original units → 0.000
+  pct_cols <- if (is_pct_mode || is_binary) {
+    intersect(c(cum_label, incr_label), names(display))
   } else character(0)
+  # Outcome Estimate: depends ONLY on DV type, not on Outcome toggle.
+  #   - Binary  → XX.X% (probability reads better as %)
+  #   - Continuous → 0.00 (2 decimals in original units)
+  est_is_pct <- is_binary
 
-  # Strip attrs before passing to DT (avoids stray classes in widget)
   display_clean <- display
   attr(display_clean, "n_obs") <- NULL
   attr(display_clean, "is_binary") <- NULL
+  attr(display_clean, "outcome_display") <- NULL
+  attr(display_clean, "cum_label") <- NULL
+  attr(display_clean, "incr_label") <- NULL
 
-  dt <- DT::datatable(
+  # Per-column 2-color gradient (white → green) closure. Mirrors
+  # bn_write_prio's Excel scale (#FFFFFF → #66BD7D) and bn_report's
+  # whiteToGreen JS. Applied to Outcome Estimate + the gain columns;
+  # p-value gets its own threshold-based coloring below.
+  color_pal <- grDevices::colorRamp(c("#FFFFFF", "#66BD7D"))
+  make_color_style <- function(col_values) {
+    finite <- col_values[is.finite(col_values)]
+    if (length(finite) == 0) return(NULL)
+    vmin <- min(finite); vmax <- max(finite)
+    if (vmin == vmax) return(NULL)
+    function(value) {
+      if (is.na(value)) return(list(textAlign = "center"))
+      normalized <- (value - vmin) / (vmax - vmin)
+      normalized <- max(0, min(1, normalized))
+      color <- grDevices::rgb(color_pal(normalized), maxColorValue = 255)
+      list(background = color, textAlign = "center")
+    }
+  }
+
+  # Build colDefs
+  col_defs <- list()
+  if ("Priority" %in% names(display_clean)) {
+    col_defs[["Priority"]] <- reactable::colDef(align = "center", width = 80)
+  }
+  if ("Variable" %in% names(display_clean)) {
+    col_defs[["Variable"]] <- reactable::colDef(name = "Variable")
+  }
+  if ("Community" %in% names(display_clean)) {
+    col_defs[["Community"]] <- reactable::colDef(name = "Community")
+  }
+  if ("Label" %in% names(display_clean)) {
+    col_defs[["Label"]] <- reactable::colDef(name = "Label")
+  }
+  for (col in setdiff(numeric_cols, "p-value")) {
+    col_style <- make_color_style(display_clean[[col]])
+    # Outcome Estimate: special-cased — depends on DV type only.
+    if (identical(col, "Outcome Estimate")) {
+      col_defs[[col]] <- reactable::colDef(
+        name = col, align = "center",
+        format = if (est_is_pct) {
+          reactable::colFormat(percent = TRUE, digits = 1)
+        } else {
+          reactable::colFormat(digits = 2)
+        },
+        style = col_style
+      )
+    } else if (col %in% pct_cols) {
+      col_defs[[col]] <- reactable::colDef(
+        name = col, align = "center",
+        format = reactable::colFormat(percent = TRUE, digits = 1),
+        style = col_style
+      )
+    } else {
+      col_defs[[col]] <- reactable::colDef(
+        name = col, align = "center",
+        format = reactable::colFormat(digits = 3),
+        style = col_style
+      )
+    }
+  }
+  if ("p-value" %in% names(display_clean)) {
+    sig <- sig_threshold; marg <- marginal_threshold
+    p_style <- function(value) {
+      if (is.na(value)) return(NULL)
+      color <- if (value < sig) "#198754"
+               else if (value < marg) "#E67E22"
+               else "#DC3545"
+      list(color = color,
+           fontWeight = if (value < sig) "bold" else "normal")
+    }
+    col_defs[["p-value"]] <- reactable::colDef(
+      name = "p-value", align = "center",
+      format = reactable::colFormat(digits = 3),
+      style  = p_style
+    )
+  }
+
+  reactable::reactable(
     display_clean,
-    rownames = FALSE,
-    selection = "none",
-    class = "row-border hover",
-    options = list(
-      dom = "t",
-      paging = FALSE,
-      pageLength = nrow(display_clean),
-      scrollX = TRUE,
-      scrollY = "100%",
-      scrollCollapse = FALSE,
-      autoWidth = TRUE,
-      columnDefs = list(
-        list(className = "dt-center",
-             targets = which(names(display_clean) %in%
-                             c("Priority", numeric_cols)) - 1L)
+    columns         = col_defs,
+    pagination      = FALSE,
+    sortable        = TRUE,
+    resizable       = TRUE,
+    bordered        = FALSE,
+    highlight       = TRUE,
+    # Reactable fills its flex parent (the .flex-1 wrapper inside
+    # card_body). The footer takes its natural height beneath; no
+    # need to reserve a fixed amount via maxHeight — the flex column
+    # in card_body handles the split dynamically.
+    height          = "100%",
+    style           = list(height = "100%"),
+    theme           = reactable::reactableTheme(
+      borderColor    = "var(--bs-card-border-color, #dee2e6)",
+      stripedColor   = "transparent",
+      highlightColor = "var(--bs-secondary-bg, #f0f0f0)",
+      cellPadding    = "8px 10px",
+      style          = list(fontFamily = "inherit", fontSize = "14px"),
+      headerStyle    = list(fontWeight = "600",
+                            background = "var(--bs-body-bg, #fff)")
+    )
+  )
+}
+
+
+# ---- Pure HTML: prio footer notes (Base line + p-value legend) -------------
+
+#' @noRd
+.network_drivers_prio_footer_notes <- function(display, metadata = NULL,
+                                               show_estimate = FALSE,
+                                               current_strategy = NULL,
+                                               sig_threshold = 0.05,
+                                               marginal_threshold = 0.10) {
+  if (is.null(display)) return(NULL)
+  n_obs <- attr(display, "n_obs")
+  has_p <- "p-value" %in% names(display)
+  outcome_disp <- attr(display, "outcome_display") %||% "propdisplay"
+  is_pct_mode  <- identical(outcome_disp, "propdisplay")
+  base_text <- if (!is.null(n_obs) && !is.na(n_obs)) {
+    sprintf("Base: %d", as.integer(n_obs))
+  } else ""
+  legend_text <- if (has_p) {
+    sprintf(
+      "Green p-values are significant (< %s); orange are marginal (< %s); red are insignificant.",
+      format(sig_threshold, nsmall = 2),
+      format(marginal_threshold, nsmall = 2)
+    )
+  } else ""
+
+  # Glossary block. Each item shows only when its column is visible in
+  # the table OR (for strategy items) when the user has the matching
+  # Analysis selected. Plain (non-bold) term + em-dash + definition.
+  pm <- metadata
+  lift_label  <- pm$lift_label  %||% NULL
+  max_label   <- pm$max_label   %||% "Maximum Lift"
+  max_dep_lbl <- pm$max_deprecated_label %||% "Maximum Lift (Deprecated)"
+  lift_explainer <- pm$lift_shift_explainer %||% ""
+  cur_strat <- current_strategy %||% ""
+
+  glossary_p <- function(term, defn) {
+    htmltools::p(
+      style = "margin: 0 0 4px 0;",
+      term, " — ", defn
+    )
+  }
+  glossary <- htmltools::tagList(
+    glossary_p("Step", "Priority step number (order in which attributes were selected)."),
+    if (isTRUE(show_estimate)) glossary_p(
+      "Outcome Estimate",
+      "Expected outcome value with all selected attributes shifted."
+    ),
+    if (!is_pct_mode) glossary_p(
+      "Cumulative Gain",
+      "Absolute increase in outcome estimate from baseline (all attributes through this step)."
+    ),
+    if (!is_pct_mode) glossary_p(
+      "Incremental Lift",
+      "Absolute increase in outcome estimate from adding this attribute."
+    ),
+    if (is_pct_mode) glossary_p(
+      "Cumulative Gain %",
+      "Percentage increase from baseline through this step."
+    ),
+    if (is_pct_mode) glossary_p(
+      "Incremental Lift %",
+      "Percentage increase relative to the previous step."
+    ),
+    if (has_p) glossary_p(
+      "p-value",
+      "Noise-floor test: proportion of bootstraps where this step’s gain ≤ the noise floor."
+    ),
+    if (!is.null(lift_label) && nzchar(lift_label) &&
+        identical(cur_strat, lift_label)) glossary_p(
+      lift_label, paste0(lift_explainer, ".")
+    ),
+    if (identical(cur_strat, max_label)) glossary_p(
+      max_label,
+      "Sets each attribute to its highest level as hard evidence, representing the theoretical ceiling."
+    ),
+    if (identical(cur_strat, max_dep_lbl)) glossary_p(
+      max_dep_lbl,
+      "Same as Maximum Lift but cumulative gain is the raw outcome estimate (no comparison to baseline). Provided for backward compatibility."
+    )
+  )
+
+  if (!nzchar(base_text) && !nzchar(legend_text) && length(glossary) == 0) {
+    return(NULL)
+  }
+  htmltools::tagList(
+    htmltools::div(
+      class = "priort-footer",
+      style = paste(
+        "margin-top: 12px;",
+        "padding: 4px 10px 10px 10px;",
+        "font-size: 12px;",
+        "color: #555;"
+      ),
+      if (nzchar(base_text)) htmltools::p(
+        base_text,
+        style = "margin: 0 0 4px 0; font-weight: 600;"
+      ),
+      if (nzchar(legend_text)) htmltools::p(
+        legend_text,
+        style = "margin: 0 0 8px 0; color: #888;"
+      ),
+      htmltools::div(
+        class = "priort-glossary",
+        style = "color: #888;",
+        glossary
       )
     )
   )
-  # Format numeric columns: percentages for binary outcome, fixed-decimal else.
-  if (length(pct_cols) > 0) {
-    dt <- DT::formatPercentage(dt, pct_cols, digits = 1)
+}
+
+
+# ---- Plotly waterfall: vertical stacked bars + cumulative line -------------
+
+#' @noRd
+.network_drivers_prio_chart <- function(display, metadata,
+                                        theme = "Default") {
+  if (is.null(display) || nrow(display) == 0) {
+    return(plotly::plotly_empty())
   }
-  non_pct_num <- setdiff(numeric_cols, pct_cols)
-  non_pct_num <- setdiff(non_pct_num, "p-value")
-  if (length(non_pct_num) > 0) {
-    dt <- DT::formatRound(dt, non_pct_num, digits = 3)
+  is_binary    <- isTRUE(attr(display, "is_binary"))
+  outcome_disp <- attr(display, "outcome_display") %||% "propdisplay"
+  cum_label    <- attr(display, "cum_label")  %||% "Cumulative Gain"
+  incr_label   <- attr(display, "incr_label") %||% "Incremental Lift"
+  is_pct_mode  <- identical(outcome_disp, "propdisplay")
+
+  if (!cum_label %in% names(display) || !incr_label %in% names(display)) {
+    return(plotly::plotly_empty())
   }
-  if ("p-value" %in% names(display_clean)) {
-    dt <- DT::formatRound(dt, "p-value", digits = 3)
-    dt <- DT::formatStyle(dt, "p-value",
-      color = DT::styleInterval(
-        c(sig_threshold, marginal_threshold),
-        c("#198754", "#E67E22", "#DC3545")
-      ),
-      fontWeight = DT::styleInterval(c(sig_threshold), c("bold", "normal"))
+
+  cumul <- as.numeric(display[[cum_label]])
+  incr  <- as.numeric(display[[incr_label]])
+  prev  <- cumul - incr
+  vars  <- as.character(display$Variable)
+  labels_col <- if ("Label" %in% names(display)) {
+    as.character(display$Label)
+  } else vars
+  steps <- if ("Priority" %in% names(display)) {
+    as.integer(display$Priority)
+  } else seq_along(vars)
+
+  # Y-axis values + label format. % mode and binary point-mode multiply
+  # the underlying ratio/probability by 100 so the axis reads as XX%;
+  # continuous point-mode plots in the original units.
+  use_pct <- is_pct_mode || is_binary
+  if (use_pct) {
+    y_prev   <- prev  * 100
+    y_incr   <- incr  * 100
+    y_cumul  <- cumul * 100
+    y_suffix <- "%"
+    y_fmt    <- ".1f"
+  } else {
+    y_prev   <- prev
+    y_incr   <- incr
+    y_cumul  <- cumul
+    y_suffix <- ""
+    y_fmt    <- ".2f"
+  }
+
+  # Preserve order — plotly otherwise alphabetises bar categories.
+  x_factor <- factor(labels_col, levels = labels_col)
+
+  # Theme-driven colors. Use the theme's first colorway entry as the
+  # "incremental" (salient) bar AND the cumulative line — they're the
+  # same conceptual series. Mix that color with white for the muted
+  # "previous" base (50/50 by default; falls back to grey palette when
+  # the theme has no colorway, e.g., "Default").
+  pal <- plotly_theme_colors(theme)
+  primary <- if (length(pal) > 0) pal[[1]] else "#595959"
+  lighten_to_white <- function(hex, mix = 0.55) {
+    rgb_v <- tryCatch(grDevices::col2rgb(hex)[, 1],
+                      error = function(e) c(89, 89, 89))
+    mixed <- round(rgb_v * (1 - mix) + c(255, 255, 255) * mix)
+    sprintf("rgb(%d, %d, %d)",
+            as.integer(mixed[1]),
+            as.integer(mixed[2]),
+            as.integer(mixed[3]))
+  }
+  bar_prev_color <- lighten_to_white(primary, mix = 0.65)
+  bar_incr_color <- primary
+  line_color     <- primary
+
+  # Bar-top labels: short cumulative value, displayed above each bar.
+  fmt_v <- function(v) {
+    if (is.na(v)) return("")
+    if (use_pct) sprintf("%.1f%%", v) else sprintf("%.2f", v)
+  }
+  bar_labels <- vapply(y_cumul, fmt_v, character(1))
+
+  # Per-row tooltip body. Pre-formatted strings so we don't depend on
+  # plotly's template-substitution semantics for matrix customdata.
+  display_name <- ifelse(
+    !is.na(labels_col) & nzchar(labels_col) & labels_col != vars,
+    paste0(vars, " (", labels_col, ")"),
+    vars
+  )
+  community_line <- if ("Community" %in% names(display)) {
+    cm <- as.character(display$Community)
+    ifelse(is.na(cm) | !nzchar(cm), "", paste0("<br>Community: ", cm))
+  } else rep("", length(vars))
+  hover_text <- paste0(
+    "Step ", steps, "<br>",
+    display_name,
+    community_line, "<br>",
+    cum_label,  ": ", bar_labels, "<br>",
+    incr_label, ": ", vapply(y_incr, fmt_v, character(1))
+  )
+
+  fig <- plotly::plot_ly() |>
+    plotly::add_bars(
+      x = x_factor, y = y_prev,
+      name = "Previous",
+      marker = list(color = bar_prev_color),
+      hoverinfo = "skip",
+      showlegend = FALSE
+    ) |>
+    plotly::add_bars(
+      x = x_factor, y = y_incr,
+      name = "Incremental",
+      marker = list(color = bar_incr_color),
+      text = bar_labels,
+      textposition = "outside",
+      hovertext = hover_text,
+      hoverinfo = "text",
+      showlegend = FALSE
+    ) |>
+    plotly::add_trace(
+      x = x_factor, y = y_cumul,
+      type = "scatter", mode = "lines+markers",
+      name = "Cumulative",
+      line = list(color = line_color, width = 2),
+      marker = list(color = line_color, size = 6),
+      hoverinfo = "skip",
+      showlegend = FALSE
+    ) |>
+    plotly::layout(
+      barmode = "stack",
+      xaxis = list(title = "", tickangle = -45,
+                   categoryorder = "array",
+                   categoryarray = labels_col),
+      yaxis = list(title = "", ticksuffix = y_suffix,
+                   tickformat = y_fmt),
+      margin = list(b = 100, l = 60, r = 20, t = 20)
     )
+
+  # Apply user-selected theme (Default = no-op).
+  if (!identical(theme, "Default")) {
+    fig <- plotly_theme(fig, theme)
   }
-  dt
+  fig
 }
