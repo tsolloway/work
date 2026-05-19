@@ -76,8 +76,12 @@ app_deliverable <- function(
     theme = NULL
 ) {
 
-  if (is.null(theme)) theme <- "flatly"
-  if (is.character(theme)) {
+  # Default to the Resondex brand theme (chrome --bs-* == report --ndr-*,
+  # Inter base font). A caller may still pass a Bootswatch name or a
+  # custom bslib::bs_theme to override.
+  if (is.null(theme)) {
+    theme <- resondex_theme()
+  } else if (is.character(theme)) {
     theme <- bslib::bs_theme(version = 5, bootswatch = theme)
   }
 
@@ -111,7 +115,11 @@ app_deliverable <- function(
   }
 
   # ---- Build header ----
-  header_parts <- list()
+  # Brand bundle first (shinyjs + resondex_css tokens/classes/tooltip),
+  # app-wide so every module — including non-bn_report ones like
+  # add_turf — gets the brand. include_import = FALSE: the theme already
+  # loads Inter via font_google.
+  header_parts <- list(resondex_deps(include_import = FALSE))
   if (length(all_css) > 0) {
     header_parts <- c(header_parts, list(
       shiny::tags$style(shiny::HTML(paste(all_css, collapse = "\n")))

@@ -18,14 +18,16 @@
 #' @param header_background Character. The header background, specified as
 #'   either a CSS color value (e.g., `"#ffffff"`, `"rgb(255,255,255)"`), a
 #'   path to a local image file (e.g., `"assets/header-bg.png"`), or a URL.
-#'   Defaults to `"#ffffff"` (matches the neutral `bn_report` aesthetic).
+#'   Defaults to the Resondex brand card surface
+#'   (`resondex_brand()$colors$card_bg`).
 #' @param header_text Character. Hex color code for the header title and
 #'   subtitle text. Set to a light color (e.g., `"#ffffff"`) when using a
-#'   dark `header_background`. Defaults to `"#333333"`.
+#'   dark `header_background`. Defaults to the Resondex brand text colour
+#'   (`resondex_brand()$colors$text`).
 #' @param accent_color Character. Hex color code for accent and interactive
-#'   elements (FAB, primary buttons). Defaults to `"#333333"` for a neutral
-#'   look that matches `bn_report`; pass a brand color (e.g., `"#4361ee"`)
-#'   for a more vibrant launcher.
+#'   elements (FAB, primary buttons). Defaults to the Resondex brand accent
+#'   (`resondex_brand()$colors$accent`); pass a brand color (e.g.,
+#'   `"#4361ee"`) for a more vibrant launcher.
 #' @param icon Character, `shiny::icon()` tag, or `NULL`. A local application
 #'   icon path (`.png`, `.jpg`, `.icns`, `.ico`), a URL to one, or a
 #'   [shiny::icon()] tag (Font Awesome) which will be rendered to PNG via
@@ -102,9 +104,9 @@ deploy_launcher <- function(
     version = "1.0.0",
     header_title = app_name,
     header_subtitle = "Load and run Shiny apps",
-    header_background = "#ffffff",
-    header_text = "#333333",
-    accent_color = "#333333",
+    header_background = resondex_brand()$colors$card_bg,
+    header_text = resondex_brand()$colors$text,
+    accent_color = resondex_brand()$colors$accent,
     icon = NULL,
     file_extension = "resondex",
     r_home = NULL,

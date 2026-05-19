@@ -1,9 +1,29 @@
+/* Resondex-branded launcher theme.
+   These --rdx-* values mirror resondex_brand() (light palette). Keep in
+   sync if the brand changes. The three runtime vars (--header-bg,
+   --header-text, --accent-color) are overridden by app.js from
+   launcher.config.json — deploy_launcher() defaults them to the brand. */
 :root {
+  /* Runtime-overridable (app.js ← config; default to brand) */
   --header-bg: #ffffff;
-  --header-text: #333333;
-  --accent-color: #333333;
+  --header-text: #212529;
+  --accent-color: #595959;
+  /* Brand palette */
+  --rdx-bg: #f8f9fa;
+  --rdx-card-bg: #ffffff;
+  --rdx-text: #212529;
+  --rdx-muted: #6c757d;
+  --rdx-border: #dee2e6;
+  --rdx-surface: #f0f0f0;
+  --rdx-danger: #AC6258;
+  --rdx-radius: 0.5rem;
+  --rdx-radius-sm: 6px;
+  --rdx-shadow: 0 1px 3px rgba(0,0,0,.055), 0 1px 2px rgba(0,0,0,.04);
+  --rdx-font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI",
+              Roboto, Helvetica, Arial, sans-serif;
+  /* App-card icon chip */
   --icon-bg: #ffffff;
-  --icon-border: #e0e0e0;
+  --icon-border: #dee2e6;
 }
 
 * {
@@ -18,9 +38,10 @@ html, body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: #fafafa;
-  color: #333;
+  font-family: var(--rdx-font);
+  background: var(--rdx-bg);
+  color: var(--rdx-text);
+  font-size: 14px;
 }
 
 /* ===== Library View ===== */
@@ -34,20 +55,21 @@ header {
   background: var(--header-bg);
   color: var(--header-text);
   padding: 20px 32px 12px;
-  border-bottom: 2px solid #333;
+  border-bottom: 1px solid var(--rdx-border);
   -webkit-app-region: drag;
   flex-shrink: 0;
 }
 
 header h1 {
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .subtitle {
   font-size: 13px;
   font-weight: 400;
-  color: #666;
+  color: var(--rdx-muted);
   margin-top: 2px;
 }
 
@@ -65,9 +87,10 @@ main {
 }
 
 .app-card {
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
+  background: var(--rdx-card-bg);
+  border: 1px solid var(--rdx-border);
+  border-radius: var(--rdx-radius);
+  box-shadow: var(--rdx-shadow);
   padding: 20px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
@@ -75,8 +98,8 @@ main {
 }
 
 .app-card:hover {
-  background: #f7f7f7;
-  border-color: #333;
+  background: var(--rdx-surface);
+  border-color: var(--accent-color);
 }
 
 .app-card .app-icon {
@@ -84,33 +107,33 @@ main {
   height: 48px;
   background: var(--icon-bg);
   border: 1px solid var(--icon-border);
-  border-radius: 8px;
+  border-radius: var(--rdx-radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  color: #333;
+  color: var(--rdx-text);
   margin-bottom: 12px;
 }
 
 .app-card .app-icon.has-initial {
-  background: #f0f0f0;
-  border: 1px solid #e0e0e0;
-  color: #333;
+  background: var(--rdx-surface);
+  border: 1px solid var(--rdx-border);
+  color: var(--rdx-text);
   font-weight: 600;
 }
 
 .app-card .app-name {
   font-size: 15px;
   font-weight: 600;
-  color: #333;
+  color: var(--rdx-text);
   margin-bottom: 4px;
   word-break: break-word;
 }
 
 .app-card .app-date {
   font-size: 12px;
-  color: #888;
+  color: var(--rdx-muted);
 }
 
 .app-card .app-actions {
@@ -128,29 +151,29 @@ main {
 .app-actions button {
   width: 28px;
   height: 28px;
-  border: 1px solid #e0e0e0;
-  background: #fff;
-  border-radius: 6px;
+  border: 1px solid var(--rdx-border);
+  background: var(--rdx-card-bg);
+  border-radius: var(--rdx-radius-sm);
   cursor: pointer;
   font-size: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #666;
+  color: var(--rdx-muted);
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   -webkit-app-region: no-drag;
 }
 
 .app-actions button:hover {
-  background: #f0f0f0;
-  color: #222;
-  border-color: #ccc;
+  background: var(--rdx-surface);
+  color: var(--rdx-text);
+  border-color: var(--rdx-border);
 }
 
 .app-actions button.delete:hover {
-  background: #fee;
-  color: #c0392b;
-  border-color: #f5c6c6;
+  background: color-mix(in srgb, var(--rdx-danger) 14%, transparent);
+  color: var(--rdx-danger);
+  border-color: color-mix(in srgb, var(--rdx-danger) 45%, transparent);
 }
 
 .app-card.loading {
@@ -166,10 +189,10 @@ main {
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.85);
-  border-radius: 8px;
+  border-radius: var(--rdx-radius);
   font-size: 13px;
   font-weight: 600;
-  color: #333;
+  color: var(--rdx-text);
 }
 
 /* ---- Empty State ---- */
@@ -187,8 +210,8 @@ main {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: #f0f0f0;
-  color: #444;
+  background: var(--rdx-surface);
+  color: var(--rdx-muted);
   font-size: 36px;
   font-weight: 300;
   display: flex;
@@ -199,14 +222,14 @@ main {
 
 .empty-state h2 {
   font-size: 18px;
-  font-weight: 700;
-  color: #333;
+  font-weight: 600;
+  color: var(--rdx-text);
   margin-bottom: 8px;
 }
 
 .empty-state p {
   font-size: 13px;
-  color: #888;
+  color: var(--rdx-muted);
   margin-bottom: 20px;
 }
 
@@ -248,7 +271,7 @@ main {
   background: var(--header-bg);
   color: var(--header-text);
   padding: 8px 16px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--rdx-border);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -275,18 +298,23 @@ main {
 /* ---- Buttons ---- */
 .btn {
   padding: 6px 12px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-  background: #fff;
-  color: #333;
+  border-radius: var(--rdx-radius-sm);
+  border: 1px solid var(--rdx-border);
+  background: var(--rdx-card-bg);
+  color: var(--rdx-text);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .btn:hover {
-  background: #f0f0f0;
+  background: var(--rdx-surface);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--accent-color) 35%, transparent);
 }
 
 .btn-primary {
@@ -301,13 +329,13 @@ main {
 }
 
 .btn-secondary {
-  background: #fff;
-  border-color: #ccc;
-  color: #333;
+  background: var(--rdx-card-bg);
+  border-color: var(--rdx-border);
+  color: var(--rdx-text);
 }
 
 .btn-secondary:hover {
-  background: #f0f0f0;
+  background: var(--rdx-surface);
 }
 
 /* ---- Modal ---- */
@@ -322,36 +350,37 @@ main {
 }
 
 .modal-content {
-  background: #fff;
+  background: var(--rdx-card-bg);
   padding: 20px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
+  border: 1px solid var(--rdx-border);
+  border-radius: var(--rdx-radius);
   width: 360px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .modal-content h3 {
   font-size: 16px;
-  font-weight: 700;
-  color: #333;
+  font-weight: 600;
+  color: var(--rdx-text);
   margin-bottom: 14px;
 }
 
 .input {
   width: 100%;
   padding: 6px 10px;
-  border: 1px solid #bbb;
-  border-radius: 3px;
-  background: #fff;
+  border: 1px solid var(--rdx-border);
+  border-radius: var(--rdx-radius-sm);
+  background: var(--rdx-card-bg);
   font-size: 13px;
-  color: #333;
+  color: var(--rdx-text);
   outline: none;
   margin-bottom: 16px;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .input:focus {
-  border-color: #333;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--accent-color) 35%, transparent);
 }
 
 .modal-actions {
@@ -365,8 +394,8 @@ main {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.04);
-  border: 2px dashed #333;
-  border-radius: 8px;
+  border: 2px dashed var(--accent-color);
+  border-radius: var(--rdx-radius);
   margin: 8px;
   display: none;
   align-items: center;
@@ -381,15 +410,15 @@ main {
 
 .drop-overlay-content {
   text-align: center;
-  color: #333;
+  color: var(--rdx-text);
 }
 
 .drop-overlay-icon {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: #f0f0f0;
-  color: #444;
+  background: var(--rdx-surface);
+  color: var(--rdx-muted);
   font-size: 32px;
   font-weight: 300;
   display: flex;
@@ -401,7 +430,7 @@ main {
 .drop-overlay-content p {
   font-size: 16px;
   font-weight: 600;
-  color: #333;
+  color: var(--rdx-text);
 }
 
 /* ---- Loading Overlay (R startup spinner) ---- */
@@ -409,7 +438,7 @@ main {
   position: absolute;
   inset: 0;
   top: 40px; /* below the app bar */
-  background: #fafafa;
+  background: var(--rdx-bg);
   display: none;
   flex-direction: column;
   align-items: center;
@@ -421,23 +450,23 @@ main {
 .loading-spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid #e0e0e0;
-  border-top-color: #333;
+  border: 3px solid var(--rdx-border);
+  border-top-color: var(--accent-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .loading-app-name {
   font-size: 16px;
-  font-weight: 700;
-  color: #333;
+  font-weight: 600;
+  color: var(--rdx-text);
   margin-top: 4px;
 }
 
 .loading-text {
   font-size: 13px;
   font-weight: 500;
-  color: #888;
+  color: var(--rdx-muted);
 }
 
 @keyframes spin {

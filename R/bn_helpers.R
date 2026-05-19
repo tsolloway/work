@@ -730,7 +730,7 @@
     sprintf(paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label class="ndr-tip" data-tip="Whether weights are applied when calculating impacts.">Weight:</label>',
+          '<label><span class="ndr-tip" data-tip="Whether weights are applied when calculating impacts.">Weight:</span></label>',
           '<select class="impact-ctrl" data-dim="weight">%s</select>',
         '</div>',
         '<span class="impact-warning" data-for="weight"></span>',
@@ -748,7 +748,7 @@
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label class="ndr-tip" data-tip="How outcome change is displayed — relative vs absolute point change.">Outcome:</label>',
+          '<label><span class="ndr-tip" data-tip="How outcome change is displayed — relative vs absolute point change.">Outcome:</span></label>',
           '<select class="impact-ctrl" data-dim="display">',
             '<option value="propdisplay"', prop_sel, '>% Change</option>',
             '<option value="absdisplay"', abs_sel, '>Point Change</option>',
@@ -772,7 +772,7 @@
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label class="ndr-tip" data-tip="How each attribute&#39;s movement is calculated when computing impact.">Shift Type:</label>',
+          '<label><span class="ndr-tip" data-tip="How each attribute&#39;s movement is calculated when computing impact.">Shift Type:</span></label>',
           '<select class="impact-ctrl" data-dim="shift">',
             '<option value="propshift"',  prop_sel,  '>% of Current Mean</option>',
             '<option value="absshift"',   abs_sel,   '>Fixed Step</option>',
@@ -810,7 +810,7 @@
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label class="ndr-tip" data-tip="Filter rows to a battery or group; the index is re-normalised within the visible rows.">Index By:</label>',
+          '<label><span class="ndr-tip" data-tip="Filter rows to a battery or group; the index is re-normalised within the visible rows.">Index By:</span></label>',
           '<select class="impact-ctrl" data-dim="indexby">',
             '<option value="All">All</option>',
             battery_options_html,
@@ -926,7 +926,7 @@
       paste0(
         '    <div class="impact-ctrl-cell">',
           '<div class="impact-ctrl-row">',
-            '<label class="ndr-tip" data-tip="Preset driver analyses that address specific questions.">Assess:</label>',
+            '<label><span class="ndr-tip" data-tip="Preset driver analyses that address specific questions.">Assess:</span></label>',
             '<select class="impact-ctrl" data-dim="assess">', assess_options_html, '</select>',
           '</div>',
           # Question feedback — JS populates with the matching preset\'s
@@ -938,7 +938,7 @@
     '    ', indexby_ctrl,
     '    <div class="impact-ctrl-cell">',
     '      <div class="impact-ctrl-row">',
-    '        <label class="ndr-tip" data-tip="&#39;Market&#39; analyzes overall performance, while a brand uses only that brand&#39;s.">Focus:</label>',
+    '        <label><span class="ndr-tip" data-tip="&#39;Market&#39; analyzes overall performance, while a brand uses only that brand&#39;s.">Focus:</span></label>',
     '        <select class="impact-ctrl" data-dim="focus">', focus_options_html, '</select>',
     '      </div>',
     '      <span class="impact-warning" data-for="focus"></span>',
@@ -951,7 +951,7 @@
     # controls — auto-fit grid wraps as needed.
     '    <div class="impact-ctrl-cell assess-driven">',
     '      <div class="impact-ctrl-row">',
-    '        <label class="ndr-tip" data-tip="The metric used to score impact.">Analysis:</label>',
+    '        <label><span class="ndr-tip" data-tip="The metric used to score impact.">Analysis:</span></label>',
     '        <select class="impact-ctrl" data-dim="metric">', metric_options_html, '</select>',
     '      </div>',
     '    </div>',
@@ -1092,7 +1092,7 @@
         paste0(
           '<div class="priort-ctrl-cell">',
             '<div class="priort-ctrl-row">',
-              '<label class="ndr-tip" data-tip="%s">%s</label>',
+              '<label><span class="ndr-tip" data-tip="%s">%s</span></label>',
               '<select class="priort-ctrl" data-dim="%s">%s</select>',
             '</div>',
             '%s',
@@ -1121,7 +1121,7 @@
     paste0(
       '<div class="priort-ctrl-cell">',
         '<div class="priort-ctrl-row">',
-          '<label class="ndr-tip" data-tip="How outcome change is displayed &#8212; relative vs absolute point change.">Display:</label>',
+          '<label><span class="ndr-tip" data-tip="How outcome change is displayed &#8212; relative vs absolute point change.">Display:</span></label>',
           '<select class="priort-ctrl" data-dim="chart">',
             '<option value="% Change"', pct_selected, '>% Change</option>',
             '<option value="Point Change"', point_selected, '>Point Change</option>',
@@ -1134,7 +1134,7 @@
       # root + re-render (so the glossary entry follows).
       '<div class="priort-ctrl-cell">',
         '<div class="priort-ctrl-row">',
-          '<label class="ndr-tip" data-tip="Predicted outcome value at each step.">Outcome Estimate:</label>',
+          '<label><span class="ndr-tip" data-tip="Predicted outcome value at each step.">Outcome Estimate:</span></label>',
         '</div>',
         '<button type="button" class="ndr-estimate-toggle" data-est-toggle="1">Show</button>',
       '</div>'
@@ -2013,6 +2013,9 @@
     '  border: 1px solid var(--ndr-border); border-radius: var(--ndr-radius);',
     '  background: var(--ndr-card-bg); box-shadow: var(--ndr-shadow);',
     '  padding: 8px;',
+    '  /* reserve a band so the absolute download button (top:10 h:34)',
+    '     sits above the chart instead of overlapping it */',
+    '  padding-top: 52px;',
     '}',
     '',
     '/* ---- Footer notes ---- */',

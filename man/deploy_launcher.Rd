@@ -9,9 +9,9 @@ deploy_launcher(
   version = "1.0.0",
   header_title = app_name,
   header_subtitle = "Load and run Shiny apps",
-  header_background = "#ffffff",
-  header_text = "#333333",
-  accent_color = "#333333",
+  header_background = resondex_brand()$colors$card_bg,
+  header_text = resondex_brand()$colors$text,
+  accent_color = resondex_brand()$colors$accent,
   icon = NULL,
   file_extension = "resondex",
   r_home = NULL,
@@ -38,16 +38,18 @@ header title. Defaults to \code{"Load and run Shiny apps"}.}
 \item{header_background}{Character. The header background, specified as
 either a CSS color value (e.g., \code{"#ffffff"}, \code{"rgb(255,255,255)"}), a
 path to a local image file (e.g., \code{"assets/header-bg.png"}), or a URL.
-Defaults to \code{"#ffffff"} (matches the neutral \code{bn_report} aesthetic).}
+Defaults to the Resondex brand card surface
+(\code{resondex_brand()$colors$card_bg}).}
 
 \item{header_text}{Character. Hex color code for the header title and
 subtitle text. Set to a light color (e.g., \code{"#ffffff"}) when using a
-dark \code{header_background}. Defaults to \code{"#333333"}.}
+dark \code{header_background}. Defaults to the Resondex brand text colour
+(\code{resondex_brand()$colors$text}).}
 
 \item{accent_color}{Character. Hex color code for accent and interactive
-elements (FAB, primary buttons). Defaults to \code{"#333333"} for a neutral
-look that matches \code{bn_report}; pass a brand color (e.g., \code{"#4361ee"})
-for a more vibrant launcher.}
+elements (FAB, primary buttons). Defaults to the Resondex brand accent
+(\code{resondex_brand()$colors$accent}); pass a brand color (e.g.,
+\code{"#4361ee"}) for a more vibrant launcher.}
 
 \item{icon}{Character, \code{shiny::icon()} tag, or \code{NULL}. A local application
 icon path (\code{.png}, \code{.jpg}, \code{.icns}, \code{.ico}), a URL to one, or a
