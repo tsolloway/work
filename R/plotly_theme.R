@@ -79,6 +79,7 @@ plotly_theme <- function(p, theme = "Default") {
       xaxis         = th$xaxis,
       yaxis         = th$yaxis,
       legend        = th$legend,
+      hoverlabel    = th$hoverlabel,
       colorway      = th$colorway
     )
 }
@@ -87,8 +88,9 @@ plotly_theme <- function(p, theme = "Default") {
 #' plotly_theme_names
 #'
 #' @description List all available theme names for \code{\link{plotly_theme}}.
-#'   Returns a character vector of 30 theme names: "Default" (no theming), 19
-#'   highcharter ports, and 10 plotly native templates.
+#'   Returns a character vector of 31 theme names: "Default" (no theming),
+#'   "Resondex" (the brand theme), 19 highcharter ports, and 10 plotly
+#'   native templates.
 #'
 #' @return Character vector of theme names, suitable for use as dropdown
 #'   choices in Shiny apps or as the \code{theme} argument to
@@ -109,8 +111,10 @@ plotly_theme <- function(p, theme = "Default") {
 #' @export
 plotly_theme_names <- function() {
   c(
-    # Highcharter ports
     "Default",
+    # Resondex brand theme (opt-in)
+    "Resondex",
+    # Highcharter ports
     "538", "Economist", "FT", "Google",
     "Flat", "Flat Dark", "Monokai", "Dark Unica",
     "Gridlight", "Sandsignika", "Superheroes",
@@ -660,6 +664,39 @@ plotly_theme_colors <- function(theme = "Default") {
       colorway = c("#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A",
                    "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52")
     ),
+
+    # -------------------------------------------------------------------
+    # Resondex — the brand theme (opt-in; built from resondex_brand()$viz).
+    # Comprehensive: backgrounds, Inter, axes/grid, legend, hover and a
+    # cohesive colorway so it themes bar / line / scatter / hist / box.
+    # -------------------------------------------------------------------
+    "Resondex" = local({
+      v  <- resondex_brand()$viz
+      ff <- "Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+      list(
+        paper_bgcolor = v$paper_bg,
+        plot_bgcolor  = v$plot_bg,
+        font  = list(family = ff, color = v$font_color, size = 13),
+        title = list(font = list(family = ff, color = v$font_color,
+                                  size = 16), x = 0),
+        xaxis = list(gridcolor = v$grid, linecolor = v$grid,
+                     tickcolor = v$grid, zerolinecolor = v$grid,
+                     tickfont = list(color = v$axis_text),
+                     title = list(font = list(color = v$axis_text))),
+        yaxis = list(gridcolor = v$grid, linecolor = v$grid,
+                     tickcolor = v$grid, zerolinecolor = v$grid,
+                     tickfont = list(color = v$axis_text),
+                     title = list(font = list(color = v$axis_text))),
+        legend = list(font = list(color = v$font_color),
+                      bgcolor = "rgba(0,0,0,0)"),
+        hoverlabel = list(
+          bgcolor = "rgba(0,0,0,0.78)",
+          bordercolor = "rgba(0,0,0,0)",
+          font = list(family = ff, color = "#ffffff", size = 12)
+        ),
+        colorway = v$colorway
+      )
+    }),
 
     # -------------------------------------------------------------------
     # Default — no theming (returns NULL so original plot is unchanged)

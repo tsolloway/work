@@ -13,8 +13,9 @@ choices in Shiny apps or as the \code{theme} argument to
 }
 \description{
 List all available theme names for \code{\link{plotly_theme}}.
-Returns a character vector of 30 theme names: "Default" (no theming), 19
-highcharter ports, and 10 plotly native templates.
+Returns a character vector of 31 theme names: "Default" (no theming),
+"Resondex" (the brand theme), 19 highcharter ports, and 10 plotly
+native templates.
 }
 \examples{
 \dontrun{

@@ -452,7 +452,7 @@
     if (col %in% pval_cols) {
       pv <- suppressWarnings(as.numeric(val))
       if (!is.finite(pv)) return("")
-      cls <- if (pv < 0.05) "p-sig" else if (pv < 0.10) "p-marg" else "p-nonsig"
+      cls <- if (pv < 0.05) "rdx-pval-sig" else if (pv < 0.10) "rdx-pval-marg" else "rdx-pval-insig"
       sprintf('<span class="%s">%s</span>', cls, formatC(pv, format = "f", digits = 3))
     } else if (col %in% index_cols) {
       num <- suppressWarnings(as.numeric(val))
@@ -730,7 +730,7 @@
     sprintf(paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label class="ndr-tip" data-ndr-tip="Whether weights are applied when calculating impacts.">Weight:</label>',
+          '<label class="ndr-tip" data-tip="Whether weights are applied when calculating impacts.">Weight:</label>',
           '<select class="impact-ctrl" data-dim="weight">%s</select>',
         '</div>',
         '<span class="impact-warning" data-for="weight"></span>',
@@ -748,7 +748,7 @@
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label class="ndr-tip" data-ndr-tip="How outcome change is displayed — relative vs absolute point change.">Outcome:</label>',
+          '<label class="ndr-tip" data-tip="How outcome change is displayed — relative vs absolute point change.">Outcome:</label>',
           '<select class="impact-ctrl" data-dim="display">',
             '<option value="propdisplay"', prop_sel, '>% Change</option>',
             '<option value="absdisplay"', abs_sel, '>Point Change</option>',
@@ -772,7 +772,7 @@
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label class="ndr-tip" data-ndr-tip="How each attribute&#39;s movement is calculated when computing impact.">Shift Type:</label>',
+          '<label class="ndr-tip" data-tip="How each attribute&#39;s movement is calculated when computing impact.">Shift Type:</label>',
           '<select class="impact-ctrl" data-dim="shift">',
             '<option value="propshift"',  prop_sel,  '>% of Current Mean</option>',
             '<option value="absshift"',   abs_sel,   '>Fixed Step</option>',
@@ -810,7 +810,7 @@
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label class="ndr-tip" data-ndr-tip="Filter rows to a battery or group; the index is re-normalised within the visible rows.">Index By:</label>',
+          '<label class="ndr-tip" data-tip="Filter rows to a battery or group; the index is re-normalised within the visible rows.">Index By:</label>',
           '<select class="impact-ctrl" data-dim="indexby">',
             '<option value="All">All</option>',
             battery_options_html,
@@ -926,7 +926,7 @@
       paste0(
         '    <div class="impact-ctrl-cell">',
           '<div class="impact-ctrl-row">',
-            '<label class="ndr-tip" data-ndr-tip="Preset driver analyses that address specific questions.">Assess:</label>',
+            '<label class="ndr-tip" data-tip="Preset driver analyses that address specific questions.">Assess:</label>',
             '<select class="impact-ctrl" data-dim="assess">', assess_options_html, '</select>',
           '</div>',
           # Question feedback — JS populates with the matching preset\'s
@@ -938,7 +938,7 @@
     '    ', indexby_ctrl,
     '    <div class="impact-ctrl-cell">',
     '      <div class="impact-ctrl-row">',
-    '        <label class="ndr-tip" data-ndr-tip="&#39;Market&#39; analyzes overall performance, while a brand uses only that brand&#39;s.">Focus:</label>',
+    '        <label class="ndr-tip" data-tip="&#39;Market&#39; analyzes overall performance, while a brand uses only that brand&#39;s.">Focus:</label>',
     '        <select class="impact-ctrl" data-dim="focus">', focus_options_html, '</select>',
     '      </div>',
     '      <span class="impact-warning" data-for="focus"></span>',
@@ -951,7 +951,7 @@
     # controls — auto-fit grid wraps as needed.
     '    <div class="impact-ctrl-cell assess-driven">',
     '      <div class="impact-ctrl-row">',
-    '        <label class="ndr-tip" data-ndr-tip="The metric used to score impact.">Analysis:</label>',
+    '        <label class="ndr-tip" data-tip="The metric used to score impact.">Analysis:</label>',
     '        <select class="impact-ctrl" data-dim="metric">', metric_options_html, '</select>',
     '      </div>',
     '    </div>',
@@ -1092,7 +1092,7 @@
         paste0(
           '<div class="priort-ctrl-cell">',
             '<div class="priort-ctrl-row">',
-              '<label class="ndr-tip" data-ndr-tip="%s">%s</label>',
+              '<label class="ndr-tip" data-tip="%s">%s</label>',
               '<select class="priort-ctrl" data-dim="%s">%s</select>',
             '</div>',
             '%s',
@@ -1121,7 +1121,7 @@
     paste0(
       '<div class="priort-ctrl-cell">',
         '<div class="priort-ctrl-row">',
-          '<label class="ndr-tip" data-ndr-tip="How outcome change is displayed &#8212; relative vs absolute point change.">Display:</label>',
+          '<label class="ndr-tip" data-tip="How outcome change is displayed &#8212; relative vs absolute point change.">Display:</label>',
           '<select class="priort-ctrl" data-dim="chart">',
             '<option value="% Change"', pct_selected, '>% Change</option>',
             '<option value="Point Change"', point_selected, '>Point Change</option>',
@@ -1134,7 +1134,7 @@
       # root + re-render (so the glossary entry follows).
       '<div class="priort-ctrl-cell">',
         '<div class="priort-ctrl-row">',
-          '<label class="ndr-tip" data-ndr-tip="Predicted outcome value at each step.">Outcome Estimate:</label>',
+          '<label class="ndr-tip" data-tip="Predicted outcome value at each step.">Outcome Estimate:</label>',
         '</div>',
         '<button type="button" class="ndr-estimate-toggle" data-est-toggle="1">Show</button>',
       '</div>'
@@ -1243,8 +1243,13 @@
 #' @noRd
 .bn_report_css <- function() {
   paste(c(
+    # Brand layer first: Inter @import (must lead the stylesheet) + both
+    # colour-mode :root token blocks + shared tooltip / disabled / focus /
+    # conditional-format classes. bn_report's own rules below all reference
+    # var(--ndr-*), so they resolve from here.
+    resondex_css(include_import = TRUE),
     'body {',
-    '  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;',
+    '  font-family: var(--ndr-font);',
     '  margin: 20px 40px;',
     '  background: #fafafa;',
     '}',
@@ -1467,9 +1472,7 @@
     '.extra-table tbody td.num-col { text-align: center; }',
     '.extra-table tbody td.txt-col { text-align: left; }',
     '.extra-table tbody tr:hover { background: #f8f8f8; }',
-    '.extra-table .p-sig { color: #2E7D32; font-weight: 700; }',
-    '.extra-table .p-marg { color: #E65100; }',
-    '.extra-table .p-nonsig { color: #777; }',
+    '/* p-value colours: shared .rdx-pval-* from resondex_css() */',
     '',
     '/* Attribute Impacts dashboard (mirrors bn_impact_write dynamic) */',
     '.impact-dashboard { padding: 20px; overflow-x: auto; }',
@@ -1629,10 +1632,7 @@
     '}',
     '.impact-table tbody td.num-col { text-align: center; font-variant-numeric: tabular-nums; }',
     '.impact-table tbody td.txt-col { text-align: left; }',
-    '.impact-table td.idx-cell.neg { font-weight: 700; font-style: italic; }',
-    '.impact-table td.idx-cell.insig {',
-    '  background: #000 !important; color: #FFF; /* blackout, white text */',
-    '}',
+    '/* negative / insignificant: shared .rdx-neg / .rdx-insig (resondex_css) */',
     '.impact-table tfoot td {',
     '  padding: 8px 10px; border: 1px solid #BFBFBF;',
     '  background: #f5f5f5; font-weight: 600;',
@@ -1795,9 +1795,7 @@
     '  text-align: center; font-variant-numeric: tabular-nums;',
     '}',
     '.priort-table tbody td.txt-col { text-align: left; }',
-    '.priort-table .p-sig   { color: #2E7D32; font-weight: 700; }',
-    '.priort-table .p-marg  { color: #E65100; font-weight: 600; }',
-    '.priort-table .p-insig { color: #B71C1C; }',
+    '/* p-value colours: shared .rdx-pval-* from resondex_css() */',
     '.priort-table tfoot td {',
     '  padding: 8px 10px; border: 1px solid #BFBFBF;',
     '  background: #f5f5f5; font-weight: 600; text-align: center;',
@@ -1857,18 +1855,8 @@
     '   equal specificity. Goal: make the static report read like the',
     '   bslib + reactable Shiny app (app_deliverable_network_drivers).',
     '   ===================================================================== */',
-    ':root {',
-    '  --ndr-bg: #f8f9fa;',
-    '  --ndr-card-bg: #ffffff;',
-    '  --ndr-border: #dee2e6;',
-    '  --ndr-radius: 0.5rem;',
-    '  --ndr-shadow: 0 1px 3px rgba(0,0,0,.055), 0 1px 2px rgba(0,0,0,.04);',
-    '  --ndr-muted: #6c757d;',
-    '  --ndr-text: #212529;',
-    '  --ndr-accent: #0d6efd;',
-    '  --ndr-header-bg: #ffffff;',
-    '  --ndr-sidebar-bg: #f3f4f6;',
-    '}',
+    '/* :root tokens now come from resondex_css() (single source, both',
+    '   colour modes); the bn_report-specific overrides continue below. */',
     'body {',
     '  background: var(--ndr-bg) !important;',
     '  color: var(--ndr-text);',
@@ -2031,17 +2019,11 @@
     '.impact-footer, .priort-footer { font-size: 12px !important; color: var(--ndr-muted) !important; }',
     '.impact-footer .index-note { font-style: italic; }',
     '',
-    '/* ---- Label tooltip affordance (paired with data-ndr-tip in render) ---- */',
-    '.ndr-tip { cursor: help; border-bottom: 1px dotted #999; position: relative; }',
-    '.ndr-tip:hover::after {',
-    '  content: attr(data-ndr-tip);',
-    '  position: absolute; left: 0; top: calc(100% + 6px);',
-    '  background: #333; color: #fff; padding: 6px 10px;',
-    '  border-radius: 4px; font-size: 11px; font-weight: 400;',
-    '  font-style: normal; line-height: 1.35; white-space: normal;',
-    '  width: max-content; max-width: 230px; z-index: 9999;',
-    '  box-shadow: 0 2px 6px rgba(0,0,0,.2); pointer-events: none;',
-    '}',
+    '/* ---- Label tooltip affordance — underline only. The tooltip itself',
+    '   is the shared resondex floating tooltip (data-tip + resondex_tooltip_js,',
+    '   injected by .bn_report_js). The old :hover::after pseudo-element was',
+    '   removed: it reflowed the flex row and caused the prio hover flicker. */',
+    '.ndr-tip { cursor: help; border-bottom: 1px dotted var(--ndr-muted); }',
     '',
     '/* ---- Card-title row (mirrors the app card header) ---- */',
     '.ndr-card-title {',
@@ -2105,6 +2087,10 @@
   )
 
   paste(c(
+    # Shared brand tooltip: one floating element bound to every [data-tip]
+    # (the control labels formerly using the .ndr-tip :hover::after CSS).
+    # Idempotent IIFE — safe at the top of the report script.
+    resondex_tooltip_js(),
     'function switchType(resultId, panelId) {',
     '  var accordion = document.getElementById(panelId).closest(".result-accordion");',
     '  accordion.querySelectorAll(".type-panel").forEach(function(p) {',
@@ -2295,7 +2281,7 @@
     '        if (!cell) return;',
     '        var raw = getRaw(r, sg, focus);',
     '        var sgData = r.sg[sg];',
-    '        cell.classList.remove("insig", "neg");',
+    '        cell.classList.remove("rdx-insig", "rdx-neg");',
     '        cell.style.background = "";',
     '        cell.removeAttribute("data-qc-tip");',
     '',
@@ -2315,8 +2301,8 @@
     '            "Raw metric: " + rawFmt + "\\nIndex: " + idx.toFixed(2));',
     '        }',
     '',
-    '        if (raw < 0) cell.classList.add("neg");',
-    '        if (isInsignificant(sgData, focus)) cell.classList.add("insig");',
+    '        if (raw < 0) cell.classList.add("rdx-neg");',
+    '        if (isInsignificant(sgData, focus)) cell.classList.add("rdx-insig");',
     '      });',
     '',
     '      // 3. Apply 3-color scale across non-null, non-insig cells in this subgroup',
@@ -2328,7 +2314,7 @@
     '        rows.forEach(function(r, fi) {',
     '          var allI = allRows.indexOf(r);',
     '          var cell = root.querySelector(\'td.idx-cell[data-sg="\' + sg + \'"][data-row="\' + allI + \'"]\');',
-    '          if (!cell || cell.classList.contains("insig")) return;',
+    '          if (!cell || cell.classList.contains("rdx-insig")) return;',
     '          var v = idxValues[fi]; if (v == null) return;',
     '          cell.style.background = interpolate3(v, minV, midV, maxV);',
     '        });',
@@ -2789,9 +2775,9 @@
     '',
     '  function pvalClass(pv) {',
     '    if (pv == null || isNaN(pv)) return "";',
-    '    if (pv < data.sig_threshold) return "p-sig";',
-    '    if (pv < data.marginal_threshold) return "p-marg";',
-    '    return "p-insig";',
+    '    if (pv < data.sig_threshold) return "rdx-pval-sig";',
+    '    if (pv < data.marginal_threshold) return "rdx-pval-marg";',
+    '    return "rdx-pval-insig";',
     '  }',
     '',
     '  var tbody = root.querySelector(".priort-table tbody");',
