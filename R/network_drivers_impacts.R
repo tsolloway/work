@@ -408,10 +408,18 @@
 
 #' @noRd
 .network_drivers_impacts_warning <- function(dim, metric_key, shift_type,
-                                             focus, metadata) {
+                                             focus, metadata,
+                                             outcome_display = "propdisplay") {
   if (is.null(metric_key) || !nzchar(metric_key)) return("")
   is_lift <- !metric_key %in% c("maxVmin", "mi")
-  shift_abs_lift <- identical(shift_type, "absshift") && is_lift
+  # Focus/weight are inert ONLY when the shift is fixed-step (absshift =
+  # Fixed Step, rangeshift = % of Range — both add a constant increment
+  # independent of the distribution, so the POINT-CHANGE numerator is
+  # focus/weight-invariant), the metric is a lift, AND Outcome = Point
+  # Change. Under % Change the figure is lift_abs / observed_expected and
+  # the baseline is focus/weight-specific, so focus/weight always matter.
+  shift_abs_lift <- shift_type %in% c("absshift", "rangeshift") &&
+    is_lift && identical(outcome_display, "absdisplay")
 
   if (identical(dim, "focus")) {
     # (a) base below minimum — only meaningful for non-Market focus + lift
@@ -422,9 +430,9 @@
         return(sprintf("Results not calculated because base is below %d", min_req))
       }
     }
-    # (b) focus has no effect when shift = fixed step
+    # (b) focus has no effect under a fixed-step shift (Fixed Step / % of Range)
     if (shift_abs_lift) {
-      return("Focus does not affect this metric when shift is a fixed step")
+      return("Focus does not affect this metric when shift is a fixed step or % of range")
     }
     return("")
   }
@@ -433,7 +441,7 @@
       return("Weights don’t affect this metric")
     }
     if (shift_abs_lift) {
-      return("Weights don’t affect this metric when shift is a fixed step")
+      return("Weights don’t affect this metric when shift is a fixed step or % of range")
     }
     return("")
   }

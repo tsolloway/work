@@ -827,15 +827,23 @@ app_deliverable_network_drivers <- function(
         # Disable inert controls — when a control's value would have no
         # effect on the displayed metric, grey it out via shinyjs.
         # Conditions mirror the advisory rules from bn_report:
-        #   - shift = absshift + lift metric → focus/weight inert
+        #   - fixed-step shift (Fixed Step / % of Range) + lift metric
+        #     → focus/weight inert (the shift is a constant increment
+        #       independent of the distribution)
         #   - metric = mi/maxVmin → shift inert; weight inert
         #   - metric = mi → display inert
         shiny::observe({
           metric_key <- input[[paste0(shared_prefix, "_metric")]]
           shift_t    <- input[[paste0(shared_prefix, "_shift")]]   %||% "propshift"
+          outcome_d  <- input[[paste0(shared_prefix, "_display")]] %||% "propdisplay"
           if (is.null(metric_key)) return()
           is_lift <- !metric_key %in% c("maxVmin", "mi")
-          shift_abs_lift <- identical(shift_t, "absshift") && is_lift
+          # Focus/weight are inert ONLY when the shift is fixed-step
+          # (absshift / rangeshift) AND a lift metric AND Outcome =
+          # Point Change. Under % Change the figure is divided by the
+          # focus/weight-specific baseline, so focus/weight always matter.
+          shift_abs_lift <- shift_t %in% c("absshift", "rangeshift") &&
+            is_lift && identical(outcome_d, "absdisplay")
 
           set_disabled <- function(dim, disabled) {
             id <- paste0(shared_prefix, "_", dim)

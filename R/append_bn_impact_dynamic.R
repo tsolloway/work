@@ -882,16 +882,25 @@ append_bn_impact_dynamic <- function(
       rows = assess_cell_row, cols = warning_col, stack = TRUE)
   }
 
-  # Pass-B grey-out rule: when Shift Type = Absolute AND metric is a lift,
-  # focus AND weight have no mathematical effect on the lift value (the
-  # shift magnitude is fixed to `lift` regardless of focus / weighting).
-  # We surface this as a grey italic note on both dropdowns so users
-  # don't expect changes when toggling.
-  shift_is_abs_and_lift <- if (has_shift_type) {
+  # Pass-B grey-out rule: focus AND weight have no effect on the lift
+  # value ONLY when ALL of: (1) Shift Type is a FIXED-STEP shift —
+  # "Fixed Step" (absshift, target = mean + lift) or "% of Range"
+  # (rangeshift, target = mean + lift*(max-min)); both add a constant
+  # increment independent of the distribution, so the POINT-CHANGE
+  # numerator is focus/weight-invariant — (2) the metric is a lift, AND
+  # (3) Outcome Display = "Point Change". Under "% Change" the figure is
+  # lift_abs / observed_expected and the baseline (observed_expected) is
+  # focus/weight-specific, so focus/weight ALWAYS matter under % Change
+  # regardless of shift type. We surface this as a grey italic note on
+  # both dropdowns so users don't expect changes when toggling.
+  shift_is_abs_and_lift <- if (has_shift_type && has_outcome_display) {
     shift_cell_let <- num2let(shift_type_cell_col)
+    out_cell_let   <- num2let(outcome_display_cell_col)
     paste0(
-      "AND(", shift_cell_let, shift_type_cell_row, "=\"Fixed Step\",",
-      "LEFT(", mk_lookup, ",4)=\"lift\")"
+      "AND(OR(", shift_cell_let, shift_type_cell_row, "=\"Fixed Step\",",
+      shift_cell_let, shift_type_cell_row, "=\"% of Range\"),",
+      "LEFT(", mk_lookup, ",4)=\"lift\",",
+      out_cell_let, outcome_display_cell_row, "=\"Point Change\")"
     )
   } else {
     "FALSE"
@@ -915,7 +924,7 @@ append_bn_impact_dynamic <- function(
     "IF(", red_rule, ",",
       num2let(metric_cell_col), metric_cell_row, "&\" must have a Market focus\",",
     "IF(", shift_is_abs_and_lift, ",",
-      "\"Focus does not affect this metric when shift is a fixed step\",",
+      "\"Focus does not affect this metric when shift is a fixed step or % of range\",",
       "\"\"))"
   )
   openxlsx::writeFormula(wb, dash_sheet, x = focus_warning_formula,
@@ -945,7 +954,7 @@ append_bn_impact_dynamic <- function(
       "IF(", weight_existing_rule, ",",
         "\"Weights don't affect this metric\",",
       "IF(", shift_is_abs_and_lift, ",",
-        "\"Weights don't affect this metric when shift is a fixed step\",",
+        "\"Weights don't affect this metric when shift is a fixed step or % of range\",",
         "\"\"))"
     )
     openxlsx::writeFormula(wb, dash_sheet, x = weight_warning_formula,

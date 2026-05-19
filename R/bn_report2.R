@@ -1,4 +1,4 @@
-#' bn_report
+#' bn_report2
 #'
 #' @description
 #' Generates a self-contained HTML report containing multiple Bayesian Network
@@ -100,20 +100,20 @@
 #' \dontrun{
 #' # Full report from bn_initial_networks output
 #' bn_init <- work::bn_initial_networks(df = df_bn, dv = NULL, batteries)
-#' work::bn_report(bn_init, file = "bn_exploratory.html")
+#' work::bn_report2(bn_init, file = "bn_exploratory.html")
 #'
 #' # Single result, attribute-only, charge layout only
-#' work::bn_report(bn_init$cb, types = "charge", do_community = FALSE)
+#' work::bn_report2(bn_init$cb, types = "charge", do_community = FALSE)
 #'
 #' # Named comparison
-#' work::bn_report(
+#' work::bn_report2(
 #'   list(Experimental = bn_init_exp$cb, Control = bn_init_ctrl$cb),
 #'   title = "Kadro Millennials - BN Comparison"
 #' )
 #' }
 #'
 #' @export
-bn_report <- function(
+bn_report2 <- function(
     results,
     types = c("none", "gravity", "charge", "hierarchy"),
     do_community = c(TRUE, FALSE),
@@ -181,7 +181,7 @@ bn_report <- function(
   default_type <- match.arg(default_type, types)
 
   # --- detect input shape and normalize to named list of engine results ---
-  results <- .bn_report_normalize_results(results)
+  results <- .bn_report2_normalize_results(results)
 
   # --- type labels ---
   type_labels <- purrr::map_chr(types, function(type) {
@@ -197,14 +197,14 @@ bn_report <- function(
   has_tabs <- length(do_community) > 1 && all(c(FALSE, TRUE) %in% do_community)
 
   # --- temp dir for individual widget html files ---
-  tmp_dir <- tempfile("bn_report_")
+  tmp_dir <- tempfile("bn_report2_")
   dir.create(tmp_dir)
   on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
 
   # --- normalize results_excel to a list aligned with `results` ---
   # Result: a named list of length(results); each slot is either a file path
   # (character) or NULL (no Download Report button for that accordion).
-  results_excel <- .bn_report_normalize_results_excel(results_excel, results)
+  results_excel <- .bn_report2_normalize_results_excel(results_excel, results)
 
   # Read a prebaked .xlsx from disk and return base64 + filename. Returns
   # NULL when path is NULL or the file is missing — caller omits the button.
@@ -243,7 +243,7 @@ bn_report <- function(
 
     # build download prefix: {title} - {subtitle} - {accordion} - {tab}
     tab_label <- if (do_community_val) "Community" else "Attribute"
-    dl_prefix <- .bn_report_download_prefix(title, subtitle, result_name, tab_label)
+    dl_prefix <- .bn_report2_download_prefix(title, subtitle, result_name, tab_label)
 
     viz <- tryCatch(
       bn_visual(
@@ -266,7 +266,7 @@ bn_report <- function(
         seed = seed
       ),
       error = function(e) {
-        warning("bn_report render_widget failed for [", result_name, " / ", type, " / ", view_name, "]: ", conditionMessage(e))
+        warning("bn_report2 render_widget failed for [", result_name, " / ", type, " / ", view_name, "]: ", conditionMessage(e))
         NULL
       }
     )
@@ -314,15 +314,15 @@ bn_report <- function(
 
       # cache deps from the first widget; reuse for all subsequent
       if (is.null(dep_cache)) {
-        dep_cache <<- .bn_report_cache_deps(widget_html, widget_lib_dir)
+        dep_cache <<- .bn_report2_cache_deps(widget_html, widget_lib_dir)
         first_lib_prefix <<- widget_lib_prefix
         # store shared deps as base64 once — JS injects into each iframe via blob URL
-        deps_string <- .bn_report_shared_deps_string(dep_cache)
+        deps_string <- .bn_report2_shared_deps_string(dep_cache)
         shared_deps_b64 <<- base64enc::base64encode(charToRaw(deps_string))
       }
 
       # strip shared dep tags, leaving <!--SHARED_DEPS--> marker for JS injection
-      widget_html <- .bn_report_strip_deps(
+      widget_html <- .bn_report2_strip_deps(
         widget_html, dep_cache, widget_lib_prefix, first_lib_prefix
       )
       widget_b64 <- base64enc::base64encode(charToRaw(widget_html))
@@ -377,7 +377,7 @@ bn_report <- function(
       glue::glue(
         '<tr>',
         '<td><span class="membership-dot" style="background: {color};"></span>',
-        '<span class="community-label" data-color="{color}">{community_name}</span>',
+        '<span class="community-label" data-color="{color}" data-orig-comm="{community_name}">{community_name}</span>',
         '<span class="card-count">{n_nodes}</span></td>',
         '<td><div class="card-nodes">{pills_str}</div></td>',
         '</tr>'
@@ -399,7 +399,7 @@ bn_report <- function(
       glue::glue(
         '<div class="membership-card" style="border-left: 4px solid {color};">',
         '<div class="card-header"><span class="membership-dot" style="background: {color};"></span>',
-        '<span class="community-label" data-color="{color}">{community_name}</span>',
+        '<span class="community-label" data-color="{color}" data-orig-comm="{community_name}">{community_name}</span>',
         '<span class="card-count">{n_nodes}</span></div>',
         '<div class="card-nodes">{pills_str}</div>',
         '</div>'
@@ -444,7 +444,7 @@ bn_report <- function(
     if (isTRUE(add_additional_results)) {
       if (!is.null(impacts_res) && !is.null(impacts_res[["table_attribute"]])) {
         shared_attr_id <- as.character(glue::glue("impact-data-{rid}-attr"))
-        attr_payload <- .bn_report_render_attribute_impacts_dashboard(
+        attr_payload <- .bn_report2_render_attribute_impacts_dashboard(
           impacts_res, result_name = name, dashboard_id = "_payload_only",
           qc_mode = qc_mode,
           outcome_display = outcome_display, shift_type = shift_type
@@ -456,7 +456,7 @@ bn_report <- function(
       }
       if (!is.null(impacts_res) && !is.null(impacts_res[["table_community"]])) {
         shared_comm_id <- as.character(glue::glue("impact-data-{rid}-comm"))
-        comm_payload <- .bn_report_render_attribute_impacts_dashboard(
+        comm_payload <- .bn_report2_render_attribute_impacts_dashboard(
           impacts_res, result_name = name, dashboard_id = "_payload_only",
           is_community = TRUE, qc_mode = qc_mode,
           outcome_display = outcome_display, shift_type = shift_type
@@ -524,7 +524,7 @@ bn_report <- function(
 
           if (!is.null(impacts_res) && !is.null(impacts_res[["table_attribute"]])) {
             impact_attr_id <- glue::glue("{panel_id}_impact_attr")
-            impact_attr_res <- .bn_report_render_attribute_impacts_dashboard(
+            impact_attr_res <- .bn_report2_render_attribute_impacts_dashboard(
               impacts_res, result_name = name, dashboard_id = impact_attr_id,
               qc_mode = qc_mode,
               outcome_display = outcome_display, shift_type = shift_type,
@@ -541,7 +541,7 @@ bn_report <- function(
 
           if (!is.null(impacts_res) && !is.null(impacts_res[["table_community"]])) {
             impact_comm_id <- glue::glue("{panel_id}_impact_comm")
-            impact_comm_res <- .bn_report_render_attribute_impacts_dashboard(
+            impact_comm_res <- .bn_report2_render_attribute_impacts_dashboard(
               impacts_res, result_name = name, dashboard_id = impact_comm_id,
               is_community = TRUE, qc_mode = qc_mode,
               outcome_display = outcome_display, shift_type = shift_type,
@@ -562,7 +562,7 @@ bn_report <- function(
             # bn_finalize_network / bn_prioritizations time). Fall back to
             # standard defaults if absent.
             priort_meta <- prioritizations_res[["meta"]] %||% list()
-            priort_html <- .bn_report_render_prioritization_dashboard(
+            priort_html <- .bn_report2_render_prioritization_dashboard(
               prioritizations_res, result_name = name, dashboard_id = priort_id,
               sig_threshold = priort_meta[["sig_threshold"]] %||% 0.05,
               marginal_threshold = priort_meta[["marginal_threshold"]] %||% 0.10,
@@ -662,8 +662,8 @@ bn_report <- function(
     ""
   }
 
-  report_css <- .bn_report_css()
-  report_js <- .bn_report_js(save_name)
+  report_css <- .bn_report2_css()
+  report_js <- .bn_report2_js(save_name)
 
   # shared deps variable for blob URL iframes (self_contained only)
   shared_deps_tag <- if (!is.null(shared_deps_b64)) {
@@ -730,7 +730,7 @@ bn_report <- function(
 
 
 # --- internal: normalize results to named list of engine results ---
-.bn_report_normalize_results <- function(results) {
+.bn_report2_normalize_results <- function(results) {
 
   # single engine result (has $meta or $bn)
   if (!is.null(results[["meta"]]) || !is.null(results[["bn"]])) {
@@ -798,7 +798,7 @@ bn_report <- function(
 #   * unnamed list / vector    — matched to results by position.
 #
 # Slot values can themselves be NULL or NA; both are treated as "no button".
-.bn_report_normalize_results_excel <- function(results_excel, results) {
+.bn_report2_normalize_results_excel <- function(results_excel, results) {
 
   empty <- setNames(rep(list(NULL), length(results)), names(results))
 
@@ -857,13 +857,13 @@ bn_report <- function(
 # leading column is "Community" instead).
 #' @noRd
 # --- internal: parse impact-table metadata --------------------------------
-# Pure data-prep extracted from .bn_report_render_attribute_impacts_dashboard
+# Pure data-prep extracted from .bn_report2_render_attribute_impacts_dashboard
 # so other consumers (the app_deliverable_network_drivers Shiny module) can
-# reuse the dimension-parsing logic without re-rendering the bn_report HTML
+# reuse the dimension-parsing logic without re-rendering the bn_report2 HTML
 # dashboard. Returns NULL when the requested table is empty/absent — caller
 # decides how to handle that.
 #' @noRd
-.bn_report_impacts_metadata <- function(impacts, is_community = FALSE) {
+.bn_report2_impacts_metadata <- function(impacts, is_community = FALSE) {
   if (isTRUE(is_community)) {
     tbl   <- impacts[["table_community"]]
     tbl_w <- impacts[["table_community_weighted"]]
@@ -1024,7 +1024,7 @@ bn_report <- function(
 }
 
 
-.bn_report_render_attribute_impacts_dashboard <- function(
+.bn_report2_render_attribute_impacts_dashboard <- function(
     impacts, result_name, dashboard_id, is_community = FALSE,
     qc_mode = FALSE,
     outcome_display = NULL, shift_type = "absolute",
@@ -1032,11 +1032,11 @@ bn_report <- function(
     # pointer instead of an inline `<script class="impact-data">` payload —
     # the caller is then responsible for emitting that shared script once.
     # This dedupe lets a single JSON payload back N type-panel copies of
-    # the same dashboard (one per layout), cutting bn_report file size
+    # the same dashboard (one per layout), cutting bn_report2 file size
     # dramatically when add_additional_results = TRUE.
     shared_data_id = NULL
 ) {
-  m <- .bn_report_impacts_metadata(impacts, is_community = is_community)
+  m <- .bn_report2_impacts_metadata(impacts, is_community = is_community)
   if (is.null(m)) {
     return('<div class="extra-empty">No impact results.</div>')
   }
@@ -1179,7 +1179,7 @@ bn_report <- function(
     sprintf(paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label>Weight:</label>',
+          '<label class="ndr-tip" data-ndr-tip="Whether weights are applied when calculating impacts.">Weight:</label>',
           '<select class="impact-ctrl" data-dim="weight">%s</select>',
         '</div>',
         '<span class="impact-warning" data-for="weight"></span>',
@@ -1197,7 +1197,7 @@ bn_report <- function(
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label>Outcome:</label>',
+          '<label class="ndr-tip" data-ndr-tip="How outcome change is displayed — relative vs absolute point change.">Outcome:</label>',
           '<select class="impact-ctrl" data-dim="display">',
             '<option value="propdisplay"', prop_sel, '>% Change</option>',
             '<option value="absdisplay"', abs_sel, '>Point Change</option>',
@@ -1221,7 +1221,7 @@ bn_report <- function(
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label>Shift Type:</label>',
+          '<label class="ndr-tip" data-ndr-tip="How each attribute&#39;s movement is calculated when computing impact.">Shift Type:</label>',
           '<select class="impact-ctrl" data-dim="shift">',
             '<option value="propshift"',  prop_sel,  '>% of Current Mean</option>',
             '<option value="absshift"',   abs_sel,   '>Fixed Step</option>',
@@ -1259,7 +1259,7 @@ bn_report <- function(
     paste0(
       '<div class="impact-ctrl-cell">',
         '<div class="impact-ctrl-row">',
-          '<label>Index By:</label>',
+          '<label class="ndr-tip" data-ndr-tip="Filter rows to a battery or group; the index is re-normalised within the visible rows.">Index By:</label>',
           '<select class="impact-ctrl" data-dim="indexby">',
             '<option value="All">All</option>',
             battery_options_html,
@@ -1297,10 +1297,25 @@ bn_report <- function(
   body_rows <- vapply(seq_along(data_obj$rows_unweighted), function(i) {
     row <- data_obj$rows_unweighted[[i]]
     leading_cells <- c(
-      sprintf('<td class="txt-col" data-col="id">%s</td>', htmltools::htmlEscape(row$id)),
-      if (has_community) sprintf('<td class="txt-col" data-col="community">%s</td>',
+      # In the Community Impacts table the id column IS the community
+      # name (no separate community/label columns), so tag it with
+      # data-orig-comm too — that lets community renames propagate here
+      # the same way they do via the dedicated community column in the
+      # Attribute Impacts table.
+      if (isTRUE(is_community)) sprintf(
+        '<td class="txt-col" data-col="id" data-orig-comm="%s">%s</td>',
+        htmltools::htmlEscape(row$id),
+        htmltools::htmlEscape(row$id)
+      ) else sprintf('<td class="txt-col" data-col="id">%s</td>',
+        htmltools::htmlEscape(row$id)),
+      if (has_community) sprintf(
+        '<td class="txt-col" data-col="community" data-orig-comm="%s">%s</td>',
+        htmltools::htmlEscape(row$community %||% ""),
         htmltools::htmlEscape(row$community %||% "")) else NULL,
-      if (has_label)     sprintf('<td class="txt-col" data-col="label">%s</td>',
+      if (has_label)     sprintf(
+        '<td class="txt-col" data-col="label" data-node-id="%s" data-orig-label="%s">%s</td>',
+        htmltools::htmlEscape(row$id),
+        htmltools::htmlEscape(row$label %||% ""),
         htmltools::htmlEscape(row$label %||% "")) else NULL
     )
     sg_cells <- vapply(sgs, function(sg) {
@@ -1338,6 +1353,10 @@ bn_report <- function(
   } else ""
   paste0(
     '<div class="impact-dashboard" data-dashboard-id="', dashboard_id, '"', shared_attr, '>',
+    # Card-title row — JS populates with "{Assess value}: <em>{question}</em>"
+    # (mirrors the Shiny app card header). Spans the full grid width above
+    # the sidebar + table.
+    '  <div class="ndr-card-title impact-card-title"></div>',
     '  <div class="impact-controls">',
     # Row 1 (framing / scope controls): Assess, Index By, Focus, Outcome Display, Weight.
     # Assess drives Row 2; Index By / Focus filter the table; Outcome
@@ -1356,7 +1375,7 @@ bn_report <- function(
       paste0(
         '    <div class="impact-ctrl-cell">',
           '<div class="impact-ctrl-row">',
-            '<label>Assess:</label>',
+            '<label class="ndr-tip" data-ndr-tip="Preset driver analyses that address specific questions.">Assess:</label>',
             '<select class="impact-ctrl" data-dim="assess">', assess_options_html, '</select>',
           '</div>',
           # Question feedback — JS populates with the matching preset\'s
@@ -1368,7 +1387,7 @@ bn_report <- function(
     '    ', indexby_ctrl,
     '    <div class="impact-ctrl-cell">',
     '      <div class="impact-ctrl-row">',
-    '        <label>Focus:</label>',
+    '        <label class="ndr-tip" data-ndr-tip="&#39;Market&#39; analyzes overall performance, while a brand uses only that brand&#39;s.">Focus:</label>',
     '        <select class="impact-ctrl" data-dim="focus">', focus_options_html, '</select>',
     '      </div>',
     '      <span class="impact-warning" data-for="focus"></span>',
@@ -1381,7 +1400,7 @@ bn_report <- function(
     # controls — auto-fit grid wraps as needed.
     '    <div class="impact-ctrl-cell assess-driven">',
     '      <div class="impact-ctrl-row">',
-    '        <label>Analysis:</label>',
+    '        <label class="ndr-tip" data-ndr-tip="The metric used to score impact.">Analysis:</label>',
     '        <select class="impact-ctrl" data-dim="metric">', metric_options_html, '</select>',
     '      </div>',
     '    </div>',
@@ -1423,7 +1442,7 @@ bn_report <- function(
 # numerics, color-coded p-values (green < 0.05, yellow < 0.10), "Index"
 # column bolded. Returns an HTML string.
 #' @noRd
-.bn_report_render_impacts_table <- function(tbl, is_community = FALSE) {
+.bn_report2_render_impacts_table <- function(tbl, is_community = FALSE) {
   if (is.null(tbl) || !is.data.frame(tbl) || nrow(tbl) == 0) {
     return('<div class="extra-empty">No impact results to display.</div>')
   }
@@ -1504,12 +1523,12 @@ bn_report <- function(
 
 
 # --- internal: parse prioritization registry metadata ----------------------
-# Pure data-prep extracted from .bn_report_render_prioritization_dashboard
+# Pure data-prep extracted from .bn_report2_render_prioritization_dashboard
 # so the app_deliverable_network_drivers Shiny module can reuse the
 # dimension-parsing logic. Returns NULL when there are no prioritization
 # results in the registry.
 #' @noRd
-.bn_report_prio_metadata <- function(priort,
+.bn_report2_prio_metadata <- function(priort,
                                      add_prioritization_pvalue = FALSE) {
   registry <- tryCatch(.prioritize_build_registry(priort),
     error = function(e) list())
@@ -1628,13 +1647,13 @@ bn_report <- function(
 # and bold-italic for negative marginal gain; Base display + warning next
 # to the Focus dropdown.
 #' @noRd
-.bn_report_render_prioritization_dashboard <- function(
+.bn_report2_render_prioritization_dashboard <- function(
     priort, result_name, dashboard_id,
     sig_threshold = 0.05, marginal_threshold = 0.10,
     add_prioritization_pvalue = FALSE,
     prioritize_display = NULL
 ) {
-  pm <- .bn_report_prio_metadata(priort, add_prioritization_pvalue)
+  pm <- .bn_report2_prio_metadata(priort, add_prioritization_pvalue)
   if (is.null(pm)) {
     return('<div class="extra-empty">No prioritization results.</div>')
   }
@@ -1692,6 +1711,14 @@ bn_report <- function(
     focus    = "Focus:",
     weight   = "Weight:"
   )
+  # Tooltip text per dimension — mirrors the Shiny app's control tips.
+  dim_tips <- c(
+    strategy = "The prioritization strategy used to rank attributes.",
+    search   = "The search algorithm used to find the best ordering.",
+    subgroup = "Which subgroup the prioritization was computed against.",
+    focus    = "&#39;Market&#39; analyzes overall performance, while a brand uses only that brand&#39;s.",
+    weight   = "Whether weights are applied when calculating prioritization."
+  )
 
   controls <- character(0)
   for (dn in names(dims)) {
@@ -1717,12 +1744,13 @@ bn_report <- function(
         paste0(
           '<div class="priort-ctrl-cell">',
             '<div class="priort-ctrl-row">',
-              '<label>%s</label>',
+              '<label class="ndr-tip" data-ndr-tip="%s">%s</label>',
               '<select class="priort-ctrl" data-dim="%s">%s</select>',
             '</div>',
             '%s',
           '</div>'
         ),
+        dim_tips[[dn]] %||% "",
         htmltools::htmlEscape(dim_labels[[dn]]), dn, opts_html, warning_html
       )
     )
@@ -1745,12 +1773,22 @@ bn_report <- function(
     paste0(
       '<div class="priort-ctrl-cell">',
         '<div class="priort-ctrl-row">',
-          '<label>Display:</label>',
+          '<label class="ndr-tip" data-ndr-tip="How outcome change is displayed &#8212; relative vs absolute point change.">Display:</label>',
           '<select class="priort-ctrl" data-dim="chart">',
             '<option value="% Change"', pct_selected, '>% Change</option>',
             '<option value="Point Change"', point_selected, '>Point Change</option>',
           '</select>',
         '</div>',
+      '</div>',
+      # Show / Hide Outcome Estimate — default hidden (matches the prior
+      # bn_report behaviour of omitting the column). The prio init JS
+      # wires the click to toggle .ndr-show-estimate on the dashboard
+      # root + re-render (so the glossary entry follows).
+      '<div class="priort-ctrl-cell">',
+        '<div class="priort-ctrl-row">',
+          '<label class="ndr-tip" data-ndr-tip="Predicted outcome value at each step.">Outcome Estimate:</label>',
+        '</div>',
+        '<button type="button" class="ndr-estimate-toggle" data-est-toggle="1">Show</button>',
       '</div>'
     )
   )
@@ -1761,16 +1799,17 @@ bn_report <- function(
   # "point" → shown only when Display = Point Change
   # "percent" → shown only when Display = Percent Change
   # No data-mode → always shown.
-  # Outcome Estimate is intentionally not rendered: in Point Change the
-  # chart and table both speak in Cumulative Gain / Incremental Lift terms,
-  # in Percent Change they speak in % terms, and Outcome Estimate doesn't
-  # belong in either view. The raw value is still in the JSON payload so
-  # the chart's tooltip could surface it later if needed.
+  # Outcome Estimate is hidden by default (class est-col, CSS display:none)
+  # and revealed when the user clicks the Show/Hide control — the prio
+  # init JS toggles `.ndr-show-estimate` on the dashboard root, which the
+  # stylesheet keys off to reveal the est-col header + cells. It carries
+  # no data-mode so it shows in both Point and % Change modes when on.
   headers <- c(
     '<th class="sortable" data-sort="num" data-col="priority">Step</th>',
     '<th class="sortable" data-sort="text" data-col="variable">Variable</th>',
     if (has_community) '<th class="sortable" data-sort="text" data-col="community">Community</th>' else NULL,
     if (has_label)     '<th class="sortable" data-sort="text" data-col="label">Label</th>'         else NULL,
+    '<th class="sortable est-col" data-sort="num" data-col="dv_estimate">Outcome Estimate</th>',
     '<th class="sortable" data-sort="num" data-col="cumulative_gain" data-mode="point">Cumulative Gain</th>',
     '<th class="sortable" data-sort="num" data-col="marginal_gain" data-mode="point">Incremental Lift</th>',
     '<th class="sortable" data-sort="num" data-col="cumulative_gain_pct" data-mode="percent">Cumulative Gain %</th>',
@@ -1781,6 +1820,9 @@ bn_report <- function(
 
   paste0(
     '<div class="priort-dashboard" data-dashboard-id="', dashboard_id, '">',
+    # Card-title row — JS populates with "Prioritization: <em>{Analysis}</em>"
+    # (mirrors the Shiny app card header).
+    '  <div class="ndr-card-title priort-card-title"></div>',
     '  <div class="priort-controls">', controls_html, '</div>',
     '  <div class="priort-split">',
     '    <div class="priort-table-wrap">',
@@ -1811,23 +1853,35 @@ bn_report <- function(
       'orange are marginal (&lt; ', marginal_threshold, '); ',
       'red are insignificant.</p>'
     ) else "",
+    # Glossary rows are tagged with data-gl so updatePriortGlossary() (in
+    # the prio init JS) can show only the entries relevant to the current
+    # Display mode + selected Analysis:
+    #   data-gl="always"   -> always shown
+    #   data-gl="point"    -> shown in Point Change mode only
+    #   data-gl="pct"      -> shown in % Change mode only
+    #   data-gl="estimate" -> shown only when the Outcome Estimate column is on
+    #   data-gl="strategy" data-gl-strat="<name>" -> shown only when that
+    #                       strategy is the selected Analysis
     '    <div class="priort-glossary muted">',
-    '      <p><b>Step</b> &mdash; Priority step number (order in which attributes were selected)</p>',
-    '      <p><b>Outcome Estimate</b> &mdash; Expected DV value with all selected attributes shifted</p>',
-    '      <p><b>Cumulative Gain</b> &mdash; Absolute increase in outcome estimate from baseline (all attributes through this step)</p>',
-    '      <p><b>Incremental Lift</b> &mdash; Absolute increase in outcome estimate from adding this attribute</p>',
-    '      <p><b>Cumulative Gain %</b> &mdash; Percentage increase from baseline through this step</p>',
-    '      <p><b>Incremental Lift %</b> &mdash; Percentage increase relative to the previous step</p>',
+    '      <p data-gl="always">Step &mdash; Priority step number (order in which attributes were selected).</p>',
+    '      <p data-gl="estimate">Outcome Estimate &mdash; Expected outcome value with all selected attributes shifted.</p>',
+    '      <p data-gl="point">Cumulative Gain &mdash; Absolute increase in outcome estimate from baseline (all attributes through this step).</p>',
+    '      <p data-gl="point">Incremental Lift &mdash; Absolute increase in outcome estimate from adding this attribute.</p>',
+    '      <p data-gl="pct">Cumulative Gain % &mdash; Percentage increase from baseline through this step.</p>',
+    '      <p data-gl="pct">Incremental Lift % &mdash; Percentage increase relative to the previous step.</p>',
     if (has_p) paste0(
-      '      <p><b>p-value</b> &mdash; Noise-floor test: proportion of bootstraps where this step’s gain &le; the noise floor</p>'
+      '      <p data-gl="always">p-value &mdash; Noise-floor test: proportion of bootstraps where this step’s gain &le; the noise floor.</p>'
     ) else "",
-    '      <p><b>', htmltools::htmlEscape(lift_label), '</b> &mdash; ', htmltools::htmlEscape(lift_shift_explainer), '</p>',
-    '      <p><b>', htmltools::htmlEscape(max_label), '</b> &mdash; Sets each IV to its highest level as hard evidence, representing the theoretical ceiling</p>',
+    paste0('      <p data-gl="strategy" data-gl-strat="', htmltools::htmlEscape(lift_label), '">',
+           htmltools::htmlEscape(lift_label), ' &mdash; ', htmltools::htmlEscape(lift_shift_explainer), '.</p>'),
+    paste0('      <p data-gl="strategy" data-gl-strat="', htmltools::htmlEscape(max_label), '">',
+           htmltools::htmlEscape(max_label), ' &mdash; Sets each attribute to its highest level as hard evidence, representing the theoretical ceiling.</p>'),
     # The deprecated strategy is only present when bn_prioritizations() was
     # called with include_maximum_lift_deprecated = TRUE; check the dims
     # payload to know whether to surface the explainer.
     if (max_deprecated_label %in% strategies) paste0(
-      '      <p><b>', htmltools::htmlEscape(max_deprecated_label), '</b> &mdash; Same as Maximum Lift but cumulative gain is the raw outcome estimate (no comparison to baseline). Provided for backward compatibility.</p>'
+      '      <p data-gl="strategy" data-gl-strat="', htmltools::htmlEscape(max_deprecated_label), '">',
+      htmltools::htmlEscape(max_deprecated_label), ' &mdash; Same as Maximum Lift but cumulative gain is the raw outcome estimate (no comparison to baseline). Provided for backward compatibility.</p>'
     ) else "",
     '    </div>',
     '  </div>',
@@ -1841,7 +1895,7 @@ bn_report <- function(
 # --- internal: render a bn_prioritizations result as HTML tables ---------
 # Legacy helper kept for backward compat; superseded by the dashboard above.
 #' @noRd
-.bn_report_render_prioritization <- function(priort) {
+.bn_report2_render_prioritization <- function(priort) {
   tbl_or_list <- priort[["greedy_lift"]] %||% priort[["greedy_max"]]
   if (is.null(tbl_or_list)) {
     return('<div class="extra-empty">No prioritization results to display.</div>')
@@ -1973,7 +2027,7 @@ bn_report <- function(
 
 # --- internal: report CSS ---
 #' @noRd
-.bn_report_css <- function() {
+.bn_report2_css <- function() {
   paste(c(
     'body {',
     '  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;',
@@ -2582,14 +2636,236 @@ bn_report <- function(
     '@keyframes bars {',
     '  0%, 100% { transform: scaleY(0.4); opacity: 0.3; }',
     '  50% { transform: scaleY(1); opacity: 1; }',
-    '}'
+    '}',
+    '',
+    '/* =====================================================================',
+    '   bn_report2 app-look override layer. Appended last so it wins on',
+    '   equal specificity. Goal: make the static report read like the',
+    '   bslib + reactable Shiny app (app_deliverable_network_drivers).',
+    '   ===================================================================== */',
+    ':root {',
+    '  --ndr-bg: #f8f9fa;',
+    '  --ndr-card-bg: #ffffff;',
+    '  --ndr-border: #dee2e6;',
+    '  --ndr-radius: 0.5rem;',
+    '  --ndr-shadow: 0 1px 3px rgba(0,0,0,.055), 0 1px 2px rgba(0,0,0,.04);',
+    '  --ndr-muted: #6c757d;',
+    '  --ndr-text: #212529;',
+    '  --ndr-accent: #0d6efd;',
+    '  --ndr-header-bg: #ffffff;',
+    '  --ndr-sidebar-bg: #f3f4f6;',
+    '}',
+    'body {',
+    '  background: var(--ndr-bg) !important;',
+    '  color: var(--ndr-text);',
+    '  margin: 18px 28px !important;',
+    '}',
+    '.page-header {',
+    '  border-bottom: 1px solid var(--ndr-border) !important;',
+    '  padding-bottom: 10px !important;',
+    '}',
+    'h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }',
+    '.subtitle { color: var(--ndr-muted); }',
+    '',
+    '/* ---- Accordion sections read as bslib cards ---- */',
+    '.result-accordion {',
+    '  border: 1px solid var(--ndr-border) !important;',
+    '  border-radius: var(--ndr-radius) !important;',
+    '  box-shadow: var(--ndr-shadow) !important;',
+    '  background: var(--ndr-card-bg) !important;',
+    '}',
+    '.result-accordion summary {',
+    '  background: var(--ndr-header-bg) !important;',
+    '  border-bottom: 1px solid var(--ndr-border) !important;',
+    '  font-size: 15px !important;',
+    '  font-weight: 600 !important;',
+    '  color: var(--ndr-text) !important;',
+    '  padding: 12px 16px !important;',
+    '}',
+    '.result-accordion summary:hover { background: var(--bs-tertiary-bg, #f1f3f5) !important; }',
+    '',
+    '/* ---- Tab bar → navset_underline look ---- */',
+    '.tab-bar {',
+    '  background: transparent !important;',
+    '  border-bottom: 1px solid var(--ndr-border) !important;',
+    '  padding: 0 12px !important;',
+    '}',
+    '.tab-btn {',
+    '  font-size: 14px !important;',
+    '  font-weight: 500 !important;',
+    '  color: var(--ndr-muted) !important;',
+    '  padding: 10px 16px !important;',
+    '}',
+    '.tab-btn:hover { color: var(--ndr-text) !important; }',
+    '.tab-btn.active {',
+    '  color: var(--ndr-text) !important;',
+    '  border-bottom-color: var(--ndr-text) !important;',
+    '}',
+    '',
+    '/* ---- Impact + Prio dashboards: controls become a left sidebar ---- */',
+    '/* DOM order is controls / table(or split) / footer as siblings inside',
+    '   .impact-dashboard | .priort-dashboard. CSS grid pins controls to a',
+    '   fixed-width left column spanning both rows; the table and footer',
+    '   stack in the right column. No HTML restructuring needed. */',
+    '@media (min-width: 1200px) {',
+    '  .impact-dashboard, .priort-dashboard {',
+    '    display: grid !important;',
+    '    grid-template-columns: 248px minmax(0, 1fr);',
+    '    grid-template-rows: auto 1fr auto;',
+    '    grid-template-areas: ". title" "side main" "side foot";',
+    '    column-gap: 18px; row-gap: 0;',
+    '    align-items: start;',
+    '  }',
+    '  .ndr-card-title { grid-area: title; }',
+    '  .impact-controls, .priort-controls {',
+    '    grid-area: side; display: flex !important; flex-direction: column !important;',
+    '    align-items: stretch !important; gap: 4px !important;',
+    '    background: var(--ndr-sidebar-bg) !important;',
+    '    border: 1px solid var(--ndr-border) !important;',
+    '    border-radius: var(--ndr-radius) !important;',
+    '    padding: 14px !important; margin: 0 !important;',
+    '    align-self: start !important;',
+    '  }',
+    '  .impact-table-wrap, .priort-split { grid-area: main; }',
+    '  .impact-footer, .priort-footer { grid-area: foot; margin-top: 12px !important; }',
+    '  .impact-ctrl-cell, .priort-ctrl-cell { width: 100%; }',
+    '  .impact-ctrl-row, .priort-ctrl-row {',
+    '    flex-direction: column !important; align-items: stretch !important;',
+    '    gap: 4px !important;',
+    '  }',
+    '  .impact-ctrl-row label, .priort-ctrl-row label {',
+    '    text-align: left !important; flex: none !important;',
+    '  }',
+    '  .impact-ctrl-row .impact-ctrl, .priort-ctrl-row .priort-ctrl {',
+    '    max-width: none !important; width: 100% !important;',
+    '  }',
+    '}',
+    '',
+    '/* ---- Bootstrap-style selects ---- */',
+    '.impact-ctrl, .priort-ctrl, .layout-select {',
+    '  border: 1px solid #ced4da !important;',
+    '  border-radius: 0.375rem !important;',
+    '  padding: 6px 28px 6px 10px !important;',
+    '  font-size: 13px !important;',
+    '  background-color: #fff !important;',
+    '  color: var(--ndr-text) !important;',
+    '  -webkit-appearance: none; appearance: none;',
+    '  background-image: url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3E%3Cpath fill=\'none\' stroke=\'%23343a40\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2 5l6 6 6-6\'/%3E%3C/svg%3E");',
+    '  background-repeat: no-repeat; background-position: right 8px center;',
+    '  background-size: 12px;',
+    '}',
+    '.impact-ctrl:focus, .priort-ctrl:focus, .layout-select:focus {',
+    '  border-color: #86b7fe !important;',
+    '  box-shadow: 0 0 0 0.2rem rgba(13,110,253,.2) !important;',
+    '  outline: 0;',
+    '}',
+    '.impact-ctrl-row label, .priort-ctrl-row label, .layout-controls label {',
+    '  font-weight: 500 !important; font-size: 13px !important;',
+    '  color: var(--ndr-text) !important;',
+    '}',
+    '/* Layout controls box matches the sidebar card look. */',
+    '.layout-controls {',
+    '  background: var(--ndr-card-bg) !important;',
+    '  border: 1px solid var(--ndr-border) !important;',
+    '  border-radius: var(--ndr-radius) !important;',
+    '}',
+    '',
+    '/* ---- Tables read like reactable ---- */',
+    '.impact-table-wrap, .priort-table-wrap {',
+    '  border: 1px solid var(--ndr-border);',
+    '  border-radius: var(--ndr-radius);',
+    '  background: var(--ndr-card-bg);',
+    '  box-shadow: var(--ndr-shadow);',
+    '  overflow: auto;',
+    '}',
+    '.impact-table, .priort-table { font-size: 14px !important; }',
+    '.impact-table thead th, .priort-table thead th {',
+    '  background: var(--ndr-card-bg) !important;',
+    '  color: var(--ndr-text) !important;',
+    '  font-weight: 600 !important;',
+    '  border: none !important;',
+    '  border-bottom: 1px solid var(--ndr-border) !important;',
+    '  position: sticky; top: 0; z-index: 2;',
+    '}',
+    '.impact-table tbody td, .priort-table tbody td {',
+    '  border: none !important;',
+    '  border-bottom: 1px solid #f0f1f3 !important;',
+    '  padding: 8px 10px !important;',
+    '}',
+    '.impact-table tbody tr:hover td, .priort-table tbody tr:hover td {',
+    '  background: var(--bs-secondary-bg, #f0f0f0) !important;',
+    '}',
+    '.impact-table tfoot td, .priort-table tfoot td {',
+    '  background: var(--bs-tertiary-bg, #f8f9fa) !important;',
+    '  border-top: 1px solid var(--ndr-border) !important;',
+    '  position: sticky; bottom: 0;',
+    '}',
+    '.impact-table tfoot tr.ti-row td { border-top: 1px solid var(--ndr-border) !important; }',
+    '',
+    '/* ---- Prio chart: greyscale to match the original bn_report ---- */',
+    '.priort-chart .bar-prev { fill: #D9D9D9 !important; }',
+    '.priort-chart .bar-incr { fill: #595959 !important; }',
+    '.priort-chart .cum-line { stroke: #595959 !important; stroke-width: 2; }',
+    '.priort-chart .cum-marker { fill: #595959 !important; stroke: #595959 !important; }',
+    '.priort-chart-wrap {',
+    '  border: 1px solid var(--ndr-border); border-radius: var(--ndr-radius);',
+    '  background: var(--ndr-card-bg); box-shadow: var(--ndr-shadow);',
+    '  padding: 8px;',
+    '}',
+    '',
+    '/* ---- Footer notes ---- */',
+    '.impact-footer, .priort-footer { font-size: 12px !important; color: var(--ndr-muted) !important; }',
+    '.impact-footer .index-note { font-style: italic; }',
+    '',
+    '/* ---- Label tooltip affordance (paired with data-ndr-tip in render) ---- */',
+    '.ndr-tip { cursor: help; border-bottom: 1px dotted #999; position: relative; }',
+    '.ndr-tip:hover::after {',
+    '  content: attr(data-ndr-tip);',
+    '  position: absolute; left: 0; top: calc(100% + 6px);',
+    '  background: #333; color: #fff; padding: 6px 10px;',
+    '  border-radius: 4px; font-size: 11px; font-weight: 400;',
+    '  font-style: normal; line-height: 1.35; white-space: normal;',
+    '  width: max-content; max-width: 230px; z-index: 9999;',
+    '  box-shadow: 0 2px 6px rgba(0,0,0,.2); pointer-events: none;',
+    '}',
+    '',
+    '/* ---- Card-title row (mirrors the app card header) ---- */',
+    '.ndr-card-title {',
+    '  font-size: 15px; font-weight: 600; color: var(--ndr-text);',
+    '  padding: 6px 4px 12px 2px; margin: 0 0 6px 0;',
+    '  border-bottom: 1px solid var(--ndr-border);',
+    '}',
+    '.ndr-card-title:empty { display: none; }',
+    '.ndr-card-title em { font-weight: 500; color: var(--ndr-muted); font-style: italic; }',
+    '/* The old inline assess-feedback span is superseded by the card title. */',
+    '.impact-warning.assess-feedback { display: none !important; }',
+    '',
+    '/* ---- Outcome Estimate column: hidden until the Show/Hide control',
+    '   adds .ndr-show-estimate on an ancestor (the JS `root` is the',
+    '   .priort-panel wrapper, not the .priort-dashboard div — so use a',
+    '   descendant selector that matches regardless of which ancestor',
+    '   carries the class) ---- */',
+    '.priort-table th.est-col, .priort-table td.est-col { display: none; }',
+    '.ndr-show-estimate .priort-table th.est-col,',
+    '.ndr-show-estimate .priort-table td.est-col {',
+    '  display: table-cell;',
+    '}',
+    '/* Show/Hide control button — matches the app\\u2019s small outlined',
+    '   white button. */',
+    '.ndr-estimate-toggle {',
+    '  width: 100%; padding: 6px 10px; font-size: 13px;',
+    '  background: #fff; color: var(--ndr-text);',
+    '  border: 1px solid #ced4da; border-radius: 0.375rem;',
+    '  cursor: pointer;',
+    '}',
+    '.ndr-estimate-toggle:hover { background: #f1f3f5; }'
   ), collapse = "\n")
 }
 
 
 # --- internal: report JS ---
 #' @noRd
-.bn_report_js <- function(save_name) {
+.bn_report2_js <- function(save_name) {
 
   # membership sync snippet (applied to static HTML membership tab)
   membership_sync <- paste0(
@@ -3079,6 +3355,17 @@ bn_report <- function(
     '      var q = (data.presets && data.presets[v] && data.presets[v].question) || "";',
     '      assessFeedback.textContent = q;',
     '    }',
+    '    // Card-title row: "{Assess value}: <em>{question}</em>" — mirrors',
+    '    // the Shiny app card header. Falls back to bare value when there',
+    '    // is no question (Custom).',
+    '    var cardTitle = root.querySelector(".impact-card-title");',
+    '    if (cardTitle) {',
+    '      var cq = (data.presets && data.presets[v] && data.presets[v].question) || "";',
+    '      function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}',
+    '      cardTitle.innerHTML = (v && cq)',
+    '        ? esc(v) + ": <em>" + esc(cq) + "</em>"',
+    '        : esc(v || "");',
+    '    }',
     '  }',
     '',
     '  function syncAssessFromControls() {',
@@ -3237,6 +3524,12 @@ bn_report <- function(
     '  // changes.',
     '  var defaultSortTh = root.querySelector(".impact-table thead th.metric-col");',
     '  if (defaultSortTh) applySort(defaultSortTh, "desc");',
+    '',
+    '  // Apply any existing network label/community renames to this',
+    '  // freshly-initialised Impact dashboard.',
+    '  var ndrImpPanel = root.closest(".tab-panel[data-result]");',
+    '  ndrApplyImpactEdits(root,',
+    '    ndrImpPanel ? (ndrImpPanel.getAttribute("data-result") || "_default") : "_default");',
     '}',
     '',
     '/* --- Prioritization dashboard --- */',
@@ -3247,6 +3540,17 @@ bn_report <- function(
     '  if (!dataScript) return;',
     '  var data;',
     '  try { data = JSON.parse(dataScript.textContent); } catch (e) { return; }',
+    '',
+    '  // Result name for resolving color-keyed community renames.',
+    '  var ndrPrioPanel = root.closest(".tab-panel[data-result]");',
+    '  var ndrPrioRName = ndrPrioPanel',
+    '    ? (ndrPrioPanel.getAttribute("data-result") || "_default") : "_default";',
+    '  // Register this dashboard\\u2019s render so edits elsewhere can force',
+    '  // a live re-render (label/community renames flow into the table+chart).',
+    '  window.__ndrPriortRenderers = window.__ndrPriortRenderers || [];',
+    '  window.__ndrPriortRerender = function() {',
+    '    (window.__ndrPriortRenderers || []).forEach(function(fn){ try { fn(); } catch(e){} });',
+    '  };',
     '',
     '  function ctrl(dim) {',
     '    return root.querySelector(\'.priort-ctrl[data-dim="\' + dim + \'"]\');',
@@ -3329,6 +3633,37 @@ bn_report <- function(
     '    var key = currentKey();',
     '    var entry = data.lookup[key] || { rows: [], n_obs: null };',
     '',
+    '    // Card-title row: "Prioritization: <em>{Analysis}</em>" — mirrors',
+    '    // the Shiny app card header (Analysis = the strategy dimension).',
+    '    var pCardTitle = root.querySelector(".priort-card-title");',
+    '    if (pCardTitle) {',
+    '      var strat = currentValue("strategy") || "";',
+    '      var pretty = strat.replace(/_/g, " ");',
+    '      function pesc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}',
+    '      pCardTitle.innerHTML = pretty',
+    '        ? "Prioritization: <em>" + pesc(pretty) + "</em>"',
+    '        : "Prioritization";',
+    '    }',
+    '',
+    '    // Conditional glossary: show only the entries relevant to the',
+    '    // current Display mode + selected Analysis (+ Outcome Estimate',
+    '    // visibility). Mirrors the Shiny app footer behaviour.',
+    '    (function(){',
+    '      var chartSel = root.querySelector(\'.priort-ctrl[data-dim="chart"]\');',
+    '      var isPct = !chartSel || chartSel.value === "% Change";',
+    '      var curStrat = currentValue("strategy") || "";',
+    '      var showEst = root.classList.contains("ndr-show-estimate");',
+    '      root.querySelectorAll(".priort-glossary p[data-gl]").forEach(function(p){',
+    '        var g = p.getAttribute("data-gl");',
+    '        var vis = true;',
+    '        if (g === "point") vis = !isPct;',
+    '        else if (g === "pct") vis = isPct;',
+    '        else if (g === "estimate") vis = showEst;',
+    '        else if (g === "strategy") vis = (p.getAttribute("data-gl-strat") === curStrat);',
+    '        p.style.display = vis ? "" : "none";',
+    '      });',
+    '    })();',
+    '',
     '    // Base — bold line below the table',
     '    var nObs = entry.n_obs;',
     '    var baseText = (nObs != null && !isNaN(nObs)) ? ("Base: " + Math.round(nObs)) : "";',
@@ -3362,14 +3697,24 @@ bn_report <- function(
     '      var cells = [];',
     '      cells.push({cls: \'num-col\', text: r.priority});',
     '      cells.push({cls: \'txt-col\', text: r.variable});',
-    '      if (data.has_community) cells.push({cls: \'txt-col\', text: r.community == null ? "" : r.community});',
-    '      if (data.has_label)     cells.push({cls: \'txt-col\', text: r.label     == null ? "" : r.label});',
+    '      if (data.has_community) cells.push({cls: \'txt-col\',',
+    '        text: ndrResolveComm(r.community == null ? "" : r.community, ndrPrioRName)});',
+    '      if (data.has_label)     cells.push({cls: \'txt-col\',',
+    '        text: ndrResolveLabel(r.variable, r.label == null ? "" : r.label)});',
     '      // Outcome / Cumulative Gain / Incremental Lift formatter — when the',
     '      // outcome is binary (data.is_binary), all three render as XX.X%.',
     '      function fmtAbs(v) {',
     '        if (v == null) return "";',
     '        return data.is_binary ? (v * 100).toFixed(1) + "%" : v.toFixed(2);',
     '      }',
+    '      // Outcome Estimate — hidden by default (est-col), shown via the',
+    '      // Show/Hide control. binary -> XX.X%, continuous -> 0.00; same',
+    '      // white-to-green gradient as the gain columns.',
+    '      cells.push({',
+    '        cls: \'num-col est-col\',',
+    '        text: fmtAbs(r.dv_estimate),',
+    '        bg: rDV ? whiteToGreen(r.dv_estimate, rDV.lo, rDV.hi) : ""',
+    '      });',
     '      // Cumulative Gain — white-to-green gradient (point-mode)',
     '      cells.push({',
     '        cls: \'num-col\',',
@@ -3445,8 +3790,10 @@ bn_report <- function(
     '',
     '    var wasForced = split.classList.contains("force-column");',
     '',
-    '    // Narrow viewport always uses column mode',
-    '    if (window.innerWidth < 1100) {',
+    '    // Narrow viewport always uses column mode (stacked top/bottom).',
+    '    // 1400px matches the Shiny app\\u2019s xxl breakpoint so the table',
+    '    // and chart stack earlier rather than cramping side-by-side.',
+    '    if (window.innerWidth < 1400) {',
     '      split.classList.add("force-column");',
     '      if (!wasForced && lastChartRows) drawChart();',
     '      return;',
@@ -3587,12 +3934,14 @@ bn_report <- function(
     '      var parts = [];',
     '      parts.push("Step " + (r.priority == null ? "?" : r.priority));',
     '      var name = (r.variable == null ? "" : String(r.variable));',
-    '      if (r.label != null && r.label !== "" && r.label !== name) {',
-    '        parts.push(name + " (" + r.label + ")");',
+    '      var rl = ndrResolveLabel(r.variable, r.label);',
+    '      if (rl != null && rl !== "" && rl !== name) {',
+    '        parts.push(name + " (" + rl + ")");',
     '      } else {',
     '        parts.push(name);',
     '      }',
-    '      if (r.community != null && r.community !== "") parts.push("Community: " + r.community);',
+    '      var rc = ndrResolveComm(r.community, ndrPrioRName);',
+    '      if (rc != null && rc !== "") parts.push("Community: " + rc);',
     '      function fmtTipAbs(v) {',
     '        if (v == null || isNaN(v)) return "";',
     '        return data.is_binary ? (v * 100).toFixed(1) + "%" : v.toFixed(2);',
@@ -3672,8 +4021,9 @@ bn_report <- function(
     '      });',
     '      t.textContent = name.length > 18 ? name.substring(0, 16) + "\\u2026" : name;',
     '      var hoverName = name;',
-    '      if (r.label != null && r.label !== "" && r.label !== name) {',
-    '        hoverName = name + " (" + r.label + ")";',
+    '      var rlbl = ndrResolveLabel(r.variable, r.label);',
+    '      if (rlbl != null && rlbl !== "" && rlbl !== name) {',
+    '        hoverName = name + " (" + rlbl + ")";',
     '      }',
     '      bindTip(t, hoverName + "\\n\\n" + tt);',
     '      prev = dv;',
@@ -3699,6 +4049,18 @@ bn_report <- function(
     '  root.querySelectorAll(".priort-ctrl").forEach(function(sel) {',
     '    sel.addEventListener("change", render);',
     '  });',
+    '',
+    '  // Show / Hide Outcome Estimate toggle. Toggles .ndr-show-estimate on',
+    '  // the dashboard root (CSS reveals the est-col header + cells), flips',
+    '  // the button label, and re-renders so the glossary entry follows.',
+    '  var estBtn = root.querySelector("[data-est-toggle]");',
+    '  if (estBtn) {',
+    '    estBtn.addEventListener("click", function() {',
+    '      var on = root.classList.toggle("ndr-show-estimate");',
+    '      estBtn.textContent = on ? "Hide" : "Show";',
+    '      render();',
+    '    });',
+    '  }',
     '',
     '  // Download-PNG button — serializes the SVG with inline styles +',
     '  // a white background, draws it onto a 2× canvas for retina-quality',
@@ -3845,11 +4207,89 @@ bn_report <- function(
     '    });',
     '  });',
     '',
+    '  // Expose this dashboard\\u2019s render for cross-view edit propagation.',
+    '  window.__ndrPriortRenderers.push(render);',
     '  render();',
     '}',
     '',
     'var legendEdits = {};',
     'var nodeLabelEdits = {};',
+    '',
+    '// ---- Network-edit propagation to the Impact / Prio dashboards ----',
+    '// Network label + community renames also drive the Attribute Impacts,',
+    '// Community Impacts and Prioritization tables/chart. Labels key by',
+    '// the variable id (node id); community renames are color-keyed in',
+    '// legendEdits, so we resolve them through an origName->color map',
+    '// captured from the membership panel (.community-label carries both',
+    '// data-color and data-orig-comm, preserved even after its text is',
+    '// replaced). All resolution is defensive: with no matching edit the',
+    '// original value is returned unchanged, so it can never corrupt data.',
+    'function ndrCommColorMap() {',
+    '  var m = {};',
+    '  document.querySelectorAll(".community-label[data-orig-comm][data-color]").forEach(function(el){',
+    '    var o = el.getAttribute("data-orig-comm");',
+    '    var c = el.getAttribute("data-color");',
+    '    if (o && c && !(o in m)) m[o] = c;',
+    '  });',
+    '  return m;',
+    '}',
+    '// Strip the variable-id prefix a propagated network label may carry.',
+    '// Network node labels are often "{variable} - {label}" / "{variable}-',
+    '// {label}" / "{variable}{label}"; the tables already show the variable',
+    '// in its own column, so the duplicate prefix is removed before display.',
+    'function ndrStripVarPrefix(varId, label) {',
+    '  if (label == null || varId == null) return label;',
+    '  var v = String(varId);',
+    '  var e = v.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&");',
+    '  var s = String(label);',
+    '  s = s.replace(new RegExp(e + "\\\\s*-\\\\s*", "g"), "");',
+    '  s = s.replace(new RegExp(e + "-", "g"), "");',
+    '  s = s.replace(new RegExp(e, "g"), "");',
+    '  return s.replace(/^\\s*-\\s*/, "").trim();',
+    '}',
+    'function ndrResolveLabel(varId, orig) {',
+    '  if (varId != null && Object.prototype.hasOwnProperty.call(nodeLabelEdits, varId)) {',
+    '    return ndrStripVarPrefix(varId, nodeLabelEdits[varId]);',
+    '  }',
+    '  return orig;',
+    '}',
+    'function ndrResolveComm(origName, rName) {',
+    '  if (!origName) return origName;',
+    '  var edits = legendEdits[rName] || legendEdits["_default"] || {};',
+    '  var color = ndrCommColorMap()[origName];',
+    '  if (color != null && Object.prototype.hasOwnProperty.call(edits, color)) {',
+    '    return edits[color];',
+    '  }',
+    '  return origName;',
+    '}',
+    '// Re-apply edits to a static Impact table inside `scope` (the panel).',
+    'function ndrApplyImpactEdits(scope, rName) {',
+    '  if (!scope) return;',
+    '  scope.querySelectorAll(".impact-table td[data-col=\\"label\\"][data-node-id]").forEach(function(td){',
+    '    var id = td.getAttribute("data-node-id");',
+    '    var orig = td.getAttribute("data-orig-label") || "";',
+    '    td.textContent = ndrResolveLabel(id, orig);',
+    '  });',
+    '  // Matches both the Attribute Impacts community column and the',
+    '  // Community Impacts id column (community name lives there).',
+    '  scope.querySelectorAll(".impact-table td[data-orig-comm]").forEach(function(td){',
+    '    var orig = td.getAttribute("data-orig-comm") || "";',
+    '    td.textContent = ndrResolveComm(orig, rName);',
+    '  });',
+    '}',
+    '// Re-apply edits across every Impact table on the page (called when',
+    '// edits change so already-rendered dashboards update live).',
+    'function ndrApplyAllImpactEdits() {',
+    '  document.querySelectorAll(".tab-panel[data-result]").forEach(function(tp){',
+    '    ndrApplyImpactEdits(tp, tp.getAttribute("data-result") || "_default");',
+    '  });',
+    '  document.querySelectorAll(".impact-dashboard").forEach(function(d){',
+    '    var tp = d.closest(".tab-panel[data-result]");',
+    '    ndrApplyImpactEdits(d, tp ? (tp.getAttribute("data-result")||"_default") : "_default");',
+    '  });',
+    '  // Prio tables/chart are JS-rebuilt — re-render the visible ones.',
+    '  if (typeof window.__ndrPriortRerender === "function") window.__ndrPriortRerender();',
+    '}',
     '',
     'function findSourceResult(evtSource) {',
     '  var result = { accordion: null, name: null };',
@@ -3884,6 +4324,7 @@ bn_report <- function(
     '        try { iframe.contentWindow.postMessage({ type: "nodeUpdate", edits: legendEditsMap }, "*"); } catch(e) {}',
     '      }',
     '    });',
+    '    ndrApplyAllImpactEdits();',
     '  }',
     '  if (evt.data.type === "nodeUpdate") {',
     '    var edits = evt.data.edits || {};',
@@ -3900,6 +4341,7 @@ bn_report <- function(
     '        try { iframe.contentWindow.postMessage({ type: "legendUpdate", edits: edits }, "*"); } catch(e) {}',
     '      }',
     '    });',
+    '    ndrApplyAllImpactEdits();',
     '  }',
     '  if (evt.data.type === "nodeLabelUpdate") {',
     '    nodeLabelEdits[evt.data.nodeId] = evt.data.label;',
@@ -3908,6 +4350,7 @@ bn_report <- function(
     '        try { iframe.contentWindow.postMessage({ type: "nodeLabelUpdate", nodeId: evt.data.nodeId, label: evt.data.label }, "*"); } catch(e) {}',
     '      }',
     '    });',
+    '    ndrApplyAllImpactEdits();',
     '  }',
     '',
     '  if (evt.data.type === "editsSynced") {',
@@ -4135,6 +4578,12 @@ bn_report <- function(
     '      // Tolerant of older save files: missing key just leaves dashboards alone.',
     '      restoreDashboardStates(parsed.dashboards);',
     '',
+    '      // Push the restored label/community renames into the Impact,',
+    '      // Community Impacts and Prioritization tables + prio chart',
+    '      // (the network iframes get them via the panel snapshots above;',
+    '      // the dashboards need an explicit re-apply on load).',
+    '      ndrApplyAllImpactEdits();',
+    '',
     '    } catch(err) {',
     '      alert("Invalid layout file.");',
     '    }',
@@ -4179,7 +4628,7 @@ bn_report <- function(
 
 # --- internal: cache shared widget dependency files ---
 #' @noRd
-.bn_report_cache_deps <- function(widget_html, lib_dir) {
+.bn_report2_cache_deps <- function(widget_html, lib_dir) {
   # extract ordered <script src="widget_N_files/..."> tags
   script_pattern <- '<script[^>]+src="([^"]+_files/[^"]+)"[^>]*>\\s*</script>'
   script_tags <- regmatches(widget_html, gregexpr(script_pattern, widget_html, perl = TRUE))[[1]]
@@ -4218,14 +4667,14 @@ bn_report <- function(
 
 # --- internal: concatenate cached dep content into shared deps string ---
 #' @noRd
-.bn_report_shared_deps_string <- function(dep_cache) {
+.bn_report2_shared_deps_string <- function(dep_cache) {
   paste(unlist(dep_cache, use.names = FALSE), collapse = "\n")
 }
 
 
 # --- internal: strip shared dep tags, leaving <!--SHARED_DEPS--> marker ---
 #' @noRd
-.bn_report_strip_deps <- function(widget_html, dep_cache, widget_lib_prefix, first_lib_prefix) {
+.bn_report2_strip_deps <- function(widget_html, dep_cache, widget_lib_prefix, first_lib_prefix) {
   placeholder_inserted <- FALSE
   for (original_tag in names(dep_cache)) {
     this_tag <- gsub(first_lib_prefix, widget_lib_prefix, original_tag, fixed = TRUE)
@@ -4242,7 +4691,7 @@ bn_report <- function(
 
 # --- internal: build download filename prefix ---
 #' @noRd
-.bn_report_download_prefix <- function(title, subtitle, result_name, tab_label) {
+.bn_report2_download_prefix <- function(title, subtitle, result_name, tab_label) {
   dl_parts <- c(title, subtitle, result_name, tab_label)
   paste(dl_parts[nchar(dl_parts) > 0], collapse = " - ")
 }
