@@ -329,9 +329,9 @@ app_deliverable_network_drivers <- function(
       icon  = NULL,
       class = "btn-sm",
       style = paste(
-        "background-color: #fff;",
-        "border: 1px solid #ced4da;",
-        "color: #212529;",
+        "background-color: var(--ndr-card-bg);",
+        "border: 1px solid var(--ndr-border);",
+        "color: var(--ndr-text);",
         "width: 100%;"
       )
     )
@@ -378,7 +378,7 @@ app_deliverable_network_drivers <- function(
       title = "Attribute Impacts", value = "impacts_attr",
       bslib::card(
         full_screen = TRUE,
-        max_height  = "80vh",
+        max_height  = "calc(100vh - 180px)",
         bslib::card_header(
           shiny::uiOutput(ns(paste0(rid, "_ia_title")), inline = TRUE),
           class = "fw-semibold"
@@ -404,7 +404,7 @@ app_deliverable_network_drivers <- function(
       title = "Community Impacts", value = "impacts_comm",
       bslib::card(
         full_screen = TRUE,
-        max_height  = "80vh",
+        max_height  = "calc(100vh - 180px)",
         bslib::card_header(
           shiny::uiOutput(ns(paste0(rid, "_ic_title")), inline = TRUE),
           class = "fw-semibold"
@@ -432,7 +432,7 @@ app_deliverable_network_drivers <- function(
 
     table_card <- bslib::card(
       full_screen = TRUE,
-      max_height  = "80vh",
+      max_height  = "calc(100vh - 180px)",
       bslib::card_header(
         shiny::uiOutput(ns(paste0(rid, "_pm_title")), inline = TRUE),
         class = "fw-semibold"
@@ -454,7 +454,7 @@ app_deliverable_network_drivers <- function(
 
     chart_card <- bslib::card(
       full_screen = TRUE,
-      max_height  = "80vh",
+      max_height  = "calc(100vh - 180px)",
       bslib::card_header("Prioritization Chart", class = "fw-semibold"),
       bslib::card_body(
         padding = 0,
@@ -815,13 +815,18 @@ app_deliverable_network_drivers <- function(
           output[[out_id]] <- shiny::renderUI({
             v <- input[[paste0(shared_prefix, "_assess")]] %||% ""
             q <- .network_drivers_impacts_assess_question(shared_meta_warn, v)
+            # Explicit brand text colour so the card-header stays legible
+            # in both light AND dark modes (Bootstrap card-header default
+            # inherits a dim colour in dark).
+            wrap <- function(...) htmltools::tags$span(
+              style = "color: var(--ndr-text); font-weight: 600;", ...)
             if (nzchar(v) && nzchar(q)) {
-              htmltools::tagList(
+              wrap(
                 htmltools::HTML(paste0(htmltools::htmlEscape(v), ": ")),
                 htmltools::tags$em(q)
               )
             } else {
-              htmltools::HTML(htmltools::htmlEscape(v))
+              wrap(htmltools::HTML(htmltools::htmlEscape(v)))
             }
           })
         }
@@ -995,11 +1000,15 @@ app_deliverable_network_drivers <- function(
         # or there's only one option (no meaningful selection to show).
         output[[paste0(rid, "_pm_title")]] <- shiny::renderUI({
           strat <- input[[paste0(pm_prefix, "_strategy")]] %||% ""
+          # Same explicit brand text colour as the impact titles so the
+          # card-header stays legible in dark mode.
+          wrap <- function(...) htmltools::tags$span(
+            style = "color: var(--ndr-text); font-weight: 600;", ...)
           if (!nzchar(strat)) {
-            return(htmltools::HTML("Prioritization"))
+            return(wrap("Prioritization"))
           }
           pretty <- gsub("_", " ", strat, fixed = TRUE)
-          htmltools::tagList(
+          wrap(
             htmltools::HTML("Prioritization: "),
             htmltools::tags$em(pretty)
           )
@@ -1448,8 +1457,8 @@ app_deliverable_network_drivers <- function(
     ".netdrv-ctrl-wrap .form-group { margin-bottom: 0; }\n",
     "#", id, " .network-drivers-membership table.dataTable td .node-pill {\n",
     "  display: inline-block; padding: 2px 8px; margin: 2px;\n",
-    "  background: #f0f0f0; border-radius: 12px;\n",
-    "  font-size: 12px; color: #444;\n",
+    "  background: var(--ndr-secondary-bg); border-radius: 12px;\n",
+    "  font-size: 12px; color: var(--ndr-text);\n",
     "}\n",
     "#", id, " .network-drivers-membership table.dataTable td .membership-dot {\n",
     "  display: inline-block; width: 10px; height: 10px;\n",

@@ -232,7 +232,7 @@
     bslib::tooltip(
       htmltools::span(
         label_text,
-        style = "cursor: help; border-bottom: 1px dotted #999;"
+        style = "cursor: help; border-bottom: 1px dotted var(--ndr-muted);"
       ),
       tip_text,
       placement = "right"
@@ -365,7 +365,7 @@
   indexby_label <- bslib::tooltip(
     htmltools::span(
       "Index By:",
-      style = "cursor: help; border-bottom: 1px dotted #999;"
+      style = "cursor: help; border-bottom: 1px dotted var(--ndr-muted);"
     ),
     "Filter rows to a battery or group; the index is re-normalised within the visible rows.",
     placement = "right"
@@ -511,14 +511,14 @@
         "margin-top: 12px;",
         "padding: 4px 10px 10px 10px;",
         "font-size: 12px;",
-        "color: #555;"
+        "color: var(--ndr-muted);"
       ),
       htmltools::p(
         index_note,
         style = "margin: 0 0 4px 0; font-style: italic;"
       ),
       htmltools::p(
-        style = "margin: 0; color: #888;",
+        style = "margin: 0; color: var(--ndr-muted);",
         sprintf(
           "Bold italicized index means a negative relationship. Black cells mean an insignificant relationship (p > %s). Blank cells are not calculated due to insufficient base (below %d).",
           format(sig_threshold, nsmall = 2),
@@ -556,9 +556,6 @@
   attr(display_clean, "total_impact") <- NULL
   attr(display_clean, "base") <- NULL
 
-  # Excel red → yellow → green color ramp.
-  color_pal <- grDevices::colorRamp(c("#F8696B", "#FFEB84", "#63BE7B"))
-
   # Build a per-column R style function that closes over the column's
   # min/max, per-row sign, and per-row insignificance flag. Reactable R
   # style functions receive (value, index) — index is the 1-based row
@@ -588,16 +585,27 @@
                   index >= 1 && index <= length(col_insig) &&
                   isTRUE(col_insig[[index]])
       if (is_insig) {
-        style$background <- "#000"
+        # Match shared .rdx-insig (resondex_css): deliberate blackout,
+        # mode-independent — #111/#fff is the brand's "suppressed" signal.
+        style$background <- "#111"
         style$color      <- "#fff"
         return(style)
       }
-      # 2. Normal value: gradient
+      # 2. Normal value: diverging brand scale (matches showcase Index).
+      # color-mix(var(--ndr-success/danger) X%, transparent) — strength
+      # scales with normalized distance from the midpoint, capped at 45%.
+      # Resolves through brand tokens so it adapts to light/dark.
       if (has_gradient && !is.na(value)) {
         normalized <- (value - vmin) / (vmax - vmin)
         normalized <- max(0, min(1, normalized))
-        style$background <- grDevices::rgb(color_pal(normalized),
-                                           maxColorValue = 255)
+        d <- normalized - 0.5
+        pct <- as.integer(round(min(0.45, abs(d) * 2 * 0.45) * 100))
+        if (pct > 0) {
+          tok <- if (d >= 0) "--ndr-success" else "--ndr-danger"
+          style$background <- sprintf(
+            "color-mix(in srgb, var(%s) %d%%, transparent)", tok, pct
+          )
+        }
       }
       # 3. Negative-sign overlay (italic/bold) — applied on top of gradient
       sign_val <- if (!is.null(col_signs) &&
@@ -620,7 +628,7 @@
     htmltools::div(
       style = "display: flex; flex-direction: column; line-height: 1.4;",
       htmltools::div(top,    style = "font-weight: 600;"),
-      htmltools::div(bottom, style = "font-weight: 500; color: #555;")
+      htmltools::div(bottom, style = "font-weight: 500; color: var(--ndr-muted);")
     )
   }
 
@@ -690,22 +698,34 @@
     # in card_body handles the split dynamically.
     height          = "100%",
     style           = list(height = "100%"),
+    # Body theme is the canonical reference (bn_report HTML tables converge
+    # on this). Header + footer mirror bn_report's .impact-table thead th /
+    # .impact-footer so reactable renders identically to the report.
     theme           = reactable::reactableTheme(
-      borderColor   = "var(--bs-card-border-color, #dee2e6)",
-      stripedColor  = "transparent",
-      highlightColor = "var(--bs-secondary-bg, #f0f0f0)",
-      cellPadding   = "8px 10px",
-      style         = list(
-        fontFamily  = "inherit",
-        fontSize    = "14px"
+      color           = "var(--ndr-text)",
+      backgroundColor = "var(--ndr-card-bg)",
+      borderColor     = "var(--ndr-border)",
+      stripedColor    = "transparent",
+      highlightColor  = "var(--ndr-secondary-bg)",
+      cellPadding     = "8px 10px",
+      style           = list(
+        fontFamily    = "inherit",
+        fontSize      = "14px",
+        color         = "var(--ndr-text)"
       ),
       headerStyle   = list(
-        fontWeight  = "600",
-        background  = "var(--bs-body-bg, #fff)"
+        fontWeight   = "600",
+        color        = "var(--ndr-text)",
+        background   = "var(--ndr-card-bg)",
+        border       = "none",
+        borderBottom = "1px solid var(--ndr-border)"
       ),
       footerStyle   = list(
-        background  = "var(--bs-tertiary-bg, #f8f9fa)",
-        borderTop   = "1px solid var(--bs-border-color, #dee2e6)"
+        fontSize     = "12px",
+        color        = "var(--ndr-muted)",
+        background   = "transparent",
+        borderTop    = "1px solid var(--ndr-border)",
+        padding      = "8px 10px"
       )
     )
   )

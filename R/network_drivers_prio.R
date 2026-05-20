@@ -111,7 +111,7 @@
     bslib::tooltip(
       htmltools::span(
         label_text,
-        style = "cursor: help; border-bottom: 1px dotted #999;"
+        style = "cursor: help; border-bottom: 1px dotted var(--ndr-muted);"
       ),
       tip_text,
       placement = "right"
@@ -174,9 +174,9 @@
           label = "Show",
           class = "btn-sm",
           style = paste(
-            "background-color: #fff;",
-            "border: 1px solid #ced4da;",
-            "color: #212529;"
+            "background-color: var(--ndr-card-bg);",
+            "border: 1px solid var(--ndr-border);",
+            "color: var(--ndr-text);"
           ),
           width = "100%"
         )
@@ -255,11 +255,11 @@
   attr(display_clean, "cum_label") <- NULL
   attr(display_clean, "incr_label") <- NULL
 
-  # Per-column 2-color gradient (white → green) closure. Mirrors
-  # bn_write_prio's Excel scale (#FFFFFF → #66BD7D) and bn_report's
-  # whiteToGreen JS. Applied to Outcome Estimate + the gain columns;
-  # p-value gets its own threshold-based coloring below.
-  color_pal <- grDevices::colorRamp(c("#FFFFFF", "#66BD7D"))
+  # Per-column sequential brand scale (matches showcase Index₂):
+  # color-mix(var(--ndr-success) X%, transparent), strength 0..55% scaling
+  # with the normalized value. Light/dark adaptive via the brand token.
+  # NOTE: bn_write_prio Excel still uses #FFFFFF → #66BD7D — kept matched
+  # to bn_report's whiteToGreen JS (also tokenized).
   make_color_style <- function(col_values) {
     finite <- col_values[is.finite(col_values)]
     if (length(finite) == 0) return(NULL)
@@ -269,8 +269,11 @@
       if (is.na(value)) return(list(textAlign = "center"))
       normalized <- (value - vmin) / (vmax - vmin)
       normalized <- max(0, min(1, normalized))
-      color <- grDevices::rgb(color_pal(normalized), maxColorValue = 255)
-      list(background = color, textAlign = "center")
+      pct <- as.integer(round(normalized * 55))
+      bgc <- if (pct == 0) "transparent" else sprintf(
+        "color-mix(in srgb, var(--ndr-success) %d%%, transparent)", pct
+      )
+      list(background = bgc, textAlign = "center")
     }
   }
 
@@ -317,11 +320,14 @@
   }
   if ("p-value" %in% names(display_clean)) {
     sig <- sig_threshold; marg <- marginal_threshold
+    # Brand semantic colours so reactable p-values match the shared
+    # .rdx-pval-* treatment used everywhere else (resondex_brand single source).
+    .sem <- resondex_brand()$semantic
     p_style <- function(value) {
       if (is.na(value)) return(NULL)
-      color <- if (value < sig) "#198754"
-               else if (value < marg) "#E67E22"
-               else "#DC3545"
+      color <- if (value < sig) .sem$success
+               else if (value < marg) .sem$warning
+               else .sem$danger
       list(color = color,
            fontWeight = if (value < sig) "bold" else "normal")
     }
@@ -346,14 +352,28 @@
     # in card_body handles the split dynamically.
     height          = "100%",
     style           = list(height = "100%"),
+    # Body theme matches the impact reactables (canonical reference);
+    # header + footer mirror bn_report's .priort-table thead th /
+    # .priort-footer so reactable renders identically to the report.
     theme           = reactable::reactableTheme(
-      borderColor    = "var(--bs-card-border-color, #dee2e6)",
-      stripedColor   = "transparent",
-      highlightColor = "var(--bs-secondary-bg, #f0f0f0)",
-      cellPadding    = "8px 10px",
-      style          = list(fontFamily = "inherit", fontSize = "14px"),
-      headerStyle    = list(fontWeight = "600",
-                            background = "var(--bs-body-bg, #fff)")
+      color           = "var(--ndr-text)",
+      backgroundColor = "var(--ndr-card-bg)",
+      borderColor     = "var(--ndr-border)",
+      stripedColor    = "transparent",
+      highlightColor  = "var(--ndr-secondary-bg)",
+      cellPadding     = "8px 10px",
+      style           = list(fontFamily = "inherit", fontSize = "14px",
+                             color = "var(--ndr-text)"),
+      headerStyle    = list(fontWeight   = "600",
+                            color        = "var(--ndr-text)",
+                            background   = "var(--ndr-card-bg)",
+                            border       = "none",
+                            borderBottom = "1px solid var(--ndr-border)"),
+      footerStyle    = list(fontSize  = "12px",
+                            color     = "var(--ndr-muted)",
+                            background = "transparent",
+                            borderTop = "1px solid var(--ndr-border)",
+                            padding   = "8px 10px")
     )
   )
 }
@@ -449,7 +469,7 @@
         "margin-top: 12px;",
         "padding: 4px 10px 10px 10px;",
         "font-size: 12px;",
-        "color: #555;"
+        "color: var(--ndr-muted);"
       ),
       if (nzchar(base_text)) htmltools::p(
         base_text,
@@ -457,11 +477,11 @@
       ),
       if (nzchar(legend_text)) htmltools::p(
         legend_text,
-        style = "margin: 0 0 8px 0; color: #888;"
+        style = "margin: 0 0 8px 0; color: var(--ndr-muted);"
       ),
       htmltools::div(
         class = "priort-glossary",
-        style = "color: #888;",
+        style = "color: var(--ndr-muted);",
         glossary
       )
     )
@@ -525,7 +545,8 @@
   # "previous" base (50/50 by default; falls back to grey palette when
   # the theme has no colorway, e.g., "Default").
   pal <- plotly_theme_colors(theme)
-  primary <- if (length(pal) > 0) pal[[1]] else "#595959"
+  # Brand accent as the fallback when the chosen plotly theme has no colorway.
+  primary <- if (length(pal) > 0) pal[[1]] else resondex_brand()$colors$accent
   lighten_to_white <- function(hex, mix = 0.55) {
     rgb_v <- tryCatch(grDevices::col2rgb(hex)[, 1],
                       error = function(e) c(89, 89, 89))
