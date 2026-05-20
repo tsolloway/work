@@ -44,8 +44,11 @@ state handler functions to participate.}
 state files. Defaults to \code{"proj"}.}
 
 \item{theme}{Character (Bootswatch theme name) or a \code{bslib::bs_theme}
-object. Default \code{NULL} uses \code{"flatly"}. See
-\url{https://bootswatch.com/} for available themes.}
+object. Default \code{NULL} uses \code{\link{resondex_theme}()} — the
+Resondex brand theme (Inter base font, brand palette mapped onto
+\code{--bs-*} so chrome matches the embedded bn_report dashboards).
+A Bootswatch name (see \url{https://bootswatch.com/}) is still
+honoured if you want to override.}
 }
 \value{
 A \code{shiny::shinyApp} object.

@@ -378,7 +378,7 @@ app_deliverable_network_drivers <- function(
       title = "Attribute Impacts", value = "impacts_attr",
       bslib::card(
         full_screen = TRUE,
-        max_height  = "calc(100vh - 180px)",
+        max_height  = "80vh",
         bslib::card_header(
           shiny::uiOutput(ns(paste0(rid, "_ia_title")), inline = TRUE),
           class = "fw-semibold"
@@ -404,7 +404,7 @@ app_deliverable_network_drivers <- function(
       title = "Community Impacts", value = "impacts_comm",
       bslib::card(
         full_screen = TRUE,
-        max_height  = "calc(100vh - 180px)",
+        max_height  = "80vh",
         bslib::card_header(
           shiny::uiOutput(ns(paste0(rid, "_ic_title")), inline = TRUE),
           class = "fw-semibold"
@@ -432,7 +432,7 @@ app_deliverable_network_drivers <- function(
 
     table_card <- bslib::card(
       full_screen = TRUE,
-      max_height  = "calc(100vh - 180px)",
+      max_height  = "80vh",
       bslib::card_header(
         shiny::uiOutput(ns(paste0(rid, "_pm_title")), inline = TRUE),
         class = "fw-semibold"
@@ -454,7 +454,7 @@ app_deliverable_network_drivers <- function(
 
     chart_card <- bslib::card(
       full_screen = TRUE,
-      max_height  = "calc(100vh - 180px)",
+      max_height  = "80vh",
       bslib::card_header("Prioritization Chart", class = "fw-semibold"),
       bslib::card_body(
         padding = 0,
@@ -1442,9 +1442,18 @@ app_deliverable_network_drivers <- function(
 .network_drivers_module_css <- function(id) {
   # Scoped wrapper styles. The embedded bn_report dashboards bring their own
   # CSS via .bn_report_css(); here we add a thin layer to:
+  #   - **neutralise the bn_report `body` margin leak** — .bn_report_css()
+  #     restyle layer sets `body { margin: 18px 28px !important; ... }` for
+  #     the standalone HTML report. When that CSS injects into the Shiny app
+  #     (this module appends it to all_css), the 18px top margin pushed the
+  #     page ~3px past viewport on standard displays — a hairline window
+  #     scroll. The bslib page handles its own chrome; body needs no margin
+  #     in the app context. Override here (loaded AFTER bn_report css so
+  #     !important wins), without affecting bn_report standalone.
   #   - constrain dashboard padding when embedded inside a bslib::card body
   #   - tighten the membership DT to feel like the rest of the app
   paste0(
+    "body { margin: 0 !important; }\n",
     "#", id, " .network-drivers-dashboard { padding: 16px; }\n",
     "#", id, " .network-drivers-membership { padding: 8px 12px; }\n",
     # Sidebar control spacing: every selectInput is wrapped in a
