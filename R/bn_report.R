@@ -296,9 +296,14 @@ bn_report <- function(
     widget_html <- readLines(widget_file, warn = FALSE) %>% paste(collapse = "\n")
     inject_head <- paste0(
       "<head><style>",
+      # Brand layer first (Inter @import must lead): the network iframe is
+      # an isolated sandboxed document, so resondex_css() carries the
+      # --ndr-* tokens + Inter into it. Without this the visNetwork
+      # toolbar's var(--ndr-*) styles fall back to unstyled.
+      resondex_css(include_import = TRUE),
       "body,html{margin:0!important;padding:0!important;height:100%!important;overflow:hidden!important;}",
       " .htmlwidget{height:100%!important;}",
-      " #pngButton,#svgButton,#fontButton,#physicsButton{width:130px!important;height:34px!important;}",
+      " #pngButton,#svgButton,#fontButton,#physicsButton{width:130px!important;height:30px!important;}",
       "</style>"
     )
 

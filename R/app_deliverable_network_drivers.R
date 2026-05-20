@@ -662,10 +662,14 @@ app_deliverable_network_drivers <- function(
                              collapse = "\n")
         injected <- paste0(
           "<head><style>",
+          # Brand layer first (Inter @import must lead): the iframe is an
+          # isolated document, so resondex_css() carries the --ndr-* tokens
+          # + Inter + shared classes into it, matching the rest of the app.
+          resondex_css(include_import = TRUE),
           "body,html{margin:0!important;padding:0!important;",
           "height:100%!important;overflow:hidden!important;}",
           " .htmlwidget{height:100%!important;}",
-          " #pngButton,#svgButton,#fontButton,#physicsButton{width:130px!important;height:34px!important;}",
+          " #pngButton,#svgButton,#fontButton,#physicsButton{width:130px!important;height:30px!important;}",
           "</style>",
           if (!isTRUE(physics)) {
             "<script>window.__disablePhysicsAfterStabilize=true;</script>"

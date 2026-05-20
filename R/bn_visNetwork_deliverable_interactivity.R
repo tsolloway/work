@@ -90,9 +90,9 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
 
       // shared button dimensions
       var btnW = 130;
-      var btnH = 34;
+      var btnH = 30;
       var btnGap = 6;
-      var btnStyle = 'width:' + btnW + 'px;height:' + btnH + 'px;padding:0 10px;background:transparent;color:black;border:1px solid rgb(204,204,204);border-radius:6px;cursor:pointer;font-size:13px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:4px;flex-shrink:0;white-space:nowrap;';
+      var btnStyle = 'width:' + btnW + 'px;height:' + btnH + 'px;padding:0 10px;background:transparent;color:var(--ndr-text);border:1px solid var(--ndr-border);border-radius:6px;cursor:pointer;font-size:13px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:4px;flex-shrink:0;white-space:nowrap;';
 
       // right-side button container (prevents overlap with left-side controls)
       var rightBar = document.createElement('div');
@@ -102,13 +102,13 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
 
       // style the nodesIdSelection select to match button dimensions
       var selStyle = document.createElement('style');
-      selStyle.textContent = '.vis-configuration-wrapper select, div[style*=\"nodesIdSelection\"] select, .vis-network select { width:' + btnW + 'px !important; height:' + btnH + 'px !important; padding:0 10px !important; font-size:13px !important; border:1px solid rgb(204,204,204) !important; border-radius:6px !important; box-sizing:border-box !important; max-height:300px !important; } #rightButtonBar > button { pointer-events:auto; } .nav-ctrl:hover{background:#f0f0f0!important;border-color:#999!important;} .nav-ctrl:active{background:#e0e0e0!important;}';
+      selStyle.textContent = '.vis-configuration-wrapper select, div[style*=\"nodesIdSelection\"] select, .vis-network select { width:' + btnW + 'px !important; height:' + btnH + 'px !important; padding:0 10px !important; font-size:13px !important; color:var(--ndr-text) !important; background:var(--ndr-card-bg) !important; border:1px solid var(--ndr-border) !important; border-radius:6px !important; box-sizing:border-box !important; max-height:300px !important; } .vis-configuration-wrapper select:focus, div[style*=\"nodesIdSelection\"] select:focus, .vis-network select:focus { border-color:var(--ndr-accent) !important; box-shadow:0 0 0 0.2rem var(--ndr-focus) !important; outline:0 !important; } #rightButtonBar > button { pointer-events:auto; } .nav-ctrl:hover{background:var(--ndr-secondary-bg)!important;border-color:var(--ndr-border)!important;} .nav-ctrl:active{background:color-mix(in srgb, var(--ndr-secondary-bg) 80%, black)!important;}';
       document.head.appendChild(selStyle);
 
       // -------------------- Custom Navigation Controls --------------------
       var navSize = 30;
       var navGap = 4;
-      var navBtnStyle = 'width:' + navSize + 'px;height:' + navSize + 'px;border-radius:50%;border:1px solid #ccc;background:white;color:black;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;padding:0;';
+      var navBtnStyle = 'width:' + navSize + 'px;height:' + navSize + 'px;border-radius:50%;border:1px solid var(--ndr-border);background:var(--ndr-card-bg);color:var(--ndr-text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;padding:0;';
       function makeNavBtn(svgIcon) {
         var b = document.createElement('button');
         b.className = 'nav-ctrl';
@@ -211,7 +211,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         ddWrap.style.cssText = 'position:fixed;top:10px;left:10px;z-index:100000;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
         var ddBtn = document.createElement('button');
         ddBtn.id = 'idSelectBtn';
-        ddBtn.style.cssText = 'width:' + btnW + 'px;height:' + btnH + 'px;padding:0 10px;background:transparent;color:black;border:1px solid rgb(204,204,204);border-radius:6px;cursor:pointer;font-size:13px;box-sizing:border-box;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        ddBtn.style.cssText = 'width:' + btnW + 'px;height:' + btnH + 'px;padding:0 10px;background:transparent;color:var(--ndr-text);border:1px solid var(--ndr-border);border-radius:6px;cursor:pointer;font-size:13px;box-sizing:border-box;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
         ddBtn.textContent = 'Select by ID';
         ddWrap.appendChild(ddBtn);
 
@@ -222,7 +222,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
           var item = document.createElement('div');
           item.textContent = nd.label || nd.id;
           item.style.cssText = 'padding:6px 10px;cursor:pointer;font-size:13px;white-space:nowrap;';
-          item.addEventListener('mouseenter', function() { item.style.background = '#f0f0f0'; });
+          item.addEventListener('mouseenter', function() { item.style.background = 'var(--ndr-secondary-bg)'; });
           item.addEventListener('mouseleave', function() { item.style.background = 'transparent'; });
           item.addEventListener('click', function() {
             // drive the hidden native select to trigger highlightNearest
@@ -351,7 +351,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         physBtn.innerHTML = physicsEnabled
           ? '' + icons.atom + ' Physics: On'
           : '' + icons.atom + ' Physics: Off';
-        physBtn.style.cssText = btnStyle + (physicsEnabled ? 'background:rgba(200,230,255,0.3);' : '');
+        physBtn.style.cssText = btnStyle + (physicsEnabled ? 'background:color-mix(in srgb, var(--ndr-accent) 16%, transparent);' : '');
         rightBar.appendChild(physBtn);
 
         physBtn.addEventListener('click', function() {
@@ -359,7 +359,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
           network.setOptions({ physics: { enabled: physicsEnabled } });
           if (physicsEnabled) {
             physBtn.innerHTML = '' + icons.atom + ' Physics: On';
-            physBtn.style.background = 'rgba(200,230,255,0.3)';
+            physBtn.style.background = 'color-mix(in srgb, var(--ndr-accent) 16%, transparent)';
           } else {
             physBtn.innerHTML = '' + icons.atom + ' Physics: Off';
             physBtn.style.background = 'transparent';
@@ -858,7 +858,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       if (keyData) {
         var legend = document.createElement('div');
         legend.id = 'customLegend';
-        legend.style.cssText = 'position:fixed;top:50px;left:10px;min-width:' + btnW + 'px;max-width:200px;max-height:70%;overflow-x:hidden;overflow-y:auto;background:rgba(255,255,255,0.95);border:1px solid #ccc;border-radius:6px;padding:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;z-index:99999;pointer-events:auto;box-sizing:border-box;';
+        legend.style.cssText = 'position:fixed;top:50px;left:10px;min-width:' + btnW + 'px;max-width:200px;max-height:70%;overflow-x:hidden;overflow-y:auto;background:rgba(255,255,255,0.95);border:1px solid var(--ndr-border);border-radius:6px;padding:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;z-index:99999;pointer-events:auto;box-sizing:border-box;';
         document.body.appendChild(legend);
         legend.addEventListener('contextmenu', function(e) { e.preventDefault(); });
 
