@@ -1789,12 +1789,32 @@ app_deliverable_network_drivers <- function(
     "  min-height: 0;",
     "  display: flex;",
     "  flex-direction: column;",
+    # Containing block for the absolutely-positioned inactive panes
+    # below (prerender trick).
+    "  position: relative;",
     "}\n",
     ".nav-underline + .tab-content > .tab-pane.active {",
     "  flex: 1 1 auto;",
     "  min-height: 0;",
     "  display: flex;",
     "  flex-direction: column;",
+    "}\n",
+    # ---- Prerender inactive tab-panes ----
+    # bslib defaults inactive .tab-pane to display:none, which gives the
+    # iframe inside zero dimensions. vis-network can't render to a 0×0
+    # canvas; first activation triggers a fresh render → brief flash.
+    # Override: keep inactive panes in DOM at full size, hidden via
+    # visibility + position:absolute (out of layout flow). vis-network
+    # renders fully on init; activation is a visibility flip.
+    # Scoped to `.nav-underline + .tab-content` so only the network-
+    # drivers inner tabs are affected, NOT the outer page_navbar tabs.
+    ".nav-underline + .tab-content > .tab-pane:not(.active) {",
+    "  display: flex !important;",
+    "  flex-direction: column;",
+    "  visibility: hidden;",
+    "  position: absolute;",
+    "  top: 0; left: 0; right: 0; bottom: 0;",
+    "  pointer-events: none;",
     "}\n",
     ".dataTables_wrapper {",
     "  height: calc(100% - 1rem);",
