@@ -378,26 +378,10 @@
     # Body theme matches the impact reactables (canonical reference);
     # header + footer mirror bn_report's .priort-table thead th /
     # .priort-footer so reactable renders identically to the report.
-    theme           = reactable::reactableTheme(
-      color           = "var(--ndr-text)",
-      backgroundColor = "var(--ndr-card-bg)",
-      borderColor     = "var(--ndr-border)",
-      stripedColor    = "transparent",
-      highlightColor  = "var(--ndr-secondary-bg)",
-      cellPadding     = "8px 10px",
-      style           = list(fontFamily = "inherit", fontSize = "14px",
-                             color = "var(--ndr-text)"),
-      headerStyle    = list(fontWeight   = "600",
-                            color        = "var(--ndr-text)",
-                            background   = "var(--ndr-card-bg)",
-                            border       = "none",
-                            borderBottom = "1px solid var(--ndr-border)"),
-      footerStyle    = list(fontSize  = "12px",
-                            color     = "var(--ndr-muted)",
-                            background = "transparent",
-                            borderTop = "1px solid var(--ndr-border)",
-                            padding   = "8px 10px")
-    )
+    # Brand reactable theme (resondex_brand.R). Single source of truth —
+    # every reactable across the package uses this so chrome matches
+    # bn_report's HTML tables.
+    theme           = resondex_reactable_theme()
   )
 }
 

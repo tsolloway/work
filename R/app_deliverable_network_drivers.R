@@ -860,22 +860,11 @@ app_deliverable_network_drivers <- function(
                 )
               )
             ),
-            theme = reactable::reactableTheme(
-              color           = "var(--ndr-text)",
-              backgroundColor = "var(--ndr-card-bg)",
-              borderColor     = "var(--ndr-border)",
-              borderWidth     = "1px",
-              stripedColor    = "var(--ndr-secondary-bg)",
-              highlightColor  = "var(--ndr-secondary-bg)",
-              cellPadding     = "8px 12px",
-              style           = list(fontSize = "13px"),
-              headerStyle     = list(
-                backgroundColor = "var(--ndr-card-bg)",
-                color           = "var(--ndr-text)",
-                borderColor     = "var(--ndr-border)",
-                fontWeight      = 600
-              )
-            )
+            # Brand reactable theme (resondex_brand.R). Membership had a
+            # slightly different inline theme (striped rows, 12px padding,
+            # 13px font) — swap loses the striping; if it matters we'll
+            # extend the helper with a `striped` variant.
+            theme = resondex_reactable_theme()
           )
         })
         # The table view starts with display:none (card view is the
@@ -1630,13 +1619,15 @@ app_deliverable_network_drivers <- function(
   )
 }
 
-#' @noRd
 #' Build the card-grid HTML for the membership panel.
+#'
 #' Mirrors bn_report's `render_membership` card view: one card per community,
 #' colored left border, header with dot + community-label + count, then the
 #' attribute pills. Class names match the report so:
-#'   - .community-label[data-color] catches the JS legend-edit sync
-#'   - [data-node-id] catches the JS node-label-edit sync
+#'   - `.community-label\[data-color\]` catches the JS legend-edit sync
+#'   - `\[data-node-id\]` catches the JS node-label-edit sync
+#'
+#' @noRd
 .network_drivers_membership_cards_html <- function(result) {
   nodes_df <- tryCatch(
     work::find_recursive(result, x_name = "attribute_viz_prep")$nodes,
