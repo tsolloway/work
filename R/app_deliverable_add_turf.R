@@ -260,7 +260,8 @@ app_deliverable_add_turf <- function(
     bslib::layout_sidebar(
       sidebar = dashboard_sidebar,
       bslib::layout_columns(
-        col_widths = c(7, 5),
+        col_widths  = c(7, 5, 12),
+        row_heights = c(1, 1),
         bslib::card(
           full_screen = TRUE,
           bslib::card_header("TURF Chart"),
@@ -278,25 +279,25 @@ app_deliverable_add_turf <- function(
           ),
           bslib::card_body(
             fillable = TRUE, fill = TRUE,
-            DT::DTOutput(ns("items_table"), width = "100%", height = "100%")
-          )
-        )
-      ),
-      bslib::card(
-        full_screen = TRUE,
-        bslib::card_header(
-          class = "d-flex justify-content-between align-items-center",
-          shiny::span("TURF Results"),
-          shiny::div(
-            shiny::downloadLink(ns("dl_greedy_csv"), "CSV",
-                                class = "btn btn-sm btn-outline-secondary"),
-            shiny::downloadLink(ns("dl_greedy_xlsx"), "Excel",
-                                class = "btn btn-sm btn-outline-secondary")
+            reactable::reactableOutput(ns("items_table"), width = "100%", height = "100%")
           )
         ),
-        bslib::card_body(
-          fillable = TRUE, fill = TRUE,
-          DT::DTOutput(ns("greedy_table"), width = "100%", height = "100%")
+        bslib::card(
+          full_screen = TRUE,
+          bslib::card_header(
+            class = "d-flex justify-content-between align-items-center",
+            shiny::span("TURF Results"),
+            shiny::div(
+              shiny::downloadLink(ns("dl_greedy_csv"), "CSV",
+                                  class = "btn btn-sm btn-outline-secondary"),
+              shiny::downloadLink(ns("dl_greedy_xlsx"), "Excel",
+                                  class = "btn btn-sm btn-outline-secondary")
+            )
+          ),
+          bslib::card_body(
+            fillable = TRUE, fill = TRUE,
+            reactable::reactableOutput(ns("greedy_table"), width = "100%", height = "100%")
+          )
         )
       )
     )
@@ -346,29 +347,33 @@ app_deliverable_add_turf <- function(
       "TURF - Best Combo",
       bslib::layout_sidebar(
         sidebar = combos_sidebar,
-        bslib::card(
-          full_screen = TRUE,
-          bslib::card_header(
-            class = "d-flex justify-content-between align-items-center",
-            shiny::span("Combo Results"),
-            shiny::div(
-              shiny::downloadLink(ns("dl_combo_csv"), "CSV",
-                                  class = "btn btn-sm btn-outline-secondary"),
-              shiny::downloadLink(ns("dl_combo_xlsx"), "Excel",
-                                  class = "btn btn-sm btn-outline-secondary")
-            )
-          ),
-          bslib::card_body(
-            fillable = TRUE, fill = TRUE,
-            DT::DTOutput(ns("combo_table"), width = "100%", height = "100%")
-          )
-        ),
-        shiny::conditionalPanel(
-          condition = sprintf("input['%s'] !== 'None'", ns("bc_chart_type")),
+        bslib::layout_columns(
+          col_widths  = c(12, 12),
+          row_heights = c(1, 1),
           bslib::card(
             full_screen = TRUE,
-            bslib::card_header(shiny::textOutput(ns("bc_chart_title"))),
-            bslib::card_body(plotly::plotlyOutput(ns("combo_chart"), height = "500px"))
+            bslib::card_header(
+              class = "d-flex justify-content-between align-items-center",
+              shiny::span("Combo Results"),
+              shiny::div(
+                shiny::downloadLink(ns("dl_combo_csv"), "CSV",
+                                    class = "btn btn-sm btn-outline-secondary"),
+                shiny::downloadLink(ns("dl_combo_xlsx"), "Excel",
+                                    class = "btn btn-sm btn-outline-secondary")
+              )
+            ),
+            bslib::card_body(
+              fillable = TRUE, fill = TRUE,
+              reactable::reactableOutput(ns("combo_table"), width = "100%", height = "100%")
+            )
+          ),
+          shiny::conditionalPanel(
+            condition = sprintf("input['%s'] !== 'None'", ns("bc_chart_type")),
+            bslib::card(
+              full_screen = TRUE,
+              bslib::card_header(shiny::textOutput(ns("bc_chart_title"))),
+              bslib::card_body(plotly::plotlyOutput(ns("combo_chart"), height = "500px"))
+            )
           )
         )
       )
@@ -705,7 +710,7 @@ app_deliverable_add_turf <- function(
     }
   })
 
-  output$greedy_table <- DT::renderDT({
+  output$greedy_table <- reactable::renderReactable({
     df <- greedy_results()
     if (is.null(df) || nrow(df) == 0) return(NULL)
 
@@ -713,118 +718,78 @@ app_deliverable_add_turf <- function(
       dplyr::select(step, variable, label,
                     cumul_pct, incr_pct, avg_freq, abs_pct, p_value)
 
-    # JS render for 1-decimal percent columns with % suffix
-    pct_render <- DT::JS(
-      "function(data, type, row, meta) {",
-      "  if (type !== 'display') return data;",
-      "  return parseFloat(data).toFixed(1) + '%';",
-      "}"
-    )
+    # Per-column max for the white→green scale (uses the showcase's
+    # `color-mix(--ndr-success X%, transparent)` pattern, X = frac * 55).
+    cumul_max <- 100  # cumulative reach % bounded 0..100
+    abs_max   <- 100  # absolute reach % bounded 0..100
+    incr_max  <- max(display$incr_pct, na.rm = TRUE)
+    freq_max  <- max(display$avg_freq, na.rm = TRUE)
+    if (!is.finite(incr_max) || incr_max <= 0) incr_max <- 1
+    if (!is.finite(freq_max) || freq_max <= 0) freq_max <- 1
 
-    # JS render for 1-decimal (no % suffix — for avg_freq)
-    dec_render <- DT::JS(
-      "function(data, type, row, meta) {",
-      "  if (type !== 'display') return data;",
-      "  return parseFloat(data).toFixed(1);",
-      "}"
-    )
-
-    # p-value JS render: >=1 -> "1", <=0.001 -> ".001", <0.01 -> "<.01", else 2 decimals
-    pval_render <- DT::JS(
-      "function(data, type, row, meta) {",
-      "  if (type !== 'display') return data;",
-      "  if (data >= 1) return '1';",
-      "  if (data <= 0.001) return '<.001';",
-      "  if (data < 0.01) return '<.01';",
-      "  return data.toFixed(2);",
-      "}"
-    )
-
-    .bs_th <- function(label, tip) {
-      shiny::tags$th(
-        `data-bs-toggle` = "tooltip", `data-bs-placement` = "top",
-        `data-bs-title` = tip, label
-      )
+    # White→green background scale (cell style fn). Same color-mix pattern
+    # the showcase's Index₂ scale uses, capped at 55% so text stays
+    # readable. Brand-tokenized: --ndr-success flips with dark mode.
+    scale_bg <- function(max_val) {
+      function(value) {
+        if (is.na(value) || max_val <= 0) return(NULL)
+        frac <- min(1, max(0, value / max_val))
+        pct  <- round(frac * 55)
+        if (pct == 0) return(NULL)
+        list(background = sprintf(
+          "color-mix(in srgb, var(--ndr-success) %d%%, transparent)", pct
+        ))
+      }
     }
 
-    greedy_header <- htmltools::withTags(table(
-      thead(tr(
-        .bs_th("#", "Greedy step number (order in which items were selected)"),
-        .bs_th("Variable", "Source variable name from the dataset"),
-        .bs_th("Label", "Human-readable label for the variable"),
-        .bs_th("Cumul%", "Cumulative unduplicated reach (% of respondents reached through this step)"),
-        .bs_th("Incr%", "Incremental reach (% points added by this item beyond previous step)"),
-        .bs_th("Avg Freq", "Average frequency among reached respondents (mean items selected per reached respondent)"),
-        .bs_th("Abs%", "Absolute/standalone reach (% who selected this item regardless of others)"),
-        .bs_th("p-value", "Binomial exact test: P(X >= n_new | n_unreached, p0 = mean rate of remaining items)")
-      ))
-    ))
+    # P-value display: >=1 → "1", <=0.001 → "<.001", <0.01 → "<.01",
+    # else 2 decimals. Wrap in <span class="rdx-pval-*"> so the SHARED
+    # text-color classes from resondex_css() apply.
+    pval_cell <- function(value) {
+      if (is.na(value)) return("")
+      txt <- if (value >= 1) "1"
+        else if (value <= 0.001) "<.001"
+        else if (value <  0.01)  "<.01"
+        else sprintf("%.2f", value)
+      cls <- if (value <  sig_threshold)      "rdx-pval-sig"
+        else if (value <  marginal_threshold) "rdx-pval-marg"
+        else                                  "rdx-pval-insig"
+      htmltools::tags$span(class = cls, txt)
+    }
 
-    bs_tooltip_init <- DT::JS(
-      "function(settings, json) {",
-      "  var el = this.api().table().container();",
-      "  $(el).find('[data-bs-toggle=\"tooltip\"]').each(function() {",
-      "    new bootstrap.Tooltip(this, {delay: {show: 0, hide: 100}});",
-      "  });",
-      "}"
-    )
+    pct_cell <- function(v) if (is.na(v)) "" else sprintf("%.1f%%", v)
+    dec_cell <- function(v) if (is.na(v)) "" else sprintf("%.1f",   v)
 
-    DT::datatable(
+    reactable::reactable(
       display,
-      container = greedy_header,
-      selection = "none",
-      options = list(
-        pageLength = nrow(display),
-        dom = "t",
-        scrollY = "100%",
-        scrollCollapse = FALSE,
-        initComplete = bs_tooltip_init,
-        columnDefs = list(
-          list(className = "dt-center", targets = c(0, 3, 4, 5, 6, 7)),
-          list(targets = c(3, 4, 6), render = pct_render),
-          list(targets = 5, render = dec_render),
-          list(targets = 7, render = pval_render)
+      pagination = FALSE,
+      theme      = resondex_reactable_theme(),
+      columns = list(
+        step      = reactable::colDef(name = "#",        align = "center"),
+        variable  = reactable::colDef(name = "Variable", align = "left"),
+        label     = reactable::colDef(name = "Label",    align = "left"),
+        cumul_pct = reactable::colDef(
+          name = "Cumul%", align = "center",
+          cell = pct_cell, style = scale_bg(cumul_max)
         ),
-        autoWidth = TRUE
-      ),
-      rownames = FALSE
-    ) %>%
-      DT::formatStyle(
-        c("step", "cumul_pct", "incr_pct", "avg_freq", "abs_pct", "p_value"),
-        `text-align` = "center"
-      ) %>%
-      DT::formatStyle(
-        "cumul_pct",
-        background = DT::styleColorBar(c(0, 100), color = "#c6eecf"),
-        backgroundSize = "98% 80%",
-        backgroundRepeat = "no-repeat",
-        backgroundPosition = "left center"
-      ) %>%
-      DT::formatStyle(
-        "incr_pct",
-        background = DT::styleColorBar(c(0, max(display$incr_pct, na.rm = TRUE)), color = "#c6eecf"),
-        backgroundSize = "98% 80%",
-        backgroundRepeat = "no-repeat",
-        backgroundPosition = "left center"
-      ) %>%
-      DT::formatStyle(
-        "abs_pct",
-        background = DT::styleColorBar(c(0, 100), color = "#c6eecf"),
-        backgroundSize = "98% 80%",
-        backgroundRepeat = "no-repeat",
-        backgroundPosition = "left center"
-      ) %>%
-      DT::formatStyle(
-        "p_value",
-        color = DT::styleInterval(
-          c(sig_threshold, marginal_threshold),
-          c("#198754", "#E67E22", "#DC3545")
+        incr_pct  = reactable::colDef(
+          name = "Incr%", align = "center",
+          cell = pct_cell, style = scale_bg(incr_max)
         ),
-        fontWeight = DT::styleInterval(
-          c(sig_threshold),
-          c("bold", "normal")
+        avg_freq  = reactable::colDef(
+          name = "Avg Freq", align = "center",
+          cell = dec_cell, style = scale_bg(freq_max)
+        ),
+        abs_pct   = reactable::colDef(
+          name = "Abs%", align = "center",
+          cell = pct_cell, style = scale_bg(abs_max)
+        ),
+        p_value   = reactable::colDef(
+          name = "p-value", align = "center",
+          cell = pval_cell
         )
       )
+    )
   })
 
   output$greedy_chart <- plotly::renderPlotly({
@@ -867,33 +832,25 @@ app_deliverable_add_turf <- function(
     })
   }
 
-  output$items_table <- DT::renderDT({
-    df <- data.frame(
+  .items_df <- function(include_vec) {
+    data.frame(
       Variable = vars,
       Label    = unname(label_lookup[vars]),
-      Include  = .items_chk(shiny::isolate(rv$item_include)),
+      Include  = .items_chk(include_vec),
       stringsAsFactors = FALSE
     )
+  }
 
-    DT::datatable(
-      df,
-      escape = FALSE,
-      selection = "none",
-      options = list(
-        pageLength = length(vars),
-        dom = "t",
-        scrollY = "100%",
-        scrollCollapse = FALSE,
-        columnDefs = list(
-          list(className = "dt-center", targets = 2)
-        ),
-        autoWidth = TRUE
-      ),
-      rownames = FALSE
+  output$items_table <- reactable::renderReactable({
+    reactable::reactable(
+      .items_df(shiny::isolate(rv$item_include)),
+      pagination = FALSE,
+      theme      = resondex_reactable_theme(),
+      columns = list(
+        Include = reactable::colDef(html = TRUE, align = "center")
+      )
     )
   })
-
-  items_proxy <- DT::dataTableProxy("items_table")
 
   # Individual checkbox clicks — update rv only, no table re-render
   shiny::observeEvent(input$item_checkbox_change, {
@@ -903,33 +860,15 @@ app_deliverable_add_turf <- function(
     rv$item_include[row_idx] <- checked
   })
 
-  # Select All / Deselect All — update rv + push new HTML via proxy
+  # Select All / Deselect All — update rv + push fresh data via reactable proxy
   shiny::observeEvent(input$items_select_all, {
     rv$item_include <- rep(TRUE, length(vars))
-    DT::replaceData(
-      items_proxy,
-      data.frame(
-        Variable = vars,
-        Label    = unname(label_lookup[vars]),
-        Include  = .items_chk(rv$item_include),
-        stringsAsFactors = FALSE
-      ),
-      resetPaging = FALSE, rownames = FALSE
-    )
+    reactable::updateReactable("items_table", data = .items_df(rv$item_include))
   })
 
   shiny::observeEvent(input$items_deselect_all, {
     rv$item_include <- rep(FALSE, length(vars))
-    DT::replaceData(
-      items_proxy,
-      data.frame(
-        Variable = vars,
-        Label    = unname(label_lookup[vars]),
-        Include  = .items_chk(rv$item_include),
-        stringsAsFactors = FALSE
-      ),
-      resetPaging = FALSE, rownames = FALSE
-    )
+    reactable::updateReactable("items_table", data = .items_df(rv$item_include))
   })
 
 
@@ -940,14 +879,13 @@ app_deliverable_add_turf <- function(
       rv$chart_type
     })
 
-    output$combo_table <- DT::renderDT({
+    output$combo_table <- reactable::renderReactable({
       df <- filtered_combos()
       if (is.null(df) || nrow(df) == 0) return(NULL)
 
       # Build display columns
       display_cols <- grep("^display_\\d+$", names(df), value = TRUE)
-      item_cols <- grep("^item_\\d+$", names(df), value = TRUE)
-      n_combo <- length(item_cols)
+      item_cols    <- grep("^item_\\d+$",    names(df), value = TRUE)
 
       # Apply chart_label mode to display columns
       label_mode <- rv$chart_label
@@ -964,59 +902,30 @@ app_deliverable_add_turf <- function(
       out <- df %>% dplyr::select(rank, reach_display, freq_display,
                                    dplyr::all_of(display_cols))
 
-      col_names <- c("Rank", "Reach%", "Freq",
-                      paste("Item", seq_len(n_combo)))
-
       # Enforce decimal formatting
       out$reach_display <- formatC(round(out$reach_display, 1), format = "f", digits = 1)
       out$freq_display  <- formatC(round(out$freq_display, 1), format = "f", digits = 1)
 
-      .bs_th2 <- function(label, tip) {
-        shiny::tags$th(
-          `data-bs-toggle` = "tooltip", `data-bs-placement` = "top",
-          `data-bs-title` = tip, label
-        )
-      }
-
-      item_ths <- lapply(seq_len(n_combo), function(i) {
-        .bs_th2(paste("Item", i), "Item in the combo (shown as label)")
-      })
-      combo_header <- htmltools::withTags(table(
-        thead(do.call(tr, c(
-          list(
-            .bs_th2("Rank", "Combo ranking (1 = best for selected optimization metric)"),
-            .bs_th2("Reach%", "Unduplicated reach (% of respondents selecting at least one item in this combo)"),
-            .bs_th2("Freq", "Average frequency among reached respondents (mean items selected per reached respondent)")
-          ),
-          item_ths
-        )))
-      ))
-
-      combo_tooltip_init <- DT::JS(
-        "function(settings, json) {",
-        "  var el = this.api().table().container();",
-        "  $(el).find('[data-bs-toggle=\"tooltip\"]').each(function() {",
-        "    new bootstrap.Tooltip(this, {delay: {show: 0, hide: 100}});",
-        "  });",
-        "}"
+      # Dynamic Item N columns (one per display_N column).
+      item_col_defs <- stats::setNames(
+        lapply(seq_along(display_cols), function(i) {
+          reactable::colDef(name = paste("Item", i), align = "left")
+        }),
+        display_cols
       )
 
-      DT::datatable(
+      reactable::reactable(
         out,
-        container = combo_header,
-        selection = "none",
-        options = list(
-          pageLength = 50,
-          dom = "t",
-          scrollY = "100%",
-          scrollCollapse = FALSE,
-          initComplete = combo_tooltip_init,
-          columnDefs = list(
-            list(className = "dt-center", targets = c(0, 1, 2))
+        pagination = FALSE,
+        theme      = resondex_reactable_theme(),
+        columns = c(
+          list(
+            rank          = reactable::colDef(name = "Rank",   align = "center"),
+            reach_display = reactable::colDef(name = "Reach%", align = "center"),
+            freq_display  = reactable::colDef(name = "Freq",   align = "center")
           ),
-          autoWidth = TRUE
-        ),
-        rownames = FALSE
+          item_col_defs
+        )
       )
     })
 
@@ -1139,16 +1048,7 @@ app_deliverable_add_turf <- function(
     }
     if (!is.null(state$item_include) && length(state$item_include) == length(vars)) {
       rv$item_include <- state$item_include
-      DT::replaceData(
-        items_proxy,
-        data.frame(
-          Variable = vars,
-          Label    = unname(label_lookup[vars]),
-          Include  = .items_chk(rv$item_include),
-          stringsAsFactors = FALSE
-        ),
-        resetPaging = FALSE, rownames = FALSE
-      )
+      reactable::updateReactable("items_table", data = .items_df(rv$item_include))
     }
   }
 

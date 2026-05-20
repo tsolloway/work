@@ -700,36 +700,10 @@
     # scrolls when content exceeds. Same pattern as the prio table.
     height          = "100%",
     style           = list(height = "100%"),
-    # Body theme is the canonical reference (bn_report HTML tables converge
-    # on this). Header + footer mirror bn_report's .impact-table thead th /
-    # .impact-footer so reactable renders identically to the report.
-    theme           = reactable::reactableTheme(
-      color           = "var(--ndr-text)",
-      backgroundColor = "var(--ndr-card-bg)",
-      borderColor     = "var(--ndr-border)",
-      stripedColor    = "transparent",
-      highlightColor  = "var(--ndr-secondary-bg)",
-      cellPadding     = "8px 10px",
-      style           = list(
-        fontFamily    = "inherit",
-        fontSize      = "14px",
-        color         = "var(--ndr-text)"
-      ),
-      headerStyle   = list(
-        fontWeight   = "600",
-        color        = "var(--ndr-text)",
-        background   = "var(--ndr-card-bg)",
-        border       = "none",
-        borderBottom = "1px solid var(--ndr-border)"
-      ),
-      footerStyle   = list(
-        fontSize     = "12px",
-        color        = "var(--ndr-muted)",
-        background   = "transparent",
-        borderTop    = "1px solid var(--ndr-border)",
-        padding      = "8px 10px"
-      )
-    )
+    # Canonical brand reactable theme (resondex_brand.R). Single source of
+    # truth — every reactable across the package uses this so chrome
+    # matches bn_report's HTML tables.
+    theme           = resondex_reactable_theme()
   )
 }
 

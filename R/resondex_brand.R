@@ -587,3 +587,56 @@ resondex_theme <- function() {
     .where = "declarations"
   )
 }
+
+
+#' resondex_reactable_theme
+#'
+#' @description
+#' Canonical brand-tokenized \code{\link[reactable]{reactableTheme}}. Use this
+#' as the \code{theme} argument of any \code{reactable::reactable(...)} call
+#' to get the standard Resondex table chrome: body, headers, footers, hover,
+#' borders — all reading \code{var(--ndr-*)} so dark mode tracks automatically.
+#'
+#' Single source of truth: editing here updates every app/report's reactable
+#' tables. Mirrors what bn_report HTML tables render so the on-screen Shiny
+#' tables and the static report tables read identically.
+#'
+#' @return A reactable theme object suitable for the \code{theme} arg of
+#'   \code{reactable::reactable()}.
+#' @export
+#' @examples
+#' \dontrun{
+#' reactable::reactable(
+#'   iris,
+#'   theme = resondex_reactable_theme()
+#' )
+#' }
+resondex_reactable_theme <- function() {
+  reactable::reactableTheme(
+    color           = "var(--ndr-text)",
+    backgroundColor = "var(--ndr-card-bg)",
+    borderColor     = "var(--ndr-border)",
+    stripedColor    = "transparent",
+    highlightColor  = "var(--ndr-secondary-bg)",
+    cellPadding     = "8px 10px",
+    style           = list(
+      fontFamily = "inherit",
+      fontSize   = "14px",
+      color      = "var(--ndr-text)"
+    ),
+    headerStyle     = list(
+      fontWeight   = "600",
+      color        = "var(--ndr-text)",
+      background   = "var(--ndr-card-bg)",
+      border       = "none",
+      borderBottom = "1px solid var(--ndr-border)"
+    ),
+    footerStyle     = list(
+      fontSize   = "12px",
+      color      = "var(--ndr-muted)",
+      background = "transparent",
+      borderTop  = "1px solid var(--ndr-border)",
+      padding    = "8px 10px"
+    )
+  )
+}
