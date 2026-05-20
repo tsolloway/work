@@ -301,8 +301,18 @@ bn_report <- function(
       # --ndr-* tokens + Inter into it. Without this the visNetwork
       # toolbar's var(--ndr-*) styles fall back to unstyled.
       resondex_css(include_import = TRUE),
-      "body,html{margin:0!important;padding:0!important;height:100%!important;overflow:hidden!important;}",
-      " .htmlwidget{height:100%!important;}",
+      "body,html{margin:0!important;padding:0!important;height:100%!important;overflow:hidden!important;",
+      # Background tracks --ndr-card-bg so the iframe surface flips with
+      # the parent's dark/light toggle (Stage 1 dark mode for network
+      # iframes). Parent sends a postMessage({type:'setMode',mode:...})
+      # which toggles data-bs-theme on this iframe's <html>, and the
+      # brand layer's dark overrides take care of the rest.
+      "background-color:var(--ndr-card-bg)!important;color:var(--ndr-text);}",
+      # .htmlwidget and .vis-network default to white — that paints OVER
+      # the body bg. Force them transparent so the body's --ndr-card-bg
+      # shows through and flips with mode.
+      " .htmlwidget{height:100%!important;background-color:transparent!important;}",
+      " .vis-network,.vis-network canvas{background-color:transparent!important;}",
       " #pngButton,#svgButton,#fontButton,#physicsButton{width:130px!important;height:30px!important;}",
       "</style>"
     )

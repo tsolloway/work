@@ -858,7 +858,7 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       if (keyData) {
         var legend = document.createElement('div');
         legend.id = 'customLegend';
-        legend.style.cssText = 'position:fixed;top:50px;left:10px;min-width:' + btnW + 'px;max-width:200px;max-height:70%;overflow-x:hidden;overflow-y:auto;background:rgba(255,255,255,0.95);border:1px solid var(--ndr-border);border-radius:6px;padding:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;z-index:99999;pointer-events:auto;box-sizing:border-box;';
+        legend.style.cssText = 'position:fixed;top:50px;left:10px;min-width:' + btnW + 'px;max-width:200px;max-height:70%;overflow-x:hidden;overflow-y:auto;background:var(--ndr-card-bg);color:var(--ndr-text);border:1px solid var(--ndr-border);border-radius:6px;padding:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;z-index:99999;pointer-events:auto;box-sizing:border-box;';
         document.body.appendChild(legend);
         legend.addEventListener('contextmenu', function(e) { e.preventDefault(); });
 
@@ -958,6 +958,28 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         // parent tells us to re-fit (e.g. after becoming visible)
         if (evt.data.type === 'fitNetwork') {
           network.fit();
+        }
+
+        // parent broadcasts a dark/light mode change.
+        //   Stage 1 (CSS): toggle data-bs-theme on the iframe's <html> →
+        //     flips every brand-token-driven surface (legend, toolbar
+        //     buttons, Select-by-ID, body bg) for free.
+        //   Stage 2 (canvas): node labels are drawn by vis.js into the
+        //     canvas (not CSS-reachable). Re-read the resolved --ndr-text
+        //     token AFTER the attribute flip and push it via
+        //     network.setOptions so labels stay legible on either bg.
+        if (evt.data.type === 'setMode') {
+          var mode = evt.data.mode === 'dark' ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-bs-theme', mode);
+          if (typeof network !== 'undefined' && network) {
+            try {
+              var textColor = getComputedStyle(document.documentElement)
+                .getPropertyValue('--ndr-text').trim() || (mode === 'dark' ? '#e8eaed' : '#212529');
+              network.setOptions({
+                nodes: { font: { color: textColor } }
+              });
+            } catch (err) {}
+          }
         }
 
         // parent asks every iframe to deselect any active node before save,
