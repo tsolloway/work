@@ -693,9 +693,11 @@
     bordered        = FALSE,
     highlight       = TRUE,
     # Reactable fills its flex parent (the .flex-1 wrapper inside
-    # card_body). The footer takes its natural height beneath; no
-    # need to reserve a fixed amount via maxHeight — the flex column
-    # in card_body handles the split dynamically.
+    # card_body). The card is wrapped in bslib::layout_columns by the
+    # module UI, which gives it a definite cell height — so the flex
+    # chain (card → card_body → wrapper height:100% → reactable) all
+    # resolves to definite values, and reactable's internal body
+    # scrolls when content exceeds. Same pattern as the prio table.
     height          = "100%",
     style           = list(height = "100%"),
     # Body theme is the canonical reference (bn_report HTML tables converge

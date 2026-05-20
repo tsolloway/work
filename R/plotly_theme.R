@@ -70,6 +70,11 @@ plotly_theme <- function(p, theme = "Default") {
   th <- .plotly_theme_def(theme)
   if (is.null(th)) return(p)
 
+  # Global rule (applies to every theme): no vertical grid lines. Forced
+  # here so per-theme defs don't need to be edited individually.
+  if (is.null(th$xaxis)) th$xaxis <- list()
+  th$xaxis$showgrid <- FALSE
+
   p %>%
     plotly::layout(
       paper_bgcolor = th$paper_bgcolor,
@@ -88,9 +93,9 @@ plotly_theme <- function(p, theme = "Default") {
 #' plotly_theme_names
 #'
 #' @description List all available theme names for \code{\link{plotly_theme}}.
-#'   Returns a character vector of 31 theme names: "Default" (no theming),
-#'   "Resondex" (the brand theme), 19 highcharter ports, and 10 plotly
-#'   native templates.
+#'   Returns a character vector of theme names: "Default" (the Resondex
+#'   brand theme — light), "Default Dark" (the brand theme — dark),
+#'   and a curated subset of highcharter ports + plotly native templates.
 #'
 #' @return Character vector of theme names, suitable for use as dropdown
 #'   choices in Shiny apps or as the \code{theme} argument to
@@ -110,20 +115,43 @@ plotly_theme <- function(p, theme = "Default") {
 #'
 #' @export
 plotly_theme_names <- function() {
+  # Named character vector: names are display labels (shown in the
+  # dropdown), values are the underlying theme keys (passed to
+  # plotly_theme()). Underscores → spaces, title-case applied,
+  # `ggplot2_native` displayed as "Native". Keeping the keys unchanged
+  # preserves back-compat with any code that passes the raw key strings.
   c(
-    "Default",
-    # Resondex brand theme (opt-in)
-    "Resondex",
-    # Highcharter ports
-    "538", "Economist", "FT", "Google",
-    "Flat", "Flat Dark", "Monokai", "Dark Unica",
-    "Gridlight", "Sandsignika", "Superheroes",
-    "Elementary", "Bloom", "ggplot2", "Highcharter",
-    "Dotabuff", "Alone", "Handdrawn", "Smpl",
-    # Plotly native
-    "plotly", "plotly_white", "plotly_dark",
-    "seaborn", "simple_white", "presentation",
-    "ggplot2_native", "xgridoff", "ygridoff", "gridon"
+    # Resondex brand themes — "Default" is the branded light theme,
+    # "Default Dark" the matching dark variant. "Default" also auto-
+    # flips to the dark surface when the host app toggles dark mode.
+    "Default"      = "Default",
+    "Default Dark" = "Default Dark",
+    # Highcharter ports (curated — removed: ggplot2, Highcharter)
+    "538"         = "538",
+    "Economist"   = "Economist",
+    "FT"          = "FT",
+    "Google"      = "Google",
+    "Flat"        = "Flat",
+    "Flat Dark"   = "Flat Dark",
+    "Monokai"     = "Monokai",
+    "Dark Unica"  = "Dark Unica",
+    "Gridlight"   = "Gridlight",
+    "Sandsignika" = "Sandsignika",
+    "Superheroes" = "Superheroes",
+    "Elementary"  = "Elementary",
+    "Bloom"       = "Bloom",
+    "Dotabuff"    = "Dotabuff",
+    "Alone"       = "Alone",
+    "Handdrawn"   = "Handdrawn",
+    "Smpl"        = "Smpl",
+    # Plotly native (curated — removed: xgridoff, ygridoff, gridon)
+    "Plotly"       = "plotly",
+    "Plotly White" = "plotly_white",
+    "Plotly Dark"  = "plotly_dark",
+    "Seaborn"      = "seaborn",
+    "Simple White" = "simple_white",
+    "Presentation" = "presentation",
+    "Native"       = "ggplot2_native"
   )
 }
 
@@ -666,11 +694,12 @@ plotly_theme_colors <- function(theme = "Default") {
     ),
 
     # -------------------------------------------------------------------
-    # Resondex — the brand theme (opt-in; built from resondex_brand()$viz).
+    # Default — the Resondex brand theme (built from resondex_brand()$viz).
     # Comprehensive: backgrounds, Inter, axes/grid, legend, hover and a
     # cohesive colorway so it themes bar / line / scatter / hist / box.
+    # Previously the no-op pass-through; now the branded default everywhere.
     # -------------------------------------------------------------------
-    "Resondex" = local({
+    "Default" = local({
       v  <- resondex_brand()$viz
       ff <- "Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
       list(
@@ -698,9 +727,43 @@ plotly_theme_colors <- function(theme = "Default") {
       )
     }),
 
+    # Back-compat aliases for the previous brand-theme names.
+    "Resondex"      = .plotly_theme_def("Default"),
+    "Resondex Dark" = .plotly_theme_def("Default Dark"),
+
     # -------------------------------------------------------------------
-    # Default — no theming (returns NULL so original plot is unchanged)
+    # Default Dark — paired dark variant of the brand theme. Backed by
+    # resondex_brand()$viz_dark so surface colors mirror the dark UI tokens.
     # -------------------------------------------------------------------
+    "Default Dark" = local({
+      v  <- resondex_brand()$viz_dark
+      ff <- "Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+      list(
+        paper_bgcolor = v$paper_bg,
+        plot_bgcolor  = v$plot_bg,
+        font  = list(family = ff, color = v$font_color, size = 13),
+        title = list(font = list(family = ff, color = v$font_color,
+                                  size = 16), x = 0),
+        xaxis = list(gridcolor = v$grid, linecolor = v$grid,
+                     tickcolor = v$grid, zerolinecolor = v$grid,
+                     tickfont = list(color = v$axis_text),
+                     title = list(font = list(color = v$axis_text))),
+        yaxis = list(gridcolor = v$grid, linecolor = v$grid,
+                     tickcolor = v$grid, zerolinecolor = v$grid,
+                     tickfont = list(color = v$axis_text),
+                     title = list(font = list(color = v$axis_text))),
+        legend = list(font = list(color = v$font_color),
+                      bgcolor = "rgba(0,0,0,0)"),
+        hoverlabel = list(
+          bgcolor = "rgba(255,255,255,0.92)",
+          bordercolor = "rgba(0,0,0,0)",
+          font = list(family = ff, color = "#212529", size = 12)
+        ),
+        colorway = v$colorway
+      )
+    }),
+
+    # Unknown theme name → NULL → plotly_theme() returns plot unchanged
     NULL
   )
 }

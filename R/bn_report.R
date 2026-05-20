@@ -591,7 +591,7 @@ bn_report <- function(
           '  <div class="tab-bar">',
           '    <button class="tab-btn active" onclick="switchTab(this, \'{attr_id}\')">Attribute</button>',
           '    <button class="tab-btn" onclick="switchTab(this, \'{comm_id}\')">Community</button>',
-          '    <button class="tab-btn" onclick="switchTab(this, \'{memb_id}\')">Community Assignments</button>',
+          '    <button class="tab-btn" onclick="switchTab(this, \'{memb_id}\')">Membership</button>',
           '{extras_buttons_str}',
           '  </div>',
           '  <div id="{attr_id}" class="tab-panel active attr-panel" data-result="{name}" data-layout="{type}" data-view="attribute">{tab_attr}</div>',

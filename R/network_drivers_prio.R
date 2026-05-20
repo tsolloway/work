@@ -6,6 +6,29 @@
 # main area. Shares dimension parsing with bn_report via .bn_report_prio_metadata().
 # =============================================================================
 
+# ---- Path A dark-mode pairing -----------------------------------------------
+#
+# Map a user-selected theme to its dark counterpart when the host app is in
+# dark mode. Returns the input theme unchanged for themes that don't have a
+# paired dark variant (Economist, Monokai, already-dark themes, etc.). The
+# render reactive (in app_deliverable_network_drivers.R) calls this with the
+# current dark_mode() reactive so the prio chart re-renders with the right
+# surface when the user toggles light/dark — zero flicker, no client-side
+# relayout race.
+
+#' @noRd
+.prio_dark_pair <- function(theme) {
+  switch(
+    theme,
+    "Default"      = "Default Dark",
+    "Flat"         = "Flat Dark",
+    "plotly"       = "plotly_dark",
+    "plotly_white" = "plotly_dark",
+    theme
+  )
+}
+
+
 # ---- Pure data: build the display data frame for the current selections ----
 
 #' @noRd
@@ -527,7 +550,7 @@
     y_incr   <- incr  * 100
     y_cumul  <- cumul * 100
     y_suffix <- "%"
-    y_fmt    <- ".1f"
+    y_fmt    <- ".0f"   # whole percents on the y-axis (e.g. "12%")
   } else {
     y_prev   <- prev
     y_incr   <- incr
@@ -563,7 +586,7 @@
   # Bar-top labels: short cumulative value, displayed above each bar.
   fmt_v <- function(v) {
     if (is.na(v)) return("")
-    if (use_pct) sprintf("%.1f%%", v) else sprintf("%.2f", v)
+    if (use_pct) sprintf("%.0f%%", v) else sprintf("%.2f", v)
   }
   bar_labels <- vapply(y_cumul, fmt_v, character(1))
 
@@ -623,9 +646,8 @@
       margin = list(b = 100, l = 60, r = 20, t = 20)
     )
 
-  # Apply user-selected theme (Default = no-op).
-  if (!identical(theme, "Default")) {
-    fig <- plotly_theme(fig, theme)
-  }
+  # Apply user-selected theme. "Default" is now the branded Resondex theme
+  # (no longer a no-op), so always apply.
+  fig <- plotly_theme(fig, theme)
   fig
 }

@@ -106,7 +106,7 @@ resondex_brand <- function(mode = c("light", "dark")) {
         "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
       radius = "0.5rem",
       # Data-viz palette (concrete hexes — charts render light). Feeds the
-      # opt-in "Resondex" plotly theme; cohesive with the UI tokens.
+      # "Default" plotly theme (brand-themed); cohesive with the UI tokens.
       viz = list(
         # Categorical series colours: brand grey + muted semantics + grey
         # extenders — distinguishable but on-identity.
@@ -122,6 +122,24 @@ resondex_brand <- function(mode = c("light", "dark")) {
         bar_base   = "#D9D9D9",  # prio base bar
         bar_incr   = "#595959",  # prio incremental / accent
         line       = "#595959"
+      ),
+      # Dark mirror for the "Resondex Dark" plotly theme. Surfaces mirror
+      # the dark UI tokens (card_bg, border, muted, text) so charts look
+      # native in dark mode. Colorway is lifted toward higher luminance
+      # so each series stays distinguishable against the dark plot bg.
+      viz_dark = list(
+        colorway = c(
+          "#A8A8A8", "#86A4B5", "#86B098", "#D69A6F",
+          "#C2877F", "#B5B5B5", "#D9D9D9", "#6F7A85"
+        ),
+        paper_bg   = "#212529",  # = dark --ndr-card-bg
+        plot_bg    = "#212529",
+        grid       = "#3a3f44",  # = dark --ndr-border
+        axis_text  = "#9aa0a6",  # = dark --ndr-muted
+        font_color = "#e8eaed",  # = dark --ndr-text
+        bar_base   = "#3a3f44",
+        bar_incr   = "#A8A8A8",
+        line       = "#A8A8A8"
       )
     )
   )
@@ -278,6 +296,129 @@ resondex_css <- function(include_import = TRUE) {
     collapse = "\n"
   )
 
+  # Form controls — uniform sizing to match .btn-sm (Download Workbook +
+  # other small-button affordances) with the brand border.
+  #
+  # Shiny's selectInput() defaults to selectize=TRUE, so the visible
+  # dropdown is a selectize.js widget (.selectize-input wrapper), NOT a
+  # native <select class="form-select">. We need to target BOTH:
+  #   - .form-select / .form-control — native selects + text inputs
+  #     (covers selectize=FALSE selects, textInput, numericInput, etc.)
+  #   - .selectize-input — the selectize.js widget body
+  form_controls <- paste(
+    c(
+      ".form-select, .form-control {",
+      "  border: 1px solid var(--ndr-border) !important;",
+      "  border-radius: 6px !important;",
+      "  padding: 0.25rem 0.5rem !important;",
+      "  font-size: var(--ndr-fs-sm, 12px) !important;",
+      "  line-height: 1.5 !important;",
+      "  color: var(--ndr-text);",
+      "  background-color: var(--ndr-card-bg);",
+      "}",
+      # .form-select keeps the chevron — reserve right padding for it.
+      ".form-select {",
+      "  padding-right: 1.75rem !important;",
+      "  background-position: right 0.5rem center !important;",
+      "  background-size: 12px 12px !important;",
+      "}",
+      # Selectize.js widget — the actual visible Shiny selectInput body.
+      # Match the .btn-sm sizing + brand border. min-height:0 overrides",
+      # selectize's default min-height which would force a taller box.
+      ".selectize-input {",
+      "  border: 1px solid var(--ndr-border) !important;",
+      "  border-radius: 6px !important;",
+      "  padding: 0.25rem 1.75rem 0.25rem 0.5rem !important;",
+      "  font-size: var(--ndr-fs-sm, 12px) !important;",
+      "  line-height: 1.5 !important;",
+      "  min-height: 0 !important;",
+      "  color: var(--ndr-text);",
+      "  background-color: var(--ndr-card-bg);",
+      "  box-shadow: none !important;",
+      "}",
+      ".selectize-input input {",
+      "  font-size: var(--ndr-fs-sm, 12px) !important;",
+      "  line-height: 1.5 !important;",
+      "}",
+      # Selectize dropdown panel (the open option list) — brand-align too.
+      ".selectize-dropdown {",
+      "  border: 1px solid var(--ndr-border) !important;",
+      "  border-radius: 6px !important;",
+      "  font-size: var(--ndr-fs-sm, 12px) !important;",
+      "  background-color: var(--ndr-card-bg);",
+      "  color: var(--ndr-text);",
+      "}",
+      ".selectize-dropdown .option.active, .selectize-dropdown .option:hover {",
+      "  background: var(--ndr-secondary-bg) !important;",
+      "  color: var(--ndr-text) !important;",
+      "}"
+    ),
+    collapse = "\n"
+  )
+
+  # Card headers everywhere read brand text color so dark mode is legible
+  # without per-callsite span wraps. bslib::card_header("Some Title") and
+  # raw .card-header markup both pick this up.
+  #
+  # Targets both plain `.card-header` and bslib's more-specific
+  # `.bslib-card > .card-header` so the brand rule isn't defeated by
+  # specificity. !important is the safety net — bn_report's old unscoped
+  # `.card-header { color: #333 }` rule used to leak through and
+  # overpower this; that rule is now scoped to `.membership-card .card-header`,
+  # but other future component CSS could re-introduce the conflict.
+  card_header <- paste(
+    c(
+      ".card-header, .bslib-card > .card-header {",
+      "  color: var(--ndr-text) !important;",
+      "  background-color: var(--ndr-card-bg) !important;",
+      "  border-bottom: 1px solid var(--ndr-border) !important;",
+      "}"
+    ),
+    collapse = "\n"
+  )
+
+  # Brand button class. SINGLE source of truth for every "outline-on-card"
+  # action button across reports and apps — Download Workbook, Toggle View,
+  # the visNetwork modebar buttons (when we migrate them off bespoke CSS),
+  # and any future per-component action.
+  #
+  # Apply via:
+  #   - class = "btn-rdx" on shiny::tags$button(...)
+  #   - class = "btn-sm btn-rdx" on shiny::downloadButton(...) — bypasses
+  #     downloadButton's default .btn.btn-default styling.
+  # We also style the bare .shiny-download-link (downloadButton's default
+  # selector) so any not-yet-migrated downloadButton still inherits the
+  # brand surface automatically.
+  brand_btn <- paste(
+    c(
+      ".btn-rdx, a.shiny-download-link {",
+      "  background-color: var(--ndr-card-bg) !important;",
+      "  border: 1px solid var(--ndr-border) !important;",
+      "  color: var(--ndr-text) !important;",
+      "  border-radius: 6px !important;",
+      "  padding: 4px 10px !important;",
+      "  font-size: var(--ndr-fs-sm, 12px) !important;",
+      "  line-height: 1.5 !important;",
+      "  text-decoration: none !important;",
+      "}",
+      ".btn-rdx:hover, a.shiny-download-link:hover {",
+      "  background-color: var(--ndr-secondary-bg) !important;",
+      "  color: var(--ndr-text) !important;",
+      "  border-color: var(--ndr-border) !important;",
+      "}",
+      ".btn-rdx:focus, a.shiny-download-link:focus {",
+      "  box-shadow: 0 0 0 0.2rem var(--ndr-focus) !important;",
+      "  outline: 0 !important;",
+      "}",
+      ".btn-rdx:disabled, .btn-rdx.disabled,",
+      "a.shiny-download-link:disabled, a.shiny-download-link.disabled {",
+      "  opacity: 0.55 !important;",
+      "  cursor: not-allowed !important;",
+      "}"
+    ),
+    collapse = "\n"
+  )
+
   # Canonical table conditional-formatting classes. SHARED: the showcase,
   # bn_report (Step 3) and the reactable theme (Step 6) all apply these
   # exact classes, so the rules are defined once here and never drift.
@@ -315,7 +456,7 @@ resondex_css <- function(include_import = TRUE) {
   paste0(
     import, root_light, "\n", root_dark, "\n",
     tip, "\n", base, "\n", disabled, "\n", focus_ring, "\n",
-    table_fmt, "\n"
+    form_controls, "\n", card_header, "\n", brand_btn, "\n", table_fmt, "\n"
   )
 }
 

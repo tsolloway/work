@@ -1416,7 +1416,12 @@
     '  border-radius: 8px;',
     '  padding: 16px;',
     '}',
-    '.card-header {',
+    # SCOPE: these were originally unscoped (just `.card-header`,
+    # `.card-count`, `.card-nodes`), which bled into bslib::card_header
+    # in the app and stamped `color: #333` on every card title — invisible
+    # in dark mode. Scoping to `.membership-card` keeps them targeted at
+    # bn_report's membership cards only.
+    '.membership-card .card-header {',
     '  font-weight: 600;',
     '  font-size: 15px;',
     '  color: #333;',
@@ -1424,7 +1429,7 @@
     '  align-items: center;',
     '  margin-bottom: 12px;',
     '}',
-    '.card-count {',
+    '.membership-card .card-count {',
     '  margin-left: 8px;',
     '  font-size: 12px;',
     '  font-weight: 500;',
@@ -1433,7 +1438,7 @@
     '  padding: 2px 8px;',
     '  border-radius: 10px;',
     '}',
-    '.card-nodes { display: flex; flex-wrap: wrap; gap: 6px; }',
+    '.membership-card .card-nodes { display: flex; flex-wrap: wrap; gap: 6px; }',
     '.node-pill {',
     '  display: inline-block;',
     '  padding: 4px 10px;',
@@ -1924,7 +1929,7 @@
     '  .ndr-card-title { grid-area: title; }',
     '  .impact-controls, .priort-controls {',
     '    grid-area: side; display: flex !important; flex-direction: column !important;',
-    '    align-items: stretch !important; gap: 4px !important;',
+    '    align-items: stretch !important; gap: 12px !important;',
     '    background: var(--ndr-sidebar-bg) !important;',
     '    border: 1px solid var(--ndr-border) !important;',
     '    border-radius: var(--ndr-radius) !important;',

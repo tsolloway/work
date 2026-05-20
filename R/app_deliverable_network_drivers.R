@@ -317,22 +317,22 @@ app_deliverable_network_drivers <- function(
     imp_sidebar,
     ia_indexby,
     pm_sidebar,
-    # Divider + workbook download — styled identically to the
-    # Outcome Estimate Show/Hide button (small, white background, thin
-    # border, full sidebar width). `downloadButton` adds its own icon
-    # by default; we suppress it with icon = NULL so the button matches
-    # the show/hide one exactly.
-    htmltools::hr(style = "margin: 12px 0;"),
-    shiny::downloadButton(
-      ns(paste0(rid, "_download_workbook")),
-      label = "Download Workbook",
-      icon  = NULL,
-      class = "btn-sm",
-      style = paste(
-        "background-color: var(--ndr-card-bg);",
-        "border: 1px solid var(--ndr-border);",
-        "color: var(--ndr-text);",
-        "width: 100%;"
+    # Divider + workbook download — pinned to the BOTTOM of the sidebar.
+    # bslib::sidebar's content area is a flex column, so `margin-top:
+    # auto` on this wrapper consumes all remaining vertical space and
+    # pushes itself (with the hr + download button) to the bottom.
+    # Controls above stay at the top with their natural heights.
+    shiny::div(
+      style = "margin-top: auto;",
+      htmltools::hr(style = "margin: 12px 0;"),
+      shiny::downloadButton(
+        ns(paste0(rid, "_download_workbook")),
+        label = "Download Workbook",
+        icon  = NULL,
+        # btn-rdx — brand-shared button class (resondex_css). width:100%
+        # is a per-instance layout choice (sidebar fill) and stays here.
+        class = "btn-rdx",
+        style = "width: 100%;"
       )
     )
   )
@@ -356,12 +356,46 @@ app_deliverable_network_drivers <- function(
     )))
   }
   if (has_memb) {
+    # Mirror bn_report's two-view membership panel: a card grid (default)
+    # and a table view, toggled by a single button. Both views are rendered
+    # into the DOM; JS toggles display so the existing MutationObserver
+    # sync layer (which re-applies user label edits to .community-label
+    # [data-color] and [data-node-id]) keeps working across both views.
     panels <- c(panels, list(bslib::nav_panel(
       title = "Membership", value = "membership",
-      shiny::div(class = "network-drivers-membership",
-                 `data-rid` = rid,
-                 style = "padding: 12px;",
-                 DT::DTOutput(ns(paste0(rid, "_membership_table"))))
+      shiny::div(
+        class      = "network-drivers-membership",
+        `data-rid` = rid,
+        style      = "padding: 12px;",
+        shiny::div(
+          class = "membership-wrap",
+          shiny::div(
+            class = "membership-toolbar",
+            shiny::tags$button(
+              # btn-rdx — brand-shared button class defined in
+              # resondex_css(). Surfaces, padding, font-size, radius, hover,
+              # and focus all flow from there so this button always tracks
+              # the brand without per-callsite styling.
+              class   = "btn-rdx",
+              type    = "button",
+              onclick = "toggleMembershipView(this)",
+              title   = "Switch view",
+              shiny::HTML("&#9776; Toggle View")
+            )
+          ),
+          shiny::div(
+            class = "membership-view membership-card-view",
+            shiny::uiOutput(ns(paste0(rid, "_membership_cards")))
+          ),
+          shiny::div(
+            class = "membership-view membership-table-view",
+            style = "display:none;",
+            reactable::reactableOutput(
+              ns(paste0(rid, "_membership_table"))
+            )
+          )
+        )
+      )
     )))
   }
   # Flex column on card_body: reactable area grows to fill the space
@@ -376,24 +410,32 @@ app_deliverable_network_drivers <- function(
   if (has_impacts_attr) {
     panels <- c(panels, list(bslib::nav_panel(
       title = "Attribute Impacts", value = "impacts_attr",
-      bslib::card(
-        full_screen = TRUE,
-        max_height  = "80vh",
-        bslib::card_header(
-          shiny::uiOutput(ns(paste0(rid, "_ia_title")), inline = TRUE),
-          class = "fw-semibold"
-        ),
-        bslib::card_body(
-          padding = 0,
-          style = flex_card_body_style,
-          shiny::div(
-            style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
-            reactable::reactableOutput(ns(paste0(rid, "_ia_dt")),
-                                       width = "100%", height = "100%")
+      # Wrap in layout_columns so the card sits in a *fillable* cell with a
+      # definite height. Without it, nav_panel's content area falls back to
+      # auto height → the flex chain (card → card_body → wrapper →
+      # reactable height:100%) resolves to auto and reactable renders all
+      # rows. Mirrors the prio table's enable_chart=TRUE path.
+      bslib::layout_columns(
+        col_widths = 12,
+        bslib::card(
+          full_screen = TRUE,
+          max_height  = "80vh",
+          bslib::card_header(
+            shiny::uiOutput(ns(paste0(rid, "_ia_title")), inline = TRUE),
+            class = "fw-semibold"
           ),
-          shiny::div(
-            style = "flex: 0 0 auto;",
-            shiny::uiOutput(ns(paste0(rid, "_ia_footer")))
+          bslib::card_body(
+            padding = 0,
+            style = flex_card_body_style,
+            shiny::div(
+              style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
+              reactable::reactableOutput(ns(paste0(rid, "_ia_dt")),
+                                         width = "100%", height = "100%")
+            ),
+            shiny::div(
+              style = "flex: 0 0 auto;",
+              shiny::uiOutput(ns(paste0(rid, "_ia_footer")))
+            )
           )
         )
       )
@@ -402,24 +444,28 @@ app_deliverable_network_drivers <- function(
   if (has_impacts_comm) {
     panels <- c(panels, list(bslib::nav_panel(
       title = "Community Impacts", value = "impacts_comm",
-      bslib::card(
-        full_screen = TRUE,
-        max_height  = "80vh",
-        bslib::card_header(
-          shiny::uiOutput(ns(paste0(rid, "_ic_title")), inline = TRUE),
-          class = "fw-semibold"
-        ),
-        bslib::card_body(
-          padding = 0,
-          style = flex_card_body_style,
-          shiny::div(
-            style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
-            reactable::reactableOutput(ns(paste0(rid, "_ic_dt")),
-                                       width = "100%", height = "100%")
+      # Same fillable-cell wrapper as Attribute Impacts — see comment there.
+      bslib::layout_columns(
+        col_widths = 12,
+        bslib::card(
+          full_screen = TRUE,
+          max_height  = "80vh",
+          bslib::card_header(
+            shiny::uiOutput(ns(paste0(rid, "_ic_title")), inline = TRUE),
+            class = "fw-semibold"
           ),
-          shiny::div(
-            style = "flex: 0 0 auto;",
-            shiny::uiOutput(ns(paste0(rid, "_ic_footer")))
+          bslib::card_body(
+            padding = 0,
+            style = flex_card_body_style,
+            shiny::div(
+              style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
+              reactable::reactableOutput(ns(paste0(rid, "_ic_dt")),
+                                         width = "100%", height = "100%")
+            ),
+            shiny::div(
+              style = "flex: 0 0 auto;",
+              shiny::uiOutput(ns(paste0(rid, "_ic_footer")))
+            )
           )
         )
       )
@@ -601,6 +647,7 @@ app_deliverable_network_drivers <- function(
       attr_content_id <- paste0(rid, "_attr_content")
       comm_content_id <- paste0(rid, "_comm_content")
       memb_out_id     <- paste0(rid, "_membership_table")
+      memb_cards_id   <- paste0(rid, "_membership_cards")
       ia_content_id   <- paste0(rid, "_impacts_attr_content")
       ic_content_id   <- paste0(rid, "_impacts_comm_content")
       prio_content_id <- paste0(rid, "_prio_content")
@@ -690,7 +737,7 @@ app_deliverable_network_drivers <- function(
             `data-rid`    = rid,
             `data-view`   = view_type,
             `data-layout` = layout_type,
-            style = "width: 100%; height: 70vh; border: none; display: block;",
+            style = "width: 100%; height: 80vh; border: none; display: block;",
             sandbox = "allow-scripts allow-downloads",
             allowfullscreen = NA
           )
@@ -709,35 +756,106 @@ app_deliverable_network_drivers <- function(
         output[[comm_content_id]] <- shiny::renderUI({ shiny::isolate(comm_tag) })
       }
 
-      # ---- Membership DT ----
+      # ---- Membership card view ----
       if (has_memb) {
-        output[[memb_out_id]] <- DT::renderDT({
+        output[[memb_cards_id]] <- shiny::renderUI({
+          html <- .network_drivers_membership_cards_html(result)
+          if (is.null(html)) {
+            return(shiny::div(class = "extra-empty",
+                              "No community membership available."))
+          }
+          shiny::HTML(html)
+        })
+      }
+
+      # ---- Membership reactable (table view) ----
+      if (has_memb) {
+        output[[memb_out_id]] <- reactable::renderReactable({
           df <- .network_drivers_membership_df(result)
           if (is.null(df) || nrow(df) == 0) {
-            return(DT::datatable(
+            return(reactable::reactable(
               data.frame(Message = "No community membership available."),
-              options = list(dom = "t", paging = FALSE),
-              rownames = FALSE, selection = "none"
+              sortable    = FALSE,
+              pagination  = FALSE,
+              highlight   = FALSE,
+              borderless  = TRUE
             ))
           }
-          DT::datatable(
+          reactable::reactable(
             df,
-            escape = FALSE,
-            rownames = FALSE,
-            selection = "none",
-            options = list(
-              dom        = "t",
-              pageLength = nrow(df),
-              scrollY    = "60vh",
-              scrollCollapse = FALSE,
-              columnDefs = list(
-                list(className = "dt-left",   targets = 0:1),
-                list(className = "dt-center", targets = 2)
+            pagination     = FALSE,
+            sortable       = TRUE,
+            highlight      = TRUE,
+            compact        = FALSE,
+            defaultColDef  = reactable::colDef(
+              headerStyle = list(
+                backgroundColor = "var(--ndr-card-bg)",
+                color           = "var(--ndr-text)",
+                fontWeight      = 600,
+                borderBottom    = "1px solid var(--ndr-border)"
+              )
+            ),
+            columns = list(
+              Community = reactable::colDef(
+                html       = TRUE,
+                minWidth   = 180,
+                align      = "left",
+                headerStyle = list(
+                  textAlign       = "left",
+                  backgroundColor = "var(--ndr-card-bg)",
+                  color           = "var(--ndr-text)",
+                  fontWeight      = 600,
+                  borderBottom    = "1px solid var(--ndr-border)"
+                )
               ),
-              autoWidth = TRUE
+              Attributes = reactable::colDef(
+                html       = TRUE,
+                minWidth   = 400,
+                align      = "left",
+                headerStyle = list(
+                  textAlign       = "left",
+                  backgroundColor = "var(--ndr-card-bg)",
+                  color           = "var(--ndr-text)",
+                  fontWeight      = 600,
+                  borderBottom    = "1px solid var(--ndr-border)"
+                )
+              ),
+              Count = reactable::colDef(
+                align    = "center",
+                maxWidth = 90,
+                headerStyle = list(
+                  textAlign       = "center",
+                  backgroundColor = "var(--ndr-card-bg)",
+                  color           = "var(--ndr-text)",
+                  fontWeight      = 600,
+                  borderBottom    = "1px solid var(--ndr-border)"
+                )
+              )
+            ),
+            theme = reactable::reactableTheme(
+              color           = "var(--ndr-text)",
+              backgroundColor = "var(--ndr-card-bg)",
+              borderColor     = "var(--ndr-border)",
+              borderWidth     = "1px",
+              stripedColor    = "var(--ndr-secondary-bg)",
+              highlightColor  = "var(--ndr-secondary-bg)",
+              cellPadding     = "8px 12px",
+              style           = list(fontSize = "13px"),
+              headerStyle     = list(
+                backgroundColor = "var(--ndr-card-bg)",
+                color           = "var(--ndr-text)",
+                borderColor     = "var(--ndr-border)",
+                fontWeight      = 600
+              )
             )
           )
         })
+        # The table view starts with display:none (card view is the
+        # default). Without this, Shiny suspends the renderReactable
+        # because the output container isn't visible — so clicking
+        # "Toggle View" reveals an empty div. Force it to render
+        # regardless of visibility.
+        shiny::outputOptions(output, memb_out_id, suspendWhenHidden = FALSE)
       }
 
       # ---- Impact dashboards: native sidebar inputs + reactable ----
@@ -984,6 +1102,13 @@ app_deliverable_network_drivers <- function(
         # plotly logo, custom button set via plotly_modebar().
         output[[paste0(rid, "_pm_chart")]] <- plotly::renderPlotly({
           theme_v <- input[[paste0(pm_prefix, "_chart_theme")]] %||% "Default"
+          # Path A: server-side dark-mode pairing. Subscribe to dark_mode()
+          # so the chart re-renders the moment the user toggles light/dark.
+          # No client-side relayout, no flicker — the chart paints directly
+          # with the right surface tokens.
+          if (isTRUE(dark_mode())) {
+            theme_v <- .prio_dark_pair(theme_v)
+          }
           .network_drivers_prio_chart(
             prio_display_reactive(), pm,
             theme = theme_v
@@ -1189,6 +1314,29 @@ app_deliverable_network_drivers <- function(
     "    document.addEventListener('DOMContentLoaded', watchMembershipDivs);",
     "  } else { watchMembershipDivs(); }",
     "  setInterval(watchMembershipDivs, 1000);",
+    # Toggle between table view and card view. Same JS as bn_report's
+    # toggleMembershipView so the onclick attribute on the toolbar button
+    # works identically in both contexts. Exposed on window so the inline
+    # onclick can reach it across the module's IIFE.
+    "  window.toggleMembershipView = function(btn) {",
+    # Button may live in the panel toolbar (legacy) OR in the sidebar
+    # (current). If sidebar, walk up to the containing layout_sidebar and
+    # locate the .membership-wrap inside its content area.
+    "    var wrap = btn.closest('.membership-wrap');",
+    "    if (!wrap) {",
+    "      var root = btn.closest('.bslib-sidebar-layout') || document;",
+    "      wrap = root.querySelector('.membership-wrap');",
+    "    }",
+    "    if (!wrap) return;",
+    "    var tbl = wrap.querySelector('.membership-table-view');",
+    "    var crd = wrap.querySelector('.membership-card-view');",
+    "    if (!tbl || !crd) return;",
+    "    if (tbl.style.display === 'none') {",
+    "      tbl.style.display = ''; crd.style.display = 'none';",
+    "    } else {",
+    "      tbl.style.display = 'none'; crd.style.display = '';",
+    "    }",
+    "  };",
     # bn_report's impact / prioritization helpers append an inline
     # <script>initImpactDashboard(id)</script> at the end of each
     # dashboard's HTML. When Shiny inserts that HTML via innerHTML, the
@@ -1439,6 +1587,57 @@ app_deliverable_network_drivers <- function(
 }
 
 #' @noRd
+#' Build the card-grid HTML for the membership panel.
+#' Mirrors bn_report's `render_membership` card view: one card per community,
+#' colored left border, header with dot + community-label + count, then the
+#' attribute pills. Class names match the report so:
+#'   - .community-label[data-color] catches the JS legend-edit sync
+#'   - [data-node-id] catches the JS node-label-edit sync
+.network_drivers_membership_cards_html <- function(result) {
+  nodes_df <- tryCatch(
+    work::find_recursive(result, x_name = "attribute_viz_prep")$nodes,
+    error = function(e) NULL
+  )
+  if (is.null(nodes_df)) return(NULL)
+  if (!all(c("community_name", "color", "id", "label") %in% names(nodes_df))) {
+    return(NULL)
+  }
+  groups <- nodes_df %>%
+    dplyr::arrange(.data$group) %>%
+    dplyr::group_by(.data$community_name, .data$color) %>%
+    dplyr::summarise(
+      ids    = list(as.character(.data$id)),
+      labels = list(as.character(.data$label)),
+      .groups = "drop"
+    )
+  cards <- purrr::pmap_chr(groups, function(community_name, color, ids, labels) {
+    pills <- paste(
+      sprintf('<span class="node-pill" data-node-id="%s">%s</span>',
+              htmltools::htmlEscape(ids),
+              htmltools::htmlEscape(labels)),
+      collapse = ""
+    )
+    sprintf(
+      paste0(
+        '<div class="membership-card" style="border-left: 4px solid %s;">',
+        '<div class="card-header">',
+        '<span class="membership-dot" style="background: %s;"></span>',
+        '<span class="community-label" data-color="%s">%s</span>',
+        '<span class="card-count">%d</span>',
+        '</div>',
+        '<div class="card-nodes">%s</div>',
+        '</div>'
+      ),
+      color, color, color,
+      htmltools::htmlEscape(community_name),
+      length(ids),
+      pills
+    )
+  })
+  paste0('<div class="membership-cards">', paste(cards, collapse = ""), '</div>')
+}
+
+#' @noRd
 .network_drivers_module_css <- function(id) {
   # Scoped wrapper styles. The embedded bn_report dashboards bring their own
   # CSS via .bn_report_css(); here we add a thin layer to:
@@ -1454,6 +1653,27 @@ app_deliverable_network_drivers <- function(
   #   - tighten the membership DT to feel like the rest of the app
   paste0(
     "body { margin: 0 !important; }\n",
+    # Sidebar bottom-pinned block (margin-top:auto wrapper around hr +
+    # Download Workbook) needs two things:
+    #   1. .sidebar-content as a flex column with a definite height
+    #      → so `margin-top: auto` has space to consume.
+    #   2. .sidebar itself with a definite height that places its bottom
+    #      at the same y as the impact card's max_height bottom.
+    #
+    # Card top is offset DOWN from sidebar top by the navset_underline
+    # tab bar (~45px) + a small nav_panel/layout_columns padding (~5px).
+    # So sidebar must be 80vh PLUS that ~50px offset for the bottoms to
+    # line up. If the offset is off, dial the +50px piece.
+    ".bslib-sidebar-layout > .sidebar {\n",
+    "  height: calc(80vh + 50px) !important;\n",
+    "}\n",
+    ".bslib-sidebar-layout > .sidebar > .sidebar-content {\n",
+    "  display: flex !important;\n",
+    "  flex-direction: column !important;\n",
+    "  height: 100% !important;\n",
+    "  overflow-y: auto !important;\n",
+    "  gap: 0 !important;\n",
+    "}\n",
     "#", id, " .network-drivers-dashboard { padding: 16px; }\n",
     "#", id, " .network-drivers-membership { padding: 8px 12px; }\n",
     # Sidebar control spacing: every selectInput is wrapped in a
@@ -1464,14 +1684,69 @@ app_deliverable_network_drivers <- function(
     # enough to be safe page-wide.
     ".netdrv-ctrl-wrap { margin-bottom: 12px; }\n",
     ".netdrv-ctrl-wrap .form-group { margin-bottom: 0; }\n",
-    "#", id, " .network-drivers-membership table.dataTable td .node-pill {\n",
-    "  display: inline-block; padding: 2px 8px; margin: 2px;\n",
+    # ---- Membership: pills + dot (apply to BOTH card view and reactable) ----
+    # `.node-pill` and `.membership-dot` appear inside reactable cells
+    # (.rt-td) for the table view AND inside .membership-card divs for the
+    # card view. Single un-nested selector covers both.
+    "#", id, " .network-drivers-membership .node-pill {\n",
+    "  display: inline-block; padding: 4px 10px; margin: 2px;\n",
     "  background: var(--ndr-secondary-bg); border-radius: 12px;\n",
     "  font-size: 12px; color: var(--ndr-text);\n",
     "}\n",
-    "#", id, " .network-drivers-membership table.dataTable td .membership-dot {\n",
-    "  display: inline-block; width: 10px; height: 10px;\n",
+    "#", id, " .network-drivers-membership .membership-dot {\n",
+    "  display: inline-block; width: 12px; height: 12px;\n",
     "  border-radius: 50%; margin-right: 8px; vertical-align: middle;\n",
+    "}\n",
+    # ---- Membership wrap + toolbar layout ----
+    # NOTE: button surface (bg/border/color/radius/padding/font/hover) is
+    # now handled by `.btn-rdx` in resondex_css(). Only the layout
+    # primitives (flex + alignment) stay here.
+    "#", id, " .network-drivers-membership .membership-wrap {\n",
+    "  display: flex; flex-direction: column; height: 100%;\n",
+    "}\n",
+    "#", id, " .network-drivers-membership .membership-toolbar {\n",
+    "  display: flex; justify-content: flex-end; margin-bottom: 12px;\n",
+    "}\n",
+    # ---- Membership: views (table vs card) ----
+    # No flex/height constraint — each view sizes to its own content. The
+    # parent `.network-drivers-membership` scrolls if the content exceeds
+    # available space (membership-cards has its own internal scroll for
+    # the grid view; reactable lays out at content height for the table).
+    "#", id, " .network-drivers-membership .membership-view {\n",
+    "  width: 100%;\n",
+    "}\n",
+    # ---- Card grid ----
+    "#", id, " .network-drivers-membership .membership-cards {\n",
+    "  display: grid;\n",
+    "  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));\n",
+    "  gap: 16px;\n",
+    "  overflow-y: auto;\n",
+    "  align-content: start;\n",
+    "  max-height: 100%;\n",
+    "}\n",
+    "#", id, " .network-drivers-membership .membership-card {\n",
+    "  background: var(--ndr-card-bg);\n",
+    "  border: 1px solid var(--ndr-border);\n",
+    "  border-radius: var(--ndr-radius, 8px);\n",
+    "  padding: 16px;\n",
+    "  box-shadow: var(--ndr-shadow);\n",
+    "}\n",
+    "#", id, " .network-drivers-membership .card-header {\n",
+    "  font-weight: 600; font-size: 14px;\n",
+    "  color: var(--ndr-text);\n",
+    "  display: flex; align-items: center;\n",
+    "  margin-bottom: 12px;\n",
+    "}\n",
+    "#", id, " .network-drivers-membership .card-count {\n",
+    "  margin-left: 8px;\n",
+    "  font-size: 11px; font-weight: 500;\n",
+    "  color: var(--ndr-muted);\n",
+    "  background: var(--ndr-secondary-bg);\n",
+    "  padding: 2px 8px;\n",
+    "  border-radius: 10px;\n",
+    "}\n",
+    "#", id, " .network-drivers-membership .card-nodes {\n",
+    "  display: flex; flex-wrap: wrap; gap: 6px;\n",
     "}\n",
     # DT-in-card fill: makes the DT wrapper flex-grow inside the
     # navset_card_underline's card_body so the table body fills available
