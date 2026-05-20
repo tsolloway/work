@@ -1410,21 +1410,26 @@
     '  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));',
     '  gap: 16px;',
     '}',
+    # Membership card surface — brand-tokenized so light AND dark modes
+    # both work in the report and the app. Previously hardcoded #fff /
+    # #e0e0e0 which left the cards stark white against a dark page in
+    # dark mode. var(--ndr-card-bg) matches the reactable table surface,
+    # so cards and the table view feel like the same component.
     '.membership-card {',
-    '  background: #fff;',
-    '  border: 1px solid #e0e0e0;',
-    '  border-radius: 8px;',
+    '  background: var(--ndr-card-bg);',
+    '  border: 1px solid var(--ndr-border);',
+    '  border-radius: var(--ndr-radius, 8px);',
     '  padding: 16px;',
+    '  box-shadow: var(--ndr-shadow);',
     '}',
-    # SCOPE: these were originally unscoped (just `.card-header`,
-    # `.card-count`, `.card-nodes`), which bled into bslib::card_header
-    # in the app and stamped `color: #333` on every card title — invisible
-    # in dark mode. Scoping to `.membership-card` keeps them targeted at
-    # bn_report's membership cards only.
-    '.membership-card .card-header {',
+    # The membership card's inner header div uses class `.mc-header`
+    # (NOT `.card-header`) to avoid colliding with bslib's generic
+    # .card-header brand styling. Color reads from --ndr-text so dark
+    # mode tracks automatically.
+    '.membership-card .mc-header {',
     '  font-weight: 600;',
     '  font-size: 15px;',
-    '  color: #333;',
+    '  color: var(--ndr-text);',
     '  display: flex;',
     '  align-items: center;',
     '  margin-bottom: 12px;',
@@ -1433,8 +1438,8 @@
     '  margin-left: 8px;',
     '  font-size: 12px;',
     '  font-weight: 500;',
-    '  color: #888;',
-    '  background: #f0f0f0;',
+    '  color: var(--ndr-muted);',
+    '  background: var(--ndr-secondary-bg);',
     '  padding: 2px 8px;',
     '  border-radius: 10px;',
     '}',
@@ -1442,10 +1447,10 @@
     '.node-pill {',
     '  display: inline-block;',
     '  padding: 4px 10px;',
-    '  background: #f0f0f0;',
+    '  background: var(--ndr-secondary-bg);',
     '  border-radius: 12px;',
     '  font-size: 13px;',
-    '  color: #444;',
+    '  color: var(--ndr-text);',
     '}',
     '',
     '/* extra tabs (impacts / prioritization) — styling matches bn_write */',

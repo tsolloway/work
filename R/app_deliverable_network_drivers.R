@@ -1620,7 +1620,7 @@ app_deliverable_network_drivers <- function(
     sprintf(
       paste0(
         '<div class="membership-card" style="border-left: 4px solid %s;">',
-        '<div class="card-header">',
+        '<div class="mc-header">',
         '<span class="membership-dot" style="background: %s;"></span>',
         '<span class="community-label" data-color="%s">%s</span>',
         '<span class="card-count">%d</span>',
@@ -1684,69 +1684,36 @@ app_deliverable_network_drivers <- function(
     # enough to be safe page-wide.
     ".netdrv-ctrl-wrap { margin-bottom: 12px; }\n",
     ".netdrv-ctrl-wrap .form-group { margin-bottom: 0; }\n",
-    # ---- Membership: pills + dot (apply to BOTH card view and reactable) ----
-    # `.node-pill` and `.membership-dot` appear inside reactable cells
-    # (.rt-td) for the table view AND inside .membership-card divs for the
-    # card view. Single un-nested selector covers both.
-    "#", id, " .network-drivers-membership .node-pill {\n",
-    "  display: inline-block; padding: 4px 10px; margin: 2px;\n",
-    "  background: var(--ndr-secondary-bg); border-radius: 12px;\n",
-    "  font-size: 12px; color: var(--ndr-text);\n",
-    "}\n",
-    "#", id, " .network-drivers-membership .membership-dot {\n",
-    "  display: inline-block; width: 12px; height: 12px;\n",
-    "  border-radius: 50%; margin-right: 8px; vertical-align: middle;\n",
-    "}\n",
-    # ---- Membership wrap + toolbar layout ----
-    # NOTE: button surface (bg/border/color/radius/padding/font/hover) is
-    # now handled by `.btn-rdx` in resondex_css(). Only the layout
-    # primitives (flex + alignment) stay here.
-    "#", id, " .network-drivers-membership .membership-wrap {\n",
+    # ---- Membership: app-specific layout overrides ----
+    # The canonical membership styling (`.membership-card`, `.mc-header`,
+    # `.card-count`, `.card-nodes`, `.node-pill`, `.membership-dot`) is
+    # tokenized in bn_helpers.R and reaches the app via .bn_report_css().
+    # Only app-specific layout rules live here:
+    #
+    #   - .membership-wrap / .membership-toolbar / .membership-view —
+    #     flex shell that doesn't exist in the report
+    #   - .membership-cards — APP wants the grid to scroll within the
+    #     panel (overflow-y:auto), REPORT wants the page to scroll. The
+    #     `.network-drivers-membership` ancestor is the app-only marker
+    #     so this rule beats bn_helpers' bare `.membership-cards` by
+    #     selector specificity (2 classes vs 1).
+    #
+    # We DON'T use `#<id>` scoping here because app_deliverable doesn't
+    # wrap the module in a container with that id, so `#<id> .foo` would
+    # match nothing. `.network-drivers-membership` is the actual scope.
+    ".network-drivers-membership .membership-wrap {\n",
     "  display: flex; flex-direction: column; height: 100%;\n",
     "}\n",
-    "#", id, " .network-drivers-membership .membership-toolbar {\n",
+    ".network-drivers-membership .membership-toolbar {\n",
     "  display: flex; justify-content: flex-end; margin-bottom: 12px;\n",
     "}\n",
-    # ---- Membership: views (table vs card) ----
-    # No flex/height constraint — each view sizes to its own content. The
-    # parent `.network-drivers-membership` scrolls if the content exceeds
-    # available space (membership-cards has its own internal scroll for
-    # the grid view; reactable lays out at content height for the table).
-    "#", id, " .network-drivers-membership .membership-view {\n",
+    ".network-drivers-membership .membership-view {\n",
     "  width: 100%;\n",
     "}\n",
-    # ---- Card grid ----
-    "#", id, " .network-drivers-membership .membership-cards {\n",
-    "  display: grid;\n",
-    "  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));\n",
-    "  gap: 16px;\n",
+    ".network-drivers-membership .membership-cards {\n",
     "  overflow-y: auto;\n",
     "  align-content: start;\n",
     "  max-height: 100%;\n",
-    "}\n",
-    "#", id, " .network-drivers-membership .membership-card {\n",
-    "  background: var(--ndr-card-bg);\n",
-    "  border: 1px solid var(--ndr-border);\n",
-    "  border-radius: var(--ndr-radius, 8px);\n",
-    "  padding: 16px;\n",
-    "  box-shadow: var(--ndr-shadow);\n",
-    "}\n",
-    "#", id, " .network-drivers-membership .card-header {\n",
-    "  font-weight: 600; font-size: 14px;\n",
-    "  color: var(--ndr-text);\n",
-    "  display: flex; align-items: center;\n",
-    "  margin-bottom: 12px;\n",
-    "}\n",
-    "#", id, " .network-drivers-membership .card-count {\n",
-    "  margin-left: 8px;\n",
-    "  font-size: 11px; font-weight: 500;\n",
-    "  color: var(--ndr-muted);\n",
-    "  background: var(--ndr-secondary-bg);\n",
-    "  padding: 2px 8px;\n",
-    "  border-radius: 10px;\n",
-    "}\n",
-    "#", id, " .network-drivers-membership .card-nodes {\n",
-    "  display: flex; flex-wrap: wrap; gap: 6px;\n",
     "}\n",
     # DT-in-card fill: makes the DT wrapper flex-grow inside the
     # navset_card_underline's card_body so the table body fills available

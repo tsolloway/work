@@ -403,7 +403,7 @@ bn_report <- function(
       n_nodes <- nrow(nodes)
       glue::glue(
         '<div class="membership-card" style="border-left: 4px solid {color};">',
-        '<div class="card-header"><span class="membership-dot" style="background: {color};"></span>',
+        '<div class="mc-header"><span class="membership-dot" style="background: {color};"></span>',
         '<span class="community-label" data-color="{color}" data-orig-comm="{community_name}">{community_name}</span>',
         '<span class="card-count">{n_nodes}</span></div>',
         '<div class="card-nodes">{pills_str}</div>',
