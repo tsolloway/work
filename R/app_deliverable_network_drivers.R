@@ -860,7 +860,22 @@ app_deliverable_network_drivers <- function(
                 )
               )
             ),
-            theme = resondex_reactable_theme()
+            theme = reactable::reactableTheme(
+              color           = "var(--ndr-text)",
+              backgroundColor = "var(--ndr-card-bg)",
+              borderColor     = "var(--ndr-border)",
+              borderWidth     = "1px",
+              stripedColor    = "var(--ndr-secondary-bg)",
+              highlightColor  = "var(--ndr-secondary-bg)",
+              cellPadding     = "8px 12px",
+              style           = list(fontSize = "13px"),
+              headerStyle     = list(
+                backgroundColor = "var(--ndr-card-bg)",
+                color           = "var(--ndr-text)",
+                borderColor     = "var(--ndr-border)",
+                fontWeight      = 600
+              )
+            )
           )
         })
         # The table view starts with display:none (card view is the
