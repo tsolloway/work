@@ -729,43 +729,7 @@ app_deliverable_network_drivers <- function(
         widget_html <- paste(readLines(widget_path, warn = FALSE),
                              collapse = "\n")
         injected <- paste0(
-          "<head>",
-          # Hide body until data-bs-theme is known. Without this, the
-          # iframe paints with light tokens (default --ndr-card-bg) for
-          # the brief window between body render and the sync script
-          # below applying the right mode — that's the flicker.
-          "<style>html:not([data-bs-theme]) body{visibility:hidden;}</style>",
-          # SYNCHRONOUS data-bs-theme sync — runs in head so we set the
-          # attribute before body paints.
-          #   1. Read parent's current data-bs-theme and apply (unhides
-          #      body via the CSS rule above flipping false).
-          #   2. MutationObserver on parent's <html> handles the case
-          #      where bslib hasn't written data-bs-theme yet at iframe-
-          #      load time (writes it ~ms later) AND future toggles.
-          #   3. 200ms fallback to 'light' so the iframe never stays
-          #      hidden if parent never sets the attribute (light-only
-          #      apps with no dark-mode toggle).
-          # Requires `allow-same-origin` in the iframe sandbox.
-          "<script>(function(){",
-          "function fallback(){",
-          "if(!document.documentElement.hasAttribute('data-bs-theme')){",
-          "document.documentElement.setAttribute('data-bs-theme','light');}}",
-          "try{",
-          "var p=window.parent&&window.parent.document&&",
-          "window.parent.document.documentElement;",
-          "if(!p){fallback();return;}",
-          "function s(){",
-          "var m=p.getAttribute('data-bs-theme');",
-          "if(m==='dark'||m==='light'){",
-          "document.documentElement.setAttribute('data-bs-theme',m);}",
-          "}",
-          "s();",
-          "new MutationObserver(s).observe(p,{",
-          "attributes:true,attributeFilter:['data-bs-theme']});",
-          "setTimeout(fallback,200);",
-          "}catch(e){fallback();}",
-          "})();</script>",
-          "<style>",
+          "<head><style>",
           # Brand layer first (Inter @import must lead): the iframe is an
           # isolated document, so resondex_css() carries the --ndr-* tokens
           # + Inter + shared classes into it, matching the rest of the app.
@@ -801,20 +765,8 @@ app_deliverable_network_drivers <- function(
             `data-rid`    = rid,
             `data-view`   = view_type,
             `data-layout` = layout_type,
-            # `background-color: var(--ndr-card-bg)` on the iframe element
-            # itself (resolved in PARENT context, so it tracks parent's
-            # data-bs-theme). This is the surface seen during the brief
-            # window the iframe body is hidden waiting for data-bs-theme
-            # sync — no white flash on first visibility.
-            style = paste(
-              "width: 100%; height: 80vh; border: none; display: block;",
-              "background-color: var(--ndr-card-bg);"
-            ),
-            # `allow-same-origin` lets the iframe read the parent's
-            # data-bs-theme synchronously at load (see <script> in
-            # inject_head). Eliminates the flicker that used to occur
-            # before the parent's postMessage setMode arrived.
-            sandbox = "allow-scripts allow-downloads allow-same-origin",
+            style = "width: 100%; height: 80vh; border: none; display: block;",
+            sandbox = "allow-scripts allow-downloads",
             allowfullscreen = NA
           )
         )
@@ -1837,35 +1789,12 @@ app_deliverable_network_drivers <- function(
     "  min-height: 0;",
     "  display: flex;",
     "  flex-direction: column;",
-    # `position: relative` is the containing block for the absolutely-
-    # positioned inactive .tab-panes below.
-    "  position: relative;",
     "}\n",
     ".nav-underline + .tab-content > .tab-pane.active {",
     "  flex: 1 1 auto;",
     "  min-height: 0;",
     "  display: flex;",
     "  flex-direction: column;",
-    "}\n",
-    # ---- Pre-render inactive tab-panes ----
-    # bslib defaults inactive .tab-pane to display:none, which gives the
-    # iframe inside zero dimensions. vis-network can't render to a 0×0
-    # canvas; first activation triggers a fresh render and the user sees
-    # a brief flash of default colors (THE flicker).
-    # Override: keep inactive panes in the DOM with full dimensions, just
-    # hidden visually (visibility:hidden) and out of layout flow
-    # (position:absolute). vis-network renders fully on init; activation
-    # is a visibility flip — no first-render flash.
-    # Scoped to `.nav-underline + .tab-content` so it ONLY affects the
-    # network-drivers inner tabs (Attribute / Community / Membership /
-    # Impacts / Prio), NOT the outer app's page_navbar tabs.
-    ".nav-underline + .tab-content > .tab-pane:not(.active) {",
-    "  display: flex !important;",
-    "  flex-direction: column;",
-    "  visibility: hidden;",
-    "  position: absolute;",
-    "  top: 0; left: 0; right: 0; bottom: 0;",
-    "  pointer-events: none;",
     "}\n",
     ".dataTables_wrapper {",
     "  height: calc(100% - 1rem);",
