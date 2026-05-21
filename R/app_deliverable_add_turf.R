@@ -372,7 +372,7 @@ app_deliverable_add_turf <- function(
       shiny::selectInput(ns("bc_chart_type"), "Chart:",
                           choices = c("Top Reach", "Reach vs Freq",
                                       "Item Frequency", "None"),
-                          selected = "Top Reach"),
+                          selected = "Reach vs Freq"),
       shiny::selectInput(ns("bc_chart_label"), "Display Label:",
                           choices = c("Label", "Variable - Label", "Variable"),
                           selected = "Label"),
@@ -484,7 +484,7 @@ app_deliverable_add_turf <- function(
     chart_theme = "Default",
     combo_size  = if (has_combos) (if (2L %in% n_values) 2L else n_values[1]) else 2L,
     display_n   = 1000L,
-    chart_type  = "Top Reach",
+    chart_type  = "Reach vs Freq",
     item_include = rep(TRUE, length(vars)),
     syncing     = FALSE
   )
@@ -839,19 +839,19 @@ app_deliverable_add_turf <- function(
       columns = list(
         step      = reactable::colDef(
           name = "#", align = "center",
-          header = th("#", "Greedy step number (order in which items were selected)")
+          header = th("Step", "Order items were optimized")
         ),
         variable  = reactable::colDef(
           name = "Variable", align = "left",
-          header = th("Variable", "Source variable name from the dataset")
+          header = th("Variable", "Name from dataset")
         ),
         label     = reactable::colDef(
           name = "Label", align = "left",
-          header = th("Label", "Human-readable label for the variable")
+          header = th("Label", "Label for variable")
         ),
         cumul_pct = reactable::colDef(
           name = "Cumul%", align = "center",
-          header = th("Cumul%", "Cumulative unduplicated reach (% of respondents reached through this step)"),
+          header = th("Cumul%", "Cumulative unduplicated reach (% reached through this step)"),
           cell = pct_cell, style = scale_bg(cumul_max)
         ),
         incr_pct  = reactable::colDef(
@@ -866,12 +866,12 @@ app_deliverable_add_turf <- function(
         ),
         abs_pct   = reactable::colDef(
           name = "Abs%", align = "center",
-          header = th("Abs%", "Absolute/standalone reach (% who selected this item regardless of others)"),
+          header = th("Abs%", "Absolute/standalone reach (% who selected this item regardless of other items)"),
           cell = pct_cell, style = scale_bg(abs_max)
         ),
         p_value   = reactable::colDef(
           name = "p-value", align = "center",
-          header = th("p-value", "Binomial exact test: P(X >= n_new | n_unreached, p0 = mean rate of remaining items)"),
+          header = th("p-value", "Significance test"),
           cell = pval_cell
         )
       )
@@ -1024,7 +1024,7 @@ app_deliverable_add_turf <- function(
           list(
             rank          = reactable::colDef(
               name = "Rank", align = "center",
-              header = th("Rank", "Combo ranking (1 = best for selected optimization metric)")
+              header = th("Rank", "Combo ranking (1 = best)")
             ),
             reach_display = reactable::colDef(
               name = "Reach%", align = "center",
@@ -1032,7 +1032,7 @@ app_deliverable_add_turf <- function(
             ),
             freq_display  = reactable::colDef(
               name = "Freq", align = "center",
-              header = th("Freq", "Average frequency among reached respondents (mean items selected per reached respondent)")
+              header = th("Frequency", "Average frequency among reached respondents (mean items selected per reached respondent)")
             )
           ),
           item_col_defs
@@ -1098,7 +1098,7 @@ app_deliverable_add_turf <- function(
     chart_theme  = "Default",
     combo_size   = if (has_combos) (if (2L %in% n_values) 2L else n_values[1]) else 2L,
     display_n    = 1000L,
-    chart_type   = "Top Reach",
+    chart_type   = "Reach vs Freq",
     item_include = rep(TRUE, length(vars))
   )
 
@@ -1513,7 +1513,7 @@ app_deliverable_add_turf <- function(
     hovertemplate = "Rank %{text}<br>Reach: %{x:.1f}%<br>Freq: %{y:.2f}<extra></extra>"
   ) %>%
     plotly::layout(
-      xaxis = list(title = "Reach %"),
+      xaxis = list(title = "Reach %", ticksuffix = "%"),
       yaxis = list(title = "Avg Freq"),
       showlegend = FALSE
     )
