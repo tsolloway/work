@@ -251,6 +251,9 @@ app_deliverable_add_turf <- function(
   # ---- Dashboard tab ----
   dashboard_sidebar <- bslib::sidebar(
     width = 220,
+    # style = "display: flex; flex-direction: column; height: 100%;",
+    fillable = TRUE,
+    fill = TRUE,
     shiny::selectInput(ns("subgroup"), "Subgroup:",
                         choices = subgroup_choices,
                         selected = subgroup_names[1]),
@@ -266,7 +269,6 @@ app_deliverable_add_turf <- function(
     shiny::selectInput(ns("chart_theme"), "Chart Theme:",
                         choices = plotly_theme_names(),
                         selected = "Default"),
-    shiny::tags$hr(),
     shiny::textInput(ns("base_display"), "Base:", value = ""),
     # Workbook downloads pinned to the BOTTOM of the sidebar — same
     # margin-top:auto flex idiom as the network-drivers Download Workbook.
@@ -275,10 +277,10 @@ app_deliverable_add_turf <- function(
     shiny::div(
       style = "margin-top: auto;",
       shiny::tags$hr(style = "margin: 12px 0;"),
-      shiny::downloadButton(ns("dl_workbook"), "Download Workbook",
+      shiny::downloadButton(ns("dl_workbook"), "Download Excel",
                             icon = NULL,
                             class = "btn-rdx w-100"),
-      shiny::downloadButton(ns("dl_workbook_light"), "Download Workbook Light",
+      shiny::downloadButton(ns("dl_workbook_light"), "Download Excel Light",
                             icon = NULL,
                             class = "btn-rdx w-100 mt-1")
     )
@@ -289,8 +291,14 @@ app_deliverable_add_turf <- function(
     bslib::layout_sidebar(
       sidebar = dashboard_sidebar,
       bslib::layout_columns(
-        col_widths  = c(7, 5, 12),
-        row_heights = c(1, 1),
+        col_widths = bslib::breakpoints(
+          md = c(12, 12, 12), # Stacks elements vertically on small screens
+          lg = c(7, 5, 12)    # 2/3 and 1/3 layout on large screens
+        ),
+        row_heights = bslib::breakpoints(
+          md = c("minmax(500px, auto)", "minmax(500px, auto)", "minmax(500px, auto)"),
+          lg = c("minmax(0, 1fr)", "minmax(0, 1fr)")
+        ),
         bslib::card(
           full_screen = TRUE,
           bslib::card_header("TURF Chart"),
@@ -312,7 +320,7 @@ app_deliverable_add_turf <- function(
           ),
           bslib::card_body(
             fillable = TRUE, fill = TRUE,
-            reactable::reactableOutput(ns("items_table"), width = "100%", height = "100%")
+            reactable::reactableOutput(ns("items_table"))
           )
         ),
         bslib::card(
@@ -331,7 +339,7 @@ app_deliverable_add_turf <- function(
           ),
           bslib::card_body(
             fillable = TRUE, fill = TRUE,
-            reactable::reactableOutput(ns("greedy_table"), width = "100%", height = "100%")
+            reactable::reactableOutput(ns("greedy_table"))
           )
         )
       )
@@ -346,6 +354,8 @@ app_deliverable_add_turf <- function(
 
     combos_sidebar <- bslib::sidebar(
       width = 220,
+      fillable = TRUE,
+      fill = TRUE,
       shiny::selectInput(ns("bc_subgroup"), "Subgroup:",
                           choices = subgroup_choices,
                           selected = subgroup_names[1]),
@@ -369,7 +379,6 @@ app_deliverable_add_turf <- function(
       shiny::selectInput(ns("bc_chart_theme"), "Chart Theme:",
                           choices = plotly_theme_names(),
                           selected = "Default"),
-      shiny::tags$hr(),
       shiny::textInput(ns("bc_base_display"), "Base:", value = ""),
       # Workbook downloads pinned to the BOTTOM of the sidebar — same
       # margin-top:auto flex idiom as the network-drivers Download Workbook.
