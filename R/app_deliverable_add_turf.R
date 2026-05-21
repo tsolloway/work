@@ -386,10 +386,10 @@ app_deliverable_add_turf <- function(
       shiny::div(
         style = "margin-top: auto;",
         shiny::tags$hr(style = "margin: 12px 0;"),
-        shiny::downloadButton(ns("bc_dl_workbook"), "Download Workbook",
+        shiny::downloadButton(ns("bc_dl_workbook"), "Download Excel",
                               icon = NULL,
                               class = "btn-rdx w-100"),
-        shiny::downloadButton(ns("bc_dl_workbook_light"), "Download Workbook Light",
+        shiny::downloadButton(ns("bc_dl_workbook_light"), "Download Excel Light",
                               icon = NULL,
                               class = "btn-rdx w-100 mt-1")
       )
@@ -838,6 +838,7 @@ app_deliverable_add_turf <- function(
       display,
       pagination = FALSE,
       highlight  = TRUE,
+      compact    = TRUE,
       theme      = resondex_reactable_theme(),
       columns = list(
         step      = reactable::colDef(
@@ -935,6 +936,7 @@ app_deliverable_add_turf <- function(
       .items_df(shiny::isolate(rv$item_include)),
       pagination = FALSE,
       highlight  = TRUE,
+      compact    = TRUE,
       theme      = resondex_reactable_theme(),
       columns = list(
         Include = reactable::colDef(html = TRUE, align = "center")
@@ -1022,6 +1024,7 @@ app_deliverable_add_turf <- function(
         out,
         pagination = FALSE,
         highlight  = TRUE,
+        compact    = TRUE,
         theme      = resondex_reactable_theme(),
         columns = c(
           list(

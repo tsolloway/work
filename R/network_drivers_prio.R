@@ -217,7 +217,7 @@
   if (is.null(display) || nrow(display) == 0) {
     return(reactable::reactable(
       data.frame(Message = "No prioritization results."),
-      pagination = FALSE, sortable = FALSE
+      pagination = FALSE, sortable = FALSE, compact = TRUE
     ))
   }
   is_binary    <- isTRUE(attr(display, "is_binary"))
@@ -351,6 +351,7 @@
     resizable       = TRUE,
     bordered        = FALSE,
     highlight       = TRUE,
+    compact         = TRUE,
     # Reactable fills its flex parent (the .flex-1 wrapper inside
     # card_body). The footer takes its natural height beneath; no
     # need to reserve a fixed amount via maxHeight — the flex column
@@ -453,13 +454,11 @@
   }
   htmltools::tagList(
     htmltools::div(
+      # Visual styling (padding, font-size, color) comes from
+      # `.impact-footer, .priort-footer` rule in resondex_css()'s
+      # `table_footer_notes` block — single source of truth shared
+      # with the impact footer + bn_report's HTML.
       class = "priort-footer",
-      style = paste(
-        "margin-top: 12px;",
-        "padding: 4px 10px 10px 10px;",
-        "font-size: 12px;",
-        "color: var(--ndr-muted);"
-      ),
       if (nzchar(base_text)) htmltools::p(
         base_text,
         style = "margin: 0 0 4px 0; font-weight: 600;"

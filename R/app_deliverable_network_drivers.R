@@ -329,7 +329,7 @@ app_deliverable_network_drivers <- function(
       htmltools::hr(style = "margin: 12px 0;"),
       shiny::downloadButton(
         ns(paste0(rid, "_download_workbook")),
-        label = "Download Workbook",
+        label = "Download Excel",
         icon  = NULL,
         # btn-rdx — brand-shared button class (resondex_css). width:100%
         # is a per-instance layout choice (sidebar fill) and stays here.
@@ -418,7 +418,6 @@ app_deliverable_network_drivers <- function(
         col_widths = 12,
         bslib::card(
           full_screen = TRUE,
-          max_height  = "80vh",
           bslib::card_header(
             shiny::uiOutput(ns(paste0(rid, "_ia_title")), inline = TRUE),
             class = "fw-semibold"
@@ -448,7 +447,6 @@ app_deliverable_network_drivers <- function(
         col_widths = 12,
         bslib::card(
           full_screen = TRUE,
-          max_height  = "80vh",
           bslib::card_header(
             shiny::uiOutput(ns(paste0(rid, "_ic_title")), inline = TRUE),
             class = "fw-semibold"
@@ -456,6 +454,7 @@ app_deliverable_network_drivers <- function(
           bslib::card_body(
             padding = 0,
             style = flex_card_body_style,
+            min_height = "500px",
             shiny::div(
               style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
               reactable::reactableOutput(ns(paste0(rid, "_ic_dt")),
@@ -477,7 +476,6 @@ app_deliverable_network_drivers <- function(
 
     table_card <- bslib::card(
       full_screen = TRUE,
-      max_height  = "80vh",
       bslib::card_header(
         shiny::uiOutput(ns(paste0(rid, "_pm_title")), inline = TRUE),
         class = "fw-semibold"
@@ -499,20 +497,22 @@ app_deliverable_network_drivers <- function(
 
     chart_card <- bslib::card(
       full_screen = TRUE,
-      max_height  = "80vh",
       bslib::card_header("Prioritization Chart", class = "fw-semibold"),
       bslib::card_body(
         padding = 0,
-        plotly::plotlyOutput(ns(paste0(rid, "_pm_chart")),
-                             width = "100%", height = "500px")
+        plotly::plotlyOutput(ns(paste0(rid, "_pm_chart")), width = "100%")
       )
     )
 
     prio_body <- if (isTRUE(enable_chart)) {
       bslib::layout_columns(
         col_widths = bslib::breakpoints(
-          md  = c(12, 12),
+          xs  = c(12, 12),
           xxl = c(7, 5)
+        ),
+        row_heights = bslib::breakpoints(
+          xs = c("minmax(500px, auto)", "minmax(500px, auto)"),
+          xxl = c("minmax(0, 1fr)", "minmax(0, 1fr)")
         ),
         table_card, chart_card
       )
@@ -531,7 +531,12 @@ app_deliverable_network_drivers <- function(
     bslib::layout_sidebar(
       fillable = TRUE,
       sidebar = sidebar,
-      do.call(bslib::navset_underline, c(
+      # navset_card_underline = bslib-fill-aware sibling of navset_underline.
+      # Wraps the tab strip + tab-content in a bslib-card with html-fill-
+      # container, so fill propagates natively to the tab-panes' children
+      # (no manual wrapper div or tab-pane flex CSS needed). Same underline
+      # tab visual, with a card frame around the whole nav area.
+      do.call(bslib::navset_card_underline, c(
         list(id = ns(view_id), selected = default_view),
         panels
       ))
@@ -805,7 +810,8 @@ app_deliverable_network_drivers <- function(
               sortable    = FALSE,
               pagination  = FALSE,
               highlight   = FALSE,
-              borderless  = TRUE
+              borderless  = TRUE,
+              compact     = FALSE
             ))
           }
           reactable::reactable(
@@ -1687,17 +1693,6 @@ app_deliverable_network_drivers <- function(
   #   - tighten the membership DT to feel like the rest of the app
   paste0(
     "body { margin: 0 !important; }\n",
-    # Sidebar bottom-pinned block (margin-top:auto wrapper around hr +
-    # Download Workbook) needs two things:
-    #   1. .sidebar-content as a flex column with a definite height
-    #      → so `margin-top: auto` has space to consume.
-    #   2. .sidebar itself with a definite height that places its bottom
-    #      at the same y as the impact card's max_height bottom.
-    #
-    # Card top is offset DOWN from sidebar top by the navset_underline
-    # tab bar (~45px) + a small nav_panel/layout_columns padding (~5px).
-    # So sidebar must be 80vh PLUS that ~50px offset for the bottoms to
-    # line up. If the offset is off, dial the +50px piece.
     "#", id, " .network-drivers-dashboard { padding: 16px; }\n",
     "#", id, " .network-drivers-membership { padding: 8px 12px; }\n",
     # NOTE: between-control spacing (12px between each .form-group inside
@@ -1736,85 +1731,27 @@ app_deliverable_network_drivers <- function(
     "  align-content: start;\n",
     "  max-height: 100%;\n",
     "}\n",
-    # DT-in-card fill: makes the DT wrapper flex-grow inside the
-    # navset_card_underline's card_body so the table body fills available
-    # height without a card-level scrollbar. Overrides the inline
-    # max-height DT sets from `scrollY`. UNSCOPED because `app_deliverable`
-    # doesn't wrap the module in an element with id=<module_id>, so any
-    # `#<id> .foo` selector would match nothing. The .dataTables_* class
-    # names are DT-internal and specific enough that page-wide scoping
-    # is safe (no other component uses those classes).
-    # `display: contents` on `.dataTables_scroll` makes its children
-    # (scrollHead, scrollBody, scrollFoot) behave as direct children of
-    # the wrapper, so they all participate in the wrapper's flex column.
-    # That lets head/body/foot stack at the top with body content-sized
-    # (or capped at wrapper height for long tables). Few rows: foot
-    # sits right under data. Many rows: body scrolls internally; foot
-    # stays right below it.
-    #
-    # `.dataTables_wrapper` also gets a border + radius + bg so it looks
-    # like it's inside a bslib::card without the actual card element
-    # (saves a layer in the DOM). Uses theme CSS variables so it tracks
-    # dark mode automatically.
-    # Fill propagation for navset_underline → tab-pane → card →
-    # reactable. Without this, the inner panels don't have a defined
-    # height, so reactable's `height = "100%"` resolves against an
-    # undefined parent and the table falls back to content size (which
-    # then doesn't respond to viewport resize).
-    ".nav-underline + .tab-content {",
-    "  flex: 1 1 auto;",
-    "  min-height: 0;",
-    "  display: flex;",
-    "  flex-direction: column;",
-    # Containing block for the absolutely-positioned inactive panes
-    # below (prerender trick).
-    "  position: relative;",
-    "}\n",
-    ".nav-underline + .tab-content > .tab-pane.active {",
-    "  flex: 1 1 auto;",
-    "  min-height: 0;",
-    "  display: flex;",
-    "  flex-direction: column;",
-    "}\n",
-    # ---- Prerender inactive tab-panes ----
+    # ---- Prerender inactive tab-panes (navset_card_underline) ----
     # bslib defaults inactive .tab-pane to display:none, which gives the
-    # iframe inside zero dimensions. vis-network can't render to a 0×0
-    # canvas; first activation triggers a fresh render → brief flash.
-    # Override: keep inactive panes in DOM at full size, hidden via
-    # visibility + position:absolute (out of layout flow). vis-network
+    # visNetwork iframe inside zero dimensions. vis-network can't render
+    # to a 0x0 canvas; first activation triggers a fresh render → brief
+    # flash. Override: keep inactive panes in DOM at full size, hidden
+    # via visibility + position:absolute (out of layout flow). Iframe
     # renders fully on init; activation is a visibility flip.
-    # Scoped to `.nav-underline + .tab-content` so only the network-
-    # drivers inner tabs are affected, NOT the outer page_navbar tabs.
-    ".nav-underline + .tab-content > .tab-pane:not(.active) {",
-    "  display: flex !important;",
-    "  flex-direction: column;",
-    "  visibility: hidden;",
-    "  position: absolute;",
-    "  top: 0; left: 0; right: 0; bottom: 0;",
-    "  pointer-events: none;",
-    "}\n",
-    ".dataTables_wrapper {",
-    "  height: calc(100% - 1rem);",
-    "  max-height: 85vh;",
-    "  margin-bottom: 1rem;",
-    "  display: flex;",
-    "  flex-direction: column;",
-    "  overflow: hidden;",
-    "  border: 1px solid var(--bs-card-border-color, #dee2e6);",
-    "  border-radius: var(--bs-card-border-radius, 0.375rem);",
-    "  background: var(--bs-card-bg, #fff);",
-    "  box-shadow: var(--bs-card-box-shadow, 0 1px 2px rgba(0,0,0,.05));",
-    "}\n",
-    ".dataTables_scroll { display: contents; }\n",
-    ".dataTables_scrollHead { flex: 0 0 auto; }\n",
-    ".dataTables_scrollBody {",
-    "  flex: 1 1 auto !important;",
-    "  min-height: 0 !important;",
-    "  max-height: none !important;",
-    "  height: auto !important;",
-    "  overflow-y: auto !important;",
-    "}\n",
-    ".dataTables_scrollFoot { flex: 0 0 auto; }\n"
+    #
+    # Selector targets navset_card_underline's structure
+    # (`.bslib-card > .tab-content > .tab-pane`) — scoped narrowly so it
+    # only affects bslib-card-based navsets, not outer page_navbar tabs
+    # (which use a non-card navset).
+    ".bslib-card > .tab-content { position: relative; }\n",
+    ".bslib-card > .tab-content > .tab-pane:not(.active) {\n",
+    "  display: flex !important;\n",
+    "  flex-direction: column;\n",
+    "  visibility: hidden;\n",
+    "  position: absolute;\n",
+    "  top: 0; left: 0; right: 0; bottom: 0;\n",
+    "  pointer-events: none;\n",
+    "}\n"
   )
 }
 

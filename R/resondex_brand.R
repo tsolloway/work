@@ -426,6 +426,25 @@ resondex_css <- function(include_import = TRUE) {
     collapse = "\n"
   )
 
+  # Table-footer notes block — the small italic / muted text under
+  # impact and prioritization tables. Both the network-drivers app
+  # AND the bn_report HTML use these classes; centralizing here so
+  # editing once updates both surfaces in lockstep.
+  # `margin-top: 0 !important` is defensive — Bootstrap reboot, bn_report
+  # media queries, and any future stray rule could add top margin and
+  # push the footer away from the reactable; this pins it flush.
+  table_footer_notes <- paste(
+    c(
+      ".impact-footer, .priort-footer {",
+      "  margin-top: 0 !important;",
+      "  padding: 4px 10px 10px 10px;",
+      "  font-size: 12px;",
+      "  color: var(--ndr-muted);",
+      "}"
+    ),
+    collapse = "\n"
+  )
+
   # Brand button class. SINGLE source of truth for every "outline-on-card"
   # action button across reports and apps — Download Workbook, Toggle View,
   # the visNetwork modebar buttons (when we migrate them off bespoke CSS),
@@ -506,7 +525,8 @@ resondex_css <- function(include_import = TRUE) {
     import, root_light, "\n", root_dark, "\n",
     tip, "\n", base, "\n", disabled, "\n", focus_ring, "\n",
     form_controls, "\n", sidebar_controls, "\n", navbar, "\n",
-    card_header, "\n", brand_btn, "\n", table_fmt, "\n"
+    card_header, "\n", table_footer_notes, "\n", brand_btn, "\n",
+    table_fmt, "\n"
   )
 }
 
@@ -686,7 +706,11 @@ resondex_reactable_theme <- function() {
       color      = "var(--ndr-muted)",
       background = "transparent",
       borderTop  = "1px solid var(--ndr-border)",
-      padding    = "8px 10px"
+      # No bottom padding — the custom footer div sits 12px below the
+      # reactable's <tfoot>, so the <tfoot>'s own bottom padding just
+      # adds visible whitespace between the totals row and the custom
+      # notes. Order: top right bottom left.
+      padding    = "8px 10px 0 10px"
     )
   )
 }

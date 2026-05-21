@@ -1655,9 +1655,12 @@
     '.impact-table tfoot tr.base-row td {',
     '  color: #595959; font-weight: 400;',
     '}',
-    '.impact-footer { margin-top: 12px; font-size: 12px; color: #555; }',
+    # .impact-footer outer styling (padding / font-size / color) is in
+    # resondex_css()'s table_footer_notes block — single source of truth
+    # shared with the network-drivers app. Inner-paragraph styling stays
+    # here because the inner classes are bn_report-specific markup.
     '.impact-footer .index-note { margin: 0 0 4px 0; font-style: italic; }',
-    '.impact-footer .muted { margin: 0; color: #888; }',
+    '.impact-footer .muted { margin: 0; color: var(--ndr-muted); }',
     '',
     '/* Prioritization dashboard (mirrors bn_prioritize_write) */',
     '.priort-dashboard { padding: 20px; overflow-x: auto; }',
@@ -1814,10 +1817,14 @@
     '  background: #f5f5f5; font-weight: 600; text-align: center;',
     '  color: #595959;',
     '}',
-    '.priort-footer { margin-top: 12px; font-size: 12px; color: #888; }',
+    # .priort-footer outer styling (padding / font-size / color) is in
+    # resondex_css()'s table_footer_notes block — single source of
+    # truth shared with the network-drivers app. Inner-paragraph
+    # styling stays here because the inner classes are bn_report
+    # markup.
     '.priort-footer .muted { margin: 0; }',
     '.priort-footer .priort-footer-base {',
-    '  margin: 0 0 4px 0; font-weight: 700; color: #222;',
+    '  margin: 0 0 4px 0; font-weight: 700; color: var(--ndr-text);',
     '}',
     # Hide the off-mode metric columns. The Display dropdown adds
     # mode-percent / mode-point on the OUTER tab-panel wrapper (.priort-
@@ -1942,7 +1949,7 @@
     '    align-self: start !important;',
     '  }',
     '  .impact-table-wrap, .priort-split { grid-area: main; }',
-    '  .impact-footer, .priort-footer { grid-area: foot; margin-top: 12px !important; }',
+    '  .impact-footer, .priort-footer { grid-area: foot; }',
     '  .impact-ctrl-cell, .priort-ctrl-cell { width: 100%; }',
     '  .impact-ctrl-row, .priort-ctrl-row {',
     '    flex-direction: column !important; align-items: stretch !important;',
@@ -2035,7 +2042,7 @@
     '}',
     '',
     '/* ---- Footer notes ---- */',
-    '.impact-footer, .priort-footer { font-size: 12px !important; color: var(--ndr-muted) !important; }',
+    '/* Outer styling now in resondex_css() table_footer_notes block. */',
     '.impact-footer .index-note { font-style: italic; }',
     '',
     '/* ---- Label tooltip affordance — underline only. The tooltip itself',

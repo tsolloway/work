@@ -506,13 +506,11 @@
   min_base <- metadata$min_base_for_lift %||% 75L
   htmltools::tagList(
     htmltools::div(
+      # Visual styling (padding, font-size, color) comes from
+      # `.impact-footer, .priort-footer` rule in resondex_css()'s
+      # `table_footer_notes` block — single source of truth shared
+      # with the prio footer + bn_report's HTML.
       class = "impact-footer",
-      style = paste(
-        "margin-top: 12px;",
-        "padding: 4px 10px 10px 10px;",
-        "font-size: 12px;",
-        "color: var(--ndr-muted);"
-      ),
       htmltools::p(
         index_note,
         style = "margin: 0 0 4px 0; font-style: italic;"
@@ -539,7 +537,7 @@
   if (is.null(display) || nrow(display) == 0) {
     return(reactable::reactable(
       data.frame(Message = "No impact results."),
-      pagination = FALSE, sortable = FALSE
+      pagination = FALSE, sortable = FALSE, compact = TRUE
     ))
   }
   sg_cols <- attr(display, "subgroup_cols") %||% setdiff(
@@ -692,6 +690,7 @@
     resizable       = TRUE,
     bordered        = FALSE,
     highlight       = TRUE,
+    compact         = TRUE,
     # Reactable fills its flex parent (the .flex-1 wrapper inside
     # card_body). The card is wrapped in bslib::layout_columns by the
     # module UI, which gives it a definite cell height — so the flex
