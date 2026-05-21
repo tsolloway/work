@@ -276,8 +276,10 @@ app_deliverable_add_turf <- function(
       style = "margin-top: auto;",
       shiny::tags$hr(style = "margin: 12px 0;"),
       shiny::downloadButton(ns("dl_workbook"), "Download Workbook",
+                            icon = NULL,
                             class = "btn-rdx w-100"),
       shiny::downloadButton(ns("dl_workbook_light"), "Download Workbook Light",
+                            icon = NULL,
                             class = "btn-rdx w-100 mt-1")
     )
   )
@@ -292,7 +294,7 @@ app_deliverable_add_turf <- function(
         bslib::card(
           full_screen = TRUE,
           bslib::card_header("TURF Chart"),
-          bslib::card_body(plotly::plotlyOutput(ns("greedy_chart"), height = "500px"))
+          bslib::card_body(fillable = TRUE, fill = TRUE, plotly::plotlyOutput(ns("greedy_chart")))
         ),
         bslib::card(
           full_screen = TRUE,
@@ -375,8 +377,10 @@ app_deliverable_add_turf <- function(
         style = "margin-top: auto;",
         shiny::tags$hr(style = "margin: 12px 0;"),
         shiny::downloadButton(ns("bc_dl_workbook"), "Download Workbook",
+                              icon = NULL,
                               class = "btn-rdx w-100"),
         shiny::downloadButton(ns("bc_dl_workbook_light"), "Download Workbook Light",
+                              icon = NULL,
                               class = "btn-rdx w-100 mt-1")
       )
     )
@@ -415,7 +419,7 @@ app_deliverable_add_turf <- function(
             bslib::card(
               full_screen = TRUE,
               bslib::card_header(shiny::textOutput(ns("bc_chart_title"))),
-              bslib::card_body(plotly::plotlyOutput(ns("combo_chart"), height = "500px"))
+              bslib::card_body(fillable = TRUE, fill = TRUE, plotly::plotlyOutput(ns("combo_chart")))
             )
           )
         )
