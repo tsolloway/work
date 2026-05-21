@@ -366,6 +366,32 @@ resondex_css <- function(include_import = TRUE) {
   # `.card-header { color: #333 }` rule used to leak through and
   # overpower this; that rule is now scoped to `.membership-card .card-header`,
   # but other future component CSS could re-introduce the conflict.
+  # Navbar typography — pin the brand font + color on the navbar brand
+  # (app title) and the navbar nav-links (top-level tabs). Bootstrap +
+  # bslib don't set font-family on these explicitly, so inheritance from
+  # body should work — but this guards against any specific selector
+  # winning the cascade, AND against Inter not having loaded yet when
+  # the navbar paints. Single source of truth: edits to --ndr-font
+  # propagate everywhere automatically.
+  navbar <- paste(
+    c(
+      ".navbar-brand {",
+      "  font-family: var(--ndr-font) !important;",
+      "  color: var(--ndr-text) !important;",
+      "  font-weight: 600 !important;",
+      "  font-size: var(--ndr-fs-lg, 15px) !important;",
+      "}",
+      ".navbar-brand:hover, .navbar-brand:focus {",
+      "  color: var(--ndr-text) !important;",
+      "}",
+      ".navbar .nav-link {",
+      "  font-family: var(--ndr-font) !important;",
+      "  font-size: var(--ndr-fs-base, 14px) !important;",
+      "}"
+    ),
+    collapse = "\n"
+  )
+
   card_header <- paste(
     c(
       ".card-header, .bslib-card > .card-header {",
@@ -456,7 +482,8 @@ resondex_css <- function(include_import = TRUE) {
   paste0(
     import, root_light, "\n", root_dark, "\n",
     tip, "\n", base, "\n", disabled, "\n", focus_ring, "\n",
-    form_controls, "\n", card_header, "\n", brand_btn, "\n", table_fmt, "\n"
+    form_controls, "\n", navbar, "\n", card_header, "\n", brand_btn, "\n",
+    table_fmt, "\n"
   )
 }
 
