@@ -1124,7 +1124,7 @@ app_deliverable_network_drivers <- function(
           # No client-side relayout, no flicker — the chart paints directly
           # with the right surface tokens.
           if (isTRUE(dark_mode())) {
-            theme_v <- .prio_dark_pair(theme_v)
+            theme_v <- .plotly_dark_pair(theme_v)
           }
           .network_drivers_prio_chart(
             prio_display_reactive(), pm,

@@ -805,7 +805,7 @@ app_deliverable_add_turf <- function(
       p <- p %>% plotly::layout(
         paper_bgcolor = dm$paper_bgcolor,
         plot_bgcolor  = dm$plot_bgcolor,
-        font = dm$font,
+        font  = dm$font,
         xaxis = dm$xaxis,
         yaxis = dm$yaxis
       )
@@ -963,7 +963,7 @@ app_deliverable_add_turf <- function(
         p <- p %>% plotly::layout(
           paper_bgcolor = dm$paper_bgcolor,
           plot_bgcolor  = dm$plot_bgcolor,
-          font = dm$font,
+          font  = dm$font,
           xaxis = dm$xaxis,
           yaxis = dm$yaxis
         )
@@ -1230,17 +1230,27 @@ app_deliverable_add_turf <- function(
 
 .turf_colors_to_palette <- function(colors, theme_name = "Default") {
   # Returns list: bar_base, bar_incr, bar_single, scatter_main, scatter_highlight
-  # Derives all colors from the theme's colorway
-
-  if (length(colors) == 0 || theme_name == "Default") {
+  # Derives all colors from the theme's colorway.
+  #
+  # Empty-colors fallback now pulls from the brand viz palette
+  # (resondex_brand()$viz) so even an unknown theme stays on-brand.
+  # Previously the "Default" special-case here forced hardcoded
+  # `#D9D9D9 / #595959 / #4472C4 / #ED7D31` — that made sense back when
+  # "Default" was a no-op; now "Default" IS the branded theme with its
+  # own colorway, so it falls through and derives from the brand.
+  if (length(colors) == 0) {
+    v <- resondex_brand()$viz
     return(list(
-      bar_base = "#D9D9D9", bar_incr = "#595959",
-      bar_single = "#4472C4", scatter_main = "#4472C4",
-      scatter_highlight = "#ED7D31"
+      bar_base          = v$bar_base,
+      bar_incr          = v$bar_incr,
+      bar_single        = v$bar_incr,
+      scatter_main      = v$colorway[1],
+      scatter_highlight = v$colorway[4]
     ))
   }
 
-  # Detect if dark theme (crude heuristic)
+  # Detect if dark theme (crude heuristic — covers the paired dark
+  # variants of every theme with a dark version).
   is_dark <- grepl("Dark|Unica|Monokai|Dotabuff|Alone|Superheroes|plotly_dark",
                    theme_name, ignore.case = FALSE)
 
@@ -1250,7 +1260,14 @@ app_deliverable_add_turf <- function(
   bar_incr <- colors[1]
   bar_single <- if (length(colors) >= 2) colors[2] else colors[1]
   scatter_main <- if (length(colors) >= 2) colors[2] else colors[1]
-  scatter_highlight <- colors[1]
+  # Highlight the top-rank marker with a clearly contrasting tone — use
+  # the 4th colorway entry when available. For Default this is orange
+  # (#C2773C), unmistakably different from the slate-blue scatter_main
+  # (#5B7E92) at any size. Falls back through colors[3] → colors[1] for
+  # themes with shorter colorways.
+  scatter_highlight <- if (length(colors) >= 4) colors[4]
+    else if (length(colors) >= 3) colors[3]
+    else colors[1]
 
   list(
     bar_base = bar_base, bar_incr = bar_incr,
@@ -1357,7 +1374,8 @@ app_deliverable_add_turf <- function(
     marker = list(color = palette$bar_single),
     text = paste0(round(df$reach_display, 1), "%"),
     textposition = "outside",
-    hovertemplate = "Rank %{y}<br>Reach: %{x:.1f}%<extra></extra>"
+    customdata = df$rank,
+    hovertemplate = "Rank %{customdata}<br>Reach: %{x:.1f}%<extra></extra>"
   ) %>%
     plotly::layout(
       xaxis = list(title = "Reach %"),
@@ -1380,8 +1398,8 @@ app_deliverable_add_turf <- function(
     x = df$reach_display, y = df$freq_display,
     type = "scatter", mode = "markers",
     marker = list(color = colors, size = sizes),
-    text = paste0("#", df$rank),
-    hovertemplate = "Rank #%{text}<br>Reach: %{x:.1f}%<br>Freq: %{y:.2f}<extra></extra>"
+    text = as.character(df$rank),
+    hovertemplate = "Rank %{text}<br>Reach: %{x:.1f}%<br>Freq: %{y:.2f}<extra></extra>"
   ) %>%
     plotly::layout(
       xaxis = list(title = "Reach %"),

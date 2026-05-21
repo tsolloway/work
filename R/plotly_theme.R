@@ -192,6 +192,31 @@ plotly_theme_colors <- function(theme = "Default") {
 
 
 # =============================================================================
+# Internal: Path A dark-mode theme pairing
+# =============================================================================
+#
+# Map a user-selected theme to its dark counterpart when the host app is in
+# dark mode. Returns the input unchanged for themes without a paired dark
+# variant (Economist, Monokai, etc. — they have opinionated palettes that
+# shouldn't auto-flip). Already-dark themes also pass through unchanged.
+#
+# Used by every chart render reactive so toggling dark mode triggers a clean
+# server-side re-render with the correct surface, no flicker.
+
+#' @noRd
+.plotly_dark_pair <- function(theme) {
+  switch(
+    theme,
+    "Default"      = "Default Dark",
+    "Flat"         = "Flat Dark",
+    "plotly"       = "plotly_dark",
+    "plotly_white" = "plotly_dark",
+    theme
+  )
+}
+
+
+# =============================================================================
 # Internal: theme definition lookup
 # =============================================================================
 

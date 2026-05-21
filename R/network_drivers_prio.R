@@ -6,27 +6,9 @@
 # main area. Shares dimension parsing with bn_report via .bn_report_prio_metadata().
 # =============================================================================
 
-# ---- Path A dark-mode pairing -----------------------------------------------
-#
-# Map a user-selected theme to its dark counterpart when the host app is in
-# dark mode. Returns the input theme unchanged for themes that don't have a
-# paired dark variant (Economist, Monokai, already-dark themes, etc.). The
-# render reactive (in app_deliverable_network_drivers.R) calls this with the
-# current dark_mode() reactive so the prio chart re-renders with the right
-# surface when the user toggles light/dark — zero flicker, no client-side
-# relayout race.
-
-#' @noRd
-.prio_dark_pair <- function(theme) {
-  switch(
-    theme,
-    "Default"      = "Default Dark",
-    "Flat"         = "Flat Dark",
-    "plotly"       = "plotly_dark",
-    "plotly_white" = "plotly_dark",
-    theme
-  )
-}
+# Path A dark-mode pairing helper lives in plotly_theme.R as
+# `.plotly_dark_pair()` — shared with app_deliverable_add_turf.R (turf
+# charts) so every chart in the package uses the same pairing logic.
 
 
 # ---- Pure data: build the display data frame for the current selections ----
