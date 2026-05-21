@@ -268,11 +268,18 @@ app_deliverable_add_turf <- function(
                         selected = "Default"),
     shiny::tags$hr(),
     shiny::textInput(ns("base_display"), "Base:", value = ""),
-    shiny::tags$hr(),
-    shiny::downloadButton(ns("dl_workbook"), "Download Workbook",
-                          class = "btn-rdx w-100"),
-    shiny::downloadButton(ns("dl_workbook_light"), "Download Workbook Light",
-                          class = "btn-rdx w-100 mt-1")
+    # Workbook downloads pinned to the BOTTOM of the sidebar — same
+    # margin-top:auto flex idiom as the network-drivers Download Workbook.
+    # bslib::sidebar's content area is a flex column, so margin-top:auto
+    # on this wrapper consumes remaining vertical space.
+    shiny::div(
+      style = "margin-top: auto;",
+      shiny::tags$hr(style = "margin: 12px 0;"),
+      shiny::downloadButton(ns("dl_workbook"), "Download Workbook",
+                            class = "btn-rdx w-100"),
+      shiny::downloadButton(ns("dl_workbook_light"), "Download Workbook Light",
+                            class = "btn-rdx w-100 mt-1")
+    )
   )
 
   dashboard_tab <- bslib::nav_panel(
@@ -362,11 +369,16 @@ app_deliverable_add_turf <- function(
                           selected = "Default"),
       shiny::tags$hr(),
       shiny::textInput(ns("bc_base_display"), "Base:", value = ""),
-      shiny::tags$hr(),
-      shiny::downloadButton(ns("bc_dl_workbook"), "Download Workbook",
-                            class = "btn-rdx w-100"),
-      shiny::downloadButton(ns("bc_dl_workbook_light"), "Download Workbook Light",
-                            class = "btn-rdx w-100 mt-1")
+      # Workbook downloads pinned to the BOTTOM of the sidebar — same
+      # margin-top:auto flex idiom as the network-drivers Download Workbook.
+      shiny::div(
+        style = "margin-top: auto;",
+        shiny::tags$hr(style = "margin: 12px 0;"),
+        shiny::downloadButton(ns("bc_dl_workbook"), "Download Workbook",
+                              class = "btn-rdx w-100"),
+        shiny::downloadButton(ns("bc_dl_workbook_light"), "Download Workbook Light",
+                              class = "btn-rdx w-100 mt-1")
+      )
     )
 
     combos_tab <- bslib::nav_panel(
