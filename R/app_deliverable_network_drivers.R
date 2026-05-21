@@ -313,6 +313,8 @@ app_deliverable_network_drivers <- function(
   } else NULL
   sidebar <- bslib::sidebar(
     width = 240,
+    fillable = TRUE,
+    fill = TRUE,
     layout_panel,
     imp_sidebar,
     ia_indexby,
@@ -331,8 +333,7 @@ app_deliverable_network_drivers <- function(
         icon  = NULL,
         # btn-rdx — brand-shared button class (resondex_css). width:100%
         # is a per-instance layout choice (sidebar fill) and stays here.
-        class = "btn-rdx",
-        style = "width: 100%;"
+        class = "btn-rdx w-100"
       )
     )
   )
@@ -344,15 +345,13 @@ app_deliverable_network_drivers <- function(
   if (has_attr) {
     panels <- c(panels, list(bslib::nav_panel(
       title = "Attribute", value = "attribute",
-      shiny::uiOutput(ns(paste0(rid, "_attr_content")),
-                      style = "min-height: 70vh;")
+      shiny::uiOutput(ns(paste0(rid, "_attr_content")))
     )))
   }
   if (has_comm) {
     panels <- c(panels, list(bslib::nav_panel(
       title = "Community", value = "community",
-      shiny::uiOutput(ns(paste0(rid, "_comm_content")),
-                      style = "min-height: 70vh;")
+      shiny::uiOutput(ns(paste0(rid, "_comm_content")))
     )))
   }
   if (has_memb) {
@@ -1699,17 +1698,6 @@ app_deliverable_network_drivers <- function(
     # tab bar (~45px) + a small nav_panel/layout_columns padding (~5px).
     # So sidebar must be 80vh PLUS that ~50px offset for the bottoms to
     # line up. If the offset is off, dial the +50px piece.
-    ".bslib-sidebar-layout > .sidebar {\n",
-    "  height: calc(80vh + 50px) !important;\n",
-    "}\n",
-    ".bslib-sidebar-layout > .sidebar > .sidebar-content {\n",
-    "  display: flex !important;\n",
-    "  flex-direction: column !important;\n",
-    "  height: 100% !important;\n",
-    "  overflow-y: auto !important;\n",
-    # NOTE: `gap: 0` is now set in resondex_css()'s sidebar_controls
-    # block, applies to every app's sidebar by default. Removed here.
-    "}\n",
     "#", id, " .network-drivers-dashboard { padding: 16px; }\n",
     "#", id, " .network-drivers-membership { padding: 8px 12px; }\n",
     # NOTE: between-control spacing (12px between each .form-group inside

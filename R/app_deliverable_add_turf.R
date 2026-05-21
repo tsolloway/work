@@ -288,6 +288,8 @@ app_deliverable_add_turf <- function(
   dashboard_tab <- bslib::nav_panel(
     "TURF",
     bslib::layout_sidebar(
+      fillable = TRUE,
+      fill     = TRUE,
       sidebar = dashboard_sidebar,
       bslib::layout_columns(
         col_widths = bslib::breakpoints(
@@ -396,6 +398,8 @@ app_deliverable_add_turf <- function(
     combos_tab <- bslib::nav_panel(
       "TURF - Best Combo",
       bslib::layout_sidebar(
+        fillable = TRUE,
+        fill     = TRUE,
         sidebar = combos_sidebar,
         bslib::layout_columns(
           col_widths  = c(12, 12),
