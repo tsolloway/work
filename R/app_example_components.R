@@ -286,6 +286,22 @@ app_example_components <- function() {
         shiny::tags$button(
           type = "button", class = "btn btn-primary", disabled = NA, "Disabled"
         )
+      ),
+      shiny::tags$hr(),
+      shiny::tags$p(class = "text-muted", style = "margin-bottom:6px;",
+        shiny::tags$strong(".btn-rdx"),
+        " — the brand action button (`resondex_css()`). Single source ",
+        "of truth for card-overlay / sidebar / download buttons across ",
+        "every app and report. Apply via ", shiny::tags$code('class = "btn-rdx"'),
+        " on any ", shiny::tags$code("shiny::tags$button"), ", ",
+        shiny::tags$code("shiny::actionButton"), ", or ",
+        shiny::tags$code("shiny::downloadButton"), "."),
+      shiny::tags$div(
+        class = "rdx-row",
+        shiny::tags$button(type = "button", class = "btn-rdx", "Default"),
+        shiny::tags$button(type = "button", class = "btn-rdx", disabled = NA,
+          "Disabled"),
+        shiny::downloadLink("dl_rdx_demo", "Download", class = "btn-rdx")
       )
     ),
 
@@ -319,6 +335,28 @@ app_example_components <- function() {
 
     section(
       "Navigation",
+      # Faux navbar — demonstrates the .navbar-brand + .nav-link brand
+      # rules in resondex_css(). app_deliverable's page_navbar renders
+      # exactly this shape; the brand layer pins font + color so the
+      # title and tabs read consistently across every app and report.
+      shiny::tags$nav(
+        class = "navbar navbar-expand",
+        style = paste(
+          "background: var(--ndr-header-bg);",
+          "border-bottom: 1px solid var(--ndr-border);",
+          "padding: 8px 16px; margin-bottom: 14px;"
+        ),
+        shiny::tags$a(class = "navbar-brand", href = "#", "Brand Title"),
+        shiny::tags$ul(
+          class = "navbar-nav",
+          shiny::tags$li(class = "nav-item",
+            shiny::tags$a(class = "nav-link active", href = "#", "Active tab")),
+          shiny::tags$li(class = "nav-item",
+            shiny::tags$a(class = "nav-link", href = "#", "Second")),
+          shiny::tags$li(class = "nav-item",
+            shiny::tags$a(class = "nav-link", href = "#", "Third"))
+        )
+      ),
       bslib::navset_underline(
         bslib::nav_panel("Tab one", shiny::tags$p(class = "pt-2",
           "Underline nav — the app chrome style.")),
@@ -403,15 +441,28 @@ app_example_components <- function() {
       shiny::tags$p(class = "text-muted",
         "The app chrome the deliverables actually use: a bslib sidebar ",
         "(app_deliverable page rail / network-drivers controls) and a ",
-        "well/panel surface."),
+        "well/panel surface. The sidebar's control spacing (12px between ",
+        "form-groups) is centralized in ", shiny::tags$code("resondex_css()"),
+        " — no per-app rules. A trailing element with ",
+        shiny::tags$code('style = "margin-top: auto;"'),
+        " pins itself to the bottom (classic flexbox idiom)."),
       shiny::tags$div(
-        style = "border:1px solid var(--ndr-border); border-radius:var(--ndr-radius); overflow:hidden; height:240px;",
+        style = "border:1px solid var(--ndr-border); border-radius:var(--ndr-radius); overflow:hidden; height:340px;",
         bslib::layout_sidebar(
           sidebar = bslib::sidebar(
             title = "Controls",
             shiny::selectInput("ls1", "Focus", c("Market", "Brand A", "Brand B")),
             shiny::radioButtons("ls2", "Shift", c("Proportional", "Fixed step")),
-            btn("primary", "Apply")
+            shiny::tags$button(type = "button", class = "btn-rdx",
+              style = "width: 100%;", "Apply"),
+            # margin-top: auto pushes this wrapper (and everything after)
+            # to the bottom of the sidebar's flex column.
+            shiny::tags$div(
+              style = "margin-top: auto;",
+              shiny::tags$hr(style = "margin: 12px 0;"),
+              shiny::downloadLink("dl_workbook_demo", "Download Workbook",
+                class = "btn-rdx", style = "width: 100%;")
+            )
           ),
           shiny::tags$h5("Main panel"),
           shiny::tags$p(class = "text-muted",
