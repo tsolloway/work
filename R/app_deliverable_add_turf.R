@@ -131,11 +131,14 @@ app_deliverable_add_turf <- function(
   css <- paste0(
     "#", ns_prefix, "base_display, #", ns_prefix, "bc_base_display {\n",
     "  pointer-events: none;\n",
-    "  background-color: var(--bs-secondary-bg);\n",
+    "  background-color: var(--ndr-secondary-bg);\n",
     "}\n",
+    # Items-table checkboxes — brand-tokenized so checked state pulls the
+    # brand accent (--ndr-accent) instead of Bootstrap's primary alias.
+    # `accent-color` is the CSS property that tints native checkboxes.
     "#", ns_prefix, "items_table input[type='checkbox'] {\n",
     "  width: 1.1em; height: 1.1em; cursor: pointer;\n",
-    "  accent-color: var(--bs-primary);\n",
+    "  accent-color: var(--ndr-accent);\n",
     "}"
   )
 

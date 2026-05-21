@@ -1707,18 +1707,16 @@ app_deliverable_network_drivers <- function(
     "  flex-direction: column !important;\n",
     "  height: 100% !important;\n",
     "  overflow-y: auto !important;\n",
-    "  gap: 0 !important;\n",
+    # NOTE: `gap: 0` is now set in resondex_css()'s sidebar_controls
+    # block, applies to every app's sidebar by default. Removed here.
     "}\n",
     "#", id, " .network-drivers-dashboard { padding: 16px; }\n",
     "#", id, " .network-drivers-membership { padding: 8px 12px; }\n",
-    # Sidebar control spacing: every selectInput is wrapped in a
-    # .netdrv-ctrl-wrap div. Zero out the inner .form-group's bottom
-    # margin so the wrapper alone controls vertical rhythm. UNSCOPED
-    # via #<id> won't work because layout_sidebar can render the sidebar
-    # outside the module's id'd container; .netdrv-ctrl-wrap is unique
-    # enough to be safe page-wide.
-    ".netdrv-ctrl-wrap { margin-bottom: 12px; }\n",
-    ".netdrv-ctrl-wrap .form-group { margin-bottom: 0; }\n",
+    # NOTE: between-control spacing (12px between each .form-group inside
+    # the sidebar) now lives in resondex_css()'s sidebar_controls block.
+    # The `.netdrv-ctrl-wrap` div wrappers in network_drivers_impacts.R
+    # and network_drivers_prio.R are kept (harmless extra divs) but no
+    # longer carry their own CSS — the centralized rule handles spacing.
     # ---- Membership: app-specific layout overrides ----
     # The canonical membership styling (`.membership-card`, `.mc-header`,
     # `.card-count`, `.card-nodes`, `.node-pill`, `.membership-dot`) is

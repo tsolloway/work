@@ -308,6 +308,7 @@ resondex_css <- function(include_import = TRUE) {
   form_controls <- paste(
     c(
       ".form-select, .form-control {",
+      "  font-family: var(--ndr-font) !important;",
       "  border: 1px solid var(--ndr-border) !important;",
       "  border-radius: 6px !important;",
       "  padding: 0.25rem 0.5rem !important;",
@@ -326,6 +327,7 @@ resondex_css <- function(include_import = TRUE) {
       # Match the .btn-sm sizing + brand border. min-height:0 overrides",
       # selectize's default min-height which would force a taller box.
       ".selectize-input {",
+      "  font-family: var(--ndr-font) !important;",
       "  border: 1px solid var(--ndr-border) !important;",
       "  border-radius: 6px !important;",
       "  padding: 0.25rem 1.75rem 0.25rem 0.5rem !important;",
@@ -337,11 +339,13 @@ resondex_css <- function(include_import = TRUE) {
       "  box-shadow: none !important;",
       "}",
       ".selectize-input input {",
+      "  font-family: var(--ndr-font) !important;",
       "  font-size: var(--ndr-fs-sm, 12px) !important;",
       "  line-height: 1.5 !important;",
       "}",
       # Selectize dropdown panel (the open option list) — brand-align too.
       ".selectize-dropdown {",
+      "  font-family: var(--ndr-font) !important;",
       "  border: 1px solid var(--ndr-border) !important;",
       "  border-radius: 6px !important;",
       "  font-size: var(--ndr-fs-sm, 12px) !important;",
@@ -366,6 +370,25 @@ resondex_css <- function(include_import = TRUE) {
   # `.card-header { color: #333 }` rule used to leak through and
   # overpower this; that rule is now scoped to `.membership-card .card-header`,
   # but other future component CSS could re-introduce the conflict.
+  # Sidebar control spacing — applies to every bslib::sidebar so apps
+  # don't have to inline their own rules. The default bslib gap (~1rem)
+  # PLUS Bootstrap's default `.form-group { margin-bottom: 15px }` add
+  # up to ~30px between controls, which feels loose. Override both to
+  # 0 and use a 12px margin-bottom on `.shiny-input-container` so each
+  # control owns its own rhythm. Single source of truth: edit here and
+  # every app's sidebar control spacing changes together.
+  sidebar_controls <- paste(
+    c(
+      ".bslib-sidebar-layout > .sidebar > .sidebar-content {",
+      "  gap: 0 !important;",
+      "}",
+      ".bslib-sidebar-layout .shiny-input-container.form-group {",
+      "  margin-bottom: 12px;",
+      "}"
+    ),
+    collapse = "\n"
+  )
+
   # Navbar typography — pin the brand font + color on the navbar brand
   # (app title) and the navbar nav-links (top-level tabs). Bootstrap +
   # bslib don't set font-family on these explicitly, so inheritance from
@@ -482,8 +505,8 @@ resondex_css <- function(include_import = TRUE) {
   paste0(
     import, root_light, "\n", root_dark, "\n",
     tip, "\n", base, "\n", disabled, "\n", focus_ring, "\n",
-    form_controls, "\n", navbar, "\n", card_header, "\n", brand_btn, "\n",
-    table_fmt, "\n"
+    form_controls, "\n", sidebar_controls, "\n", navbar, "\n",
+    card_header, "\n", brand_btn, "\n", table_fmt, "\n"
   )
 }
 
