@@ -185,6 +185,23 @@ app_deliverable_add_turf <- function(
       "    xhr.onloadend = function() { removeOverlay(); };",
       "    xhr.send();",
       "  });",
+      # Bootstrap-tooltip init for reactable column headers (and any other
+      # element with data-bs-toggle=\"tooltip\"). bslib::tooltip() returns
+      # a tag list that breaks reactable, so we use plain data-attributes
+      # on a single <span> and init Bootstrap.Tooltip per element here.
+      # Re-fires after each shiny:value so re-rendered reactables pick up
+      # their headers. Guard against double-init via a DOM marker.
+      "  function initTurfTooltips() {",
+      "    if (typeof bootstrap === 'undefined') return;",
+      "    document.querySelectorAll('[data-bs-toggle=\"tooltip\"]:not([data-bs-tt-inited])').forEach(function(el) {",
+      "      el.setAttribute('data-bs-tt-inited', '1');",
+      "      try { new bootstrap.Tooltip(el, {delay: {show: 0, hide: 100}}); } catch(err) {}",
+      "    });",
+      "  }",
+      "  $(document).on('shiny:value', function(e) {",
+      "    setTimeout(initTurfTooltips, 50);",
+      "  });",
+      "  $(function() { setTimeout(initTurfTooltips, 100); });",
       "})();"
     )))
   )
@@ -250,9 +267,9 @@ app_deliverable_add_turf <- function(
     shiny::textInput(ns("base_display"), "Base:", value = ""),
     shiny::tags$hr(),
     shiny::downloadButton(ns("dl_workbook"), "Download Workbook",
-                          class = "btn-primary btn-sm w-100"),
+                          class = "btn-rdx w-100"),
     shiny::downloadButton(ns("dl_workbook_light"), "Download Workbook Light",
-                          class = "btn-outline-primary btn-sm w-100 mt-1")
+                          class = "btn-rdx w-100 mt-1")
   )
 
   dashboard_tab <- bslib::nav_panel(
@@ -273,8 +290,12 @@ app_deliverable_add_turf <- function(
             class = "d-flex justify-content-between align-items-center",
             shiny::span("Item Controls"),
             shiny::div(
-              shiny::actionButton(ns("items_select_all"), "All", class = "btn-sm btn-outline-secondary"),
-              shiny::actionButton(ns("items_deselect_all"), "None", class = "btn-sm btn-outline-secondary")
+              shiny::actionButton(ns("items_select_all"), "All",
+                                  class = "btn-rdx",
+                                  style = "min-width: 60px;"),
+              shiny::actionButton(ns("items_deselect_all"), "None",
+                                  class = "btn-rdx",
+                                  style = "min-width: 60px;")
             )
           ),
           bslib::card_body(
@@ -289,9 +310,11 @@ app_deliverable_add_turf <- function(
             shiny::span("TURF Results"),
             shiny::div(
               shiny::downloadLink(ns("dl_greedy_csv"), "CSV",
-                                  class = "btn btn-sm btn-outline-secondary"),
+                                  class = "btn-rdx",
+                                  style = "min-width: 60px;"),
               shiny::downloadLink(ns("dl_greedy_xlsx"), "Excel",
-                                  class = "btn btn-sm btn-outline-secondary")
+                                  class = "btn-rdx",
+                                  style = "min-width: 60px;")
             )
           ),
           bslib::card_body(
@@ -338,9 +361,9 @@ app_deliverable_add_turf <- function(
       shiny::textInput(ns("bc_base_display"), "Base:", value = ""),
       shiny::tags$hr(),
       shiny::downloadButton(ns("bc_dl_workbook"), "Download Workbook",
-                            class = "btn-primary btn-sm w-100"),
+                            class = "btn-rdx w-100"),
       shiny::downloadButton(ns("bc_dl_workbook_light"), "Download Workbook Light",
-                            class = "btn-outline-primary btn-sm w-100 mt-1")
+                            class = "btn-rdx w-100 mt-1")
     )
 
     combos_tab <- bslib::nav_panel(
@@ -349,7 +372,10 @@ app_deliverable_add_turf <- function(
         sidebar = combos_sidebar,
         bslib::layout_columns(
           col_widths  = c(12, 12),
-          row_heights = c(1, 1),
+          # Second row sizes to its content (NA) so when the chart card
+          # is hidden via conditionalPanel (chart_type = "None"), the
+          # row collapses away cleanly instead of leaving empty space.
+          row_heights = c(1, NA),
           bslib::card(
             full_screen = TRUE,
             bslib::card_header(
@@ -357,9 +383,11 @@ app_deliverable_add_turf <- function(
               shiny::span("Combo Results"),
               shiny::div(
                 shiny::downloadLink(ns("dl_combo_csv"), "CSV",
-                                    class = "btn btn-sm btn-outline-secondary"),
+                                    class = "btn-rdx",
+                                    style = "min-width: 60px;"),
                 shiny::downloadLink(ns("dl_combo_xlsx"), "Excel",
-                                    class = "btn btn-sm btn-outline-secondary")
+                                    class = "btn-rdx",
+                                    style = "min-width: 60px;")
               )
             ),
             bslib::card_body(
@@ -760,32 +788,62 @@ app_deliverable_add_turf <- function(
     pct_cell <- function(v) if (is.na(v)) "" else sprintf("%.1f%%", v)
     dec_cell <- function(v) if (is.na(v)) "" else sprintf("%.1f",   v)
 
+    # Bootstrap-tooltip header helper. Returns a SINGLE <span> tag —
+    # reactable's `header =` arg can render it cleanly (unlike bslib's
+    # tooltip which returns a tag-list and breaks the reactable). The
+    # tippy / popper init runs once after each reactable render via the
+    # module's head_tags JS (`initTurfTooltips`).
+    th <- function(label, tip) {
+      htmltools::tags$span(
+        label,
+        `data-bs-toggle`    = "tooltip",
+        `data-bs-placement` = "top",
+        `data-bs-title`     = tip,
+        style = "border-bottom: 1px dotted var(--ndr-muted); cursor: help;"
+      )
+    }
+
     reactable::reactable(
       display,
       pagination = FALSE,
+      highlight  = TRUE,
       theme      = resondex_reactable_theme(),
       columns = list(
-        step      = reactable::colDef(name = "#",        align = "center"),
-        variable  = reactable::colDef(name = "Variable", align = "left"),
-        label     = reactable::colDef(name = "Label",    align = "left"),
+        step      = reactable::colDef(
+          name = "#", align = "center",
+          header = th("#", "Greedy step number (order in which items were selected)")
+        ),
+        variable  = reactable::colDef(
+          name = "Variable", align = "left",
+          header = th("Variable", "Source variable name from the dataset")
+        ),
+        label     = reactable::colDef(
+          name = "Label", align = "left",
+          header = th("Label", "Human-readable label for the variable")
+        ),
         cumul_pct = reactable::colDef(
           name = "Cumul%", align = "center",
+          header = th("Cumul%", "Cumulative unduplicated reach (% of respondents reached through this step)"),
           cell = pct_cell, style = scale_bg(cumul_max)
         ),
         incr_pct  = reactable::colDef(
           name = "Incr%", align = "center",
+          header = th("Incr%", "Incremental reach (% points added by this item beyond previous step)"),
           cell = pct_cell, style = scale_bg(incr_max)
         ),
         avg_freq  = reactable::colDef(
           name = "Avg Freq", align = "center",
+          header = th("Avg Freq", "Average frequency among reached respondents (mean items selected per reached respondent)"),
           cell = dec_cell, style = scale_bg(freq_max)
         ),
         abs_pct   = reactable::colDef(
           name = "Abs%", align = "center",
+          header = th("Abs%", "Absolute/standalone reach (% who selected this item regardless of others)"),
           cell = pct_cell, style = scale_bg(abs_max)
         ),
         p_value   = reactable::colDef(
           name = "p-value", align = "center",
+          header = th("p-value", "Binomial exact test: P(X >= n_new | n_unreached, p0 = mean rate of remaining items)"),
           cell = pval_cell
         )
       )
@@ -845,6 +903,7 @@ app_deliverable_add_turf <- function(
     reactable::reactable(
       .items_df(shiny::isolate(rv$item_include)),
       pagination = FALSE,
+      highlight  = TRUE,
       theme      = resondex_reactable_theme(),
       columns = list(
         Include = reactable::colDef(html = TRUE, align = "center")
@@ -906,10 +965,24 @@ app_deliverable_add_turf <- function(
       out$reach_display <- formatC(round(out$reach_display, 1), format = "f", digits = 1)
       out$freq_display  <- formatC(round(out$freq_display, 1), format = "f", digits = 1)
 
+      # Bootstrap-tooltip header helper (same pattern as the greedy table).
+      th <- function(label, tip) {
+        htmltools::tags$span(
+          label,
+          `data-bs-toggle`    = "tooltip",
+          `data-bs-placement` = "top",
+          `data-bs-title`     = tip,
+          style = "border-bottom: 1px dotted var(--ndr-muted); cursor: help;"
+        )
+      }
+
       # Dynamic Item N columns (one per display_N column).
       item_col_defs <- stats::setNames(
         lapply(seq_along(display_cols), function(i) {
-          reactable::colDef(name = paste("Item", i), align = "left")
+          reactable::colDef(
+            name = paste("Item", i), align = "left",
+            header = th(paste("Item", i), "Item in the combo (shown as label)")
+          )
         }),
         display_cols
       )
@@ -917,12 +990,22 @@ app_deliverable_add_turf <- function(
       reactable::reactable(
         out,
         pagination = FALSE,
+        highlight  = TRUE,
         theme      = resondex_reactable_theme(),
         columns = c(
           list(
-            rank          = reactable::colDef(name = "Rank",   align = "center"),
-            reach_display = reactable::colDef(name = "Reach%", align = "center"),
-            freq_display  = reactable::colDef(name = "Freq",   align = "center")
+            rank          = reactable::colDef(
+              name = "Rank", align = "center",
+              header = th("Rank", "Combo ranking (1 = best for selected optimization metric)")
+            ),
+            reach_display = reactable::colDef(
+              name = "Reach%", align = "center",
+              header = th("Reach%", "Unduplicated reach (% of respondents selecting at least one item in this combo)")
+            ),
+            freq_display  = reactable::colDef(
+              name = "Freq", align = "center",
+              header = th("Freq", "Average frequency among reached respondents (mean items selected per reached respondent)")
+            )
           ),
           item_col_defs
         )
