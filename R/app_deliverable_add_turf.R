@@ -251,7 +251,6 @@ app_deliverable_add_turf <- function(
   # ---- Dashboard tab ----
   dashboard_sidebar <- bslib::sidebar(
     width = 220,
-    # style = "display: flex; flex-direction: column; height: 100%;",
     fillable = TRUE,
     fill = TRUE,
     shiny::selectInput(ns("subgroup"), "Subgroup:",
