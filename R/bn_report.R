@@ -144,20 +144,9 @@ bn_report <- function(
     add_additional_results = FALSE,
     results_excel = NULL,
     qc_mode = FALSE,
-    # Initial value for the impact dashboard's Outcome dropdown. NULL
-    # (default) auto-detects from the DV type: dichotomous DVs land on
-    # "Point Change"; continuous DVs land on "% Change". Pass "Point Change"
-    # or "% Change" to override. Translated internally to the engine's
-    # "absolute" / "proportional" vocabulary.
     impact_outcome_display = NULL,
     shift_type      = c("absolute", "proportional", "headroom", "range"),
-    # When TRUE, the prioritization dashboard table includes a p-value column
-    # (current behavior). When FALSE (default), the p-value column is hidden
-    # entirely from the prioritization table.
     add_prioritization_pvalue = FALSE,
-    # Initial Display value for the prioritization dashboard. NULL (default)
-    # auto-detects from the DV type (dichotomous -> "Point Change",
-    # continuous -> "% Change"). Pass an explicit string to override.
     prioritize_display = NULL
 ){
 
@@ -232,217 +221,42 @@ bn_report <- function(
     )
   }
 
-  widget_counter <- 0L
+  # ---- Per-bn_report state container for the extracted widget renderer ----
+  # `state` is an environment because .bn_report_render_widget() needs to
+  # mutate these counters across calls within a single bn_report
+  # invocation; environments give us reference semantics without `<<-`
+  # gymnastics across a function boundary.
+  state <- new.env(parent = emptyenv())
+  state$widget_counter   <- 0L
+  state$dep_cache        <- NULL
+  state$first_lib_prefix <- NULL
+  state$shared_deps_b64  <- NULL
 
-  # cache for shared widget dependency files (self_contained = TRUE only)
-  # populated after first widget is saved; reused for all subsequent widgets
-  dep_cache <- NULL
-  first_lib_prefix <- NULL
-  shared_deps_b64 <- NULL
+  # Immutable config bundle handed to .bn_report_render_widget() each call.
+  cfg <- list(
+    add_key          = add_key,
+    interactive      = interactive,
+    physics          = physics,
+    gravity_constant = gravity_constant,
+    central_gravity  = central_gravity,
+    charge_layout    = charge_layout,
+    seed             = seed,
+    title            = title,
+    subtitle         = subtitle,
+    self_contained   = self_contained,
+    tmp_dir          = tmp_dir
+  )
 
-
-  # --- helper: render one widget to iframe html ---
+  # Thin wrapper closures so call sites (and the type-panel builder)
+  # don't have to thread cfg / state on every invocation.
   render_widget <- function(result, type, do_community_val, result_name = NULL) {
-
-    # no legend on community tabs
-    use_key <- add_key && !do_community_val
-
-    # build namespace key for report-level save/load
-    view_name <- if (do_community_val) "community" else "attribute"
-    ns <- if (!is.null(result_name)) paste(result_name, type, view_name, sep = "|") else NULL
-
-    # build download prefix: {title} - {subtitle} - {accordion} - {tab}
-    tab_label <- if (do_community_val) "Community" else "Attribute"
-    dl_prefix <- .bn_report_download_prefix(title, subtitle, result_name, tab_label)
-
-    viz <- tryCatch(
-      bn_visual(
-        obj = result,
-        type = type,
-        do_community = do_community_val,
-        vs_height = "85vh",
-        interactive = interactive,
-        # always TRUE: vis.js needs physics ON to compute force-directed layout.
-        # when user passes physics=FALSE, the __disablePhysicsAfterStabilize
-        # flag (injected below) freezes nodes after stabilization.
-        physics = TRUE,
-        gravity_constant = gravity_constant,
-        central_gravity = central_gravity,
-        charge_layout = charge_layout,
-        add_key = use_key,
-        panel_ns = ns,
-        download_prefix = dl_prefix,
-        save_visuals = FALSE,
-        seed = seed
-      ),
-      error = function(e) {
-        warning("bn_report render_widget failed for [", result_name, " / ", type, " / ", view_name, "]: ", conditionMessage(e))
-        NULL
-      }
-    )
-
-    if (is.null(viz)) {
-      return(glue::glue(
-        '<div style="height: 100px; padding: 20px; color: #888;">',
-        '<p>Could not render this view.</p>',
-        '</div>'
-      ))
-    }
-
-    widget_counter <<- widget_counter + 1L
-    widget_file <- file.path(tmp_dir, glue::glue("widget_{widget_counter}.html"))
-    widget_lib_prefix <- paste0("widget_", widget_counter, "_files")
-
-    # always save non-self-contained to avoid redundant pandoc calls.
-    # when self_contained = TRUE, we cache shared lib files from the first
-    # widget and manually inline them for all subsequent widgets.
-    htmlwidgets::saveWidget(
-      viz,
-      file = widget_file,
-      selfcontained = FALSE
-    )
-
-    # read and inject iframe-level CSS overrides
-    widget_html <- readLines(widget_file, warn = FALSE) %>% paste(collapse = "\n")
-    inject_head <- paste0(
-      "<head><style>",
-      # Brand layer first (Inter @import must lead): the network iframe is
-      # an isolated sandboxed document, so resondex_css() carries the
-      # --ndr-* tokens + Inter into it. Without this the visNetwork
-      # toolbar's var(--ndr-*) styles fall back to unstyled.
-      resondex_css(include_import = TRUE),
-      "body,html{margin:0!important;padding:0!important;height:100%!important;overflow:hidden!important;",
-      # Background tracks --ndr-card-bg so the iframe surface flips with
-      # the parent's dark/light toggle (Stage 1 dark mode for network
-      # iframes). Parent sends a postMessage({type:'setMode',mode:...})
-      # which toggles data-bs-theme on this iframe's <html>, and the
-      # brand layer's dark overrides take care of the rest.
-      "background-color:var(--ndr-card-bg)!important;color:var(--ndr-text);}",
-      # .htmlwidget and .vis-network default to white — that paints OVER
-      # the body bg. Force them transparent so the body's --ndr-card-bg
-      # shows through and flips with mode.
-      " .htmlwidget{height:100%!important;background-color:transparent!important;}",
-      " .vis-network,.vis-network canvas{background-color:transparent!important;}",
-      " #pngButton,#svgButton,#fontButton,#physicsButton{width:130px!important;height:30px!important;}",
-      "</style>"
-    )
-
-    # when physics = FALSE, set a global flag the interactivity JS will read
-    if (!physics) {
-      inject_head <- paste0(inject_head, "<script>window.__disablePhysicsAfterStabilize=true;</script>")
-    }
-
-    widget_html <- sub("<head>", inject_head, widget_html)
-
-    if (self_contained) {
-      widget_lib_dir <- file.path(tmp_dir, widget_lib_prefix)
-
-      # cache deps from the first widget; reuse for all subsequent
-      if (is.null(dep_cache)) {
-        dep_cache <<- .bn_report_cache_deps(widget_html, widget_lib_dir)
-        first_lib_prefix <<- widget_lib_prefix
-        # store shared deps as base64 once — JS injects into each iframe via blob URL
-        deps_string <- .bn_report_shared_deps_string(dep_cache)
-        shared_deps_b64 <<- base64enc::base64encode(charToRaw(deps_string))
-      }
-
-      # strip shared dep tags, leaving <!--SHARED_DEPS--> marker for JS injection
-      widget_html <- .bn_report_strip_deps(
-        widget_html, dep_cache, widget_lib_prefix, first_lib_prefix
-      )
-      widget_b64 <- base64enc::base64encode(charToRaw(widget_html))
-
-      glue::glue(
-        '<div class="iframe-wrap" data-widget="{widget_b64}">',
-        '<div class="spinner-overlay"><div class="spinner"><div class="spinner-bar"></div><div class="spinner-bar"></div><div class="spinner-bar"></div></div></div>',
-        '<iframe style="width: 100%; height: 70vh; border: none;" ',
-        'sandbox="allow-scripts allow-downloads" allowfullscreen>',
-        '</iframe></div>'
-      )
-    } else {
-      widget_rel <- glue::glue("lib/widget_{widget_counter}.html")
-      writeLines(widget_html, widget_file)
-
-      glue::glue(
-        '<div class="iframe-wrap">',
-        '<div class="spinner-overlay"><div class="spinner"><div class="spinner-bar"></div><div class="spinner-bar"></div><div class="spinner-bar"></div></div></div>',
-        '<iframe src="{widget_rel}" ',
-        'style="width: 100%; height: 70vh; border: none;" ',
-        'sandbox="allow-scripts allow-downloads" allowfullscreen>',
-        '</iframe></div>'
-      )
-    }
+    .bn_report_render_widget(result, type, do_community_val, result_name,
+                              cfg = cfg, state = state)
   }
-
-
-  # --- helper: render membership table + card views ---
   render_membership <- function(result, result_name) {
-    nodes_df <- tryCatch(
-      work::find_recursive(result, x_name = "attribute_viz_prep")$nodes,
-      error = function(e) NULL
-    )
-    if (is.null(nodes_df)) return("")
-
-    # group nodes by community
-    groups <- nodes_df %>%
-      dplyr::arrange(group) %>%
-      dplyr::group_by(community_name, color) %>%
-      dplyr::summarise(
-        nodes = list(tibble::tibble(id = id, label = label)),
-        .groups = "drop"
-      )
-
-    # --- table view ---
-    table_rows <- purrr::pmap_chr(groups, function(community_name, color, nodes) {
-      pills <- purrr::map_chr(seq_len(nrow(nodes)), function(i) {
-        glue::glue('<span class="node-pill" data-node-id="{nodes$id[i]}">{nodes$label[i]}</span>')
-      })
-      pills_str <- paste(pills, collapse = "")
-      n_nodes <- nrow(nodes)
-      glue::glue(
-        '<tr>',
-        '<td><span class="membership-dot" style="background: {color};"></span>',
-        '<span class="community-label" data-color="{color}" data-orig-comm="{community_name}">{community_name}</span>',
-        '<span class="card-count">{n_nodes}</span></td>',
-        '<td><div class="card-nodes">{pills_str}</div></td>',
-        '</tr>'
-      )
-    })
-    table_html <- paste0(
-      '<table class="membership-table">',
-      '<thead><tr><th>Community</th><th>Attributes</th></tr></thead>',
-      '<tbody>', paste(table_rows, collapse = ""), '</tbody></table>'
-    )
-
-    # --- card view ---
-    cards <- purrr::pmap_chr(groups, function(community_name, color, nodes) {
-      pills <- purrr::map_chr(seq_len(nrow(nodes)), function(i) {
-        glue::glue('<span class="node-pill" data-node-id="{nodes$id[i]}">{nodes$label[i]}</span>')
-      })
-      pills_str <- paste(pills, collapse = "")
-      n_nodes <- nrow(nodes)
-      glue::glue(
-        '<div class="membership-card" style="border-left: 4px solid {color};">',
-        '<div class="mc-header"><span class="membership-dot" style="background: {color};"></span>',
-        '<span class="community-label" data-color="{color}" data-orig-comm="{community_name}">{community_name}</span>',
-        '<span class="card-count">{n_nodes}</span></div>',
-        '<div class="card-nodes">{pills_str}</div>',
-        '</div>'
-      )
-    })
-    cards_html <- paste0('<div class="membership-cards">', paste(cards, collapse = ""), '</div>')
-
-    # wrap both views with toggle
-    paste0(
-      '<div class="membership-wrap" data-result="', result_name, '">',
-      '<div class="membership-toolbar">',
-      '<button class="report-btn membership-toggle" onclick="toggleMembershipView(this)" title="Switch view">',
-      '&#9776; Toggle View</button></div>',
-      '<div class="membership-view membership-table-view" style="display:none;">', table_html, '</div>',
-      '<div class="membership-view membership-card-view">', cards_html, '</div>',
-      '</div>'
-    )
+    .bn_report_render_membership(result, result_name)
   }
+
 
   # --- build html sections ---
   # structure: result (accordion) > type (dropdown) > view (tabs)
@@ -493,173 +307,26 @@ bn_report <- function(
       }
     }
 
-    # build type panels — each contains tabs (or single view)
+    # Build type panels — each contains tabs (or single view). Heavy
+    # lifting lives in .bn_report_build_type_panel() (bn_helpers.R);
+    # this loop just iterates and computes the per-panel id / visibility.
     type_panels <- purrr::map2_chr(types, type_labels, function(type, label) {
-
       panel_id <- glue::glue("{rid}_{type}")
       visible <- if (type == default_type) "block" else "none"
-
-      # Per-type layout dropdown — each type-panel carries its own copy with
-      # its own type pre-selected, so when switchType swaps to this panel the
-      # dropdown already reads the right value (no JS sync needed).
-      type_options <- purrr::map2_chr(types, type_labels, function(t, l) {
-        sel <- if (t == type) " selected" else ""
-        glue::glue('<option value="{rid}_{t}"{sel}>{l}</option>')
-      })
-      type_options_str <- paste(type_options, collapse = "\n            ")
-      layout_ctrl_html <- glue::glue(
-        '<div class="layout-controls">',
-        '<label for="{panel_id}_layout">Layout</label>',
-        '<select id="{panel_id}_layout" class="layout-select" ',
-        'onchange="switchType(\'{rid}\', this.value)">',
-        '{type_options_str}',
-        '</select>',
-        '</div>'
+      .bn_report_build_type_panel(
+        type = type, label = label, panel_id = panel_id, visible = visible,
+        has_tabs = has_tabs, result = result, name = name, rid = rid,
+        types = types, type_labels = type_labels,
+        do_community = do_community,
+        render_widget = render_widget, render_membership = render_membership,
+        add_additional_results = add_additional_results,
+        impacts_res = impacts_res, prioritizations_res = prioritizations_res,
+        shared_attr_id = shared_attr_id, shared_comm_id = shared_comm_id,
+        qc_mode = qc_mode,
+        outcome_display = outcome_display, shift_type = shift_type,
+        add_prioritization_pvalue = add_prioritization_pvalue,
+        prioritize_display = prioritize_display
       )
-
-      if (has_tabs) {
-
-        # Wrap the network views in .network-dashboard so they get the same
-        # 20px outer padding as .impact-dashboard / .priort-dashboard /
-        # .membership-wrap — keeps every tab's controls box visually
-        # identical (same edge spacing, same gap below to the content).
-        #
-        # The Layout dropdown now lives inside a .network-controls well
-        # panel (matches .impact-controls / .priort-controls) and the
-        # whole sidebar is collapsible via the shared .ctrl-toggle
-        # button. The visNetwork widget itself goes inside .network-main
-        # (grid-area: main), so the grid layout flips cleanly between
-        # expanded (248px sidebar + main) and collapsed (44px rail + main).
-        ctrl_toggle_html <- paste0(
-          '<button type="button" class="ctrl-toggle" onclick="toggleCtrls(this)" ',
-          'aria-label="Toggle controls panel" title="Toggle controls">',
-          '<span class="chev">&#9664;</span></button>'
-        )
-        tab_attr <- paste0(
-          '<div class="network-dashboard">',
-          ctrl_toggle_html,
-          '<div class="network-controls">', layout_ctrl_html, '</div>',
-          '<div class="network-main">',
-          render_widget(result, type, FALSE, result_name = name),
-          '</div>',
-          '</div>'
-        )
-        tab_comm <- paste0(
-          '<div class="network-dashboard">',
-          ctrl_toggle_html,
-          '<div class="network-controls">', layout_ctrl_html, '</div>',
-          '<div class="network-main">',
-          render_widget(result, type, TRUE,  result_name = name),
-          '</div>',
-          '</div>'
-        )
-        tab_memb <- render_membership(result, name)
-
-        attr_id <- glue::glue("{panel_id}_attr")
-        comm_id <- glue::glue("{panel_id}_comm")
-        memb_id <- glue::glue("{panel_id}_memb")
-
-        # Optional extra tabs: Attribute Impacts, Community Impacts, Prioritization
-        extras_buttons <- character(0)
-        extras_panels  <- character(0)
-
-        if (isTRUE(add_additional_results)) {
-
-          if (!is.null(impacts_res) && !is.null(impacts_res[["table_attribute"]])) {
-            impact_attr_id <- glue::glue("{panel_id}_impact_attr")
-            impact_attr_res <- .bn_report_render_attribute_impacts_dashboard(
-              impacts_res, result_name = name, dashboard_id = impact_attr_id,
-              qc_mode = qc_mode,
-              outcome_display = outcome_display, shift_type = shift_type,
-              shared_data_id = shared_attr_id
-            )
-            impact_attr_html <- impact_attr_res$html
-            extras_buttons <- c(extras_buttons, glue::glue(
-              '    <button class="tab-btn" onclick="switchTab(this, \'{impact_attr_id}\')">Attribute Impacts</button>'
-            ))
-            extras_panels <- c(extras_panels, glue::glue(
-              '  <div id="{impact_attr_id}" class="tab-panel impact-panel" data-result="{name}" data-layout="{type}" data-view="impact_attr">{impact_attr_html}</div>'
-            ))
-          }
-
-          if (!is.null(impacts_res) && !is.null(impacts_res[["table_community"]])) {
-            impact_comm_id <- glue::glue("{panel_id}_impact_comm")
-            impact_comm_res <- .bn_report_render_attribute_impacts_dashboard(
-              impacts_res, result_name = name, dashboard_id = impact_comm_id,
-              is_community = TRUE, qc_mode = qc_mode,
-              outcome_display = outcome_display, shift_type = shift_type,
-              shared_data_id = shared_comm_id
-            )
-            impact_comm_html <- impact_comm_res$html
-            extras_buttons <- c(extras_buttons, glue::glue(
-              '    <button class="tab-btn" onclick="switchTab(this, \'{impact_comm_id}\')">Community Impacts</button>'
-            ))
-            extras_panels <- c(extras_panels, glue::glue(
-              '  <div id="{impact_comm_id}" class="tab-panel impact-panel" data-result="{name}" data-layout="{type}" data-view="impact_comm">{impact_comm_html}</div>'
-            ))
-          }
-
-          if (!is.null(prioritizations_res)) {
-            priort_id <- glue::glue("{panel_id}_priort")
-            # Pull thresholds from the prioritizations meta (set at
-            # bn_finalize_network / bn_prioritizations time). Fall back to
-            # standard defaults if absent.
-            priort_meta <- prioritizations_res[["meta"]] %||% list()
-            priort_html <- .bn_report_render_prioritization_dashboard(
-              prioritizations_res, result_name = name, dashboard_id = priort_id,
-              sig_threshold = priort_meta[["sig_threshold"]] %||% 0.05,
-              marginal_threshold = priort_meta[["marginal_threshold"]] %||% 0.10,
-              add_prioritization_pvalue = add_prioritization_pvalue,
-              prioritize_display = prioritize_display
-            )
-            extras_buttons <- c(extras_buttons, glue::glue(
-              '    <button class="tab-btn" onclick="switchTab(this, \'{priort_id}\')">Prioritization</button>'
-            ))
-            extras_panels <- c(extras_panels, glue::glue(
-              '  <div id="{priort_id}" class="tab-panel priort-panel" data-result="{name}" data-layout="{type}" data-view="prioritization">{priort_html}</div>'
-            ))
-          }
-        }
-
-        extras_buttons_str <- paste(extras_buttons, collapse = "\n")
-        extras_panels_str  <- paste(extras_panels,  collapse = "\n")
-
-        glue::glue(
-          '<div id="{panel_id}" class="type-panel" style="display: {visible};">',
-          '  <div class="tab-bar">',
-          '    <button class="tab-btn active" onclick="switchTab(this, \'{attr_id}\')">Attribute</button>',
-          '    <button class="tab-btn" onclick="switchTab(this, \'{comm_id}\')">Community</button>',
-          '    <button class="tab-btn" onclick="switchTab(this, \'{memb_id}\')">Membership</button>',
-          '{extras_buttons_str}',
-          '  </div>',
-          '  <div id="{attr_id}" class="tab-panel active attr-panel" data-result="{name}" data-layout="{type}" data-view="attribute">{tab_attr}</div>',
-          '  <div id="{comm_id}" class="tab-panel comm-panel" data-result="{name}" data-layout="{type}" data-view="community">{tab_comm}</div>',
-          '  <div id="{memb_id}" class="tab-panel membership-panel" data-result="{name}" data-layout="{type}" data-view="membership">{tab_memb}</div>',
-          '{extras_panels_str}',
-          '</div>'
-        )
-
-      } else {
-
-        panel_content <- render_widget(result, type, do_community[1], result_name = name)
-        # Same collapsible well-panel + grid layout as the has_tabs branch
-        # above. See that block's comment for the full structure rationale.
-        ctrl_toggle_html <- paste0(
-          '<button type="button" class="ctrl-toggle" onclick="toggleCtrls(this)" ',
-          'aria-label="Toggle controls panel" title="Toggle controls">',
-          '<span class="chev">&#9664;</span></button>'
-        )
-
-        glue::glue(
-          '<div id="{panel_id}" class="type-panel" style="display: {visible};">',
-          '  <div class="network-dashboard">',
-          '    {ctrl_toggle_html}',
-          '    <div class="network-controls">{layout_ctrl_html}</div>',
-          '    <div class="network-main">{panel_content}</div>',
-          '  </div>',
-          '</div>'
-        )
-      }
     })
 
     type_panels_str <- paste(type_panels, collapse = "\n")
@@ -720,8 +387,8 @@ bn_report <- function(
   report_js <- .bn_report_js(save_name)
 
   # shared deps variable for blob URL iframes (self_contained only)
-  shared_deps_tag <- if (!is.null(shared_deps_b64)) {
-    paste0('  <script>var __sharedDepsB64 = "', shared_deps_b64, '";</script>')
+  shared_deps_tag <- if (!is.null(state$shared_deps_b64)) {
+    paste0('  <script>var __sharedDepsB64 = "', state$shared_deps_b64, '";</script>')
   } else {
     ""
   }
