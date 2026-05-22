@@ -32,7 +32,7 @@ bn_write(
   sig_threshold = NULL,
   marginal_threshold = NULL,
   impact_outcome_display = NULL,
-  shift_type = c("absolute", "proportional"),
+  shift_type = c("absolute", "proportional", "headroom", "range"),
   add_prioritization_pvalue = FALSE,
   add_impacts_by_battery = TRUE,
   prioritize_display = NULL,

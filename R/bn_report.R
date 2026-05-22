@@ -17,17 +17,20 @@
 #' @param types Character vector of layout types to render.
 #'   Default `c("none", "gravity", "charge")`.
 #' @param do_community Logical vector controlling which views to render.
-#'   Default `c(FALSE, TRUE)` renders both attribute and community views.
-#'   Use `FALSE` for attribute-only or `TRUE` for community-only.
+#'   Default `c(TRUE, FALSE)` renders both attribute and community views
+#'   (order doesn't matter — the tab UI is built from the presence of
+#'   both `TRUE` and `FALSE` in the vector). Use `FALSE` for
+#'   attribute-only or `TRUE` for community-only.
 #' @param title Character. Report title displayed as H1 header.
 #'   Default `"Network Analysis"`.
 #' @param subtitle Character or `NULL`. Optional subtitle displayed below the
-#'   title, above the border line. Default `NULL` (no subtitle).
+#'   title, above the border line. Default `"Project Name (123456789)"`;
+#'   pass `NULL` to suppress.
 #' @param interactive Logical. Passed through to `bn_visual()`.
 #'   Default `TRUE`.
-#' @param physics Logical. If `TRUE` (default), networks render with physics
-#'   enabled (nodes repel/attract in real time). If `FALSE`, networks render
-#'   with physics to compute layout, then physics is disabled after
+#' @param physics Logical. If `TRUE`, networks render with physics enabled
+#'   (nodes repel/attract in real time). If `FALSE` (default), networks
+#'   render with physics to compute layout, then physics is disabled after
 #'   stabilization so nodes stay fixed.
 #' @param default_type Character or `NULL`. Which layout type to show by
 #'   default in the dropdown selector. Must be one of `types`. If `NULL`
@@ -38,8 +41,9 @@
 #'   layout. Passed through to `bn_visual()`. Default `0.2`.
 #' @param charge_layout Character. igraph layout algorithm for the charge
 #'   layout. Passed through to `bn_visual()`. Default `"layout_with_fr"`.
-#' @param add_key Logical. If `TRUE`, adds a community color legend to each
-#'   network. Default `FALSE` (legend can cause overflow in iframes).
+#' @param add_key Logical. If `TRUE` (default), adds a community color
+#'   legend to each network. Pass `FALSE` to suppress (the legend can
+#'   cause overflow in tight iframes).
 #' @param self_contained Logical. If `TRUE` (default), embeds all widget
 #'   JS/CSS into a single HTML file via base64 iframes. If `FALSE`, writes
 #'   widget dependencies to a `lib/` folder alongside the HTML file (faster
@@ -47,8 +51,9 @@
 #' @param file Character or `NULL`. Output HTML file path. If `NULL` (default),
 #'   auto-generates from `title` and `subtitle` (e.g., `"Network Analysis.html"`
 #'   or `"Network Analysis - Feb 2026.html"`).
-#' @param open Logical. If `TRUE`, opens the file in the browser.
-#'   Default `FALSE`.
+#' @param open Logical. If `TRUE` (default), opens the file in the
+#'   browser via `utils::browseURL()`. Pass `FALSE` to suppress (useful
+#'   for headless / server contexts).
 #' @param save_name Character or `NULL`. Name portion of the Save Layout
 #'   filename (without extension). If `NULL` (default), auto-generates from
 #'   `title` and `subtitle`.
@@ -81,6 +86,11 @@
 #'   `NULL` (default) auto-detects from the DV type (dichotomous outcomes
 #'   default to `"Point Change"`, continuous outcomes default to
 #'   `"% Change"`). Pass an explicit string to override.
+#' @param shift_type Character. Initial value of the impact dashboard's
+#'   Shift Type dropdown. One of `"absolute"` (Fixed Step, default),
+#'   `"proportional"` (% of Current Mean), `"headroom"` (% Toward Top),
+#'   or `"range"` (% of Range). Only consulted when the underlying
+#'   impact table emitted the corresponding shift variant.
 #' @param prioritize_display Character or `NULL`. Initial value of the
 #'   prioritization Display dropdown — `"Point Change"` or `"% Change"`.
 #'   `NULL` (default) auto-detects from the DV type (dichotomous outcomes
@@ -511,7 +521,7 @@ bn_report <- function(
 
         # Wrap the network views in .network-dashboard so they get the same
         # 20px outer padding as .impact-dashboard / .priort-dashboard /
-        # .membership-wrap — keeps every tab\\u2019s controls box visually
+        # .membership-wrap — keeps every tab's controls box visually
         # identical (same edge spacing, same gap below to the content).
         tab_attr <- paste0(
           '<div class="network-dashboard">',
@@ -741,32 +751,4 @@ bn_report <- function(
 
   invisible(file)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

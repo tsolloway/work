@@ -41,21 +41,24 @@ Also accepts the full output of \code{bn_initial_networks()} directly.}
 Default \code{c("none", "gravity", "charge")}.}
 
 \item{do_community}{Logical vector controlling which views to render.
-Default \code{c(FALSE, TRUE)} renders both attribute and community views.
-Use \code{FALSE} for attribute-only or \code{TRUE} for community-only.}
+Default \code{c(TRUE, FALSE)} renders both attribute and community views
+(order doesn't matter — the tab UI is built from the presence of
+both \code{TRUE} and \code{FALSE} in the vector). Use \code{FALSE} for
+attribute-only or \code{TRUE} for community-only.}
 
 \item{title}{Character. Report title displayed as H1 header.
 Default \code{"Network Analysis"}.}
 
 \item{subtitle}{Character or \code{NULL}. Optional subtitle displayed below the
-title, above the border line. Default \code{NULL} (no subtitle).}
+title, above the border line. Default \code{"Project Name (123456789)"};
+pass \code{NULL} to suppress.}
 
 \item{interactive}{Logical. Passed through to \code{bn_visual()}.
 Default \code{TRUE}.}
 
-\item{physics}{Logical. If \code{TRUE} (default), networks render with physics
-enabled (nodes repel/attract in real time). If \code{FALSE}, networks render
-with physics to compute layout, then physics is disabled after
+\item{physics}{Logical. If \code{TRUE}, networks render with physics enabled
+(nodes repel/attract in real time). If \code{FALSE} (default), networks
+render with physics to compute layout, then physics is disabled after
 stabilization so nodes stay fixed.}
 
 \item{default_type}{Character or \code{NULL}. Which layout type to show by
@@ -71,8 +74,9 @@ layout. Passed through to \code{bn_visual()}. Default \code{0.2}.}
 \item{charge_layout}{Character. igraph layout algorithm for the charge
 layout. Passed through to \code{bn_visual()}. Default \code{"layout_with_fr"}.}
 
-\item{add_key}{Logical. If \code{TRUE}, adds a community color legend to each
-network. Default \code{FALSE} (legend can cause overflow in iframes).}
+\item{add_key}{Logical. If \code{TRUE} (default), adds a community color
+legend to each network. Pass \code{FALSE} to suppress (the legend can
+cause overflow in tight iframes).}
 
 \item{self_contained}{Logical. If \code{TRUE} (default), embeds all widget
 JS/CSS into a single HTML file via base64 iframes. If \code{FALSE}, writes
@@ -87,8 +91,9 @@ filename (without extension). If \code{NULL} (default), auto-generates from
 auto-generates from \code{title} and \code{subtitle} (e.g., \code{"Network Analysis.html"}
 or \code{"Network Analysis - Feb 2026.html"}).}
 
-\item{open}{Logical. If \code{TRUE}, opens the file in the browser.
-Default \code{FALSE}.}
+\item{open}{Logical. If \code{TRUE} (default), opens the file in the
+browser via \code{utils::browseURL()}. Pass \code{FALSE} to suppress (useful
+for headless / server contexts).}
 
 \item{seed}{Numeric. Passed through to \code{bn_visual()}. Default \code{1}.}
 
@@ -128,6 +133,12 @@ impact dashboard's Outcome dropdown — \code{"Point Change"} or \code{"\% Chang
 \code{NULL} (default) auto-detects from the DV type (dichotomous outcomes
 default to \code{"Point Change"}, continuous outcomes default to
 \code{"\% Change"}). Pass an explicit string to override.}
+
+\item{shift_type}{Character. Initial value of the impact dashboard's
+Shift Type dropdown. One of \code{"absolute"} (Fixed Step, default),
+\code{"proportional"} (\% of Current Mean), \code{"headroom"} (\% Toward Top),
+or \code{"range"} (\% of Range). Only consulted when the underlying
+impact table emitted the corresponding shift variant.}
 
 \item{add_prioritization_pvalue}{Logical. If \code{TRUE}, the prioritization
 dashboard table includes its \code{p-value} column (current behavior). If
