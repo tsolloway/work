@@ -702,7 +702,7 @@ app_deliverable_network_drivers <- function(
             obj              = result,
             type             = layout_type,
             do_community     = do_comm,
-            vs_height        = "95vh",
+            vs_height        = "100vh",
             vs_width         = "100%",
             interactive      = TRUE,
             physics          = TRUE,
@@ -777,7 +777,7 @@ app_deliverable_network_drivers <- function(
             `data-rid`    = rid,
             `data-view`   = view_type,
             `data-layout` = layout_type,
-            style = "width: 100%; height: 80vh; border: none; display: block;",
+            style = "width: 100%; height: 100%; border: none; display: block;",
             sandbox = "allow-scripts allow-downloads",
             allowfullscreen = NA
           )
