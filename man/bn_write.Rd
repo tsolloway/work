@@ -120,6 +120,16 @@ prioritization Display dropdown — either \code{"Point Change"} or
 dichotomous outcomes get \code{"Point Change"}, continuous outcomes get
 \code{"\% Change"}. Pass an explicit string to override.}
 
+\item{color_gradient_resondex}{Logical. When \code{TRUE} (default), impact
+cell colour-scales use the Resondex brand semantic palette
+(\code{--ndr-danger} → white → \code{--ndr-success}) and the dynamic
+dashboard's warning text reads from \code{--ndr-danger} / \code{--ndr-muted},
+so Excel matches the in-app reactable and \code{bn_report} HTML. When
+\code{FALSE}, falls back to the legacy red / yellow / green Material
+scale and \verb{#FF0000} / \verb{#888888} warning text — pass \code{FALSE} for
+workbooks where stakeholders expect the pre-brand treatment.
+Forwarded to \code{bn_impact_write()}.}
+
 \item{path}{Character. Directory to write the workbook to.}
 }
 \value{

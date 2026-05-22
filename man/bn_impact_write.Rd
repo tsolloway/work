@@ -161,6 +161,14 @@ ordering places network maps after the prioritization section.}
 Drivers tab — one per battery (and one per battery group) with
 within-battery indexing. When FALSE, only the main Attribute Drivers
 tab is written. Has no effect when no batteries are defined upstream.}
+
+\item{color_gradient_resondex}{Logical. When TRUE (default), impact
+cell colour-scales use the Resondex brand semantic palette
+(\code{--ndr-danger} → white → \code{--ndr-success}) and the dynamic
+dashboard's warning text reads from \code{--ndr-danger} / \code{--ndr-muted}.
+When FALSE, falls back to the legacy red / yellow / green Material
+scale and \verb{#FF0000} / \verb{#888888} warning text. Forwarded to
+\code{append_bn_impact()} and \code{append_bn_impact_dynamic()}.}
 }
 \value{
 Workbook object (invisibly).

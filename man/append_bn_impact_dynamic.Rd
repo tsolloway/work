@@ -53,6 +53,14 @@ append_bn_impact_dynamic(
 \item{community_width}{Numeric. Column width for Community column.}
 
 \item{label_width}{Column width for Label column.}
+
+\item{color_gradient_resondex}{Logical. When TRUE (default), impact
+cell colour-scales use the Resondex brand semantic palette
+(\code{--ndr-danger} → white → \code{--ndr-success}) and the dynamic
+dashboard's focus / weight warning text reads from \code{--ndr-danger}
+/ \code{--ndr-muted}. When FALSE, falls back to the legacy red /
+yellow / green Material scale and \verb{#FF0000} / \verb{#888888} warning
+text.}
 }
 \value{
 The modified workbook object (invisibly).

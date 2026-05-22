@@ -98,6 +98,13 @@
 #'   Drivers tab — one per battery (and one per battery group) with
 #'   within-battery indexing. When FALSE, only the main Attribute Drivers
 #'   tab is written. Has no effect when no batteries are defined upstream.
+#' @param color_gradient_resondex Logical. When TRUE (default), impact
+#'   cell colour-scales use the Resondex brand semantic palette
+#'   (`--ndr-danger` → white → `--ndr-success`) and the dynamic
+#'   dashboard's warning text reads from `--ndr-danger` / `--ndr-muted`.
+#'   When FALSE, falls back to the legacy red / yellow / green Material
+#'   scale and `#FF0000` / `#888888` warning text. Forwarded to
+#'   `append_bn_impact()` and `append_bn_impact_dynamic()`.
 #'
 #' @return Workbook object (invisibly).
 #'

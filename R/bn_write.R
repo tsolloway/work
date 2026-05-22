@@ -68,6 +68,15 @@
 #'   `"% Change"`. When NULL (default), auto-detects from the DV type:
 #'   dichotomous outcomes get `"Point Change"`, continuous outcomes get
 #'   `"% Change"`. Pass an explicit string to override.
+#' @param color_gradient_resondex Logical. When `TRUE` (default), impact
+#'   cell colour-scales use the Resondex brand semantic palette
+#'   (`--ndr-danger` → white → `--ndr-success`) and the dynamic
+#'   dashboard's warning text reads from `--ndr-danger` / `--ndr-muted`,
+#'   so Excel matches the in-app reactable and `bn_report` HTML. When
+#'   `FALSE`, falls back to the legacy red / yellow / green Material
+#'   scale and `#FF0000` / `#888888` warning text — pass `FALSE` for
+#'   workbooks where stakeholders expect the pre-brand treatment.
+#'   Forwarded to `bn_impact_write()`.
 #' @param path Character. Directory to write the workbook to.
 #'
 #' @return A list (invisibly) with:
@@ -121,7 +130,10 @@ bn_write <- function(
     # ("Point Change" / "% Change") are respected. Forwarded to
     # bn_impact_write.
     impact_outcome_display = NULL,
-    shift_type      = c("absolute", "proportional"),
+    # All 4 options that bn_impact_write accepts — mirror the downstream
+    # signature so callers passing "headroom" / "range" don't error at
+    # the bn_write boundary's match.arg().
+    shift_type      = c("absolute", "proportional", "headroom", "range"),
     # When TRUE, the prioritization table includes a p-value column
     # (current behavior). When FALSE (default), the p-value column is hidden
     # from the prioritization dashboard.

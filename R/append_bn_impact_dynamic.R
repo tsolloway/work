@@ -17,6 +17,13 @@
 #' @param variable_width Numeric. Column width for first ID column.
 #' @param community_width Numeric. Column width for Community column.
 #' @param label_width Column width for Label column.
+#' @param color_gradient_resondex Logical. When TRUE (default), impact
+#'   cell colour-scales use the Resondex brand semantic palette
+#'   (`--ndr-danger` → white → `--ndr-success`) and the dynamic
+#'   dashboard's focus / weight warning text reads from `--ndr-danger`
+#'   / `--ndr-muted`. When FALSE, falls back to the legacy red /
+#'   yellow / green Material scale and `#FF0000` / `#888888` warning
+#'   text.
 #'
 #' @return The modified workbook object (invisibly).
 #'

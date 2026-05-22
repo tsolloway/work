@@ -679,7 +679,7 @@ append_bn_simulator <- function(
   n_p_cols <- length(p_cols)
 
   # Title
-  openxlsx::writeData(wb, dash_sheet, "Bayesian Network Simulator", startRow = row_title, startCol = col_data_start)
+  openxlsx::writeData(wb, dash_sheet, "Network Simulator", startRow = row_title, startCol = col_data_start)
   openxlsx::addStyle(wb, dash_sheet, style = styles$title,
     rows = row_title, cols = col_data_start, stack = TRUE)
   openxlsx::writeData(wb, dash_sheet, "Set evidence on one variable to see updated probability distributions",

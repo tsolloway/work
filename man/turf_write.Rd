@@ -65,6 +65,18 @@ uses the bundled template from the work package, falling back to
 \code{turf_template.xlsm} in the working directory.}
 
 \item{return_location}{Logical. If \code{TRUE}, returns the file path.}
+
+\item{color_gradient_resondex}{Logical. When \code{TRUE} (default),
+the VBA dashboard's runtime coloring (p-value tiers, Cumul / Incr
+/ Abs gradient, Include checkbox bg / text) uses the Resondex
+brand semantic palette via the \code{Pal*} helpers in
+\code{Module1.bas}. When \code{FALSE}, falls back to the legacy
+Material palette (Material green/orange/red for p-values; red /
+yellow / green 3-color scale; lighter Material green / red for
+checkbox backgrounds). The flag is written to \code{_config!B11}
+and read by VBA at render time, so the toggle takes effect
+without re-importing the VBA — but it does require VBA_VERSION 3+
+(Module1.bas updated alongside this parameter).}
 }
 \value{
 File path (invisibly) if \code{return_location = TRUE}.
