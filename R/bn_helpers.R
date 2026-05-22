@@ -908,6 +908,14 @@
     # (mirrors the Shiny app card header). Spans the full grid width above
     # the sidebar + table.
     '  <div class="ndr-card-title impact-card-title"></div>',
+    # Controls-collapse toggle. Sits in the top-left corner of the
+    # dashboard, OUTSIDE the sidebar so it stays visible whether the
+    # sidebar is open or collapsed. Click toggles `.controls-collapsed`
+    # on the dashboard root; CSS handles the rest. Hidden on narrow
+    # viewports (< 1200 px) where the sidebar layout doesn\'t apply.
+    '  <button type="button" class="ctrl-toggle" onclick="toggleCtrls(this)" ',
+    'aria-label="Toggle controls panel" title="Toggle controls">',
+    '<span class="chev">&#9664;</span></button>',
     '  <div class="impact-controls">',
     # Row 1 (framing / scope controls): Assess, Index By, Focus, Outcome Display, Weight.
     # Assess drives Row 2; Index By / Focus filter the table; Outcome
@@ -1171,6 +1179,10 @@
     # Card-title row — JS populates with "Prioritization: <em>{Analysis}</em>"
     # (mirrors the Shiny app card header).
     '  <div class="ndr-card-title priort-card-title"></div>',
+    # Controls-collapse toggle — see impact dashboard above for rationale.
+    '  <button type="button" class="ctrl-toggle" onclick="toggleCtrls(this)" ',
+    'aria-label="Toggle controls panel" title="Toggle controls">',
+    '<span class="chev">&#9664;</span></button>',
     '  <div class="priort-controls">', controls_html, '</div>',
     '  <div class="priort-split">',
     '    <div class="priort-table-wrap">',
@@ -1953,16 +1965,33 @@
     '   fixed-width left column spanning both rows; the table and footer',
     '   stack in the right column. No HTML restructuring needed. */',
     '@media (min-width: 1200px) {',
-    '  .impact-dashboard, .priort-dashboard {',
+    # .network-dashboard joins .impact-dashboard / .priort-dashboard in
+    # the sidebar-layout grid so the network tab\'s Layout dropdown can
+    # live inside a matching collapsible well panel.
+    '  .impact-dashboard, .priort-dashboard, .network-dashboard {',
     '    display: grid !important;',
     '    grid-template-columns: 248px minmax(0, 1fr);',
     '    grid-template-rows: auto 1fr auto;',
-    '    grid-template-areas: ". title" "side main" "side foot";',
+    # The toggle sits in column 1 of the first row, the optional card
+    # title spans column 2. With both items in the same row the toggle
+    # naturally top-aligns with whatever sits at the top of column 2
+    # (title text, or just the start of the well panel below).
+    '    grid-template-areas: "toggle title" "side main" "side foot";',
     '    column-gap: 18px; row-gap: 0;',
     '    align-items: start;',
     '  }',
     '  .ndr-card-title { grid-area: title; }',
-    '  .impact-controls, .priort-controls {',
+    # Network dashboard variant: no title, no footer — just toggle in
+    # column 1 row 1, sidebar in column 1 row 2, and main (the iframe)
+    # spanning column 2 across both rows so the visNetwork canvas
+    # starts at the very top of the tab-panel instead of sitting below
+    # an empty toggle row.
+    '  .network-dashboard {',
+    '    grid-template-rows: auto 1fr !important;',
+    '    grid-template-areas: "toggle main" "side main" !important;',
+    '  }',
+    # Single well-panel styling for all three dashboard types.
+    '  .impact-controls, .priort-controls, .network-controls {',
     '    grid-area: side; display: flex !important; flex-direction: column !important;',
     '    align-items: stretch !important; gap: 12px !important;',
     '    background: var(--ndr-sidebar-bg) !important;',
@@ -1970,8 +1999,10 @@
     '    border-radius: var(--ndr-radius) !important;',
     '    padding: 14px !important; margin: 0 !important;',
     '    align-self: start !important;',
+    # Smooth transition into / out of the collapsed state.
+    '    transition: opacity 0.18s ease, padding 0.18s ease;',
     '  }',
-    '  .impact-table-wrap, .priort-split { grid-area: main; }',
+    '  .impact-table-wrap, .priort-split, .network-main { grid-area: main; }',
     '  .impact-footer, .priort-footer { grid-area: foot; }',
     '  .impact-ctrl-cell, .priort-ctrl-cell { width: 100%; }',
     '  .impact-ctrl-row, .priort-ctrl-row {',
@@ -1984,6 +2015,61 @@
     '  .impact-ctrl-row .impact-ctrl, .priort-ctrl-row .priort-ctrl {',
     '    max-width: none !important; width: 100% !important;',
     '  }',
+    # Layout dropdown lives inside .network-controls now — zero the
+    # padding it carried for its old standalone position (was offsetting
+    # the label to match the in-iframe Select-by-ID), since the well
+    # panel\'s own 14px padding handles spacing.
+    '  .network-controls .layout-controls {',
+    '    padding: 0 !important; margin: 0 !important;',
+    '  }',
+    # ---- Controls-collapsed state (1200 px+ only) ----
+    # The sidebar collapses leftward, but column 1 keeps a narrow rail
+    # (44px) so the toggle stays in a dedicated lane and the table /
+    # main don\'t slide underneath the button. The sidebar itself loses
+    # padding / border / opacity so it gracefully fades out behind the
+    # rail. Main + foot start to the right of the rail.
+    '  .impact-dashboard.controls-collapsed,',
+    '  .priort-dashboard.controls-collapsed,',
+    '  .network-dashboard.controls-collapsed {',
+    '    grid-template-columns: 44px minmax(0, 1fr) !important;',
+    '    column-gap: 0 !important;',
+    '  }',
+    '  .impact-dashboard.controls-collapsed .impact-controls,',
+    '  .priort-dashboard.controls-collapsed .priort-controls,',
+    '  .network-dashboard.controls-collapsed .network-controls {',
+    '    padding: 0 !important;',
+    '    border-width: 0 !important;',
+    '    overflow: hidden;',
+    '    opacity: 0;',
+    '    pointer-events: none;',
+    '  }',
+    # ---- .ctrl-toggle — grid-placed in column 1 of the top row ----
+    # Left-aligned with the well panel below (justify-self: start +
+    # margin so it sits flush with the well panel\'s left edge). Background
+    # matches the well panel so the toggle reads as part of the sidebar
+    # surface. Chevron flips horizontally when collapsed to flag the
+    # direction reversal.
+    '  .ctrl-toggle {',
+    '    display: inline-flex; align-items: center; justify-content: center;',
+    '    grid-area: toggle;',
+    '    justify-self: start; align-self: start;',
+    '    margin-bottom: 8px;',
+    '    width: 24px; height: 24px;',
+    '    background: var(--ndr-sidebar-bg);',
+    '    border: 1px solid var(--ndr-border);',
+    '    border-radius: 6px;',
+    '    color: var(--ndr-text);',
+    '    cursor: pointer; font-size: 11px; line-height: 1;',
+    '  }',
+    '  .ctrl-toggle:hover { background: var(--ndr-secondary-bg); }',
+    '  .ctrl-toggle .chev { display: inline-block; transition: transform 0.2s ease; }',
+    '  .controls-collapsed .ctrl-toggle .chev { transform: scaleX(-1); }',
+    '}',
+    # Hide the toggle entirely below the sidebar-layout breakpoint —
+    # the controls stack inline above the table at that width, so a
+    # collapse affordance would be meaningless.
+    '@media (max-width: 1199px) {',
+    '  .ctrl-toggle { display: none; }',
     '}',
     '',
     '/* ---- Bootstrap-style selects ---- */',
@@ -2222,6 +2308,16 @@
     '  } else {',
     '    tbl.style.display = "none"; crd.style.display = "";',
     '  }',
+    '}',
+    '',
+    '/* --- Collapse / expand the controls sidebar on impact + prio dashboards. */',
+    '/* Toggle is per-dashboard (each .impact-dashboard / .priort-dashboard tracks */',
+    '/* its own .controls-collapsed class), so collapsing one sidebar leaves the */',
+    '/* others untouched. CSS in .bn_report_css() handles the actual layout flip. */',
+    'function toggleCtrls(btn) {',
+    '  var root = btn.closest(".impact-dashboard, .priort-dashboard, .network-dashboard");',
+    '  if (!root) return;',
+    '  root.classList.toggle("controls-collapsed");',
     '}',
     '',
     '/* --- Attribute Impacts dashboard --- */',

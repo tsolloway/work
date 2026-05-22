@@ -260,7 +260,7 @@ bn_report <- function(
         obj = result,
         type = type,
         do_community = do_community_val,
-        vs_height = "95vh",
+        vs_height = "85vh",
         interactive = interactive,
         # always TRUE: vis.js needs physics ON to compute force-directed layout.
         # when user passes physics=FALSE, the __disablePhysicsAfterStabilize
@@ -523,16 +523,34 @@ bn_report <- function(
         # 20px outer padding as .impact-dashboard / .priort-dashboard /
         # .membership-wrap — keeps every tab's controls box visually
         # identical (same edge spacing, same gap below to the content).
+        #
+        # The Layout dropdown now lives inside a .network-controls well
+        # panel (matches .impact-controls / .priort-controls) and the
+        # whole sidebar is collapsible via the shared .ctrl-toggle
+        # button. The visNetwork widget itself goes inside .network-main
+        # (grid-area: main), so the grid layout flips cleanly between
+        # expanded (248px sidebar + main) and collapsed (44px rail + main).
+        ctrl_toggle_html <- paste0(
+          '<button type="button" class="ctrl-toggle" onclick="toggleCtrls(this)" ',
+          'aria-label="Toggle controls panel" title="Toggle controls">',
+          '<span class="chev">&#9664;</span></button>'
+        )
         tab_attr <- paste0(
           '<div class="network-dashboard">',
-          layout_ctrl_html,
+          ctrl_toggle_html,
+          '<div class="network-controls">', layout_ctrl_html, '</div>',
+          '<div class="network-main">',
           render_widget(result, type, FALSE, result_name = name),
+          '</div>',
           '</div>'
         )
         tab_comm <- paste0(
           '<div class="network-dashboard">',
-          layout_ctrl_html,
+          ctrl_toggle_html,
+          '<div class="network-controls">', layout_ctrl_html, '</div>',
+          '<div class="network-main">',
           render_widget(result, type, TRUE,  result_name = name),
+          '</div>',
           '</div>'
         )
         tab_memb <- render_membership(result, name)
@@ -624,10 +642,21 @@ bn_report <- function(
       } else {
 
         panel_content <- render_widget(result, type, do_community[1], result_name = name)
+        # Same collapsible well-panel + grid layout as the has_tabs branch
+        # above. See that block's comment for the full structure rationale.
+        ctrl_toggle_html <- paste0(
+          '<button type="button" class="ctrl-toggle" onclick="toggleCtrls(this)" ',
+          'aria-label="Toggle controls panel" title="Toggle controls">',
+          '<span class="chev">&#9664;</span></button>'
+        )
 
         glue::glue(
           '<div id="{panel_id}" class="type-panel" style="display: {visible};">',
-          '  <div class="network-dashboard">{layout_ctrl_html}{panel_content}</div>',
+          '  <div class="network-dashboard">',
+          '    {ctrl_toggle_html}',
+          '    <div class="network-controls">{layout_ctrl_html}</div>',
+          '    <div class="network-main">{panel_content}</div>',
+          '  </div>',
           '</div>'
         )
       }
