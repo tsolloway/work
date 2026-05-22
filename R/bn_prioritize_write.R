@@ -262,6 +262,13 @@ bn_prioritize_write <- function(
   # ---------------------------------------------------------------------------
   # 4. Build Prioritization
   # ---------------------------------------------------------------------------
+  # Pull brand semantic colours so the Excel p-value cells render the
+  # exact same hex as the in-app reactable's p_style() and bn_report's
+  # .rdx-pval-* classes (all three resolve from resondex_brand()$semantic).
+  # Uses the LIGHT-mode palette — Excel has no equivalent of CSS dark
+  # mode, and the printed/shared workbook is overwhelmingly viewed on
+  # white sheets.
+  .sem <- resondex_brand()$semantic
   styles <- list(
     title      = openxlsx::createStyle(textDecoration = "bold", fontSize = 18),
     sub_title  = openxlsx::createStyle(textDecoration = c("bold", "italic"), fontSize = 14),
@@ -275,9 +282,11 @@ bn_prioritize_write <- function(
     center_pct = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
     left       = openxlsx::createStyle(halign = "left"),
     baseline   = openxlsx::createStyle(textDecoration = "italic", fgFill = "#F2F2F2"),
-    p_green    = openxlsx::createStyle(fontColour = "#2E7D32", textDecoration = "bold"),
-    p_orange   = openxlsx::createStyle(fontColour = "#E65100"),
-    p_red      = openxlsx::createStyle(fontColour = "#B71C1C"),
+    # P-value colour tiers — pull from brand semantic palette so app /
+    # report / Excel all paint p-values the same hex.
+    p_green    = openxlsx::createStyle(fontColour = .sem$success, textDecoration = "bold"),
+    p_orange   = openxlsx::createStyle(fontColour = .sem$warning),
+    p_red      = openxlsx::createStyle(fontColour = .sem$danger),
     dropdown_label = openxlsx::createStyle(textDecoration = "bold", halign = "right"),
     dropdown_cell  = openxlsx::createStyle(border = "Bottom", borderStyle = "thin", halign = "left")
   )

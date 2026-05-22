@@ -25,7 +25,8 @@ append_bn_impact_dynamic(
   battery_filter = NULL,
   write_helper_sheets = TRUE,
   outcome_display = c("absolute", "proportional"),
-  shift_type = c("absolute", "proportional", "headroom", "range")
+  shift_type = c("absolute", "proportional", "headroom", "range"),
+  color_gradient_resondex = TRUE
 )
 }
 \arguments{

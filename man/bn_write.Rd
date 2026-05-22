@@ -36,6 +36,7 @@ bn_write(
   add_prioritization_pvalue = FALSE,
   add_impacts_by_battery = TRUE,
   prioritize_display = NULL,
+  color_gradient_resondex = TRUE,
   path = "."
 )
 }

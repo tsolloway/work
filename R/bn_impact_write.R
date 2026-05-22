@@ -142,7 +142,13 @@ bn_impact_write <- function(
     # When TRUE (default), per-battery `AD - <name>` dashboards are emitted
     # alongside the main Attribute Drivers tab. When FALSE, only the main
     # tab is written. Has no effect when no batteries are defined upstream.
-    add_impacts_by_battery = TRUE
+    add_impacts_by_battery = TRUE,
+    # When TRUE (default), impact cell colour-scale uses the brand
+    # semantic palette (--ndr-danger / white / --ndr-success) so Excel
+    # matches the in-app reactable and bn_report HTML. FALSE falls back
+    # to the legacy red / yellow / green Material scale — pass FALSE for
+    # legacy workbooks where stakeholders expect the old treatment.
+    color_gradient_resondex = TRUE
 ){
 
   wb_type <- match.arg(wb_type)
@@ -392,7 +398,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       footer = footer,
       variable_width = variable_width,
       label_width = label_width,
-      index_by = index_by
+      index_by = index_by,
+      color_gradient_resondex = color_gradient_resondex
     )
 
     # Per-battery sheets (optional, static path only). One sheet per battery
@@ -600,7 +607,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       min_base_for_lift = min_base_for_lift,
       batteries = batteries,
       battery_groups = battery_groups,
-      outcome_display = outcome_display, shift_type = shift_type
+      outcome_display = outcome_display, shift_type = shift_type,
+      color_gradient_resondex = color_gradient_resondex
     )
 
     # Per-battery dashboards. Each tab shows only its battery's IVs and
@@ -633,7 +641,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
           battery_groups = battery_groups,
           battery_filter = b_name,
           write_helper_sheets = FALSE,
-          outcome_display = outcome_display, shift_type = shift_type
+          outcome_display = outcome_display, shift_type = shift_type,
+          color_gradient_resondex = color_gradient_resondex
         )
       }
     }
@@ -667,7 +676,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
           battery_groups = battery_groups,
           battery_filter = g_name,
           write_helper_sheets = FALSE,
-          outcome_display = outcome_display, shift_type = shift_type
+          outcome_display = outcome_display, shift_type = shift_type,
+          color_gradient_resondex = color_gradient_resondex
         )
       }
     }
@@ -693,7 +703,8 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
         has_weights = !is.null(community_weighted),
         weighted_results_sheet = if (!is.null(community_weighted)) "Results_Community_Weighted" else NULL,
         min_base_for_lift = min_base_for_lift,
-        outcome_display = outcome_display, shift_type = shift_type
+        outcome_display = outcome_display, shift_type = shift_type,
+        color_gradient_resondex = color_gradient_resondex
       )
     }
 

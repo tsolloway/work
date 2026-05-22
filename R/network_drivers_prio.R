@@ -154,7 +154,13 @@
                    "How outcome change is displayed — relative vs absolute point change."),
         choices = c("% Change" = "propdisplay",
                     "Point Change" = "absdisplay"),
-        selected = "propdisplay"
+        # Binary DV → default to Point Change. Point changes read more
+        # naturally in probability terms than as a % of a probability
+        # (e.g. "+5 pts" vs "+18% of the base rate"). Matches bn_report's
+        # default for binary outcomes (bn_helpers .impact-table init,
+        # line ~1111-1117). For non-binary DVs the control is omitted
+        # entirely (single sensible display = decimal/% above).
+        selected = "absdisplay"
       ))
     ))
   }

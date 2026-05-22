@@ -34,7 +34,8 @@ bn_impact_write(
   save = TRUE,
   add_guide = TRUE,
   add_images = TRUE,
-  add_impacts_by_battery = TRUE
+  add_impacts_by_battery = TRUE,
+  color_gradient_resondex = TRUE
 )
 }
 \arguments{

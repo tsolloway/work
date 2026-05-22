@@ -61,7 +61,12 @@ append_bn_impact_dynamic <- function(
     # and "range" are valid shift_type initial values when bn_impact()
     # emitted those variants.
     outcome_display = c("absolute", "proportional"),
-    shift_type      = c("absolute", "proportional", "headroom", "range")
+    shift_type      = c("absolute", "proportional", "headroom", "range"),
+    # When TRUE (default), the cell colour-scale uses the brand semantic
+    # palette (danger / white / success) so the dynamic dashboard
+    # matches the app reactable and bn_report HTML. FALSE falls back to
+    # the legacy red / yellow / green Material scale.
+    color_gradient_resondex = TRUE
 ) {
 
   outcome_display <- match.arg(outcome_display)
@@ -909,9 +914,17 @@ append_bn_impact_dynamic <- function(
   # Focus warning — to the right of the Focus control (same row).
   # Priority: red error for brand+maxVmin/mi (invalid lookup), then grey
   # italic note for absolute-shift + lift (valid but unaffected by focus).
+  #
+  # When color_gradient_resondex = TRUE (default), warning text colours
+  # pull from the brand palette — danger for the red error, muted for
+  # the grey italic — so the dynamic dashboard matches the app's
+  # equivalent warning treatment. FALSE keeps the legacy #FF0000 /
+  # #888888 used by older workbooks.
   focus_cell_let <- num2let(focus_cell_col)
-  red_warning <- openxlsx::createStyle(fontColour = "#FF0000", textDecoration = "bold")
-  grey_italic <- openxlsx::createStyle(fontColour = "#888888", textDecoration = "italic")
+  .warn_red  <- if (isTRUE(color_gradient_resondex)) resondex_brand()$semantic$danger else "#FF0000"
+  .warn_grey <- if (isTRUE(color_gradient_resondex)) resondex_brand()$colors$muted    else "#888888"
+  red_warning <- openxlsx::createStyle(fontColour = .warn_red,  textDecoration = "bold")
+  grey_italic <- openxlsx::createStyle(fontColour = .warn_grey, textDecoration = "italic")
   red_rule <- paste0(
     "AND(", focus_cell_let, focus_cell_row, "<>\"Market\",",
     "OR(", mk_lookup, "=\"maxVmin\",", mk_lookup, "=\"mi\"))"
@@ -1567,9 +1580,19 @@ append_bn_impact_dynamic <- function(
     raw_col <- raw_metric_cols[sg_i]
     pval_col <- p_val_cols[sg_i]
 
-    # Colour scale (lowest priority)
+    # Colour scale (lowest priority). Diverging palette switches on
+    # color_gradient_resondex: TRUE → brand semantic danger / white /
+    # success (matches app reactable + bn_report); FALSE → legacy
+    # red / yellow / green Material scale. See append_bn_impact.R for
+    # the matching block.
+    grad_style <- if (isTRUE(color_gradient_resondex)) {
+      .sem_imp <- resondex_brand()$semantic
+      c(.sem_imp$danger, "#FFFFFF", .sem_imp$success)
+    } else {
+      c("#f66a6e", "#feea8a", "#66bd7d")
+    }
     openxlsx::conditionalFormatting(wb, dash_sheet, cols = i, rows = data_rows,
-      style = c("#f66a6e", "#feea8a", "#66bd7d"), type = "colourScale")
+      style = grad_style, type = "colourScale")
 
     # Bold italic for negative raw metric
     raw_col_let <- num2let(raw_col)

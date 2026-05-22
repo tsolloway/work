@@ -301,8 +301,8 @@ append_bn_prioritize_guide <- function(
       Column = "p-value",
       Description = paste0(
         "How confident we are that this step's gain is real signal rather than noise. Smaller is stronger; cells are shaded green below ",
-        sig_threshold, " and yellow below ", marginal_threshold,
-        ". A blank p-value means the bootstrap wasn't applied to this slice (typically because the sample size was too small)."
+        sig_threshold, ", orange below ", marginal_threshold,
+        ", and red otherwise (the step's gain isn't statistically significant). A blank p-value means the bootstrap wasn't applied to this slice (typically because the sample size was too small)."
       ),
       stringsAsFactors = FALSE
     ))

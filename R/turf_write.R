@@ -72,7 +72,13 @@ turf_write <- function(
     sig_threshold = 0.10,
     marginal_threshold = 0.20,
     very_hidden = FALSE,
-    return_location = TRUE
+    return_location = TRUE,
+    # When TRUE (default), the Greedy sheet's p-value column receives
+    # brand-tokenized conditional formatting (green / orange / red,
+    # from resondex_brand()$semantic) so Excel matches the app's
+    # .rdx-pval-* tiers. When FALSE, no conditional formatting is
+    # applied (preserves pre-brand behavior — plain black numbers).
+    color_gradient_resondex = TRUE
 ) {
 
   # best_combo_results = foo
@@ -199,7 +205,8 @@ turf_write <- function(
   .turf_write_config(wb, subgroup_names, n_values, col_info, has_subgroups,
                      top, n_items, vars, label_lookup, base_sizes, sg_keys,
                      sig_threshold = sig_threshold,
-                     marginal_threshold = marginal_threshold)
+                     marginal_threshold = marginal_threshold,
+                     color_gradient_resondex = color_gradient_resondex)
 
 
   # ---- Write _controls sheet ----
@@ -230,7 +237,8 @@ turf_write <- function(
     n_items, vars, label_lookup, base_sizes,
     project_name = project_name,
     sig_threshold = sig_threshold,
-    marginal_threshold = marginal_threshold
+    marginal_threshold = marginal_threshold,
+    color_gradient_resondex = color_gradient_resondex
   )
 
 
@@ -453,14 +461,22 @@ turf_write <- function(
 .turf_write_config <- function(wb, subgroup_names, n_values, col_info,
                                 has_subgroups, top, n_items, vars,
                                 label_lookup, base_sizes, sg_keys,
-                                sig_threshold = 0.10, marginal_threshold = 0.20){
+                                sig_threshold = 0.10, marginal_threshold = 0.20,
+                                color_gradient_resondex = TRUE){
 
   wb$add_worksheet("_config")
 
   # ---- Key-value config pairs: title in A, value in B ----
+  # `color_gradient_resondex` (row 11) — TRUE/FALSE flag VBA reads to
+  # branch its runtime palette between the brand semantic colours
+  # (--ndr-success / --ndr-warning / --ndr-danger and the diverging
+  # danger / white / success gradient) and the legacy Material
+  # palette previously hardcoded into Module1.bas. Bumped vba_version
+  # to 3 because the VBA now expects this row to exist.
   config_titles <- c("subgroup_names", "n_values", "has_weights", "has_labels",
                      "has_subgroups", "top", "n_items", "sig_threshold",
-                     "marginal_threshold", "vba_version")
+                     "marginal_threshold", "vba_version",
+                     "color_gradient_resondex")
   config_values <- c(
     paste(subgroup_names, collapse = ","),
     paste(n_values, collapse = ","),
@@ -471,7 +487,8 @@ turf_write <- function(
     as.character(n_items),
     as.character(sig_threshold),
     as.character(marginal_threshold),
-    "2"
+    "3",
+    as.character(isTRUE(color_gradient_resondex))
   )
   for (i in seq_along(config_titles)) {
     wb$add_data("_config", x = config_titles[i], dims = paste0("A", i))
@@ -482,7 +499,7 @@ turf_write <- function(
   wb$add_data("_config", x = n_items, dims = "B7")
   wb$add_data("_config", x = sig_threshold, dims = "B8")
   wb$add_data("_config", x = marginal_threshold, dims = "B9")
-  wb$add_data("_config", x = 2L, dims = "B10")  # vba_version — must match VBA_VERSION constant
+  wb$add_data("_config", x = 3L, dims = "B10")  # vba_version — must match VBA_VERSION constant
 
   # ---- Subgroups + base sizes + short keys + display labels: F/G/H/I starting row 1 ----
   base_df <- data.frame(
@@ -597,7 +614,8 @@ turf_write <- function(
     wb, subgroup_names, n_values, col_info,
     n_items, vars, label_lookup, base_sizes,
     project_name = "Project Name - (#xxxxxxx)",
-    sig_threshold = 0.10, marginal_threshold = 0.20
+    sig_threshold = 0.10, marginal_threshold = 0.20,
+    color_gradient_resondex = TRUE
 ) {
 
   sheet <- "Dashboard"
@@ -665,7 +683,9 @@ turf_write <- function(
   }
 
   # ---- Row 8: Items panel headers (Z-AB, centered) ----
-  items_headers <- c("Item", "Label", "Include")
+  # "Variable" matches the app's items table column header — single
+  # vocabulary across surfaces ("Item" is reserved for the row entity).
+  items_headers <- c("Variable", "Label", "Include")
   items_cols <- c("Z", "AA", "AB")
   for(i in seq_along(items_headers)){
     dims <- paste0(items_cols[i], "8")
@@ -702,6 +722,16 @@ turf_write <- function(
                 top_border = "medium", bottom_border = "medium",
                 left_border = "medium", right_border = "medium",
                 inner_hgrid = NULL, inner_vgrid = NULL)
+
+  # NOTE: P-value colours, the Cumul/Incr/Abs 3-colour scale, and the
+  # Include-checkbox bg colours are all painted by VBA at runtime
+  # (Module1.bas — see ApplyPValueColors / ApplyGreedyConditionalFormatting
+  # / ApplyIncludeCheckboxFormatting). VBA calls FormatConditions.Delete
+  # before each render, so R-side conditional formatting would be wiped.
+  # Instead, the colour palette is gated by the
+  # `color_gradient_resondex` flag, which R writes to `_config!B11`
+  # (TRUE/FALSE); VBA reads that cell and branches between the brand
+  # palette and the legacy Material palette.
 
   # ---- Row 9+: Item variable names, labels + checkboxes ----
   for(i in seq_along(vars)){
@@ -975,10 +1005,11 @@ turf_write <- function(
   wb$add_font(sheet, dims = "C10", name = "Calibri", size = 11)
   .style_bc_control(10)
 
-  # Row 11: Chart
+  # Row 11: Chart — default mirrors the app's Best Combo default
+  # ("Reach vs Freq") so the Excel + Shiny surfaces open on the same chart.
   wb$add_data(sheet, x = "Chart:", dims = "B11")
   wb$add_font(sheet, dims = "B11", name = "Calibri", bold = "true", size = 11)
-  wb$add_data(sheet, x = "Top Reach", dims = "C11")
+  wb$add_data(sheet, x = "Reach vs Freq", dims = "C11")
   wb$add_data_validation(
     sheet, dims = "C11", type = "list",
     value = '"Top Reach,Reach vs Freq,Item Frequency,None"'

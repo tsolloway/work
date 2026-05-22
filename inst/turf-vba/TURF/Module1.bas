@@ -3,7 +3,9 @@ Option Explicit
 
 ' VBA code version — bump whenever Module1.bas changes.
 ' R writes this same value to _config!B10 so BuildTURF can detect mismatches.
-Private Const VBA_VERSION As Long = 2
+' v3 — added color_gradient_resondex flag (_config!B11) to swap the
+'      runtime palette between the Resondex brand and the legacy Material colors.
+Private Const VBA_VERSION As Long = 3
 
 ' =============================================================================
 ' TURF Dashboard — Main VBA Module (Multi-Sheet Architecture)
@@ -35,6 +37,13 @@ Private Const CFG_N_ITEMS As String = "B7"
 Private Const CFG_HAS_WEIGHTS As String = "B3"
 Private Const CFG_SIG_THRESH As String = "B8"
 Private Const CFG_MARG_THRESH As String = "B9"
+' Resondex brand palette toggle (TRUE/FALSE). When TRUE, all runtime
+' coloring (p-value tiers, Cumul/Incr/Abs gradient, Include checkboxes)
+' uses the brand semantic palette (--ndr-success / --ndr-warning /
+' --ndr-danger + diverging danger/white/success). When FALSE, the
+' legacy Material palette is used. Helper functions live below the
+' declarations block — see UseBrandPalette / Pal* further down.
+Private Const CFG_COLOR_BRAND As String = "B11"
 Private Const CFG_ITEMS_START_ROW As Long = 21  ' row 20 = header, 21+ = data
 Private Const CFG_ITEMS_VAR_COL As Long = 1     ' A
 Private Const CFG_ITEMS_LABEL_COL As Long = 2   ' B
@@ -101,6 +110,109 @@ Private mInitialized As Boolean
 ' Deferred BC chart parameters (set by WriteComboResults, used after CleanUp)
 Private mBCLastRank As Long
 Private mBCLastCombo As Long
+
+
+' =============================================================================
+' Palette helpers — single source of truth for runtime colors.
+' Lives after all module-level declarations because VBA requires variable
+' declarations to precede any Sub/Function in the module.
+'
+' UseBrandPalette: reads _config!B11 (CFG_COLOR_BRAND). Defaults to TRUE if
+' the cell is missing or unreadable so older templates still surface the
+' brand palette by default after the R-side toggle landed.
+' =============================================================================
+Private Function UseBrandPalette() As Boolean
+    Dim v As Variant
+    On Error Resume Next
+    v = Sheets(CFG_SHEET).Range(CFG_COLOR_BRAND).Value
+    On Error GoTo 0
+    If IsEmpty(v) Or IsNull(v) Then
+        UseBrandPalette = True
+    Else
+        UseBrandPalette = (UCase(CStr(v)) = "TRUE")
+    End If
+End Function
+
+' Per-tier accessors. Centralizing the RGB choice here means future
+' brand tweaks only touch this block. Brand hexes match resondex_brand():
+'   success #5C8A6B, warning #C2773C, danger #AC6258 (light mode).
+Private Function PalSuccess() As Long
+    If UseBrandPalette() Then
+        PalSuccess = RGB(92, 138, 107)    ' brand --ndr-success #5C8A6B
+    Else
+        PalSuccess = RGB(46, 125, 50)     ' legacy Material #2E7D32
+    End If
+End Function
+Private Function PalWarning() As Long
+    If UseBrandPalette() Then
+        PalWarning = RGB(194, 119, 60)    ' brand --ndr-warning #C2773C
+    Else
+        PalWarning = RGB(230, 81, 0)      ' legacy Material #E65100
+    End If
+End Function
+Private Function PalDanger() As Long
+    If UseBrandPalette() Then
+        PalDanger = RGB(172, 98, 88)      ' brand --ndr-danger #AC6258
+    Else
+        PalDanger = RGB(183, 28, 28)      ' legacy Material #B71C1C
+    End If
+End Function
+' 3-color gradient (used on Cumul/Incr/Abs columns). Brand path uses
+' diverging danger -> white -> success, matching the in-app reactable's
+' color-mix-to-transparent effect on white card surfaces. Legacy path
+' keeps the Material red/yellow/green that pre-brand workbooks expect.
+Private Function PalScaleLow() As Long
+    If UseBrandPalette() Then
+        PalScaleLow = RGB(172, 98, 88)    ' brand danger
+    Else
+        PalScaleLow = RGB(248, 105, 107)  ' legacy red
+    End If
+End Function
+Private Function PalScaleMid() As Long
+    If UseBrandPalette() Then
+        PalScaleMid = RGB(255, 255, 255)  ' white (neutral midpoint)
+    Else
+        PalScaleMid = RGB(255, 235, 132)  ' legacy yellow
+    End If
+End Function
+Private Function PalScaleHigh() As Long
+    If UseBrandPalette() Then
+        PalScaleHigh = RGB(92, 138, 107)  ' brand success
+    Else
+        PalScaleHigh = RGB(99, 190, 123)  ' legacy green
+    End If
+End Function
+' Include checkbox bg + text. Brand path uses success/danger for bg
+' with white text for contrast; legacy keeps the original
+' light-bg + dark-text combos.
+Private Function PalIncludeTrueBg() As Long
+    If UseBrandPalette() Then
+        PalIncludeTrueBg = RGB(92, 138, 107)
+    Else
+        PalIncludeTrueBg = RGB(99, 190, 123)
+    End If
+End Function
+Private Function PalIncludeTrueText() As Long
+    If UseBrandPalette() Then
+        PalIncludeTrueText = RGB(255, 255, 255)
+    Else
+        PalIncludeTrueText = RGB(0, 97, 0)
+    End If
+End Function
+Private Function PalIncludeFalseBg() As Long
+    If UseBrandPalette() Then
+        PalIncludeFalseBg = RGB(172, 98, 88)
+    Else
+        PalIncludeFalseBg = RGB(248, 105, 107)
+    End If
+End Function
+Private Function PalIncludeFalseText() As Long
+    If UseBrandPalette() Then
+        PalIncludeFalseText = RGB(255, 255, 255)
+    Else
+        PalIncludeFalseText = RGB(156, 0, 6)
+    End If
+End Function
 
 
 ' =============================================================================
@@ -822,19 +934,19 @@ Private Sub WriteDashboardGreedy( _
         pVal = CDbl(dashWs.Cells(pRow, DG_PVAL_COL).Value)
 
         If pVal < sigThresh Then
-            ' Green: significant
+            ' Significant — brand --ndr-success / legacy Material green
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Name = "Calibri"
-            dashWs.Cells(pRow, DG_PVAL_COL).Font.Color = RGB(46, 125, 50)
+            dashWs.Cells(pRow, DG_PVAL_COL).Font.Color = PalSuccess()
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Bold = True
         ElseIf pVal < margThresh Then
-            ' Orange: marginal
+            ' Marginal — brand --ndr-warning / legacy Material orange
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Name = "Calibri"
-            dashWs.Cells(pRow, DG_PVAL_COL).Font.Color = RGB(230, 81, 0)
+            dashWs.Cells(pRow, DG_PVAL_COL).Font.Color = PalWarning()
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Bold = False
         Else
-            ' Red: not significant
+            ' Not significant — brand --ndr-danger / legacy Material red
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Name = "Calibri"
-            dashWs.Cells(pRow, DG_PVAL_COL).Font.Color = RGB(183, 28, 28)
+            dashWs.Cells(pRow, DG_PVAL_COL).Font.Color = PalDanger()
             dashWs.Cells(pRow, DG_PVAL_COL).Font.Bold = False
         End If
     Next pRow
@@ -952,21 +1064,22 @@ Private Sub ApplyGreedyConditionalFormatting(ByVal dashWs As Worksheet, ByVal nI
         ' Clear any existing conditional formatting on this range
         rng.FormatConditions.Delete
 
-        ' Add 3-color scale: Red (low) → Yellow (mid) → Green (high)
+        ' Add 3-color scale: low → mid → high. Palette comes from
+        ' PalScale* (brand: danger/white/success; legacy: red/yellow/green).
         Set cs = rng.FormatConditions.AddColorScale(ColorScaleType:=3)
 
-        ' Criteria 1: Minimum → Red
+        ' Criteria 1: Minimum → brand --ndr-danger / legacy red
         cs.ColorScaleCriteria(1).Type = 1  ' xlConditionValueLowestValue
-        cs.ColorScaleCriteria(1).FormatColor.Color = RGB(248, 105, 107)  ' red
+        cs.ColorScaleCriteria(1).FormatColor.Color = PalScaleLow()
 
-        ' Criteria 2: Midpoint → Yellow
+        ' Criteria 2: Midpoint → white (brand) / yellow (legacy)
         cs.ColorScaleCriteria(2).Type = 4  ' xlConditionValuePercentile
         cs.ColorScaleCriteria(2).Value = 50
-        cs.ColorScaleCriteria(2).FormatColor.Color = RGB(255, 235, 132)  ' yellow
+        cs.ColorScaleCriteria(2).FormatColor.Color = PalScaleMid()
 
-        ' Criteria 3: Maximum → Green
+        ' Criteria 3: Maximum → brand --ndr-success / legacy green
         cs.ColorScaleCriteria(3).Type = 2  ' xlConditionValueHighestValue
-        cs.ColorScaleCriteria(3).FormatColor.Color = RGB(99, 190, 123)  ' green
+        cs.ColorScaleCriteria(3).FormatColor.Color = PalScaleHigh()
     Next ci
 End Sub
 
@@ -2009,17 +2122,17 @@ Public Sub InitializeCheckboxes()
                             ws.Cells(ITEMS_START_ROW + nItems - 1, ITEMS_CHECK_COL))
     checkRng.FormatConditions.Delete
 
-    ' TRUE → green fill
+    ' TRUE → green fill (brand --ndr-success / legacy Material green)
     Dim fcTrue As FormatCondition
     Set fcTrue = checkRng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlEqual, Formula1:="TRUE")
-    fcTrue.Interior.Color = RGB(99, 190, 123)   ' green
-    fcTrue.Font.Color = RGB(0, 97, 0)           ' dark green text
+    fcTrue.Interior.Color = PalIncludeTrueBg()
+    fcTrue.Font.Color = PalIncludeTrueText()
 
-    ' FALSE → red fill
+    ' FALSE → red fill (brand --ndr-danger / legacy Material red)
     Dim fcFalse As FormatCondition
     Set fcFalse = checkRng.FormatConditions.Add(Type:=xlCellValue, Operator:=xlEqual, Formula1:="FALSE")
-    fcFalse.Interior.Color = RGB(248, 105, 107)  ' red
-    fcFalse.Font.Color = RGB(156, 0, 6)          ' dark red text
+    fcFalse.Interior.Color = PalIncludeFalseBg()
+    fcFalse.Font.Color = PalIncludeFalseText()
 End Sub
 
 

@@ -14,7 +14,8 @@ append_bn_impact(
   footer = NULL,
   variable_width = 20,
   label_width = "auto",
-  index_by = "lift_first"
+  index_by = "lift_first",
+  color_gradient_resondex = TRUE
 )
 }
 \arguments{
@@ -39,6 +40,14 @@ display columns.}
 
 \item{index_by}{Character. Which metric was used for the index column.
 Controls which column is used for sign detection and Total Impact.}
+
+\item{color_gradient_resondex}{Logical. When TRUE (default), the cell
+colour-scale uses the brand semantic palette
+(\code{resondex_brand()$semantic}) — danger / white / success — so the
+gradient matches the in-app reactable and bn_report HTML cells. When
+FALSE, falls back to the original red / yellow / green Material-style
+scale (\code{#f66a6e, #feea8a, #66bd7d}). Pass FALSE for legacy
+workbooks where stakeholders expect the old colour treatment.}
 }
 \value{
 Modified workbook object.

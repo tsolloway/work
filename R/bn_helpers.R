@@ -1373,8 +1373,10 @@
     '  justify-content: flex-end;',
     '  margin-bottom: 12px;',
     '}',
-    # 13px — parity with --ndr-fs-md (table body).
-    '.membership-toggle { font-size: 13px; padding: 4px 10px; }',
+    # var(--ndr-fs-sm) = 12px — matches the app's brand button sizing.
+    # Note: was 13px (matching table body) but report-side controls now
+    # consistently use the smaller fs-sm token for parity with the app.
+    '.membership-toggle { font-size: var(--ndr-fs-sm, 12px); padding: 4px 10px; }',
     '.membership-table {',
     '  width: 100%;',
     '  border-collapse: collapse;',
@@ -1435,7 +1437,14 @@
     '  align-items: center;',
     '  margin-bottom: 12px;',
     '}',
-    '.membership-card .card-count {',
+    # `.card-count` is the small pill chip showing attribute count next
+    # to a community name. Used in BOTH views: card view (inside a
+    # `.membership-card`) AND table view (inline beside the community
+    # name in the first `<td>`). The previous `.membership-card`
+    # ancestor scoped this rule to the card view only, leaving the
+    # table view's count rendering as bare unformatted text. Drop the
+    # ancestor so the pill applies wherever `.card-count` appears.
+    '.card-count {',
     '  margin-left: 8px;',
     '  font-size: 12px;',
     '  font-weight: 500;',
@@ -1443,6 +1452,13 @@
     '  background: var(--ndr-secondary-bg);',
     '  padding: 2px 8px;',
     '  border-radius: 10px;',
+    # `display: inline-block` so vertical padding renders correctly in
+    # both contexts. Inline alone (the default) ignores top/bottom
+    # padding in table cells, which was making the table-view chip
+    # look squashed compared to the card-view chip.
+    '  display: inline-block;',
+    '  vertical-align: middle;',
+    '  line-height: 1.4;',
     '}',
     '.membership-card .card-nodes { display: flex; flex-wrap: wrap; gap: 6px; }',
     '.node-pill {',
@@ -1642,7 +1658,11 @@
     '  transform: translateY(-50%) translateY(2px);',
     '}',
     '.impact-table tbody td {',
-    '  padding: 6px 10px; border: 1px solid #e0e0e0; vertical-align: middle;',
+    # 4px 6px — matches reactable `compact = TRUE` spacing so the
+    # standalone bn_report HTML reads with the same row density as
+    # the in-app reactable. Header (thead) keeps 8px 10px so column
+    # labels stay visually distinct from data rows.
+    '  padding: 4px 6px; border: 1px solid #e0e0e0; vertical-align: middle;',
     '}',
     '.impact-table tbody td.num-col { text-align: center; font-variant-numeric: tabular-nums; }',
     '.impact-table tbody td.txt-col { text-align: left; }',
@@ -1806,7 +1826,9 @@
     '  transform: translateY(-50%) translateY(2px);',
     '}',
     '.priort-table tbody td {',
-    '  padding: 6px 10px; border: 1px solid #e0e0e0; vertical-align: middle;',
+    # 4px 6px — parity with .impact-table tbody and the in-app
+    # reactable's compact spacing. Header keeps 8px 10px.
+    '  padding: 4px 6px; border: 1px solid #e0e0e0; vertical-align: middle;',
     '}',
     '.priort-table tbody td.num-col {',
     '  text-align: center; font-variant-numeric: tabular-nums;',
@@ -1969,7 +1991,11 @@
     '  border: 1px solid var(--ndr-border) !important;',
     '  border-radius: 6px !important;',
     '  padding: 6px 28px 6px 10px !important;',
-    '  font-size: 13px !important;',
+    # var(--ndr-fs-sm) = 12px — matches the app's brand form controls
+    # (.form-select / .form-control / .selectize-*) so the report's
+    # impact + prio control selects render at the same size as the
+    # equivalent app sidebar inputs.
+    '  font-size: var(--ndr-fs-sm, 12px) !important;',
     '  background-color: var(--ndr-card-bg) !important;',
     '  color: var(--ndr-text) !important;',
     '  -webkit-appearance: none; appearance: none;',
@@ -1983,7 +2009,9 @@
     '  outline: 0;',
     '}',
     '.impact-ctrl-row label, .priort-ctrl-row label, .layout-controls label {',
-    '  font-weight: 500 !important; font-size: 13px !important;',
+    # var(--ndr-fs-sm) = 12px — parity with the app's .form-check-label
+    # (brand-tokenized) so control labels match across surfaces.
+    '  font-weight: 500 !important; font-size: var(--ndr-fs-sm, 12px) !important;',
     '  color: var(--ndr-text) !important;',
     '}',
     '/* Layout control is a bare control row (not a well/card) — overrides',
@@ -2018,7 +2046,11 @@
     '.impact-table tbody td, .priort-table tbody td {',
     '  border: none !important;',
     '  border-bottom: 1px solid #f0f1f3 !important;',
-    '  padding: 8px 10px !important;',
+    # 4px 6px — matches the in-app reactable's `compact = TRUE`
+    # spacing so the standalone bn_report HTML reads with the same
+    # row density. Header / footer keep 8px 10px so they stay
+    # visually distinct from data rows.
+    '  padding: 4px 6px !important;',
     '}',
     '.impact-table tbody tr:hover td, .priort-table tbody tr:hover td {',
     '  background: var(--bs-secondary-bg, #f0f0f0) !important;',
@@ -2078,7 +2110,10 @@
     '/* Show/Hide control button — matches the app\\u2019s small outlined',
     '   white button. */',
     '.ndr-estimate-toggle {',
-    '  width: 100%; padding: 6px 10px; font-size: 13px;',
+    # var(--ndr-fs-sm) = 12px — matches the app's .btn-rdx so the
+    # toggle button reads the same size as the app's equivalent
+    # outlined action buttons.
+    '  width: 100%; padding: 6px 10px; font-size: var(--ndr-fs-sm, 12px);',
     '  background: var(--ndr-card-bg); color: var(--ndr-text);',
     '  border: 1px solid var(--ndr-border); border-radius: 6px;',
     '  cursor: pointer;',

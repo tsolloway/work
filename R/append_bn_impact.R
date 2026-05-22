@@ -16,6 +16,13 @@
 #' @param label_width Column width for Label column (default \code{"auto"}).
 #' @param index_by Character. Which metric was used for the index column.
 #'   Controls which column is used for sign detection and Total Impact.
+#' @param color_gradient_resondex Logical. When TRUE (default), the cell
+#'   colour-scale uses the brand semantic palette
+#'   (\code{resondex_brand()$semantic}) — danger / white / success — so the
+#'   gradient matches the in-app reactable and bn_report HTML cells. When
+#'   FALSE, falls back to the original red / yellow / green Material-style
+#'   scale (\code{#f66a6e, #feea8a, #66bd7d}). Pass FALSE for legacy
+#'   workbooks where stakeholders expect the old colour treatment.
 #'
 #' @return Modified workbook object.
 #'
@@ -30,7 +37,8 @@ append_bn_impact <- function(
     footer = NULL,
     variable_width = 20,
     label_width = "auto",
-    index_by = "lift_first"
+    index_by = "lift_first",
+    color_gradient_resondex = TRUE
 ){
 
   if (is.null(wb)) wb <- oxl_create_workbook()
@@ -264,9 +272,21 @@ append_bn_impact <- function(
       p_col_name <- paste0(sg, p_suffix)
       p_col_pos <- which(names(analysis_table) == p_col_name)
 
-      # openxlsx writes rules in reverse order — last call = highest priority in Excel
+      # openxlsx writes rules in reverse order — last call = highest priority in Excel.
+      # Diverging gradient:
+      #   - TRUE (default): brand semantic palette
+      #     (--ndr-danger / white / --ndr-success) so Excel matches the
+      #     in-app reactable and bn_report HTML.
+      #   - FALSE: legacy red / yellow / green Material scale for
+      #     workbooks where stakeholders expect the old treatment.
+      grad_style <- if (isTRUE(color_gradient_resondex)) {
+        .sem_imp <- resondex_brand()$semantic
+        c(.sem_imp$danger, "#FFFFFF", .sem_imp$success)
+      } else {
+        c("#f66a6e", "#feea8a", "#66bd7d")
+      }
       openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = data_rows,
-        style = c("#f66a6e", "#feea8a", "#66bd7d"), type = "colourScale")
+        style = grad_style, type = "colourScale")
 
       if (!is.null(sign_suffix)) {
         sign_col_name <- paste0(sg, sign_suffix)

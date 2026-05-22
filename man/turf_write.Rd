@@ -20,7 +20,8 @@ turf_write(
   sig_threshold = 0.1,
   marginal_threshold = 0.2,
   very_hidden = FALSE,
-  return_location = TRUE
+  return_location = TRUE,
+  color_gradient_resondex = TRUE
 )
 }
 \arguments{

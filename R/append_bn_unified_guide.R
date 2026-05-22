@@ -300,7 +300,7 @@ append_bn_unified_guide <- function(
     ))
     ctrl_df <- rbind(ctrl_df, data.frame(
       Control = "Outcome (Attribute / Community Drivers)",
-      Description = "Controls how impact values are formatted. '% Change' scales each value by baseline DV (relative read); 'Point Change' shows the raw DV-unit delta (absolute read).",
+      Description = "Controls how impact values are formatted. '% Change' scales each value by baseline DV (relative read); 'Point Change' shows the raw DV-unit delta (absolute read). Defaults to 'Point Change' for dichotomous DVs (probability points read naturally) and '% Change' for continuous DVs (% of baseline reads better). Override via the Outcome dropdown.",
       stringsAsFactors = FALSE
     ))
     if (has_weights) {
@@ -398,7 +398,8 @@ append_bn_unified_guide <- function(
       Column = "p-value",
       Description = paste0(
         "How confident we are this step's gain is real. Smaller is stronger; green below ",
-        sig_threshold, ", yellow below ", marginal_threshold, "."
+        sig_threshold, ", orange below ", marginal_threshold,
+        ", red otherwise (the step's gain isn't statistically significant)."
       ),
       stringsAsFactors = FALSE
     ))

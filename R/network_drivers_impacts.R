@@ -188,11 +188,28 @@
 #' @noRd
 .network_drivers_impacts_sidebar <- function(ns, prefix, metadata,
                                              view_value, view_input_id,
-                                             default_outcome = "propdisplay",
-                                             default_shift = "propshift",
+                                             default_outcome = NULL,
+                                             default_shift = "absshift",
                                              include_indexby = TRUE) {
   m <- metadata
   if (is.null(m)) return(NULL)
+
+  # Auto-default Outcome Display by DV type when caller didn't pass an
+  # explicit value: dichotomous DVs read more naturally as raw probability
+  # points (Point Change / absdisplay), everything else as % change.
+  # Mirrors bn_report (.bn_report_render_attribute_impacts_dashboard,
+  # bn_helpers.R ~ line 624) and bn_impact_write's auto-detect so all
+  # three surfaces (app / report / Excel) land on the same initial
+  # outcome display for any given DV.
+  if (is.null(default_outcome)) {
+    default_outcome <- if (isTRUE(m$is_dichotomous_dv)) "absdisplay" else "propdisplay"
+  }
+  # default_shift = "absshift" (Fixed Step) mirrors bn_report
+  # (shift_type = "absolute" → absshift) and bn_impact_write's default.
+  # In practice this only surfaces when the user flips Assess from
+  # "Current Impact" (which forces rangeshift) to "Custom" — at that
+  # point all three surfaces now land on Fixed Step instead of the
+  # previous "% of Current Mean" mismatch.
 
   # `view_value` can be a single string OR a vector of strings (when the
   # same shared controls should appear on multiple tabs, e.g. both

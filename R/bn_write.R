@@ -137,6 +137,13 @@ bn_write <- function(
     # continuous -> "% Change"). Pass "Point Change" or "% Change" to
     # override. Forwarded to bn_prioritize_write.
     prioritize_display = NULL,
+    # When TRUE (default), impact cell colour-scale uses the brand
+    # semantic palette (--ndr-danger / white / --ndr-success) so Excel
+    # matches the in-app reactable and bn_report HTML. FALSE falls back
+    # to the legacy red / yellow / green Material scale — pass FALSE
+    # for legacy workbooks where stakeholders expect the old treatment.
+    # Forwarded to bn_impact_write.
+    color_gradient_resondex = TRUE,
     path = "."
 ) {
 
@@ -236,6 +243,7 @@ bn_write <- function(
       impact_outcome_display = impact_outcome_display,
       shift_type         = shift_type,
       add_impacts_by_battery = add_impacts_by_battery,
+      color_gradient_resondex = color_gradient_resondex,
       path               = path,
       wb                 = wb,
       save               = FALSE,
