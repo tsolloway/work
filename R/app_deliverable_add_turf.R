@@ -293,12 +293,12 @@ app_deliverable_add_turf <- function(
       sidebar = dashboard_sidebar,
       bslib::layout_columns(
         col_widths = bslib::breakpoints(
-          md = c(12, 12, 12), # Stacks elements vertically on small screens
-          lg = c(7, 5, 12)    # 2/3 and 1/3 layout on large screens
+          xs = c(12, 12, 12), # Stacks elements vertically on small screens
+          xl = c(7, 5, 12)    # 2/3 and 1/3 layout on large screens
         ),
         row_heights = bslib::breakpoints(
-          md = c("minmax(500px, auto)", "minmax(500px, auto)", "minmax(500px, auto)"),
-          lg = c("minmax(0, 1fr)", "minmax(0, 1fr)")
+          xs = c("minmax(500px, auto)", "minmax(500px, auto)", "minmax(500px, auto)"),
+          xl = c("minmax(0, 1fr)", "minmax(0, 1fr)")
         ),
         bslib::card(
           full_screen = TRUE,
