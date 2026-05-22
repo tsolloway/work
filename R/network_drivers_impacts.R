@@ -691,14 +691,11 @@
     bordered        = FALSE,
     highlight       = TRUE,
     compact         = TRUE,
-    # Reactable fills its flex parent (the .flex-1 wrapper inside
-    # card_body). The card is wrapped in bslib::layout_columns by the
-    # module UI, which gives it a definite cell height — so the flex
-    # chain (card → card_body → wrapper height:100% → reactable) all
-    # resolves to definite values, and reactable's internal body
-    # scrolls when content exceeds. Same pattern as the prio table.
-    height          = "100%",
-    style           = list(height = "100%"),
+    # Reactable renders at content height. The card_body's wrapper
+    # div uses `flex: 0 1 auto` + `overflow-y: auto` so short tables
+    # let the footer hug the last row, and tall tables hit the
+    # available space and scroll inside the wrapper. Same pattern
+    # as the prio table.
     # Body theme is the canonical reference (bn_report HTML tables converge
     # on this). Header + footer mirror bn_report's .impact-table thead th /
     # .impact-footer so reactable renders identically to the report.

@@ -426,9 +426,14 @@ app_deliverable_network_drivers <- function(
             padding = 0,
             style = flex_card_body_style,
             shiny::div(
-              style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
+              # flex: 0 1 auto = content-height, allowed to shrink if
+              # too tall. Combined with overflow-y: auto, that means:
+              # short tables render at content size (footer hugs the
+              # last row); tall tables cap at available space and
+              # scroll internally (footer pinned to card bottom).
+              style = "flex: 0 1 auto; min-height: 0; overflow-y: auto;",
               reactable::reactableOutput(ns(paste0(rid, "_ia_dt")),
-                                         width = "100%", height = "100%")
+                                         width = "100%")
             ),
             shiny::div(
               style = "flex: 0 0 auto;",
@@ -456,9 +461,10 @@ app_deliverable_network_drivers <- function(
             style = flex_card_body_style,
             min_height = "500px",
             shiny::div(
-              style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
+              # See _ia_dt wrapper above for rationale.
+              style = "flex: 0 1 auto; min-height: 0; overflow-y: auto;",
               reactable::reactableOutput(ns(paste0(rid, "_ic_dt")),
-                                         width = "100%", height = "100%")
+                                         width = "100%")
             ),
             shiny::div(
               style = "flex: 0 0 auto;",
@@ -484,9 +490,11 @@ app_deliverable_network_drivers <- function(
         padding = 0,
         style = flex_card_body_style,
         shiny::div(
-          style = "flex: 1 1 auto; min-height: 0; overflow: hidden;",
+          # See _ia_dt wrapper above for rationale (footer-hugs-content
+          # for short tables; internal scroll cap for tall ones).
+          style = "flex: 0 1 auto; min-height: 0; overflow-y: auto;",
           reactable::reactableOutput(ns(paste0(rid, "_pm_dt")),
-                                     width = "100%", height = "100%")
+                                     width = "100%")
         ),
         shiny::div(
           style = "flex: 0 0 auto;",

@@ -352,12 +352,10 @@
     bordered        = FALSE,
     highlight       = TRUE,
     compact         = TRUE,
-    # Reactable fills its flex parent (the .flex-1 wrapper inside
-    # card_body). The footer takes its natural height beneath; no
-    # need to reserve a fixed amount via maxHeight — the flex column
-    # in card_body handles the split dynamically.
-    height          = "100%",
-    style           = list(height = "100%"),
+    # Reactable renders at content height. The card_body's wrapper
+    # div uses `flex: 0 1 auto` + `overflow-y: auto` so short tables
+    # let the footer hug the last row, and tall tables hit the
+    # available space and scroll inside the wrapper.
     # Body theme matches the impact reactables (canonical reference);
     # header + footer mirror bn_report's .priort-table thead th /
     # .priort-footer so reactable renders identically to the report.
