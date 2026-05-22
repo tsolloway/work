@@ -730,9 +730,13 @@ plotly_theme_colors <- function(theme = "Default") {
       list(
         paper_bgcolor = v$paper_bg,
         plot_bgcolor  = v$plot_bg,
-        font  = list(family = ff, color = v$font_color, size = 13),
+        # Body 12 / title 14 — tightened for analytics density. Axis
+        # tick labels at 12 leave room for long attribute names in the
+        # prio chart; title at 14 sits naturally below the (15px) card
+        # header without competing for visual weight.
+        font  = list(family = ff, color = v$font_color, size = 12),
         title = list(font = list(family = ff, color = v$font_color,
-                                  size = 16), x = 0),
+                                  size = 14), x = 0),
         xaxis = list(gridcolor = v$grid, linecolor = v$grid,
                      tickcolor = v$grid, zerolinecolor = v$grid,
                      tickfont = list(color = v$axis_text),
@@ -766,9 +770,10 @@ plotly_theme_colors <- function(theme = "Default") {
       list(
         paper_bgcolor = v$paper_bg,
         plot_bgcolor  = v$plot_bg,
-        font  = list(family = ff, color = v$font_color, size = 13),
+        # Mirrors Default — body 12 / title 14. See Default for rationale.
+        font  = list(family = ff, color = v$font_color, size = 12),
         title = list(font = list(family = ff, color = v$font_color,
-                                  size = 16), x = 0),
+                                  size = 14), x = 0),
         xaxis = list(gridcolor = v$grid, linecolor = v$grid,
                      tickcolor = v$grid, zerolinecolor = v$grid,
                      tickfont = list(color = v$axis_text),

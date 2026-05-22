@@ -85,9 +85,9 @@ resondex_brand <- function(mode = c("light", "dark")) {
       # Mode-independent.
       type = list(
         xs   = "11px",  # axis / fine print
-        sm   = "12px",  # footers / legend
-        base = "14px",  # body
-        md   = "14px",  # table body (matches reactable spec)
+        sm   = "12px",  # footers / legend / form controls
+        base = "13px",  # body — tightened from 14px for analytics density
+        md   = "13px",  # table body — matches body so tables sit at one rhythm
         lg   = "15px",  # card title
         h3   = "18px",
         h2   = "22px"
@@ -421,6 +421,13 @@ resondex_css <- function(include_import = TRUE) {
       "  color: var(--ndr-text) !important;",
       "  background-color: var(--ndr-card-bg) !important;",
       "  border-bottom: 1px solid var(--ndr-border) !important;",
+      # Pin card titles at --ndr-fs-lg so every card-header (both apps
+      # AND bn_report's .ndr-card-title equivalent) reads as a title,
+      # not as body text. No !important — per-card overrides remain
+      # possible. Weight matches the `fw-semibold` utility most cards
+      # already carry; harmless when present, fills in when absent.
+      "  font-size: var(--ndr-fs-lg, 15px);",
+      "  font-weight: 600;",
       "}"
     ),
     collapse = "\n"
@@ -691,7 +698,10 @@ resondex_reactable_theme <- function() {
     cellPadding     = "8px 10px",
     style           = list(
       fontFamily = "inherit",
-      fontSize   = "14px",
+      # 13px to match --ndr-fs-md (table body). Reactable doesn't read
+      # CSS variables here (this list becomes inline styles on the
+      # widget root), so we hardcode but keep the value in lockstep.
+      fontSize   = "13px",
       color      = "var(--ndr-text)"
     ),
     headerStyle     = list(

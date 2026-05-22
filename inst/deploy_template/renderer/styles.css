@@ -41,7 +41,8 @@ body {
   font-family: var(--rdx-font);
   background: var(--rdx-bg);
   color: var(--rdx-text);
-  font-size: 14px;
+  /* 13px — mirrors --ndr-fs-base in resondex_brand(). */
+  font-size: 13px;
 }
 
 /* ===== Library View ===== */
@@ -284,7 +285,8 @@ main {
 }
 
 #app-bar-title {
-  font-size: 14px;
+  /* 13px — mirrors --ndr-fs-base. */
+  font-size: 13px;
   font-weight: 600;
   color: var(--header-text);
 }

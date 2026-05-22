@@ -1373,11 +1373,12 @@
     '  justify-content: flex-end;',
     '  margin-bottom: 12px;',
     '}',
-    '.membership-toggle { font-size: 14px; padding: 4px 10px; }',
+    # 13px — parity with --ndr-fs-md (table body).
+    '.membership-toggle { font-size: 13px; padding: 4px 10px; }',
     '.membership-table {',
     '  width: 100%;',
     '  border-collapse: collapse;',
-    '  font-size: 14px;',
+    '  font-size: 13px;',
     '}',
     '.membership-table th {',
     '  text-align: left;',
@@ -2003,7 +2004,9 @@
     '  box-shadow: var(--ndr-shadow);',
     '  overflow: auto;',
     '}',
-    '.impact-table, .priort-table { font-size: 14px !important; }',
+    # 13px — parity with --ndr-fs-md / reactable theme so standalone
+    # bn_report HTML matches the in-app reactables.
+    '.impact-table, .priort-table { font-size: 13px !important; }',
     '.impact-table thead th, .priort-table thead th {',
     '  background: var(--ndr-card-bg) !important;',
     '  color: var(--ndr-text) !important;',
