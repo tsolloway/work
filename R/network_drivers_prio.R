@@ -111,15 +111,14 @@
   # mixed-search registry.
   active_dims <- setdiff(pm$active_dims, "search")
 
-  # Tooltip-on-label helper — same pattern as impacts.
+  # Tooltip-on-label helper — same pattern as impacts. Uses data-tip
+  # so the resondex floating tooltip handles the popup (bslib::tooltip\'s
+  # Bootstrap auto-init was unreliable in the app).
   tt <- function(label_text, tip_text) {
-    bslib::tooltip(
-      htmltools::span(
-        label_text,
-        style = "cursor: help; border-bottom: 1px dotted var(--ndr-muted);"
-      ),
-      tip_text,
-      placement = "right"
+    htmltools::span(
+      label_text,
+      `data-tip` = tip_text,
+      style = "cursor: help; border-bottom: 1px dotted var(--ndr-muted);"
     )
   }
   # Uniform-spacing wrapper — same pattern as impacts.

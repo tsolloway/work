@@ -242,17 +242,17 @@
     }
   }
 
-  # Tooltip-on-label helper. Returns a <span> wrapped in a bslib tooltip
-  # for use as a selectInput's `label` arg — hovering the label text
-  # triggers the tooltip, hovering the dropdown does not.
+  # Tooltip-on-label helper. Returns a <span data-tip="..."> wired to
+  # the resondex floating tooltip (driven by resondex_tooltip_js(),
+  # which is injected into the app via .bn_report_js()). bslib::tooltip
+  # was the previous mechanism but its Bootstrap-tooltip auto-init
+  # stopped firing reliably in the app context; the data-tip path is
+  # the same mechanism used in bn_report HTML and is known-good here.
   tt <- function(label_text, tip_text) {
-    bslib::tooltip(
-      htmltools::span(
-        label_text,
-        style = "cursor: help; border-bottom: 1px dotted var(--ndr-muted);"
-      ),
-      tip_text,
-      placement = "right"
+    htmltools::span(
+      label_text,
+      `data-tip` = tip_text,
+      style = "cursor: help; border-bottom: 1px dotted var(--ndr-muted);"
     )
   }
   # Uniform-spacing wrapper. Class `netdrv-ctrl-wrap` is paired with a
@@ -379,13 +379,11 @@
   }
   if (length(index_choices) <= 1) return(NULL)
   view_js <- sprintf("input['%s']", view_input_id)
-  indexby_label <- bslib::tooltip(
-    htmltools::span(
-      "Index By:",
-      style = "cursor: help; border-bottom: 1px dotted var(--ndr-muted);"
-    ),
-    "Filter rows to a battery or group; the index is re-normalised within the visible rows.",
-    placement = "right"
+  # data-tip variant — see tt() above for why bslib::tooltip was swapped.
+  indexby_label <- htmltools::span(
+    "Index By:",
+    `data-tip` = "Filter rows to a battery or group; the index is re-normalised within the visible rows.",
+    style = "cursor: help; border-bottom: 1px dotted var(--ndr-muted);"
   )
   shiny::conditionalPanel(
     condition = sprintf("%s === '%s'", view_js, view_value),
