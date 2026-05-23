@@ -188,25 +188,15 @@ app_deliverable_add_turf <- function(
       "    xhr.onloadend = function() { removeOverlay(); };",
       "    xhr.send();",
       "  });",
-      # Bootstrap-tooltip init for reactable column headers (and any other
-      # element with data-bs-toggle=\"tooltip\"). bslib::tooltip() returns
-      # a tag list that breaks reactable, so we use plain data-attributes
-      # on a single <span> and init Bootstrap.Tooltip per element here.
-      # Re-fires after each shiny:value so re-rendered reactables pick up
-      # their headers. Guard against double-init via a DOM marker.
-      "  function initTurfTooltips() {",
-      "    if (typeof bootstrap === 'undefined') return;",
-      "    document.querySelectorAll('[data-bs-toggle=\"tooltip\"]:not([data-bs-tt-inited])').forEach(function(el) {",
-      "      el.setAttribute('data-bs-tt-inited', '1');",
-      "      try { new bootstrap.Tooltip(el, {delay: {show: 0, hide: 100}}); } catch(err) {}",
-      "    });",
-      "  }",
-      "  $(document).on('shiny:value', function(e) {",
-      "    setTimeout(initTurfTooltips, 50);",
-      "  });",
-      "  $(function() { setTimeout(initTurfTooltips, 100); });",
       "})();"
-    )))
+    ))),
+    # Shared resondex floating tooltip — drives every `[data-tip]`
+    # element across the app. Used by the reactable column headers
+    # (th() helper) instead of Bootstrap\'s data-bs-toggle="tooltip",
+    # which depended on bslib auto-init that proved unreliable. The
+    # data-tip mechanism is the same one the network-drivers app
+    # (network_drivers_impacts.R / network_drivers_prio.R) uses.
+    shiny::tags$script(shiny::HTML(resondex_tooltip_js()))
   )
 
   # ---- Server function ----
@@ -819,17 +809,17 @@ app_deliverable_add_turf <- function(
     pct_cell <- function(v) if (is.na(v)) "" else sprintf("%.1f%%", v)
     dec_cell <- function(v) if (is.na(v)) "" else sprintf("%.1f",   v)
 
-    # Bootstrap-tooltip header helper. Returns a SINGLE <span> tag —
-    # reactable's `header =` arg can render it cleanly (unlike bslib's
-    # tooltip which returns a tag-list and breaks the reactable). The
-    # tippy / popper init runs once after each reactable render via the
-    # module's head_tags JS (`initTurfTooltips`).
+    # Reactable column-header tooltip helper. Returns a single <span>
+    # with a `data-tip` attribute — the resondex floating tooltip
+    # (resondex_tooltip_js, injected via the module head_tags above)
+    # catches hover events on any `[data-tip]` element and shows a
+    # single shared popup. Same mechanism the network-drivers app
+    # uses; replaced Bootstrap's data-bs-toggle="tooltip" path because
+    # bslib's auto-init proved unreliable.
     th <- function(label, tip) {
       htmltools::tags$span(
         label,
-        `data-bs-toggle`    = "tooltip",
-        `data-bs-placement` = "top",
-        `data-bs-title`     = tip,
+        `data-tip` = tip,
         style = "border-bottom: 1px dotted var(--ndr-muted); cursor: help;"
       )
     }
@@ -998,13 +988,11 @@ app_deliverable_add_turf <- function(
       out$reach_display <- formatC(round(out$reach_display, 1), format = "f", digits = 1)
       out$freq_display  <- formatC(round(out$freq_display, 1), format = "f", digits = 1)
 
-      # Bootstrap-tooltip header helper (same pattern as the greedy table).
+      # data-tip header helper (same pattern as the greedy table).
       th <- function(label, tip) {
         htmltools::tags$span(
           label,
-          `data-bs-toggle`    = "tooltip",
-          `data-bs-placement` = "top",
-          `data-bs-title`     = tip,
+          `data-tip` = tip,
           style = "border-bottom: 1px dotted var(--ndr-muted); cursor: help;"
         )
       }
