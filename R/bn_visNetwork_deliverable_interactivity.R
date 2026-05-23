@@ -772,6 +772,26 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       }
 
       network.on('dragEnd', saveState);
+
+      // Hierarchical layout: vis.js keeps re-running its tier algorithm
+      // on every nodes.update(), so drags get snapped back to algorithm
+      // positions and saved snapshots can't restore custom positions on
+      // load. After a short delay (long enough for the initial layout to
+      // compute + stabilize), disable the hierarchical algorithm. The
+      // initial tier-based visual is preserved as the starting positions;
+      // from then on the nodes are free to drag and snapshot loads stick.
+      if (layoutType === 'hierarchy') {
+        setTimeout(function() {
+          try {
+            network.setOptions({ layout: { hierarchical: { enabled: false } } });
+          } catch(e) {}
+          // Push a fresh snapshot now that the algorithm is off — the
+          // saved positions are the tier-computed ones and accurately
+          // reflect what the user sees.
+          pushToParent();
+        }, 1500);
+      }
+
       network.on('stabilized', function() {
         saveState();
         // if parent report requested physics off after stabilization, disable now
