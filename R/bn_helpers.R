@@ -681,7 +681,12 @@
       obj = result,
       type = type,
       do_community = do_community_val,
-      vs_height = "85vh",
+      # vs_height intentionally omitted. The inline saveWidget height
+      # is overridden inside the iframe by the injected
+      # `.html-widget { height: 100vh !important }` rule below, so
+      # passing vs_height here has no effect on the rendered canvas.
+      # If you want canvas sizing to come from vs_height, drop the
+      # `!important` from that CSS rule first.
       interactive = cfg$interactive,
       # always TRUE: vis.js needs physics ON to compute force-directed layout.
       # when user passes physics=FALSE, the __disablePhysicsAfterStabilize
@@ -755,6 +760,16 @@
 
   widget_html <- sub("<head>", inject_head, widget_html)
 
+  # Branches set the only two things that differ between the
+  # self-contained and non-self-contained iframe markup:
+  #   - wrap_attr:   `data-widget="{b64}"` on `.iframe-wrap` (TRUE only).
+  #                  Picked up by client-side JS to populate the iframe
+  #                  via a blob URL once shared deps are injected.
+  #   - iframe_attr: `src="lib/widget_N.html"` on the <iframe> (FALSE
+  #                  only). TRUE has no `src` because the widget HTML
+  #                  lives in the wrap's data attribute, not on disk.
+  # Everything else (spinner overlay, iframe style, sandbox) is
+  # identical between the two paths, so we emit it once below.
   if (cfg$self_contained) {
     widget_lib_dir <- file.path(cfg$tmp_dir, widget_lib_prefix)
 
@@ -771,28 +786,25 @@
     widget_html <- .bn_report_strip_deps(
       widget_html, state$dep_cache, widget_lib_prefix, state$first_lib_prefix
     )
-    widget_b64 <- base64enc::base64encode(charToRaw(widget_html))
-
-    glue::glue(
-      '<div class="iframe-wrap" data-widget="{widget_b64}">',
-      '<div class="spinner-overlay"><div class="spinner"><div class="spinner-bar"></div><div class="spinner-bar"></div><div class="spinner-bar"></div></div></div>',
-      '<iframe style="width: 100%; height: 70vh; border: none;" ',
-      'sandbox="allow-scripts allow-downloads" allowfullscreen>',
-      '</iframe></div>'
-    )
+    widget_b64  <- base64enc::base64encode(charToRaw(widget_html))
+    wrap_attr   <- paste0(' data-widget="', widget_b64, '"')
+    iframe_attr <- ""
   } else {
     widget_rel <- glue::glue("lib/widget_{state$widget_counter}.html")
     writeLines(widget_html, widget_file)
 
-    glue::glue(
-      '<div class="iframe-wrap">',
-      '<div class="spinner-overlay"><div class="spinner"><div class="spinner-bar"></div><div class="spinner-bar"></div><div class="spinner-bar"></div></div></div>',
-      '<iframe src="{widget_rel}" ',
-      'style="width: 100%; height: 70vh; border: none;" ',
-      'sandbox="allow-scripts allow-downloads" allowfullscreen>',
-      '</iframe></div>'
-    )
+    wrap_attr   <- ""
+    iframe_attr <- paste0('src="', widget_rel, '" ')
   }
+
+  glue::glue(
+    '<div class="iframe-wrap"{wrap_attr}>',
+    '<div class="spinner-overlay"><div class="spinner"><div class="spinner-bar"></div><div class="spinner-bar"></div><div class="spinner-bar"></div></div></div>',
+    '<iframe {iframe_attr}',
+    'style="width: 100%; height: 70vh; border: none;" ',
+    'sandbox="allow-scripts allow-downloads" allowfullscreen>',
+    '</iframe></div>'
+  )
 }
 
 
@@ -1682,7 +1694,7 @@
     'h1 { margin: 0; }',
     '.subtitle {',
     '  margin: 2px 0 0 0;',
-    '  font-size: 14px;',
+    '  font-size: 13px;',
     '  font-weight: 400;',
     '  color: #666;',
     '}',
@@ -1701,7 +1713,7 @@
     '',
     '/* accordion */',
     '.result-accordion {',
-    '  margin: 20px 0;',
+    '  margin: 8px 0;',
     '  border: 1px solid #ddd;',
     '  border-radius: 8px;',
     '  background: #fff;',
@@ -1731,7 +1743,10 @@
     '/* Wrapper for the Attribute / Community network tabs — matches the 20px',
     '   outer padding used by .impact-dashboard / .priort-dashboard /',
     '   .membership-wrap so the controls box has identical spacing on every tab. */',
-    '.network-dashboard { padding: 20px; }',
+    # 8px top + 20px sides/bottom — tighter gap between the tab-bar
+    # and the network canvas while keeping horizontal breathing room
+    # consistent with .impact-dashboard / .priort-dashboard.
+    '.network-dashboard { padding: 8px 20px 20px 20px; }',
     '/* Layout dropdown — label stacked on top, select left-aligned with the',
     '   in-iframe "Select by ID" below it. NOT a well/card. */',
     '.layout-controls {',
@@ -1793,7 +1808,7 @@
     '.tab-panel.active { display: block; }',
     '',
     '/* membership tab */',
-    '.membership-wrap { padding: 20px; }',
+    '.membership-wrap { padding: 8px 20px 20px 20px; }',
     '.membership-toolbar {',
     '  display: flex;',
     '  justify-content: flex-end;',
@@ -1931,7 +1946,7 @@
     '/* p-value colours: shared .rdx-pval-* from resondex_css() */',
     '',
     '/* Attribute Impacts dashboard (mirrors bn_impact_write dynamic) */',
-    '.impact-dashboard { padding: 20px; overflow-x: auto; }',
+    '.impact-dashboard { padding: 8px 20px 20px 20px; overflow-x: auto; }',
     # Layout: responsive grid. auto-fit + minmax(280px, 1fr) means the grid
     # fits as many 280px-minimum columns as will fit the container — so at
     # full desktop width you get 3 columns, narrower viewports collapse to
@@ -2110,7 +2125,7 @@
     '.impact-footer .muted { margin: 0; color: var(--ndr-muted); }',
     '',
     '/* Prioritization dashboard (mirrors bn_prioritize_write) */',
-    '.priort-dashboard { padding: 20px; overflow-x: auto; }',
+    '.priort-dashboard { padding: 8px 20px 20px 20px; overflow-x: auto; }',
     # Layout: same responsive grid as .impact-controls — auto-fit + minmax
     # collapses 3 → 2 → 1 column based on viewport width, with consistent
     # gutters between whatever columns remain.
@@ -2333,9 +2348,9 @@
     '}',
     '.page-header {',
     '  border-bottom: 1px solid var(--ndr-border) !important;',
-    '  padding-bottom: 10px !important;',
+    '  padding-bottom: 6px !important;',
     '}',
-    'h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }',
+    'h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }',
     '.subtitle { color: var(--ndr-muted); }',
     '',
     '/* ---- Accordion sections read as bslib cards ---- */',
@@ -2384,7 +2399,10 @@
     # live inside a matching collapsible well panel.
     '  .impact-dashboard, .priort-dashboard, .network-dashboard {',
     '    display: grid !important;',
-    '    grid-template-columns: 248px minmax(0, 1fr);',
+    # 186px ~= 248 * 0.75 — tightened well panel. Inner content area
+    # (after the panel\'s 14px padding) is ~158px, enough for the
+    # 12px-font controls without wrapping.
+    '    grid-template-columns: 186px minmax(0, 1fr);',
     '    grid-template-rows: auto 1fr auto;',
     # The toggle sits in column 1 of the first row, the optional card
     # title spans column 2. With both items in the same row the toggle
@@ -2417,6 +2435,22 @@
     '    transition: opacity 0.18s ease, padding 0.18s ease;',
     '  }',
     '  .impact-table-wrap, .priort-split, .network-main { grid-area: main; }',
+    # .network-main spans rows 1+2 in the network grid (areas
+    # "toggle main" / "side main"). Anchor it explicitly at the start
+    # of the spanned area so the iframe top sits flush with the
+    # .ctrl-toggle button top, regardless of the toggle\'s margin-bottom
+    # or the .network-controls (sidebar) content height. Zero margins
+    # / padding so nothing else can push the iframe down inside its
+    # grid cell.
+    '  .network-main {',
+    '    align-self: start !important;',
+    '    margin: 0 !important;',
+    '    padding: 0 !important;',
+    '  }',
+    '  .network-main > .iframe-wrap {',
+    '    margin: 0 !important;',
+    '    padding: 0 !important;',
+    '  }',
     '  .impact-footer, .priort-footer { grid-area: foot; }',
     '  .impact-ctrl-cell, .priort-ctrl-cell { width: 100%; }',
     '  .impact-ctrl-row, .priort-ctrl-row {',
@@ -2435,6 +2469,16 @@
     # panel\'s own 14px padding handles spacing.
     '  .network-controls .layout-controls {',
     '    padding: 0 !important; margin: 0 !important;',
+    '  }',
+    # Stretch the Layout <select> to fill the well-panel width, same
+    # as `.impact-ctrl` / `.priort-ctrl`. Overrides the bare-control
+    # `.layout-select` rule that hardcodes width: 130px (matched the
+    # in-iframe Select-by-ID when the dropdown lived above the iframe;
+    # irrelevant now that it\'s in a sidebar well panel).
+    '  .network-controls .layout-select {',
+    '    width: 100% !important;',
+    '    max-width: none !important;',
+    '    box-sizing: border-box !important;',
     '  }',
     # ---- Controls-collapsed state (1200 px+ only) ----
     # The sidebar collapses leftward, but column 1 keeps a narrow rail
@@ -2467,6 +2511,14 @@
     '    display: inline-flex; align-items: center; justify-content: center;',
     '    grid-area: toggle;',
     '    justify-self: start; align-self: start;',
+    # margin-top: 10px nudges the toggle down to align its TOP with
+    # the in-iframe `Select by ID` dropdown, which is itself positioned
+    # at `top: 10px` inside the iframe by
+    # bn_visNetwork_deliverable_interactivity.R. Without this offset
+    # the toggle sits at the iframe ELEMENT top (10px above where the
+    # iframe\'s first visible chrome renders), making them look mis-
+    # aligned by ~10 px.
+    '    margin-top: 10px;',
     '    margin-bottom: 8px;',
     '    width: 24px; height: 24px;',
     '    background: var(--ndr-sidebar-bg);',

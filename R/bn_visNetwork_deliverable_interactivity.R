@@ -94,10 +94,16 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       var btnGap = 6;
       var btnStyle = 'width:' + btnW + 'px;height:' + btnH + 'px;padding:0 10px;background:transparent;color:var(--ndr-text);border:1px solid var(--ndr-border);border-radius:6px;cursor:pointer;font-size:13px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:4px;flex-shrink:0;white-space:nowrap;';
 
-      // right-side button container (prevents overlap with left-side controls)
+      // right-side button container — flex COLUMN at the top-right
+      // corner so Font Size / Physics / Download SVG / Download PNG
+      // stack vertically. `align-items: flex-end` keeps them right-
+      // edge aligned (matters if button widths ever differ).
+      // Dropped the `left: 220px` constraint that was needed when the
+      // buttons were horizontal (so they didn\'t overlap left-side
+      // controls) — irrelevant for a vertical stack pinned to the right.
       var rightBar = document.createElement('div');
       rightBar.id = 'rightButtonBar';
-      rightBar.style.cssText = 'position:fixed;top:10px;right:10px;left:220px;z-index:9999;display:flex;gap:' + btnGap + 'px;justify-content:flex-end;flex-wrap:wrap;pointer-events:none;';
+      rightBar.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;gap:' + btnGap + 'px;pointer-events:none;';
       document.body.appendChild(rightBar);
 
       // style the nodesIdSelection select to match button dimensions
@@ -209,14 +215,20 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
 
         var ddWrap = document.createElement('div');
         ddWrap.style.cssText = 'position:fixed;top:10px;left:10px;z-index:100000;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
+        // Side-control width: matches the customLegend\'s max-width
+        // (200px) so the Select-by-ID button and the legend below it
+        // read as the same column of controls.
+        var sideW = 200;
         var ddBtn = document.createElement('button');
         ddBtn.id = 'idSelectBtn';
-        ddBtn.style.cssText = 'width:' + btnW + 'px;height:' + btnH + 'px;padding:0 10px;background:transparent;color:var(--ndr-text);border:1px solid var(--ndr-border);border-radius:6px;cursor:pointer;font-size:13px;box-sizing:border-box;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        ddBtn.style.cssText = 'width:' + sideW + 'px;height:' + btnH + 'px;padding:0 10px;background:transparent;color:var(--ndr-text);border:1px solid var(--ndr-border);border-radius:6px;cursor:pointer;font-size:13px;box-sizing:border-box;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
         ddBtn.textContent = 'Select by ID';
         ddWrap.appendChild(ddBtn);
 
         var ddPanel = document.createElement('div');
-        ddPanel.style.cssText = 'display:none;position:absolute;top:' + (btnH + 4) + 'px;left:0;min-width:' + btnW + 'px;max-height:300px;overflow-y:auto;background:white;border:1px solid #ccc;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.15);padding:4px 0;';
+        // Dropdown panel matches the button width so it doesn\'t look
+        // narrower than its trigger.
+        ddPanel.style.cssText = 'display:none;position:absolute;top:' + (btnH + 4) + 'px;left:0;min-width:' + sideW + 'px;max-height:300px;overflow-y:auto;background:white;border:1px solid #ccc;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.15);padding:4px 0;';
 
         nodeList.forEach(function(nd) {
           var item = document.createElement('div');
@@ -858,7 +870,9 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       if (keyData) {
         var legend = document.createElement('div');
         legend.id = 'customLegend';
-        legend.style.cssText = 'position:fixed;top:50px;left:10px;min-width:' + btnW + 'px;max-width:200px;max-height:70%;overflow-x:hidden;overflow-y:auto;background:var(--ndr-card-bg);color:var(--ndr-text);border:1px solid var(--ndr-border);border-radius:6px;padding:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;z-index:99999;pointer-events:auto;box-sizing:border-box;';
+        // Fixed 200px width — matches the Select-by-ID button above
+        // so the left-side control stack reads as a uniform column.
+        legend.style.cssText = 'position:fixed;top:50px;left:10px;width:200px;max-height:70%;overflow-x:hidden;overflow-y:auto;background:var(--ndr-card-bg);color:var(--ndr-text);border:1px solid var(--ndr-border);border-radius:6px;padding:10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;z-index:99999;pointer-events:auto;box-sizing:border-box;';
         document.body.appendChild(legend);
         legend.addEventListener('contextmenu', function(e) { e.preventDefault(); });
 
