@@ -20,11 +20,28 @@ seg_reorder_solution <- function(
   # solution_new = "Solution_A"
   # new_order = c(6,2,3,4,5,1)
 
-  summary_table <- seg[["solutions"]][["summary_table"]]
+  # The global summary_table is built by seg_bind_summary_tables, which strips
+  # df_solution / lda_fit / lda_predict. We need the full row (with df_solution)
+  # to remap segment assignments, so look it up from the per-family analysis
+  # tables instead. Include the "reorder" family so already-reordered solutions
+  # can themselves be reordered.
+  analysis <- seg[["solutions"]][["analysis"]]
 
+  summary_table_new <- purrr::keep(analysis, is.list) %>%
+    purrr::map(purrr::pluck, "solution_table") %>%
+    purrr::compact() %>%
+    purrr::map(~ dplyr::filter(.x, lda_name == !!solution_old)) %>%
+    purrr::keep(~ nrow(.x) > 0) %>%
+    purrr::pluck(1, .default = NULL)
 
-  summary_table_new <- summary_table %>%
-    dplyr::filter(lda_name == !!solution_old)
+  if (is.null(summary_table_new) || nrow(summary_table_new) == 0) {
+    stop(glue::glue(
+      "Solution '{solution_old}' not found in any seg$solutions$analysis ",
+      "family's solution_table."
+    ))
+  }
+
+  summary_table_new <- dplyr::slice(summary_table_new, 1)
 
 
   if(!all(seq(summary_table_new[["n"]]) == sort(new_order))){
