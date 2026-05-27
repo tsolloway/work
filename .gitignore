@@ -6,3 +6,4 @@
 /doc/
 /Meta/
 inst/deploy_template/runtime/
+.claude/settings.local.json
