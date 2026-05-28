@@ -177,6 +177,10 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       // (scale / position) is left for vis.js to handle natively on
       // resize — interfering with moveTo here caused flicker on entry
       // and a wrong-scale snap on exit.
+      // Remember the pre-fullscreen camera RIGHT NOW (before entering). By
+      // the time fullscreenchange fires, vis has already re-fit for the big
+      // viewport, so capturing then saves the wrong (fullscreen) camera.
+      var savedView = null;
       var fsBtn = makeNavBtn(icons.fullscreen);
       fsBtn.title = 'Toggle Fullscreen';
       fsBtn.addEventListener('click', function() {
@@ -187,6 +191,8 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
                      document.msExitFullscreen;
           if (exit) { try { exit.call(document); } catch(e) {} }
         } else {
+          try { savedView = { scale: network.getScale(), position: network.getViewPosition() }; }
+          catch (e) { savedView = null; }
           var el = document.documentElement;
           var req = el.requestFullscreen || el.webkitRequestFullscreen ||
                     el.mozRequestFullScreen || el.msRequestFullscreen;
@@ -194,6 +200,27 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         }
       });
       zoomPad.appendChild(fsBtn);
+
+      // On exit, HOLD the saved pre-fullscreen camera through the shrink.
+      // The trace showed vis's autoResize rescales proportionally on each
+      // intermediate resize and DRIFTS (ended s=0.37 pos x=1527 instead of
+      // s=0.54 x=7) — that drift is the off-center beat that no single fit/
+      // restore could hide. Re-applying the FIXED saved camera on every
+      // resize during exit keeps the framing rock-steady (mine wins each
+      // frame; fixed target = no jump), so the graph holds its normal view
+      // while the window shrinks around it. Detach after the transition so
+      // ordinary window resizes are untouched. fit() fallback if no save.
+      var onFsChange = function() {
+        if (document.fullscreenElement || document.webkitFullscreenElement) return;
+        var hold = savedView
+          ? function() { try { network.moveTo({ scale: savedView.scale, position: savedView.position }); } catch (e) {} }
+          : function() { try { network.fit(); } catch (e) {} };
+        hold();
+        window.addEventListener('resize', hold);
+        setTimeout(function() { window.removeEventListener('resize', hold); hold(); }, 600);
+      };
+      document.addEventListener('fullscreenchange', onFsChange);
+      document.addEventListener('webkitfullscreenchange', onFsChange);
 
       document.body.appendChild(zoomPad);
 
