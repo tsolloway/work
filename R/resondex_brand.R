@@ -265,7 +265,14 @@ resondex_css <- function(include_import = TRUE) {
     collapse = "\n"
   )
 
-  base <- "body { font-family: var(--ndr-font); font-size: var(--ndr-fs-base); }"
+  # Body base: font + the page background. `background: var(--ndr-bg)` lives
+  # here (not in bn_report_css) so EVERY app_deliverable surface paints the
+  # warm page — not only apps that happen to include the Network Drivers
+  # module. !important beats Bootstrap reboot's `body { background: var(--bs-body-bg) }`.
+  base <- paste0(
+    "body { font-family: var(--ndr-font); font-size: var(--ndr-fs-base); ",
+    "background: var(--ndr-bg) !important; color: var(--ndr-text); }"
+  )
 
   disabled <- paste(
     c(

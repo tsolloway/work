@@ -2342,7 +2342,9 @@
     '/* :root tokens now come from resondex_css() (single source, both',
     '   colour modes); the bn_report-specific overrides continue below. */',
     'body {',
-    '  background: var(--ndr-bg) !important;',
+    # Page background now comes from resondex_css() (shared layer) so every
+    # app_deliverable surface gets it, not only ones that include bn_report.
+    # The 18/28px margin is the report's own page frame and stays here.
     '  color: var(--ndr-text);',
     '  margin: 18px 28px !important;',
     '}',
