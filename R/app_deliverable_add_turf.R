@@ -128,18 +128,24 @@ app_deliverable_add_turf <- function(
 
   # ---- CSS (namespaced) ----
   ns_prefix <- paste0(id, "-")
-  css <- paste0(
-    "#", ns_prefix, "base_display, #", ns_prefix, "bc_base_display {\n",
-    "  pointer-events: none;\n",
-    "  background-color: var(--ndr-secondary-bg);\n",
-    "}\n",
-    # Items-table checkboxes — brand-tokenized so checked state pulls the
-    # brand accent (--ndr-accent) instead of Bootstrap's primary alias.
-    # `accent-color` is the CSS property that tints native checkboxes.
-    "#", ns_prefix, "items_table input[type='checkbox'] {\n",
-    "  width: 1.1em; height: 1.1em; cursor: pointer;\n",
-    "  accent-color: var(--ndr-accent);\n",
-    "}"
+  css <- paste(
+    paste0(
+      "#", ns_prefix, "base_display, #", ns_prefix, "bc_base_display {\n",
+      "  pointer-events: none;\n",
+      "  background-color: var(--ndr-secondary-bg);\n",
+      "}\n",
+      # Items-table checkboxes — brand-tokenized so checked state pulls the
+      # brand accent (--ndr-accent) instead of Bootstrap's primary alias.
+      # `accent-color` is the CSS property that tints native checkboxes.
+      "#", ns_prefix, "items_table input[type='checkbox'] {\n",
+      "  width: 1.1em; height: 1.1em; cursor: pointer;\n",
+      "  accent-color: var(--ndr-accent);\n",
+      "}"
+    ),
+    # Init splash spinner (shared helper) — dropped once the first plotly
+    # chart has drawn or a 20s fallback (see head script below).
+    .app_deliverable_splash_css(),
+    sep = "\n"
   )
 
   head_tags <- list(
@@ -188,6 +194,21 @@ app_deliverable_add_turf <- function(
       "    xhr.onloadend = function() { removeOverlay(); };",
       "    xhr.send();",
       "  });",
+      "})();"
+    ))),
+    # Init splash spinner (shared CSS in `css` above) — dropped once the first
+    # plotly chart has drawn (.js-plotly-plot appears in the DOM) or a 20s
+    # fallback so it can never stick.
+    shiny::tags$script(shiny::HTML(paste0(
+      "(function(){",
+      "  function ready(){ if (document.body) document.body.classList.add('rdx-app-ready'); }",
+      "  function check(){ if (document.querySelector('.js-plotly-plot')){ ready(); return true; } return false; }",
+      "  if (!check()) {",
+      "    var obs = new MutationObserver(function(){ if (check()) obs.disconnect(); });",
+      "    function start(){ obs.observe(document.body, {childList:true, subtree:true}); }",
+      "    if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);",
+      "  }",
+      "  setTimeout(ready, 20000);",
       "})();"
     ))),
     # Shared resondex floating tooltip — drives every `[data-tip]`

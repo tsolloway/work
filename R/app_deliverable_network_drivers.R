@@ -188,6 +188,9 @@ app_deliverable_network_drivers <- function(
   css <- paste(
     .bn_report_css(),
     .network_drivers_module_css(id),
+    # Init splash spinner (shared helper) — dropped once the first network
+    # graph reports ready (parent listener below) or a 20s fallback.
+    .app_deliverable_splash_css(),
     sep = "\n"
   )
 
@@ -1291,6 +1294,11 @@ app_deliverable_network_drivers <- function(
     "(function() {",
     "  if (window['", flag, "']) return;",
     "  window['", flag, "'] = true;",
+    # Safety net: never let the init splash stick if the network errors or
+    # never reports ready. Drops it after 20s regardless.
+    "  setTimeout(function(){",
+    "    if (document.body) document.body.classList.add('rdx-app-ready');",
+    "  }, 20000);",
     # Window-scoped edit cache. Populated by every legendUpdate /
     # nodeUpdate / nodeLabelUpdate; replayed onto (a) iframes via
     # syncEdits when iframeReady fires, and (b) membership DT cells via
@@ -1407,6 +1415,10 @@ app_deliverable_network_drivers <- function(
     "        Shiny.setInputValue('", module_id, "-iframe_ready', d.nsKey, ",
     "          { priority: 'event' });",
     "      }",
+    "    }",
+    # First network graph is live -> drop the init splash spinner.
+    "    if (d.type === 'iframeReady' && d.nsKey && document.body) {",
+    "      document.body.classList.add('rdx-app-ready');",
     "    }",
     # When embedded in the marketing site, the first network graph that
     # finishes init is our cue that the app is visibly live — forward a

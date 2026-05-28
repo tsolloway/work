@@ -587,3 +587,33 @@ app_deliverable <- function(
 
   shiny::shinyApp(ui, server)
 }
+
+
+# =============================================================================
+# Shared init splash
+# =============================================================================
+
+#' @noRd
+#' @description Init-splash CSS: a full-viewport spinner shown from first paint
+#'   (body::before backdrop + body::after spinner ring, so no body markup is
+#'   needed and it appears before any JS runs). A module hides it by adding the
+#'   `rdx-app-ready` class to <body> once its primary content has resolved
+#'   (the network graph for Network Drivers, the first plotly chart for TURF).
+#'   Lives in module CSS — not the shared resondex_css() — so it only appears
+#'   in apps whose modules actually emit a ready signal; a module with no
+#'   async content never shows a spinner that can't be dismissed.
+.app_deliverable_splash_css <- function() {
+  paste0(
+    "body::before{content:'';position:fixed;inset:0;z-index:99998;",
+    "background:var(--ndr-bg);transition:opacity .45s ease;}",
+    "body::after{content:'';position:fixed;top:50%;left:50%;width:42px;height:42px;",
+    "margin:-21px 0 0 -21px;z-index:99999;border-radius:50%;",
+    "border:3px solid color-mix(in srgb, var(--ndr-info) 25%, transparent);",
+    "border-top-color:var(--ndr-info);animation:rdx-app-spin .8s linear infinite;",
+    "transition:opacity .45s ease;}",
+    "@keyframes rdx-app-spin{to{transform:rotate(360deg)}}",
+    "body.rdx-app-ready::before,body.rdx-app-ready::after{",
+    "opacity:0;pointer-events:none;}",
+    "@media (prefers-reduced-motion:reduce){body::after{animation-duration:2s;}}"
+  )
+}
