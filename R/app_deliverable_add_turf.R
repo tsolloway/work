@@ -456,12 +456,15 @@ app_deliverable_add_turf <- function(
   dark_mode_override <- shiny::reactive({
     dark <- dark_mode()
     if (dark) {
+      # Match the Network Drivers dark charts — source from the brand's dark
+      # viz tokens so this can never drift from resondex_brand() again.
+      vd <- resondex_brand("dark")$viz_dark
       list(
-        paper_bgcolor = "#2c3034",
-        plot_bgcolor  = "#2c3034",
-        font = list(color = "#dee2e6"),
-        xaxis = list(gridcolor = "#495057"),
-        yaxis = list(gridcolor = "#495057")
+        paper_bgcolor = vd$paper_bg,
+        plot_bgcolor  = vd$plot_bg,
+        font = list(color = vd$font_color),
+        xaxis = list(gridcolor = vd$grid),
+        yaxis = list(gridcolor = vd$grid)
       )
     } else {
       NULL

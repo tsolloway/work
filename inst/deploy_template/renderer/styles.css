@@ -6,15 +6,15 @@
 :root {
   /* Runtime-overridable (app.js ← config; default to brand) */
   --header-bg: #ffffff;
-  --header-text: #212529;
+  --header-text: #1a1d1f;
   --accent-color: #595959;
   /* Brand palette */
-  --rdx-bg: #f8f9fa;
+  --rdx-bg: #f6f6f4;
   --rdx-card-bg: #ffffff;
-  --rdx-text: #212529;
+  --rdx-text: #1a1d1f;
   --rdx-muted: #6c757d;
-  --rdx-border: #dee2e6;
-  --rdx-surface: #f0f0f0;
+  --rdx-border: #e4e4e1;
+  --rdx-surface: #f0f0ec;
   --rdx-danger: #AC6258;
   --rdx-radius: 0.5rem;
   --rdx-radius-sm: 6px;
@@ -23,7 +23,7 @@
               Roboto, Helvetica, Arial, sans-serif;
   /* App-card icon chip */
   --icon-bg: #ffffff;
-  --icon-border: #dee2e6;
+  --icon-border: #e4e4e1;
 }
 
 * {

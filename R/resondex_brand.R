@@ -26,18 +26,18 @@ resondex_brand <- function(mode = c("light", "dark")) {
   palettes <- list(
     light = list(
       colors = list(
-        bg         = "#f8f9fa",
+        bg         = "#f6f6f4",
         card_bg    = "#ffffff",
-        border     = "#dee2e6",
+        border     = "#e4e4e1",
         muted      = "#6c757d",
-        text       = "#212529",
+        text       = "#1a1d1f",
         accent     = "#595959",
         secondary  = "#6c757d",
         header_bg  = "#ffffff",
         sidebar_bg = "#f3f4f6"
       ),
       surfaces = list(
-        secondary_bg = "#f0f0f0",  # row hover
+        secondary_bg = "#f0f0ec",  # row hover
         tertiary_bg  = "#f8f9fa"   # table footer / subtle fills
       ),
       semantic = list(
@@ -51,18 +51,18 @@ resondex_brand <- function(mode = c("light", "dark")) {
     ),
     dark = list(
       colors = list(
-        bg         = "#16181a",
-        card_bg    = "#212529",
-        border     = "#3a3f44",
+        bg         = "#0a0b0d",
+        card_bg    = "#121316",
+        border     = "#25282c",
         muted      = "#9aa0a6",
         text       = "#e8eaed",
         accent     = "#aeb4ba",
         secondary  = "#5c6166",
-        header_bg  = "#212529",
+        header_bg  = "#121316",
         sidebar_bg = "#1b1e21"
       ),
       surfaces = list(
-        secondary_bg = "#2a2e33",  # row hover
+        secondary_bg = "#1a1d20",  # row hover
         tertiary_bg  = "#1f2226"   # table footer / subtle fills
       ),
       semantic = list(
@@ -116,9 +116,9 @@ resondex_brand <- function(mode = c("light", "dark")) {
         ),
         paper_bg   = "#ffffff",
         plot_bg    = "#ffffff",
-        grid       = "#dee2e6",  # = --ndr-border
+        grid       = "#e4e4e1",  # = --ndr-border
         axis_text  = "#6c757d",  # = --ndr-muted
-        font_color = "#212529",  # = --ndr-text
+        font_color = "#1a1d1f",  # = --ndr-text
         bar_base   = "#D9D9D9",  # prio base bar
         bar_incr   = "#595959",  # prio incremental / accent
         line       = "#595959"
@@ -132,9 +132,9 @@ resondex_brand <- function(mode = c("light", "dark")) {
           "#A8A8A8", "#86A4B5", "#86B098", "#D69A6F",
           "#C2877F", "#B5B5B5", "#D9D9D9", "#6F7A85"
         ),
-        paper_bg   = "#212529",  # = dark --ndr-card-bg
-        plot_bg    = "#212529",
-        grid       = "#3a3f44",  # = dark --ndr-border
+        paper_bg   = "#121316",  # = dark --ndr-card-bg
+        plot_bg    = "#121316",
+        grid       = "#25282c",  # = dark --ndr-border
         axis_text  = "#9aa0a6",  # = dark --ndr-muted
         font_color = "#e8eaed",  # = dark --ndr-text
         bar_base   = "#3a3f44",
