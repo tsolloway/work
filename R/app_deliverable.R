@@ -130,6 +130,62 @@ app_deliverable <- function(
   }
   header_parts <- c(header_parts, all_head_tags)
 
+  # ---- Website embed bridge --------------------------------------------
+  # When this app is embedded in an <iframe> on the marketing site
+  # (resondex.com), the parent page can drive the app via postMessage:
+  #   { type: 'resondex:nav',     value: 'TURF' }            -> select top tab
+  #   { type: 'resondex:sidebar', value: 'open'|'close'|'toggle' }
+  # Both are pure-DOM (no Shiny round-trip): nav clicks the matching navbar
+  # link, sidebar clicks bslib's .collapse-toggle on the active sidebar
+  # layout. Inert when not iframed, so it costs nothing in standalone use.
+  header_parts <- c(header_parts, list(
+    shiny::tags$script(shiny::HTML("
+      $(function() {
+        if (window.self === window.top) return;  // only when embedded
+
+        function selectTopNav(value) {
+          if (value == null) return;
+          var want = String(value).trim().toLowerCase();
+          // Scope to the TOP navbar so nested view tabs (Attribute /
+          // Community / etc.) are never matched.
+          var links = document.querySelectorAll('.navbar .nav-link');
+          for (var i = 0; i < links.length; i++) {
+            var l = links[i];
+            var dv = (l.getAttribute('data-value') || '').trim().toLowerCase();
+            var tx = (l.textContent || '').trim().toLowerCase();
+            if (dv === want || tx === want) { l.click(); return; }
+          }
+        }
+
+        function setSidebar(action) {
+          // Prefer the sidebar in the currently-active top tab.
+          var layout =
+            document.querySelector('.tab-pane.active .bslib-sidebar-layout') ||
+            document.querySelector('.bslib-sidebar-layout');
+          if (!layout) return;
+          var toggle = layout.querySelector('.collapse-toggle');
+          if (!toggle) return;
+          var isClosed = layout.classList.contains('sidebar-collapsed');
+          if (action === 'open')       { if (isClosed)  toggle.click(); }
+          else if (action === 'close') { if (!isClosed) toggle.click(); }
+          else                         { toggle.click(); }  // toggle / undefined
+        }
+
+        window.addEventListener('message', function(ev) {
+          var d = ev.data;
+          if (!d || !d.type) return;
+          if (d.type === 'resondex:nav')     selectTopNav(d.value);
+          if (d.type === 'resondex:sidebar') setSidebar(d.value);
+        });
+
+        // Announce to the embedding page that the bridge is live, so it can
+        // send an initial nav once the app has booted.
+        try { window.parent.postMessage({ type: 'resondex:embed-ready' }, '*'); }
+        catch (e) {}
+      });
+    "))
+  ))
+
   # State management CSS + JS
   if (save_restore) {
     header_parts <- c(header_parts, list(

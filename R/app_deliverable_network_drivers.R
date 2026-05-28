@@ -1408,6 +1408,17 @@ app_deliverable_network_drivers <- function(
     "          { priority: 'event' });",
     "      }",
     "    }",
+    # When embedded in the marketing site, the first network graph that
+    # finishes init is our cue that the app is visibly live — forward a
+    # one-shot 'resondex:ready' up to the website so it can drop its
+    # loading overlay (the website's own iframe `load` fires far earlier,
+    # while the container is still cold-starting and blank).
+    "    if (d.type === 'iframeReady' && d.nsKey &&",
+    "        window.self !== window.top && !window.__resondex_ready_sent) {",
+    "      window.__resondex_ready_sent = true;",
+    "      try { window.parent.postMessage({ type: 'resondex:ready' }, '*'); }",
+    "      catch (err) {}",
+    "    }",
     # On iframeReady, replay any stored edits so a late-loading iframe
     # picks them up. Doesn't depend on Shiny.
     "    if (d.type === 'iframeReady' && d.nsKey && e.source) {",
