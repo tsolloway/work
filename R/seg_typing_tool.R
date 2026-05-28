@@ -4714,7 +4714,7 @@ seg_typing_tool <- function(
     row_data_first <- row_header + 1
     row_data_last <- row_data_first + nrow(data_inputs)
 
-    ammount_of_input_rows <- row_data_last %>% divide_by(1000) %>% ceiling() %>% multiply_by(1000)
+    ammount_of_input_rows <- ceiling(row_data_last / 1000) * 1000
 
     row_last <- row_data_first + ammount_of_input_rows
 
