@@ -314,7 +314,7 @@ app_deliverable_add_turf <- function(
         bslib::card(
           full_screen = TRUE,
           bslib::card_header("TURF Chart"),
-          bslib::card_body(fillable = TRUE, fill = TRUE, plotly::plotlyOutput(ns("greedy_chart")))
+          bslib::card_body(fillable = TRUE, fill = TRUE, style = "overflow: hidden;", plotly::plotlyOutput(ns("greedy_chart")))
         ),
         bslib::card(
           full_screen = TRUE,
@@ -442,7 +442,7 @@ app_deliverable_add_turf <- function(
             bslib::card(
               full_screen = TRUE,
               bslib::card_header(shiny::textOutput(ns("bc_chart_title"))),
-              bslib::card_body(fillable = TRUE, fill = TRUE, plotly::plotlyOutput(ns("combo_chart")))
+              bslib::card_body(fillable = TRUE, fill = TRUE, style = "overflow: hidden;", plotly::plotlyOutput(ns("combo_chart")))
             )
           )
         )

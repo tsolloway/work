@@ -511,6 +511,11 @@ app_deliverable_network_drivers <- function(
       bslib::card_header("Prioritization Chart", class = "fw-semibold"),
       bslib::card_body(
         padding = 0,
+        # A chart fills its card and never needs to scroll — pin overflow
+        # hidden so the card can't pop a scrollbar (Safari flickers one on/off
+        # when you hover the full-screen button). Chart cards only; tables and
+        # other panes keep their own scroll.
+        style = "overflow: hidden;",
         plotly::plotlyOutput(ns(paste0(rid, "_pm_chart")), width = "100%")
       )
     )

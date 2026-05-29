@@ -211,7 +211,24 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
       // while the window shrinks around it. Detach after the transition so
       // ordinary window resizes are untouched. fit() fallback if no save.
       var onFsChange = function() {
-        if (document.fullscreenElement || document.webkitFullscreenElement) return;
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          // ENTER. Safari's native autoResize already fits the whole graph
+          // perfectly on enter, and any fit() we add there visibly SNAPS — so
+          // leave Safari alone. Chrome (Chromium) over-zooms on enter (graph
+          // too big to see), and a one-shot fit gets overridden by the next
+          // resize, so fit on EVERY resize through the transition (the final
+          // one lands fitted), then detach. Browser-gated on purpose: this is
+          // a genuine engine-specific behavior difference, not feature-
+          // detectable. fit() is instant (no animation).
+          var ua = navigator.userAgent;
+          var isSafari = /Safari/.test(ua) && !/Chrom(e|ium)|Edg|OPR|Android/.test(ua);
+          if (isSafari) return;
+          var fitFs = function() { try { network.fit(); } catch (e) {} };
+          fitFs();
+          window.addEventListener('resize', fitFs);
+          setTimeout(function() { window.removeEventListener('resize', fitFs); fitFs(); }, 600);
+          return;
+        }
         var hold = savedView
           ? function() { try { network.moveTo({ scale: savedView.scale, position: savedView.position }); } catch (e) {} }
           : function() { try { network.fit(); } catch (e) {} };
