@@ -32,20 +32,14 @@
     <circle cx="200" cy="200" r="24" fill="#5B7E92"/>
   </g>
 
-  <!-- Wordmark lockup, top-left -->
-  <g transform="translate(90 92)">
-    <g stroke="#595959" stroke-width="2.6" stroke-opacity="0.4" stroke-linecap="round">
-      <line x1="22" y1="22" x2="6" y2="6"/>
-      <line x1="22" y1="22" x2="38" y2="7"/>
-      <line x1="22" y1="22" x2="6" y2="38"/>
-      <line x1="22" y1="22" x2="38" y2="37"/>
-    </g>
-    <circle cx="6" cy="6" r="3.5" fill="#5C8A6B"/>
-    <circle cx="38" cy="7" r="3.5" fill="#C2773C"/>
-    <circle cx="6" cy="38" r="3.5" fill="#AC6258"/>
-    <circle cx="38" cy="37" r="3.5" fill="#595959"/>
-    <circle cx="22" cy="22" r="6.5" fill="#5B7E92"/>
-    <text x="58" y="31" font-family="Inter, sans-serif" font-weight="600" font-size="30" letter-spacing="-0.6" fill="#1a1d1f">Resondex</text>
+  <!-- Wordmark lockup, top-left — solid dark dot + wordmark, mirroring the
+       site header's brand mark (a `bg-fg` dot before "Resondex"). The small
+       4-corner mark was previously here, but it competed with the big hero
+       network on the right; a single dot reads as one brand anchor without
+       duplicating the network motif. -->
+  <g transform="translate(90 88)">
+    <circle cx="14" cy="28" r="13" fill="#1a1d1f"/>
+    <text x="38" y="44" font-family="Inter, sans-serif" font-weight="600" font-size="44" letter-spacing="-1" fill="#1a1d1f">Resondex</text>
   </g>
 
   <!-- Headline -->
@@ -53,5 +47,5 @@
   <text x="90" y="438" font-family="'Instrument Serif', Georgia, serif" font-style="italic" font-size="100" letter-spacing="-1" fill="#5B7E92">decisive.</text>
 
   <!-- Sub-tagline (matches the website hero line) -->
-  <text x="92" y="510" font-family="Inter, sans-serif" font-weight="500" font-size="28" fill="#6c757d">We turn complex data into the clarity you can act on.</text>
+  <text x="92" y="516" font-family="Inter, sans-serif" font-weight="500" font-size="36" fill="#6c757d">We turn complex data into the clarity you can act on.</text>
 </svg>
