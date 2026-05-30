@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="140" viewBox="0 0 200 140" role="img" aria-label="Custom Modeling">
+  <circle cx="38" cy="98" r="3.5" fill="#595959" fill-opacity="0.45"/>
+  <circle cx="62" cy="86" r="3.5" fill="#595959" fill-opacity="0.45"/>
+  <circle cx="70" cy="100" r="3.5" fill="#595959" fill-opacity="0.45"/>
+  <circle cx="96" cy="70" r="3.5" fill="#595959" fill-opacity="0.45"/>
+  <circle cx="120" cy="74" r="3.5" fill="#595959" fill-opacity="0.45"/>
+  <circle cx="140" cy="52" r="3.5" fill="#595959" fill-opacity="0.45"/>
+  <circle cx="166" cy="44" r="3.5" fill="#595959" fill-opacity="0.45"/>
+  <path d="M30 108 C 70 96, 96 78, 120 64 S 162 40, 176 34" fill="none" stroke="#5B7E92" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="96" cy="71" r="5" fill="#5C8A6B"/>
+  <circle cx="140" cy="51" r="5" fill="#C2773C"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="48" viewBox="0 0 220 48" role="img" aria-label="Resondex">
+  <!-- Resondex wordmark only. NOTE: text uses live Inter; outline to paths
+       before handing to external vendors who may not have the font. -->
+  <text x="0" y="34" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-weight="600" font-size="34" letter-spacing="-0.8" fill="#1a1d1f">Resondex</text>
+</svg>

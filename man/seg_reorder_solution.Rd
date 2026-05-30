@@ -4,23 +4,46 @@
 \alias{seg_reorder_solution}
 \title{seg_reorder_solution}
 \usage{
-seg_reorder_solution(seg, solution_old, solution_new, new_order)
+seg_reorder_solution(
+  seg,
+  solution_old,
+  solution_new = NULL,
+  new_order,
+  resp_id_name = NULL
+)
 }
 \arguments{
 \item{seg}{A seg object with solutions.}
 
 \item{solution_old}{Character. The \code{lda_name} of the solution to reorder.}
 
-\item{solution_new}{Character. The new \code{lda_name} for the reordered solution.}
+\item{solution_new}{Character. The \code{lda_name} for the reordered solution.
+Defaults to \code{paste0(solution_old, "_reordered")}.}
 
-\item{new_order}{Integer vector. New segment ordering
-(e.g., \code{c(6,2,3,4,5,1)} maps old seg 1 → new seg 6, etc.).}
+\item{new_order}{Integer vector mapping old segment \code{i} to new label
+\code{new_order[i]} (e.g. \code{c(3,1,2)} sends old seg 1 -> 3, 2 -> 1, 3 -> 2). Must
+be a permutation of \code{1:n_segments}.}
+
+\item{resp_id_name}{Character or \code{NULL}. Respondent id column; auto-detected
+via \code{\link[=get_resp_id_name]{get_resp_id_name()}} when \code{NULL}.}
 }
 \value{
-The seg object with the reordered solution added.
+The seg object with the reordered solution added under
+\code{seg$solutions$analysis$reorder}, and \code{summary_table} / \code{with_solutions}
+rebuilt.
 }
 \description{
-Reorder segment numbers for a solution. Takes an existing LDA
-solution and remaps the segment assignments and coefficient function to
-reflect a new ordering.
+Relabel an existing LDA solution's segments into a new order and
+refit a clean LDA against the relabeled segments. Rather than permuting the
+stored coefficient columns / posterior columns (error-prone — the
+coefficient matrix, posteriors, and segment labels each have to be permuted
+in exactly the right direction), this refits \code{MASS::lda} on the reordered
+k-means cluster labels and derives a fresh coefficient function, posterior
+table, and segment assignment from that single fit. The three are therefore
+guaranteed mutually consistent — the typing tool's coefficient scoring, its
+Bulk QC posteriors (\code{lda_predict}), and the shell's segment means all agree.
+
+The original solution is left untouched. The reordered solution is added as
+a new row under the \code{reorder} analysis family, named \code{solution_new}
+(default \code{paste0(solution_old, "_reordered")}), so both coexist.
 }

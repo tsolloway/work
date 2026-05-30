@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="200" viewBox="0 0 400 400" role="img" aria-label="Network Drivers — expanded network">
+  <!-- Network Drivers — expanded/hero variant of the preview illustration
+       (lifted from the OG card; center node + 8 satellites + 10 edges incl.
+       top + bottom connectors). Use when you want the busier, more
+       symmetric network than the 7-node `network.svg` card preview. -->
+  <g stroke="#595959" stroke-width="1.8" stroke-opacity="0.3" stroke-linecap="round">
+    <line x1="100" y1="100" x2="200" y2="200"/>
+    <line x1="300" y1="100" x2="200" y2="200"/>
+    <line x1="100" y1="300" x2="200" y2="200"/>
+    <line x1="300" y1="300" x2="200" y2="200"/>
+    <line x1="200" y1="80"  x2="200" y2="200"/>
+    <line x1="200" y1="320" x2="200" y2="200"/>
+    <line x1="80"  y1="200" x2="200" y2="200"/>
+    <line x1="320" y1="200" x2="200" y2="200"/>
+    <line x1="100" y1="100" x2="300" y2="100"/>
+    <line x1="100" y1="300" x2="300" y2="300"/>
+  </g>
+  <circle cx="100" cy="100" r="14" fill="#5C8A6B"/>
+  <circle cx="300" cy="100" r="14" fill="#5C8A6B"/>
+  <circle cx="100" cy="300" r="14" fill="#C2773C"/>
+  <circle cx="300" cy="300" r="14" fill="#C2773C"/>
+  <circle cx="200" cy="80"  r="11" fill="#AC6258"/>
+  <circle cx="200" cy="320" r="11" fill="#AC6258"/>
+  <circle cx="80"  cy="200" r="11" fill="#5B7E92"/>
+  <circle cx="320" cy="200" r="11" fill="#5B7E92"/>
+  <circle cx="200" cy="200" r="24" fill="#5B7E92"/>
+</svg>

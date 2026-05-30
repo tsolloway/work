@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="140" viewBox="0 0 200 140" role="img" aria-label="Tracker Programs">
+  <line x1="22" y1="112" x2="180" y2="112" stroke="#595959" stroke-opacity="0.3" stroke-width="1.5"/>
+  <polyline points="30,96 58,84 86,90 114,62 142,54 170,38" fill="none" stroke="#5B7E92" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="30" cy="96" r="3.5" fill="#5B7E92"/>
+  <circle cx="86" cy="90" r="3.5" fill="#5B7E92"/>
+  <circle cx="142" cy="54" r="3.5" fill="#5B7E92"/>
+  <circle cx="170" cy="38" r="5.5" fill="#C2773C"/>
+</svg>

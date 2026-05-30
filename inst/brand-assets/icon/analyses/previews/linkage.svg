@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="140" viewBox="0 0 200 140" role="img" aria-label="Financial Linkage">
+  <path d="M44 42 C 96 42, 110 70, 150 70" fill="none" stroke="#5C8A6B" stroke-width="2.5" stroke-opacity="0.55" stroke-linecap="round"/>
+  <path d="M44 70 C 96 70, 110 70, 150 70" fill="none" stroke="#5B7E92" stroke-width="2.5" stroke-opacity="0.55" stroke-linecap="round"/>
+  <path d="M44 98 C 96 98, 110 70, 150 70" fill="none" stroke="#C2773C" stroke-width="2.5" stroke-opacity="0.55" stroke-linecap="round"/>
+  <circle cx="36" cy="42" r="8" fill="#5C8A6B"/>
+  <circle cx="36" cy="70" r="8" fill="#5B7E92"/>
+  <circle cx="36" cy="98" r="8" fill="#C2773C"/>
+  <circle cx="162" cy="70" r="14" fill="#595959"/>
+</svg>

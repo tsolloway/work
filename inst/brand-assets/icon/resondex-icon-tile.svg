@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Resondex">
+  <!-- Monogram tile (concept B) — alternate square icon for app stores,
+       social avatars, anywhere a bold filled tile reads better than the
+       open mark. "R" uses live Inter; outline for external use. -->
+  <rect width="64" height="64" rx="15" fill="#5B7E92"/>
+  <text x="32" y="46" text-anchor="middle"
+        font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-weight="700" font-size="42" fill="#ffffff">R</text>
+</svg>

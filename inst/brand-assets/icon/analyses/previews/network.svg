@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="120" viewBox="0 0 240 200" role="img" aria-label="Network Drivers">
+  <!-- Network Drivers — productized preview illustration (as shown on the
+       website analyses card). -->
+  <g stroke="#595959" stroke-width="1" fill="none" stroke-opacity="0.32">
+    <line x1="60"  y1="40"  x2="120" y2="90"/>
+    <line x1="180" y1="40"  x2="120" y2="90"/>
+    <line x1="40"  y1="130" x2="120" y2="90"/>
+    <line x1="200" y1="130" x2="120" y2="90"/>
+    <line x1="80"  y1="160" x2="120" y2="90"/>
+    <line x1="160" y1="160" x2="120" y2="90"/>
+    <line x1="60"  y1="40"  x2="180" y2="40"/>
+  </g>
+  <circle cx="120" cy="90"  r="14" fill="#5B7E92"/>
+  <circle cx="60"  cy="40"  r="9"  fill="#5C8A6B"/>
+  <circle cx="180" cy="40"  r="9"  fill="#5C8A6B"/>
+  <circle cx="40"  cy="130" r="9"  fill="#C2773C"/>
+  <circle cx="200" cy="130" r="9"  fill="#C2773C"/>
+  <circle cx="80"  cy="160" r="8"  fill="#AC6258"/>
+  <circle cx="160" cy="160" r="8"  fill="#AC6258"/>
+</svg>

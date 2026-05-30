@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 160 160" role="img" aria-label="TURF">
+  <!-- TURF — productized preview illustration (as shown on the website
+       analyses card): concentric reach rings. -->
+  <circle cx="80" cy="80" r="68" fill="none" stroke="#C2773C" stroke-width="1" stroke-opacity="0.32"/>
+  <circle cx="80" cy="80" r="50" fill="none" stroke="#C2773C" stroke-width="2" stroke-opacity="0.6"/>
+  <circle cx="80" cy="80" r="32" fill="none" stroke="#C2773C" stroke-width="2" stroke-opacity="0.8"/>
+  <circle cx="80" cy="80" r="14" fill="#C2773C"/>
+  <circle cx="80" cy="80" r="5"  fill="#ffffff"/>
+</svg>
