@@ -12,8 +12,16 @@
 #' Call with no arguments to list every available key. Pass an unknown key
 #' and the error message echoes the catalog so discovery stays cheap.
 #'
-#' @param name Asset key. See the catalog below or call \code{resondex_assets()}
-#'   with no arguments. Examples:
+#' @param name Asset key. Two-tier resolution: (1) the curated catalog of
+#'   stable, short keys listed below; (2) for any SVG synced into
+#'   \code{inst/brand-assets/} that isn't yet catalogued (e.g. exploration
+#'   sketches, in-progress favicon variants), the relative path inside that
+#'   tree — with or without the \code{.svg} extension — works too. So
+#'   \code{resondex_assets("mark")} (curated) and
+#'   \code{resondex_assets("icon/resondex-favicon-bullseye-dark")}
+#'   (path-fallback) both resolve. Call \code{resondex_assets()} with no
+#'   arguments to list every callable key (curated first, then extras).
+#'   Examples of curated keys:
 #'   \itemize{
 #'     \item Marks: \code{"mark"}, \code{"mark-dark"}, \code{"mark-mono"},
 #'           \code{"mark-white"}, \code{"mark-black"}
@@ -138,26 +146,41 @@ resondex_assets <- function(name = NULL,
     "avatar" = "social/resondex-avatar.svg"
   )
 
-  if (is.null(name)) return(names(catalog))
+  root <- system.file("brand-assets", package = "work")
+
+  if (is.null(name)) {
+    # List every callable key: curated catalog first (in the stable order
+    # above), then any extras present on disk under inst/brand-assets/ that
+    # the catalog hasn't yet adopted (synced files like exploration sketches,
+    # in-progress favicons, etc.). Extras are listed as their relative path
+    # minus the .svg extension so they read like keys.
+    extras <- character()
+    if (nzchar(root) && dir.exists(root)) {
+      on_disk <- list.files(root, pattern = "\\.svg$", recursive = TRUE)
+      catalog_paths <- unname(catalog)
+      extras <- sub("\\.svg$", "",
+                    setdiff(on_disk, catalog_paths))
+    }
+    return(c(names(catalog), extras))
+  }
 
   if (length(name) != 1L || !is.character(name)) {
     stop("`name` must be a single character key. ",
          "Call resondex_assets() to list available keys.", call. = FALSE)
   }
-  if (!name %in% names(catalog)) {
-    stop("Unknown Resondex brand asset: '", name, "'.\n",
-         "Available keys: ",
-         paste(names(catalog), collapse = ", "), call. = FALSE)
+
+  # Resolution order: (1) curated catalog key, (2) path-fallback for any
+  # synced SVG under inst/brand-assets/. The fallback accepts the relative
+  # path with or without the .svg suffix.
+  path <- if (name %in% names(catalog)) {
+    file.path(root, unname(catalog[name]))
+  } else {
+    .resondex_assets_resolve_path(name, root)
   }
 
-  # Resolve via system.file so it works in both installed and dev (load_all)
-  # contexts. system.file returns "" on a miss; guard explicitly.
-  rel  <- unname(catalog[name])
-  path <- system.file(file.path("brand-assets", rel), package = "work")
-  if (path == "" || !file.exists(path)) {
-    stop("Brand asset file missing from the installed work package: ",
-         rel, ". Reinstall work after refreshing inst/brand-assets/.",
-         call. = FALSE)
+  if (is.null(path) || !nzchar(path) || !file.exists(path)) {
+    stop("Unknown Resondex brand asset: '", name, "'.\n",
+         "Call resondex_assets() to list available keys.", call. = FALSE)
   }
 
   switch(
@@ -167,6 +190,21 @@ resondex_assets <- function(name = NULL,
     html = htmltools::HTML(paste(readLines(path, warn = FALSE), collapse = "\n")),
     png  = .resondex_assets_rasterize(path, name, width)
   )
+}
+
+# Resolve a non-catalogued key as a relative path under inst/brand-assets/.
+# Accepts both "icon/resondex-favicon-bullseye-dark.svg" and the same
+# without the extension. Returns NULL if neither form lands on a real file,
+# so the caller can surface a clean "unknown asset" error. Guards against
+# path traversal — anything containing ".." is rejected up front.
+.resondex_assets_resolve_path <- function(name, root) {
+  if (grepl("\\.\\.", name, fixed = FALSE)) return(NULL)
+  candidates <- c(name, paste0(name, ".svg"))
+  for (rel in candidates) {
+    p <- file.path(root, rel)
+    if (file.exists(p) && !dir.exists(p)) return(p)
+  }
+  NULL
 }
 
 # Rasterize an SVG asset to a cached PNG.

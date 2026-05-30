@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Resondex">
+  <!-- W1 · Delta — slate tile + a single white triangle (Δ).
+       Δ = change / difference / result. The most universal data-science
+       symbol that isn't a network. -->
+  <rect width="64" height="64" rx="15" fill="#5B7E92"/>
+  <path d="M 32 16 L 50 46 L 14 46 Z" fill="#ffffff"/>
+</svg>

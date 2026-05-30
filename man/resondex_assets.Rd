@@ -11,8 +11,16 @@ resondex_assets(
 )
 }
 \arguments{
-\item{name}{Asset key. See the catalog below or call \code{resondex_assets()}
-with no arguments. Examples:
+\item{name}{Asset key. Two-tier resolution: (1) the curated catalog of
+stable, short keys listed below; (2) for any SVG synced into
+\code{inst/brand-assets/} that isn't yet catalogued (e.g. exploration
+sketches, in-progress favicon variants), the relative path inside that
+tree — with or without the \code{.svg} extension — works too. So
+\code{resondex_assets("mark")} (curated) and
+\code{resondex_assets("icon/resondex-favicon-bullseye-dark")}
+(path-fallback) both resolve. Call \code{resondex_assets()} with no
+arguments to list every callable key (curated first, then extras).
+Examples of curated keys:
 \itemize{
 \item Marks: \code{"mark"}, \code{"mark-dark"}, \code{"mark-mono"},
 \code{"mark-white"}, \code{"mark-black"}

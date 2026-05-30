@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Resondex">
+  <!-- W3 · Plus / crosshair — slate tile + clean white plus.
+       Reads as "intersection / precision / coordinate". Conceptually
+       echoes "where data meets decision." Maximum 16px legibility. -->
+  <rect width="64" height="64" rx="15" fill="#5B7E92"/>
+  <path d="M 32 16 L 32 48 M 16 32 L 48 32" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round"/>
+</svg>

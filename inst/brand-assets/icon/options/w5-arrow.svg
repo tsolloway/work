@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Resondex">
+  <!-- W5 · Rising arrow — slate tile + diagonal stroke with a dot terminus.
+       Implies a decisive trajectory / data → decision arrow.
+       (A clean forward-arrow alternative without feeling like a "play" icon.) -->
+  <rect width="64" height="64" rx="15" fill="#5B7E92"/>
+  <path d="M 17 47 L 41 23" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round"/>
+  <circle cx="41" cy="23" r="6" fill="#ffffff"/>
+</svg>

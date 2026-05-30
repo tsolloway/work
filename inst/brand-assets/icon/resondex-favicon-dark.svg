@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Resondex">
+  <!-- Dark favicon (D from _favicon-preview.html) — deep slate tile + the
+       4-corner mark in dark-mode brand colours + white hub. For dark UI
+       contexts where the standard slate tile would blend in. -->
+  <rect width="64" height="64" rx="14" fill="#2f4754"/>
+  <g stroke="#cdd6db" stroke-width="2.8" stroke-opacity="0.55" stroke-linecap="round">
+    <line x1="32" y1="32" x2="19" y2="19"/>
+    <line x1="32" y1="32" x2="45" y2="19"/>
+    <line x1="32" y1="32" x2="19" y2="45"/>
+    <line x1="32" y1="32" x2="45" y2="45"/>
+  </g>
+  <circle cx="19" cy="19" r="5" fill="#6FA085"/>
+  <circle cx="45" cy="19" r="5" fill="#D68F52"/>
+  <circle cx="19" cy="45" r="5" fill="#C2776C"/>
+  <circle cx="45" cy="45" r="5" fill="#cdd6db"/>
+  <circle cx="32" cy="32" r="9.5" fill="#ffffff"/>
+</svg>

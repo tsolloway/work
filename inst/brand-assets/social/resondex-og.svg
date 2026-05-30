@@ -32,11 +32,9 @@
     <circle cx="200" cy="200" r="24" fill="#5B7E92"/>
   </g>
 
-  <!-- Wordmark lockup, top-left — solid dark dot + wordmark, mirroring the
-       site header's brand mark (a `bg-fg` dot before "Resondex"). The small
-       4-corner mark was previously here, but it competed with the big hero
-       network on the right; a single dot reads as one brand anchor without
-       duplicating the network motif. -->
+  <!-- Wordmark lockup, top-left — dark dot + wordmark (matches the site
+       header). The big hero network on the right is the singular brand
+       visual; the lockup mark stays as a simple dot so it doesn't compete. -->
   <g transform="translate(90 88)">
     <circle cx="14" cy="28" r="13" fill="#1a1d1f"/>
     <text x="38" y="44" font-family="Inter, sans-serif" font-weight="600" font-size="44" letter-spacing="-1" fill="#1a1d1f">Resondex</text>

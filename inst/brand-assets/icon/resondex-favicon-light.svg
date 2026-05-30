@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Resondex">
+  <!-- Light favicon (C from _favicon-preview.html) — off-white tile + the
+       4-corner mark in full colour. For contexts that prefer a softer,
+       more editorial favicon over the bold slate tile. -->
+  <rect width="64" height="64" rx="14" fill="#f6f6f4"/>
+  <g stroke="#595959" stroke-width="2.8" stroke-opacity="0.55" stroke-linecap="round">
+    <line x1="32" y1="32" x2="19" y2="19"/>
+    <line x1="32" y1="32" x2="45" y2="19"/>
+    <line x1="32" y1="32" x2="19" y2="45"/>
+    <line x1="32" y1="32" x2="45" y2="45"/>
+  </g>
+  <circle cx="19" cy="19" r="5" fill="#5C8A6B"/>
+  <circle cx="45" cy="19" r="5" fill="#C2773C"/>
+  <circle cx="19" cy="45" r="5" fill="#AC6258"/>
+  <circle cx="45" cy="45" r="5" fill="#595959"/>
+  <circle cx="32" cy="32" r="9.5" fill="#5B7E92"/>
+</svg>

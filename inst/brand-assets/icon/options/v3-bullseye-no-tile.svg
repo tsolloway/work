@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Resondex">
+  <!-- V3 · Bullseye, no tile — pure concentric slate shapes on the host
+       background. Outer disc + transparent gap + inner dot, all slate.
+       Looks like a true mark, not a "product tile". -->
+  <circle cx="32" cy="32" r="28" fill="#5B7E92"/>
+  <circle cx="32" cy="32" r="20" fill="#f6f6f4"/>
+  <circle cx="32" cy="32" r="14" fill="#5B7E92"/>
+  <circle cx="32" cy="32" r="6"  fill="#f6f6f4"/>
+</svg>
