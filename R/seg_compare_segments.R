@@ -523,12 +523,39 @@ seg_compare_segments <- function(
       }
       openxlsx::writeFormula(wb, ag, x = f, startRow = d1, startCol = cb + j)
     }
-    openxlsx::writeFormula(wb, ag, x = glue::glue('SUM({gc_first}{drows}:{gc_last}{drows})'), startRow = d1, startCol = totcol_n)
-    for (j in seq_len(maxK)) {
-      cl <- num2let(cb + j)
-      openxlsx::writeFormula(wb, ag, x = glue::glue('SUM({cl}{d1}:{cl}{dn})'), startRow = trow, startCol = cb + j)
+    # ---- marginal totals (computed as in seg_shell_add_crosstab) ----
+    if (mode == "count") {
+      # right Total col = per-row sum; bottom Total row = per-col sum; grand = full sum
+      openxlsx::writeFormula(wb, ag, x = glue::glue('SUM({gc_first}{drows}:{gc_last}{drows})'), startRow = d1, startCol = totcol_n)
+      for (j in seq_len(maxK)) {
+        cl <- num2let(cb + j)
+        openxlsx::writeFormula(wb, ag, x = glue::glue('SUM({cl}{d1}:{cl}{dn})'), startRow = trow, startCol = cb + j)
+      }
+      openxlsx::writeFormula(wb, ag, x = glue::glue('SUM({gc_first}{d1}:{gc_last}{dn})'), startRow = trow, startCol = totcol_n)
+
+    } else if (mode == "rowpct") {
+      # right Total col: each row's %s sum to 1
+      openxlsx::writeFormula(wb, ag, x = glue::glue('SUM({gc_first}{drows}:{gc_last}{drows})'), startRow = d1, startCol = totcol_n)
+      # bottom Total row: each column's marginal share of N, from the COUNTS panel
+      for (j in seq_len(maxK)) {
+        cl <- num2let(cb + j)
+        openxlsx::writeFormula(wb, ag, x = glue::glue('IFERROR({cl}${cc$trow}/${totcol}${cc$trow},"")'), startRow = trow, startCol = cb + j)
+      }
+      # grand: sum of the bottom marginal-share row (= 1)
+      openxlsx::writeFormula(wb, ag, x = glue::glue('SUM({gc_first}${trow}:{gc_last}${trow})'), startRow = trow, startCol = totcol_n)
+
+    } else {  # colpct
+      ccr <- seq(cc$d1, cc$dn)
+      # right Total col: each row's marginal share of N, from the COUNTS panel
+      openxlsx::writeFormula(wb, ag, x = glue::glue('IFERROR(${totcol}{ccr}/${totcol}${cc$trow},"")'), startRow = d1, startCol = totcol_n)
+      # bottom Total row: each column's %s sum to 1
+      for (j in seq_len(maxK)) {
+        cl <- num2let(cb + j)
+        openxlsx::writeFormula(wb, ag, x = glue::glue('SUM({cl}{d1}:{cl}{dn})'), startRow = trow, startCol = cb + j)
+      }
+      # grand: sum of the right marginal-share col (= 1)
+      openxlsx::writeFormula(wb, ag, x = glue::glue('SUM(${totcol}{d1}:${totcol}{dn})'), startRow = trow, startCol = totcol_n)
     }
-    openxlsx::writeFormula(wb, ag, x = glue::glue('SUM({gc_first}{d1}:{gc_last}{dn})'), startRow = trow, startCol = totcol_n)
 
     numfmt <- if (mode == "count") "0" else "0%"
     openxlsx::addStyle(wb, ag, openxlsx::createStyle(textDecoration = "Bold"), rows = top, cols = cb, stack = TRUE)
