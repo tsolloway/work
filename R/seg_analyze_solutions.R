@@ -97,8 +97,9 @@ seg_analyze_solutions <- function(
                      tools::file_path_sans_ext(basename(filepath)))
 
     tryCatch({
-      df <- openxlsx::read.xlsx(filepath, sheet = "summary", colNames = FALSE)
       sheets <- openxlsx::getSheetNames(filepath)
+      summary_sheet <- sheets[tolower(sheets) == "summary"][1]   # tolerate "summary" (old) or "Summary" (new)
+      df <- openxlsx::read.xlsx(filepath, sheet = summary_sheet, colNames = FALSE)
 
       # header row detection
       header_row <- df[9, ]

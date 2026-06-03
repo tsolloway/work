@@ -43,8 +43,8 @@ Examples of curated keys:
 \itemize{
 \item \code{"svg"} (default) — raw inline SVG markup (a character
 scalar). Drop into \code{htmltools::HTML()}, \code{shiny::HTML()},
-a Quarto/Rmd \code{`r ...`} chunk with \code{results = "asis"},
-or any string-templating context.
+an inline R expression in a Quarto/Rmd chunk with
+\code{results = "asis"}, or any string-templating context.
 \item \code{"html"} — the SVG wrapped in \code{htmltools::HTML()} so
 it slots straight into a tag tree
 (e.g. \code{div(resondex_assets("mark", "html"))}).

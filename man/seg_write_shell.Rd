@@ -16,6 +16,7 @@ seg_write_shell(
   truncate_profile_threshold = 0.1,
   var_weight = NULL,
   use_weight = TRUE,
+  weighted = TRUE,
   version = c("traditional", "both"),
   do_seg_bw = TRUE,
   do_italic = TRUE,
@@ -30,6 +31,14 @@ seg_write_shell(
   where = NULL,
   verbose = FALSE
 )
+}
+\arguments{
+\item{weighted}{Logical. Master weighting switch (default \code{TRUE}). When
+\code{TRUE}, both the displayed means and the significance test use the project
+weight variable if one is present (\code{seg$meta$weight_variable}); when
+\code{FALSE}, everything is computed unweighted regardless of the weight
+variable. Weighted and unweighted runs are both fully supported; the
+unweighted path is byte-identical to the pre-weighting behavior.}
 }
 \value{
 Invisibly returns \code{NULL}. Writes the solution workbook to disk.

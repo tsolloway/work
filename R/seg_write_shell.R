@@ -79,13 +79,26 @@
   grp <- df[[solution_var]]
   keep <- !is.na(grp)
   grp_clean <- grp[keep]
+  w_clean <- df[[var_weight]][keep]
 
   table_summary[, "p_value"] <- vapply(uv, function(x) {
-    v <- df[[x]][keep]
-    tb <- table(v, grp_clean)
-    if(nrow(tb) < 2) return(1)
+    v  <- df[[x]][keep]
+    ok <- !is.na(v)
+    vv <- v[ok]; gg <- grp_clean[ok]; ww <- w_clean[ok]
+    if(length(unique(vv)) < 2) return(1)
+
+    # Weighted test on the raw-n base: build the contingency on weights, then
+    # rescale each segment column back to its (unweighted) respondent count, so
+    # the test reflects the weighted proportions shown while the base stays the
+    # raw count. When unweighted (ww == 1) this reduces exactly to table(v, grp).
+    unw  <- table(vv, gg)
+    wtab <- tapply(ww, list(vv, gg), sum)
+    wtab[is.na(wtab)] <- 0
+    cw <- colSums(wtab); cw[cw == 0] <- 1
+    wtab <- sweep(wtab, 2, colSums(unw) / cw, "*")
+
     p <- tryCatch(
-      suppressWarnings(chisq.test(tb)$p.value),
+      suppressWarnings(chisq.test(wtab)$p.value),
       error = function(e) NA_real_
     )
     if(is.null(p) || is.nan(p) || is.na(p)) return(1)
@@ -168,20 +181,31 @@
 
       # vectorized chi-squared p-values for binary split (2x2 with Yates correction)
       is_target <- grp_clean == k
+      is_other  <- !is_target
 
-      # per-variable N (excluding NAs)
-      n_var <- colSums(not_na)
+      # Weighted proportions of 1s in target / others (matches the weighted means
+      # shown); raw respondent counts stay the test base. When unweighted
+      # (w == 1) this reduces exactly to the raw-count 2x2.
+      w_clean <- w[keep]
+      wa  <- colSums(var_mat_clean * is_target * w_clean * not_na, na.rm = TRUE)
+      wr1 <- colSums(is_target * w_clean * not_na)
+      wc  <- colSums(var_mat_clean * is_other * w_clean * not_na, na.rm = TRUE)
+      wr2 <- colSums(is_other * w_clean * not_na)
+      p_t <- ifelse(wr1 > 0, wa / wr1, 0)
+      p_o <- ifelse(wr2 > 0, wc / wr2, 0)
 
-      # 2x2 contingency table cells: a=target&1, b=target&0, c=other&1, d=other&0
-      is_other <- !is_target
-      a <- colSums(var_mat_clean * is_target * not_na, na.rm = TRUE)
-      c <- colSums(var_mat_clean * is_other * not_na, na.rm = TRUE)
+      # raw row totals (base = respondent count, excluding NAs)
       r1 <- colSums(is_target * not_na)   # target row total per var
       r2 <- colSums(is_other * not_na)    # others row total per var
-      b <- r1 - a
-      d <- r2 - c
-      c1 <- a + c   # column total (value = 1)
-      c2 <- b + d   # column total (value = 0)
+      n_var <- r1 + r2
+
+      # 2x2 cells from weighted proportions scaled to raw n
+      a <- p_t * r1         # target & 1
+      b <- (1 - p_t) * r1   # target & 0
+      c <- p_o * r2         # other  & 1
+      d <- (1 - p_o) * r2   # other  & 0
+      c1 <- a + c           # column total (value = 1)
+      c2 <- b + d           # column total (value = 0)
 
       # chi-squared with Yates continuity correction
       chi2 <- n_var * (pmax(abs(a * d - b * c) - n_var / 2, 0))^2 / (r1 * r2 * c1 * c2)
@@ -264,7 +288,8 @@
     summary_key <- df %>%
       .seg_do_summary_means(
         solution_var = solution_var,
-        shell_all = shell_all %>% dplyr::filter(var %in% key)
+        shell_all = shell_all %>% dplyr::filter(var %in% key),
+        var_weight = var_weight
       ) %>% tidyr::unnest(by) %>%
       dplyr::mutate(
         block_header = ifelse(type == "polar", "Key Polars", "Key Profiles")
@@ -276,14 +301,22 @@
 
 
 
-  solution_frequency <- df %>%
-    dplyr::select(dplyr::all_of(solution_var)) %>%
-    table() %>%
-    as.numeric() %>%
-    tibble(
-      n = .,
-      r = ./nrow(df)
-    ) %>%
+  # frequency row: counts (n) are always raw respondent counts; proportions (r)
+  # are weighted when a weight variable is in play, raw otherwise. The unweighted
+  # branch reproduces the original n / nrow(df) exactly.
+  .freq_grp  <- df[[solution_var]]
+  .freq_keep <- !is.na(.freq_grp)
+  .freq_grp  <- .freq_grp[.freq_keep]
+  .freq_tn   <- table(.freq_grp)
+  .freq_n    <- as.numeric(.freq_tn)
+  if (is.null(var_weight)) {
+    .freq_r <- .freq_n / nrow(df)
+  } else {
+    .freq_w  <- df[[var_weight]][.freq_keep]
+    .freq_tw <- tapply(.freq_w, .freq_grp, sum)
+    .freq_r  <- as.numeric(.freq_tw[names(.freq_tn)]) / sum(.freq_w)
+  }
+  solution_frequency <- tibble::tibble(n = .freq_n, r = .freq_r) %>%
     t() %>%
     data.frame()
 
@@ -322,7 +355,7 @@
     },
 
     add_box = function(sheet, row_start, row_end, col_start, col_end,
-                       borderStyle = "thick") {
+                       borderStyle = "medium") {
       box_ops[[length(box_ops) + 1L]] <<- list(
         sheet = sheet,
         row_start = row_start, row_end = row_end,
@@ -676,7 +709,7 @@
     batch = NULL
 ){
 
-  sheet_name_summary <- "summary"
+  sheet_name_summary <- "Summary"
 
   style_center <- styles$style_center
   style_percent <- styles$style_percent
@@ -978,11 +1011,7 @@
   if(segment_specific){
 
     temp_func <- function(x,y,z,s, xc){
-      batch$add_cf(
-        sheet = sheet_name,
-        cols = xc,
-        rows = rows_all,
-        rule = glue::glue('OR(
+      rule <- glue::glue('OR(
       AND(
       {cell_rule_color} = {x}, {cell_rule_type} = 1, ${col_type}{row_start} = "polar", ${col_range}{row_start} {y} {cell_rule_polar} * {z}
       ),
@@ -992,12 +1021,25 @@
       AND(
       {cell_rule_color} = {x}, {cell_rule_type} = 2, ${col_pvalue}{row_start} <= {cell_rule_pvalue}, ${col_range}{row_start} {left(y)} 0
       )
-                  )'),
-        style = s
-      )
+                  )')
+      # openxlsx CF uses the bounding box of `cols`, so a non-contiguous vector
+      # would also fill the spacer columns between blocks (col_start+2 = D,
+      # col_start+5 = G). Emit one CF per contiguous run to skip those spacers.
+      runs <- split(xc, cumsum(c(TRUE, diff(xc) != 1L)))
+      for (rc in runs) {
+        batch$add_cf(
+          sheet = sheet_name,
+          cols = rc,
+          rows = rows_all,
+          rule = rule,
+          style = s
+        )
+      }
     }
 
 
+    # spacer columns (col_start+2 = D, col_start+5 = G) are deliberately excluded
+    # so no significance highlight is applied to them
     all_cond_cols <- c(col_start + 1, seq(col_seg_first_number, col_seg_last_number), seq(col_range_number, col_pvalue_number))
 
     conditional_coloring_instructions <- list(
@@ -1037,17 +1079,17 @@
       startRow = row_start,
       x = glue::glue('IFERROR(
                 IF(
-                ${col_seg_first}{rows_all} >= MAX(INDEX(summary!${col_seg_summary_first}${row_start}:${col_seg_summary_last}${row_end},MATCH(${col_second_letter}{rows_all},summary!${col_second_letter}${row_start}:${col_second_letter}${row_end},0),)) - {cell_rule_tolerance},
+                ${col_seg_first}{rows_all} >= MAX(INDEX(Summary!${col_seg_summary_first}${row_start}:${col_seg_summary_last}${row_end},MATCH(${col_second_letter}{rows_all},Summary!${col_second_letter}${row_start}:${col_second_letter}${row_end},0),)) - {cell_rule_tolerance},
                 "High",
                 IF(
-                ${col_seg_first}{rows_all} <= MIN(INDEX(summary!${col_seg_summary_first}${row_start}:${col_seg_summary_last}${row_end},MATCH(${col_second_letter}{rows_all},summary!${col_second_letter}${row_start}:${col_second_letter}${row_end},0),)) + {cell_rule_tolerance},
+                ${col_seg_first}{rows_all} <= MIN(INDEX(Summary!${col_seg_summary_first}${row_start}:${col_seg_summary_last}${row_end},MATCH(${col_second_letter}{rows_all},Summary!${col_second_letter}${row_start}:${col_second_letter}${row_end},0),)) + {cell_rule_tolerance},
                 "Low","")
                 ),
                 IF(
-                1 - ${col_seg_first}{rows_all} <= MIN(INDEX(summary!${col_seg_summary_first}${row_start}:${col_seg_summary_last}${row_end},MATCH(${col_first_letter}{rows_all},summary!${col_first_letter}${row_start}:${col_first_letter}${row_end},0),)) + {cell_rule_tolerance},
+                1 - ${col_seg_first}{rows_all} <= MIN(INDEX(Summary!${col_seg_summary_first}${row_start}:${col_seg_summary_last}${row_end},MATCH(${col_first_letter}{rows_all},Summary!${col_first_letter}${row_start}:${col_first_letter}${row_end},0),)) + {cell_rule_tolerance},
                 "High",
                 IF(
-                1 - ${col_seg_first}{rows_all} >= MAX(INDEX(summary!${col_seg_summary_first}${row_start}:${col_seg_summary_last}${row_end},MATCH(${col_first_letter}{rows_all},summary!${col_first_letter}${row_start}:${col_first_letter}${row_end},0),)) - {cell_rule_tolerance},
+                1 - ${col_seg_first}{rows_all} >= MAX(INDEX(Summary!${col_seg_summary_first}${row_start}:${col_seg_summary_last}${row_end},MATCH(${col_first_letter}{rows_all},Summary!${col_first_letter}${row_start}:${col_first_letter}${row_end},0),)) - {cell_rule_tolerance},
                 "Low", "")
                 )
                 )')
@@ -1178,8 +1220,8 @@
   setting_color <- match.arg(setting_color)
 
 
-  summary_sheet_name <-  "summary"
-  key_sheet_name <- "key"
+  summary_sheet_name <-  "Summary"
+  key_sheet_name <- "Key"
 
 
   row_start <- row_data_start
@@ -1481,8 +1523,10 @@
       wb, sheet_name,
       x = matrix(
         c(
-          solution_frequency[1 ,seg_n], solution_frequency[1 ,seg_n] / sum(solution_frequency[1 , ]),
-          sum(solution_frequency[1 , -seg_n]), sum(solution_frequency[1 , -seg_n]) / sum(solution_frequency[1 , ])
+          # n = raw count (row 1); % = weighted proportion (row 2, weighted when a
+          # weight variable is in play). "Others" sums the remaining segments.
+          solution_frequency[1 ,seg_n], solution_frequency[2 ,seg_n],
+          sum(solution_frequency[1 , -seg_n]), sum(solution_frequency[2 , -seg_n])
         ), nrow = 2),
       colNames = FALSE,
       startRow = row_data_start - 3,
@@ -1756,6 +1800,12 @@
 #'   `addStyle` calls to reduce S4 dispatch overhead. Produces identical output.
 #'
 #' @inheritParams seg_write_shell
+#' @param weighted Logical. Master weighting switch (default `TRUE`). When
+#'   `TRUE`, both the displayed means and the significance test use the project
+#'   weight variable if one is present (`seg$meta$weight_variable`); when
+#'   `FALSE`, everything is computed unweighted regardless of the weight
+#'   variable. Weighted and unweighted runs are both fully supported; the
+#'   unweighted path is byte-identical to the pre-weighting behavior.
 #'
 #' @return Invisibly returns `NULL`. Writes the solution workbook to disk.
 #'
@@ -1772,6 +1822,7 @@ seg_write_shell <- function(
     truncate_profile_threshold = .1,
     var_weight = NULL,
     use_weight = TRUE,
+    weighted = TRUE,
     version = c("traditional", "both"),
     do_seg_bw = TRUE,
     do_italic = TRUE,
@@ -1816,7 +1867,13 @@ seg_write_shell <- function(
   df <- df %>% dplyr::filter(!is.na(.data[[solution_var]]))
 
 
-  if( !is.null(seg[["meta"]][["weight_variable"]]) && use_weight && is.null(var_weight)){
+  # weighting: `weighted` is the master switch. When TRUE (default) the project
+  # weight variable is used if present; when FALSE, force unweighted regardless
+  # of seg$meta$weight_variable. Both the displayed means and the significance
+  # test follow this single basis.
+  if(!weighted){
+    var_weight <- NULL
+  }else if( !is.null(seg[["meta"]][["weight_variable"]]) && use_weight && is.null(var_weight)){
     var_weight <- seg[["meta"]][["weight_variable"]]
   }
 

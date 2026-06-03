@@ -29,6 +29,7 @@ seg_write_shell_parallel <- function(
     setting_diff = .1,
     setting_type = c("diff", "pvalue"),
     setting_color = c("bw", "color"),
+    weighted = TRUE,
     verbose = FALSE
 ){
 
@@ -136,6 +137,7 @@ seg_write_shell_parallel <- function(
         setting_diff = setting_diff,
         setting_type = setting_type,
         setting_color = setting_color,
+        weighted = weighted,
         verbose = verbose
       )
     },
@@ -162,6 +164,7 @@ seg_write_shell_parallel <- function(
       setting_diff = setting_diff,
       setting_type = setting_type,
       setting_color = setting_color,
+      weighted = weighted,
       verbose = verbose
     ),
     parent = globalenv()

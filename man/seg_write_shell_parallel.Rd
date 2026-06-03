@@ -27,6 +27,7 @@ seg_write_shell_parallel(
   setting_diff = 0.1,
   setting_type = c("diff", "pvalue"),
   setting_color = c("bw", "color"),
+  weighted = TRUE,
   verbose = FALSE
 )
 }
