@@ -73,6 +73,10 @@
 #'   `"pvalue"`.
 #' @param setting_color Character. Output colour scheme: `"bw"` (default) or
 #'   `"color"`.
+#' @param weighted Logical. Master weighting switch passed to
+#'   [seg_write_shell_parallel()] (default `TRUE`). When `TRUE`, means and the
+#'   significance test use `seg$meta$weight_variable` if present; when `FALSE`,
+#'   everything is computed unweighted.
 #' @param verbose Logical. Print progress messages (default: `FALSE`).
 #'
 #' @return Invisibly returns the result of [seg_write_shell_parallel()].
@@ -109,6 +113,7 @@ seg_write_solutions <- function(
     setting_diff = .1,
     setting_type = c("diff", "pvalue"),
     setting_color = c("bw", "color"),
+    weighted = TRUE,
     verbose = FALSE
 ){
 
@@ -205,6 +210,7 @@ seg_write_solutions <- function(
     setting_diff = setting_diff,
     setting_type = setting_type,
     setting_color = setting_color,
+    weighted = weighted,
     verbose = verbose
   ))
 

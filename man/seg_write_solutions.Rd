@@ -36,6 +36,7 @@ seg_write_solutions(
   setting_diff = 0.1,
   setting_type = c("diff", "pvalue"),
   setting_color = c("bw", "color"),
+  weighted = TRUE,
   verbose = FALSE
 )
 }
@@ -129,6 +130,11 @@ truncation (default: \code{0.10}).}
 
 \item{setting_color}{Character. Output colour scheme: \code{"bw"} (default) or
 \code{"color"}.}
+
+\item{weighted}{Logical. Master weighting switch passed to
+\code{\link[=seg_write_shell_parallel]{seg_write_shell_parallel()}} (default \code{TRUE}). When \code{TRUE}, means and the
+significance test use \code{seg$meta$weight_variable} if present; when \code{FALSE},
+everything is computed unweighted.}
 
 \item{verbose}{Logical. Print progress messages (default: \code{FALSE}).}
 }

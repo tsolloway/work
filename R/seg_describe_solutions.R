@@ -211,8 +211,9 @@ seg_describe_solutions <- function(
   if (verbose) cli::cli_alert_info("Reading {.file {sol_file}}")
 
   # ---- parse solution file ----
-  df <- openxlsx::read.xlsx(sol_file, sheet = "summary", colNames = FALSE)
   sheets <- openxlsx::getSheetNames(sol_file)
+  summary_sheet <- sheets[tolower(sheets) == "summary"][1]   # tolerate "summary" (old) or "Summary" (new)
+  df <- openxlsx::read.xlsx(sol_file, sheet = summary_sheet, colNames = FALSE)
 
   header <- df[9, ]
   seg_cols <- which(grepl("^Seg", as.character(header)))
