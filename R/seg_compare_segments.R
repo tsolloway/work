@@ -111,7 +111,23 @@ seg_compare_segments <- function(
     dplyr::bind_rows() %>% dplyr::distinct(lda_name, .keep_all = TRUE)
   if (!is.null(solutions)) {
     miss <- setdiff(solutions, sol_tbl[["lda_name"]])
-    if (length(miss)) stop(glue::glue("Solutions not found: {paste(miss, collapse=', ')}."), call. = FALSE)
+    if (length(miss)) {
+      # fall back to solution columns living directly in seg$data$with_solutions
+      # (assignment columns named by the solution, keyed on resp_id_name)
+      ws <- seg[["data"]][["with_solutions"]]
+      ws_cols <- if (is.data.frame(ws)) intersect(miss, names(ws)) else character(0)
+      still_miss <- setdiff(miss, ws_cols)
+      if (length(still_miss)) stop(glue::glue("Solutions not found: {paste(still_miss, collapse=', ')}."), call. = FALSE)
+      extra <- tibble::tibble(
+        lda_name    = ws_cols,
+        df_solution = purrr::map(ws_cols, function(nm) {
+          out <- tibble::tibble(id = ws[[resp_id_name]], v = ws[[nm]])
+          names(out)[2] <- nm
+          out[!is.na(out[[nm]]), , drop = FALSE]
+        })
+      )
+      sol_tbl <- dplyr::bind_rows(sol_tbl, extra)
+    }
     sol_tbl <- sol_tbl %>% dplyr::filter(lda_name %in% solutions)
   }
   if (nrow(sol_tbl) == 0) stop("No solutions found.", call. = FALSE)
