@@ -1,29 +1,91 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1584" height="396" viewBox="0 0 1584 396" role="img" aria-label="Resondex — Data made decisive.">
   <!-- LinkedIn PERSONAL PROFILE banner — 1584×396 (~4:1).
-       Mirrors the company banner's clean design at personal scale:
-       no network art (the profile photo carries identity); dot-anchored
-       lockup; all three lines align at x=480.
-       Mobile-safe: text lives well inside LinkedIn's center ~67% crop
-       (visible x ≈ 261–1322), and stays in the upper-middle band so the
-       profile photo's bottom-left overlap never crashes the type. -->
+       Same design language as the company banner — dot-anchored
+       alignment, mobile-safe positioning — but with the network art
+       back on the right. The profile PHOTO carries identity on
+       personal pages (not the brand mark), so there's no 3× glyph
+       repeat issue this banner needs to dodge.
+
+       Alignment column at x=560 (further right than the company
+       proportionally — more room on a 1584-wide canvas). Network sits
+       on the right at cx=1310, vertically centered with the headline,
+       sized so its right edge stays inside LinkedIn's center ~67%
+       mobile crop (visible x ≈ 261–1322). -->
+  <!-- Aurora backdrop — matches the website's hero bg: warm cream base
+       + soft radial washes (info top-left, success bottom-right, warning
+       center-ish, danger hint bottom-left). Percentage-based gradient
+       centres so the same defs scale cleanly to any viewBox. -->
+  <defs>
+    <radialGradient id="auroraInfo" cx="15%" cy="25%" r="55%">
+      <stop offset="0%"  stop-color="#5B7E92" stop-opacity="0.35"/>
+      <stop offset="70%" stop-color="#5B7E92" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auroraSuccess" cx="85%" cy="80%" r="55%">
+      <stop offset="0%"  stop-color="#5C8A6B" stop-opacity="0.30"/>
+      <stop offset="70%" stop-color="#5C8A6B" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auroraWarning" cx="60%" cy="40%" r="40%">
+      <stop offset="0%"  stop-color="#C2773C" stop-opacity="0.20"/>
+      <stop offset="70%" stop-color="#C2773C" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auroraDanger" cx="25%" cy="85%" r="45%">
+      <stop offset="0%"  stop-color="#AC6258" stop-opacity="0.18"/>
+      <stop offset="70%" stop-color="#AC6258" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
   <rect width="1584" height="396" fill="#f6f6f4"/>
+  <rect width="1584" height="396" fill="url(#auroraInfo)"/>
+  <rect width="1584" height="396" fill="url(#auroraSuccess)"/>
+  <rect width="1584" height="396" fill="url(#auroraWarning)"/>
+  <rect width="1584" height="396" fill="url(#auroraDanger)"/>
 
-  <!-- All three lines align at x=480. The dot sits ON the alignment line
-       (left edge at x=480); the wordmark trails it. -->
+  <!-- Hero network on the right — same 9-node art as the OG / website
+       hero, scaled up to bookend the composition with confidence.
+       Vertically centered with the headline. -->
+  <g transform="translate(1280 155) scale(0.42)">
+    <g stroke="#595959" stroke-width="2.2" stroke-opacity="0.3" stroke-linecap="round">
+      <line x1="0" y1="0" x2="-100" y2="-100"/>
+      <line x1="0" y1="0" x2="100"  y2="-100"/>
+      <line x1="0" y1="0" x2="-100" y2="100"/>
+      <line x1="0" y1="0" x2="100"  y2="100"/>
+      <line x1="0" y1="0" x2="0"    y2="-130"/>
+      <line x1="0" y1="0" x2="0"    y2="130"/>
+      <line x1="0" y1="0" x2="-130" y2="0"/>
+      <line x1="0" y1="0" x2="130"  y2="0"/>
+      <line x1="-100" y1="-100" x2="100" y2="-100"/>
+      <line x1="-100" y1="100"  x2="100" y2="100"/>
+    </g>
+    <circle cx="-100" cy="-100" r="14" fill="#5C8A6B"/>
+    <circle cx="100"  cy="-100" r="14" fill="#5C8A6B"/>
+    <circle cx="-100" cy="100"  r="14" fill="#C2773C"/>
+    <circle cx="100"  cy="100"  r="14" fill="#C2773C"/>
+    <circle cx="0"    cy="-130" r="10" fill="#AC6258"/>
+    <circle cx="0"    cy="130"  r="10" fill="#AC6258"/>
+    <circle cx="-130" cy="0"    r="10" fill="#5B7E92"/>
+    <circle cx="130"  cy="0"    r="10" fill="#5B7E92"/>
+    <circle cx="0"    cy="0"    r="22" fill="#5B7E92"/>
+  </g>
 
-  <!-- Header lockup — solid 14px dot + "Resondex" in Inter 600. -->
-  <circle cx="487" cy="50" r="7" fill="#1a1d1f"/>
-  <text x="511" y="61" font-family="Inter, sans-serif" font-weight="600"
+  <!-- All three text lines align at x=560. Dot sits ON the alignment
+       line (left edge at x=560); wordmark trails it. -->
+
+  <!-- Header lockup — solid 14px dot + "Resondex" in Inter 600.
+       Lockup pulled down to y=90 so it reads as the headline's eyebrow
+       (~38px clear of the headline cap top) rather than floating in the
+       top-left. -->
+  <circle cx="567" cy="80" r="7" fill="#1a1d1f"/>
+  <text x="591" y="90" font-family="Inter, sans-serif" font-weight="600"
         font-size="30" letter-spacing="-0.5" fill="#1a1d1f">Resondex</text>
 
-  <!-- Headline: Inter Bold + Instrument Serif italic accent, same
-       treatment as the OG, company banner, and website hero. -->
-  <text x="480" y="180" font-family="Inter, sans-serif" font-weight="700"
-        font-size="100" letter-spacing="-2.8" fill="#1a1d1f">Data made <tspan
+  <!-- Headline: Inter Bold + Instrument Serif italic accent. Trimmed
+       to fs=72/82 to give the bigger right-side network real breathing
+       room (~45px gap from "decisive." to the network's left edge). -->
+  <text x="560" y="180" font-family="Inter, sans-serif" font-weight="700"
+        font-size="72" letter-spacing="-2.0" fill="#1a1d1f">Data made <tspan
         font-family="'Instrument Serif', Georgia, serif" font-weight="400"
-        font-style="italic" font-size="110" fill="#5B7E92" dx="3">decisive.</tspan></text>
+        font-style="italic" font-size="82" fill="#5B7E92" dx="3">decisive.</tspan></text>
 
   <!-- Sub-line — the canonical brand promise. -->
-  <text x="480" y="230" font-family="Inter, sans-serif" font-weight="500"
-        font-size="30" fill="#6c757d">Turn data into clarity you can act on.</text>
+  <text x="560" y="230" font-family="Inter, sans-serif" font-weight="500"
+        font-size="28" fill="#6c757d">Turn data into clarity you can act on.</text>
 </svg>

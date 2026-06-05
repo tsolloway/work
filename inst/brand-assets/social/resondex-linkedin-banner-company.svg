@@ -7,16 +7,42 @@
        profile circle has clearance on every viewport (bottom-LEFT on
        desktop, bottom-CENTER on mobile). Sister to resondex-linkedin-
        banner.svg (1584×396, personal profile). -->
+  <!-- Aurora backdrop — matches the website's hero bg: warm cream base
+       + soft radial washes (info top-left, success bottom-right, warning
+       center-ish, danger hint bottom-left). Same defs as the personal
+       banner; percentage centres scale to this 1128×191 canvas. -->
+  <defs>
+    <radialGradient id="auroraInfo" cx="15%" cy="25%" r="55%">
+      <stop offset="0%"  stop-color="#5B7E92" stop-opacity="0.35"/>
+      <stop offset="70%" stop-color="#5B7E92" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auroraSuccess" cx="85%" cy="80%" r="55%">
+      <stop offset="0%"  stop-color="#5C8A6B" stop-opacity="0.30"/>
+      <stop offset="70%" stop-color="#5C8A6B" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auroraWarning" cx="60%" cy="40%" r="40%">
+      <stop offset="0%"  stop-color="#C2773C" stop-opacity="0.20"/>
+      <stop offset="70%" stop-color="#C2773C" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auroraDanger" cx="25%" cy="85%" r="45%">
+      <stop offset="0%"  stop-color="#AC6258" stop-opacity="0.18"/>
+      <stop offset="70%" stop-color="#AC6258" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
   <rect width="1128" height="191" fill="#f6f6f4"/>
+  <rect width="1128" height="191" fill="url(#auroraInfo)"/>
+  <rect width="1128" height="191" fill="url(#auroraSuccess)"/>
+  <rect width="1128" height="191" fill="url(#auroraWarning)"/>
+  <rect width="1128" height="191" fill="url(#auroraDanger)"/>
 
-  <!-- All three elements (lockup, headline, sub-line) share the same left
-       baseline at x=340 so they form a clean vertical stack. The dot is a
-       small ornament hung slightly to the left of the alignment line. -->
+  <!-- All three lines align at x=340. For the lockup row, the DOT sits on
+       the alignment line (dot left edge at x=340) and "Resondex" trails to
+       the right of it — so the dot itself anchors the column, matching the
+       headline's "D" and the sub-line's "T". -->
 
-  <!-- Header lockup — matches the SiteHeader.astro convention:
-       solid 10px dot + "Resondex" in Inter 600. -->
-  <circle cx="325" cy="34" r="5" fill="#1a1d1f"/>
-  <text x="340" y="41" font-family="Inter, sans-serif" font-weight="600"
+  <!-- Header lockup — solid 10px dot + "Resondex" in Inter 600. -->
+  <circle cx="345" cy="34" r="5" fill="#1a1d1f"/>
+  <text x="360" y="41" font-family="Inter, sans-serif" font-weight="600"
         font-size="22" letter-spacing="-0.4" fill="#1a1d1f">Resondex</text>
 
   <text x="340" y="108"
