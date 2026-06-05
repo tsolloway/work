@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1128" height="191" viewBox="0 0 1128 191" role="img" aria-label="Resondex — Data made decisive.">
+  <!-- LinkedIn COMPANY PAGE banner — 1128×191.
+       Top-LEFT: the site header's dot+wordmark lockup (small, discreet —
+       different visual element from the profile circle's network mark).
+       Right-anchored message in the right band: "Data made decisive." +
+       the website sub-line. Bottom-left is intentionally clear so the
+       profile circle has clearance on every viewport (bottom-LEFT on
+       desktop, bottom-CENTER on mobile). Sister to resondex-linkedin-
+       banner.svg (1584×396, personal profile). -->
+  <rect width="1128" height="191" fill="#f6f6f4"/>
+
+  <!-- All three elements (lockup, headline, sub-line) share the same left
+       baseline at x=340 so they form a clean vertical stack. The dot is a
+       small ornament hung slightly to the left of the alignment line. -->
+
+  <!-- Header lockup — matches the SiteHeader.astro convention:
+       solid 10px dot + "Resondex" in Inter 600. -->
+  <circle cx="325" cy="34" r="5" fill="#1a1d1f"/>
+  <text x="340" y="41" font-family="Inter, sans-serif" font-weight="600"
+        font-size="22" letter-spacing="-0.4" fill="#1a1d1f">Resondex</text>
+
+  <text x="340" y="108"
+        font-family="Inter, sans-serif" font-weight="700"
+        font-size="68" letter-spacing="-1.9" fill="#1a1d1f">Data made <tspan
+        font-family="'Instrument Serif', Georgia, serif" font-weight="400"
+        font-style="italic" font-size="76" fill="#5B7E92" dx="2">decisive.</tspan></text>
+
+  <text x="340" y="148"
+        font-family="Inter, sans-serif" font-weight="500"
+        font-size="22" fill="#6c757d">Turn data into clarity you can act on.</text>
+</svg>

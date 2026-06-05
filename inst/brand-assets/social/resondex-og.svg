@@ -45,5 +45,5 @@
   <text x="90" y="438" font-family="'Instrument Serif', Georgia, serif" font-style="italic" font-size="100" letter-spacing="-1" fill="#5B7E92">decisive.</text>
 
   <!-- Sub-tagline (matches the website hero line) -->
-  <text x="92" y="516" font-family="Inter, sans-serif" font-weight="500" font-size="36" fill="#6c757d">We turn complex data into the clarity you can act on.</text>
+  <text x="92" y="516" font-family="Inter, sans-serif" font-weight="500" font-size="36" fill="#6c757d">Turn data into clarity you can act on.</text>
 </svg>

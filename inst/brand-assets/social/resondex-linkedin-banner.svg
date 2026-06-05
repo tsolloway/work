@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1584" height="396" viewBox="0 0 1584 396" role="img" aria-label="Resondex — Data made decisive.">
+  <!-- LinkedIn profile banner, 1584×396. Warm brand bg, hero network motif on
+       the right, lockup + tagline lifted into the TOP-LEFT band so the whole
+       text block clears the profile photo that overlaps the lower-left corner.
+       The right-side network is full-height to keep the composition balanced.
+       Text uses live Inter / Instrument Serif — outline to paths before sending
+       to anyone without the fonts installed. -->
+  <rect width="1584" height="396" fill="#f6f6f4"/>
+
+  <!-- Hero network (center node + 8 satellites + edges), native 0–400 space,
+       scaled 1.3 and placed on the right. -->
+  <g transform="translate(1060 -62) scale(1.3)">
+    <g stroke="#595959" stroke-width="1.8" stroke-opacity="0.3" stroke-linecap="round">
+      <line x1="100" y1="100" x2="200" y2="200"/>
+      <line x1="300" y1="100" x2="200" y2="200"/>
+      <line x1="100" y1="300" x2="200" y2="200"/>
+      <line x1="300" y1="300" x2="200" y2="200"/>
+      <line x1="200" y1="80"  x2="200" y2="200"/>
+      <line x1="200" y1="320" x2="200" y2="200"/>
+      <line x1="80"  y1="200" x2="200" y2="200"/>
+      <line x1="320" y1="200" x2="200" y2="200"/>
+      <line x1="100" y1="100" x2="300" y2="100"/>
+      <line x1="100" y1="300" x2="300" y2="300"/>
+    </g>
+    <circle cx="100" cy="100" r="14" fill="#5C8A6B"/>
+    <circle cx="300" cy="100" r="14" fill="#5C8A6B"/>
+    <circle cx="100" cy="300" r="14" fill="#C2773C"/>
+    <circle cx="300" cy="300" r="14" fill="#C2773C"/>
+    <circle cx="200" cy="80"  r="11" fill="#AC6258"/>
+    <circle cx="200" cy="320" r="11" fill="#AC6258"/>
+    <circle cx="80"  cy="200" r="11" fill="#5B7E92"/>
+    <circle cx="320" cy="200" r="11" fill="#5B7E92"/>
+    <circle cx="200" cy="200" r="24" fill="#5B7E92"/>
+  </g>
+
+  <!-- Wordmark lockup, top-left (dark dot + wordmark) -->
+  <g transform="translate(108 16)">
+    <circle cx="12" cy="24" r="12" fill="#1a1d1f"/>
+    <text x="35" y="38" font-family="Inter, sans-serif" font-weight="600" font-size="40" letter-spacing="-1" fill="#1a1d1f">Resondex</text>
+  </g>
+
+  <!-- Headline -->
+  <text x="106" y="126" font-family="Inter, sans-serif" font-weight="700" font-size="60" letter-spacing="-2" fill="#1a1d1f">Data made <tspan font-family="'Instrument Serif', Georgia, serif" font-weight="400" font-style="italic" font-size="66" fill="#5B7E92" dx="2">decisive.</tspan></text>
+
+  <!-- Sub-tagline (matches the website hero line) -->
+  <text x="108" y="166" font-family="Inter, sans-serif" font-weight="500" font-size="25" fill="#6c757d">Turn data into clarity you can act on.</text>
+</svg>

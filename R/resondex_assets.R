@@ -98,53 +98,9 @@ resondex_assets <- function(name = NULL,
   format <- match.arg(format)
 
   # ---- Catalog ----
-  # Explicit key → relative path under inst/brand-assets/ so the public
-  # keys are stable even if the on-disk filenames change. Edit here when
-  # adding a new asset to the kit.
-  catalog <- c(
-    # Marks — the canonical 4-colour glyph in every finish.
-    "mark"                  = "logo/resondex-mark.svg",
-    "mark-dark"             = "logo/resondex-mark-dark.svg",
-    "mark-mono"             = "logo/resondex-mark-mono.svg",
-    "mark-white"            = "logo/resondex-mark-white.svg",
-    "mark-black"            = "logo/resondex-mark-black.svg",
-    # Lockups & wordmark.
-    "logo-horizontal"       = "logo/resondex-logo-horizontal.svg",
-    "logo-horizontal-dark"  = "logo/resondex-logo-horizontal-dark.svg",
-    "logo-stacked"          = "logo/resondex-logo-stacked.svg",
-    "logo-stacked-dark"     = "logo/resondex-logo-stacked-dark.svg",
-    "wordmark"              = "logo/resondex-wordmark.svg",
-    # Icons (favicon family + app/tile/expressive).
-    "favicon"               = "icon/resondex-favicon.svg",
-    "favicon-16"            = "icon/resondex-favicon-16.svg",
-    "icon-tile"             = "icon/resondex-icon-tile.svg",
-    "app-icon"              = "icon/resondex-app-icon.svg",
-    "icon-expressive"       = "icon/resondex-icon-expressive.svg",
-    # Analyses — productized preview illustrations (rich, brand-coloured).
-    "analyses/network"      = "icon/analyses/previews/network.svg",
-    "analyses/network2"     = "icon/analyses/previews/network2.svg",
-    "analyses/segment"      = "icon/analyses/previews/segment.svg",
-    "analyses/turf"         = "icon/analyses/previews/turf.svg",
-    "analyses/dashboard"    = "icon/analyses/previews/dashboard.svg",
-    "analyses/modeling"     = "icon/analyses/previews/modeling.svg",
-    "analyses/scoring"      = "icon/analyses/previews/scoring.svg",
-    "analyses/linkage"      = "icon/analyses/previews/linkage.svg",
-    "analyses/tracker"      = "icon/analyses/previews/tracker.svg",
-    "analyses/foundation"   = "icon/analyses/previews/foundation.svg",
-    # Analyses — uniform line icon set (24×24, accent grey).
-    "analyses/network-line"    = "icon/analyses/line/network.svg",
-    "analyses/segment-line"    = "icon/analyses/line/segment.svg",
-    "analyses/turf-line"       = "icon/analyses/line/turf.svg",
-    "analyses/dashboard-line"  = "icon/analyses/line/dashboard.svg",
-    "analyses/modeling-line"   = "icon/analyses/line/modeling.svg",
-    "analyses/scoring-line"    = "icon/analyses/line/scoring.svg",
-    "analyses/linkage-line"    = "icon/analyses/line/linkage.svg",
-    "analyses/tracker-line"    = "icon/analyses/line/tracker.svg",
-    "analyses/foundation-line" = "icon/analyses/line/foundation.svg",
-    # Social.
-    "og"     = "social/resondex-og.svg",
-    "avatar" = "social/resondex-avatar.svg"
-  )
+  # Sourced from the internal accessor so resondex_assets_sync() (and any
+  # future tool) can iterate the curated list without duplicating it here.
+  catalog <- .resondex_assets_catalog()
 
   root <- system.file("brand-assets", package = "work")
 
@@ -189,6 +145,60 @@ resondex_assets <- function(name = NULL,
     svg  = paste(readLines(path, warn = FALSE), collapse = "\n"),
     html = htmltools::HTML(paste(readLines(path, warn = FALSE), collapse = "\n")),
     png  = .resondex_assets_rasterize(path, name, width)
+  )
+}
+
+# Curated catalog: explicit key → relative path under inst/brand-assets/.
+# Single source of truth — used by resondex_assets() to map a key to a file
+# and by resondex_assets_sync() to know which SVGs are "blessed deliverables"
+# worthy of a parallel PNG in brand-assets/png/. Edit here when adding a
+# new asset to the kit; everything downstream picks it up.
+.resondex_assets_catalog <- function() {
+  c(
+    # Marks — the canonical 4-colour glyph in every finish.
+    "mark"                  = "logo/resondex-mark.svg",
+    "mark-dark"             = "logo/resondex-mark-dark.svg",
+    "mark-mono"             = "logo/resondex-mark-mono.svg",
+    "mark-white"            = "logo/resondex-mark-white.svg",
+    "mark-black"            = "logo/resondex-mark-black.svg",
+    # Lockups & wordmark.
+    "logo-horizontal"       = "logo/resondex-logo-horizontal.svg",
+    "logo-horizontal-dark"  = "logo/resondex-logo-horizontal-dark.svg",
+    "logo-stacked"          = "logo/resondex-logo-stacked.svg",
+    "logo-stacked-dark"     = "logo/resondex-logo-stacked-dark.svg",
+    "wordmark"              = "logo/resondex-wordmark.svg",
+    # Icons (favicon family + app/tile/expressive).
+    "favicon"               = "icon/resondex-favicon.svg",
+    "favicon-16"            = "icon/resondex-favicon-16.svg",
+    "icon-tile"             = "icon/resondex-icon-tile.svg",
+    "app-icon"              = "icon/resondex-app-icon.svg",
+    "icon-expressive"       = "icon/resondex-icon-expressive.svg",
+    # Analyses — productized preview illustrations (rich, brand-coloured).
+    "analyses/network"      = "icon/analyses/previews/network.svg",
+    "analyses/network2"     = "icon/analyses/previews/network2.svg",
+    "analyses/segment"      = "icon/analyses/previews/segment.svg",
+    "analyses/turf"         = "icon/analyses/previews/turf.svg",
+    "analyses/dashboard"    = "icon/analyses/previews/dashboard.svg",
+    "analyses/modeling"     = "icon/analyses/previews/modeling.svg",
+    "analyses/scoring"      = "icon/analyses/previews/scoring.svg",
+    "analyses/linkage"      = "icon/analyses/previews/linkage.svg",
+    "analyses/tracker"      = "icon/analyses/previews/tracker.svg",
+    "analyses/foundation"   = "icon/analyses/previews/foundation.svg",
+    # Analyses — uniform line icon set (24×24, accent grey).
+    "analyses/network-line"    = "icon/analyses/line/network.svg",
+    "analyses/segment-line"    = "icon/analyses/line/segment.svg",
+    "analyses/turf-line"       = "icon/analyses/line/turf.svg",
+    "analyses/dashboard-line"  = "icon/analyses/line/dashboard.svg",
+    "analyses/modeling-line"   = "icon/analyses/line/modeling.svg",
+    "analyses/scoring-line"    = "icon/analyses/line/scoring.svg",
+    "analyses/linkage-line"    = "icon/analyses/line/linkage.svg",
+    "analyses/tracker-line"    = "icon/analyses/line/tracker.svg",
+    "analyses/foundation-line" = "icon/analyses/line/foundation.svg",
+    # Social.
+    "og"                       = "social/resondex-og.svg",
+    "avatar"                   = "social/resondex-avatar.svg",
+    "linkedin-banner"          = "social/resondex-linkedin-banner.svg",
+    "linkedin-banner-company"  = "social/resondex-linkedin-banner-company.svg"
   )
 }
 

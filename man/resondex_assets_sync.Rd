@@ -7,6 +7,8 @@
 resondex_assets_sync(
   source = "~/Documents/GitHub/brand-assets",
   dest = "~/Documents/GitHub/work/inst/brand-assets",
+  export_png = TRUE,
+  min_png_width = 512L,
   quiet = FALSE
 )
 }
@@ -18,12 +20,27 @@ Defaults to \code{~/Documents/GitHub/brand-assets}.}
 (the one git tracks, not the installed copy). Defaults to
 \code{~/Documents/GitHub/work/inst/brand-assets}.}
 
+\item{export_png}{Also write a parallel \code{<source>/png/} mirror by
+rasterizing every \strong{curated catalog} asset (i.e. blessed
+deliverables, not exploration sketches). Each PNG lives at
+\code{<source>/png/<same-relative-path>.png}. SVGs are still the
+masters — you edit those; PNGs are derived. Skipped silently if
+\pkg{rsvg} isn't installed. Default \code{TRUE}.}
+
+\item{min_png_width}{Floor for PNG width when \code{export_png = TRUE}.
+The actual width per asset is \code{max(svg_intrinsic_width,
+min_png_width)} — so a 64\eqn{\times}64 mark becomes a 512\eqn{\times}512
+PNG (useful for slides/docs), while a 1200\eqn{\times}630 OG card
+stays at its native 1200. Default 512.}
+
 \item{quiet}{Suppress the printed summary.}
 }
 \value{
 Invisibly: a list with three character vectors of relative paths
 (\code{added}, \code{updated}, \code{identical}) plus the resolved
-\code{source} and \code{dest}.
+\code{source} and \code{dest}; when \code{export_png = TRUE} a
+\code{png} sub-list with parallel \code{added}/\code{updated}/\code{identical}
+vectors for the PNG mirror.
 }
 \description{
 Copy the latest brand SVG sources from a local checkout of the
