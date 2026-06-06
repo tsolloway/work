@@ -22,7 +22,9 @@
 #'       block, so the rows re-sort as the selection changes.
 #'     \item \strong{Seg Sort} — the same comparison as one flat, auto-filtered
 #'       table (sort by any column, e.g. largest Diff), carrying the same shell
-#'       control panel and conditional formatting.
+#'       control panel and conditional formatting. The \code{var} key column is
+#'       visible and inside the filter range so it travels with each row on a
+#'       sort, keeping the \code{INDEX/MATCH} lookups aligned.
 #'     \item \strong{Solution Summary} — a dynamic cross-tabulation of the two
 #'       selected solutions' segments, with count, row-\% and column-\% panels
 #'       (unused segment rows/cols greyed out), plus the Adj Rand Index,
@@ -307,7 +309,7 @@ seg_compare_segments <- function(
   openxlsx::addStyle(wb, so, openxlsx::createStyle(border = "bottom", borderStyle = "medium"), rows = 8, cols = 5:6, gridExpand = TRUE, stack = TRUE)
   openxlsx::addStyle(wb, so, openxlsx::createStyle(border = "left",   borderStyle = "medium"), rows = 2:8, cols = 5, gridExpand = TRUE, stack = TRUE)
   openxlsx::addStyle(wb, so, openxlsx::createStyle(border = "right",  borderStyle = "medium"), rows = 2:8, cols = 6, gridExpand = TRUE, stack = TRUE)
-  openxlsx::addStyle(wb, so, openxlsx::createStyle(textDecoration = "Bold", halign = "center", fgFill = "#e0e0e0", border = "bottom"), rows = hr, cols = 3:9, gridExpand = TRUE, stack = TRUE)
+  openxlsx::addStyle(wb, so, openxlsx::createStyle(textDecoration = "Bold", halign = "center", fgFill = "#e0e0e0", border = "bottom"), rows = hr, cols = 2:9, gridExpand = TRUE, stack = TRUE)
   openxlsx::addStyle(wb, so, openxlsx::createStyle(numFmt = "0%", halign = "center"), rows = sr, cols = 5:7, gridExpand = TRUE, stack = TRUE)
   openxlsx::addStyle(wb, so, openxlsx::createStyle(numFmt = "0%", halign = "center"), rows = sr, cols = 8, gridExpand = TRUE, stack = TRUE)  # P Value as %
   openxlsx::addStyle(wb, so, openxlsx::createStyle(halign = "center"), rows = sr, cols = 9, gridExpand = TRUE, stack = TRUE)
@@ -327,9 +329,9 @@ seg_compare_segments <- function(
   openxlsx::conditionalFormatting(wb, so, cols = 7, rows = sr, rule = glue::glue('AND($F$8=0,$G{s1}<=-$F$6)'), style = neg_style_bw)
   openxlsx::conditionalFormatting(wb, so, cols = 7, rows = sr, rule = glue::glue('$G{s1}=0'), style = white_font)
 
-  openxlsx::addFilter(wb, so, rows = hr, cols = 3:11)  # include nA / nB in the filter
+  openxlsx::addFilter(wb, so, rows = hr, cols = 2:11)  # var key travels with the sort; include nA / nB
   openxlsx::setColWidths(wb, so, cols = 1, widths = 2)        # A gap
-  openxlsx::setColWidths(wb, so, cols = 2, hidden = TRUE)     # var
+  openxlsx::setColWidths(wb, so, cols = 2, widths = 16)       # var (visible: it is the sort/lookup key)
   openxlsx::setColWidths(wb, so, cols = 3, widths = 22)       # Block
   openxlsx::setColWidths(wb, so, cols = 4, widths = 60)       # Label
   openxlsx::setColWidths(wb, so, cols = 5:6, widths = 15)     # Mean A / B (match Seg Compare / Seg by Diff)

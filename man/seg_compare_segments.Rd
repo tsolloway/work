@@ -71,7 +71,9 @@ columns) and the master threshold control panel.
 block, so the rows re-sort as the selection changes.
 \item \strong{Seg Sort} — the same comparison as one flat, auto-filtered
 table (sort by any column, e.g. largest Diff), carrying the same shell
-control panel and conditional formatting.
+control panel and conditional formatting. The \code{var} key column is
+visible and inside the filter range so it travels with each row on a
+sort, keeping the \code{INDEX/MATCH} lookups aligned.
 \item \strong{Solution Summary} — a dynamic cross-tabulation of the two
 selected solutions' segments, with count, row-\\% and column-\\% panels
 (unused segment rows/cols greyed out), plus the Adj Rand Index,
