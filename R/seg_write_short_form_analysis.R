@@ -44,6 +44,12 @@ seg_write_short_form_analysis <- function(
   # segment_labels = NULL
   # segment_descriptions = NULL
 
+  # -- ensure reticulate (+ openpyxl) for the native Excel chart step --
+  if(!"reticulate" %in% rownames(utils::installed.packages())){
+    pak::pkg_install("reticulate")
+    reticulate::py_install("openpyxl")
+  }
+
   # -- resolve project_name from short_form_analysis if not provided --
   if (is.null(project_name)) {
     pn <- short_form_analysis[["project_name"]]

@@ -218,12 +218,13 @@ seg_short_form_analysis <- function(
       stop("All combo LDA fits failed. Check your solution and input data.")
     }
 
-    # keep best per size (highest accuracy_overall)
+    # keep best per size (highest accuracy_overall); order largest -> smallest
+    # to match the backward/sequential path (full set down to the floor)
     results <- combo_results %>%
       dplyr::group_by(n) %>%
       dplyr::slice_max(accuracy_overall, n = 1, with_ties = FALSE) %>%
       dplyr::ungroup() %>%
-      dplyr::arrange(n)
+      dplyr::arrange(dplyr::desc(n))
 
     # build analysis summary
     analysis <- results %>%

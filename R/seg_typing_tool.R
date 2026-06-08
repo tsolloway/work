@@ -368,7 +368,10 @@ seg_typing_tool <- function(
 
   row_title <- start_row
 
-  where <- seg[["paths"]][["folders"]][["solution"]]
+  # `where` falls back to seg$paths$folders$solution only when not supplied —
+  # the conditional fallback lives just before the save (see is.null(where)
+  # check). Honoring the passed-in `where` lets callers (e.g.
+  # seg_finalize_prep_solution) redirect typing tools into a subfolder.
 
   df <- seg[["data"]][["with_solutions"]]
 
