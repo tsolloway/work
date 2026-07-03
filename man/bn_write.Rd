@@ -37,7 +37,8 @@ bn_write(
   add_impacts_by_battery = TRUE,
   prioritize_display = NULL,
   color_gradient_resondex = TRUE,
-  path = "."
+  path = ".",
+  trim_wb = TRUE
 )
 }
 \arguments{
@@ -131,6 +132,17 @@ workbooks where stakeholders expect the pre-brand treatment.
 Forwarded to \code{bn_impact_write()}.}
 
 \item{path}{Character. Directory to write the workbook to.}
+
+\item{trim_wb}{Logical. When \code{TRUE} (default), strips the unused boot-stat
+columns (\verb{_sd}, \verb{_se}, \verb{_t}, \verb{_ci_low}, \verb{_ci_high}) from the impact
+tables before writing. The dashboard only consumes \verb{_mean} (for display)
+and \verb{_p_value} (for the blackout rule); the other 5 stats are written
+but never read. With bootstrapping + multiple subgroups + brand levels,
+keeping all 7 stats easily pushes per-sheet column counts past Excel's
+16,384 limit. The in-memory \code{obj$impacts} is not mutated — trimming
+happens on a copy local to the writer. When \code{FALSE}, the full tables
+are written as-is, and any table exceeding 16,384 columns aborts with
+an error rather than producing a corrupt workbook.}
 }
 \value{
 A list (invisibly) with:

@@ -29,6 +29,27 @@
 #' @param audience One of `"client"` (default — plain language, no methods
 #'   jargon) or `"internal"` (uses metric names directly). Controls the prompt
 #'   framing sent to the API.
+#' @param format Character. Output format. One of `"email"` (default — a
+#'   ready-to-send email with subject line, greeting, body paragraphs, and
+#'   sign-off) or `"memo"` (a longer client-ready memo with sectioned
+#'   analysis). The underlying digest and analytical rigor are identical;
+#'   only the wrapping changes.
+#' @param sign_off Optional character. Name to use on the email sign-off.
+#'   Ignored when `format = "memo"`. Default `NULL` leaves a `[Your name]`
+#'   placeholder in the email.
+#' @param file Character path, `TRUE` (default), or `NULL`. When non-NULL,
+#'   the narrative is written to disk. With `format = "email"` it writes a
+#'   `.eml` file (RFC 5322 minimal envelope; double-click to open in Mail
+#'   / Outlook ready to edit + send); with `format = "memo"` it writes a
+#'   `.md` file. Pass an explicit path to control the location; pass `TRUE`
+#'   (the default) to drop a timestamped file in `getwd()`; pass `NULL` to
+#'   skip the file step entirely. The extension is auto-corrected to
+#'   `.eml` / `.md` if missing. The resolved path is returned in the
+#'   result list as `$file`.
+#' @param open_file Logical. When `TRUE` (default), open the saved file in
+#'   the OS's default handler (Mail.app on macOS for `.eml`, Outlook on
+#'   Windows, etc.). Implies `file = TRUE` when `file` is `NULL` — you
+#'   can't open what wasn't written.
 #' @param dry_run Logical. When TRUE, the function builds the digest and
 #'   returns it WITHOUT calling the Anthropic API. Useful for inspecting what
 #'   the LLM would see (and verifying top-N ordering) without spending
@@ -39,6 +60,8 @@
 #'   * `digest` — the structured summary that was sent to the API (useful for
 #'     auditing / regression testing).
 #'   * `model`, `usage` — the Anthropic response metadata.
+#'   * `file` — resolved path of the written file, or NULL when
+#'     `file = NULL`.
 #'
 #' @details
 #'   The API key is only read when the function is actually called, never at
@@ -54,10 +77,22 @@ bn_insights <- function(
     max_tokens = 2000L,
     top_n = 10L,
     audience = c("client", "internal"),
+    format = c("email", "memo"),
+    sign_off = NULL,
+    file = TRUE,
+    open_file = TRUE,
     dry_run = FALSE
 ) {
 
   audience <- match.arg(audience)
+  format   <- match.arg(format)
+
+  # `open_file = TRUE` implies a file must exist on disk to open. If the
+  # caller asked to open but didn't specify a destination, default to
+  # `file = TRUE` (timestamped path in getwd()).
+  if (isTRUE(open_file) && is.null(file)) {
+    file <- TRUE
+  }
 
   if (!isTRUE(dry_run) && !requireNamespace("httr2", quietly = TRUE)) {
     cli::cli_abort("{.pkg httr2} is required for {.fn bn_insights}.")
@@ -73,7 +108,8 @@ bn_insights <- function(
       }
       bn_insights(xi, verbose = verbose, api_key = api_key,
         model = model, max_tokens = max_tokens, top_n = top_n,
-        audience = audience)
+        audience = audience, format = format, sign_off = sign_off,
+        file = file, open_file = open_file, dry_run = dry_run)
     })
     return(invisible(res))
   }
@@ -99,7 +135,7 @@ bn_insights <- function(
       cat("\n")
     }
     return(invisible(list(digest = digest, narrative = NULL,
-                          model = NULL, usage = NULL)))
+                          model = NULL, usage = NULL, file = NULL)))
   }
 
   # Call the API.
@@ -108,18 +144,51 @@ bn_insights <- function(
     api_key    = api_key,
     model      = model,
     max_tokens = max_tokens,
-    audience   = audience
+    audience   = audience,
+    format     = format,
+    sign_off   = sign_off
   )
 
   narrative <- response$narrative
 
   if (isTRUE(verbose)) cat(narrative, "\n", sep = "")
 
+  # Optionally write to disk + open.
+  out_path <- NULL
+  if (!is.null(file)) {
+    out_path <- .bn_insights_write_file(
+      narrative = narrative,
+      file      = file,
+      format    = format
+    )
+    open_ok <- if (isTRUE(open_file)) {
+      .bn_insights_open_path(out_path)
+    } else NA
+    if (isTRUE(verbose)) {
+      cat("\n")
+      cli::cli_rule("File saved")
+      cli::cli_alert_success("{.field {format}} written to:")
+      cli::cli_text("  {.path {out_path}}")
+      if (isTRUE(open_file)) {
+        if (isTRUE(open_ok)) {
+          cli::cli_alert_success("Opened in default handler.")
+        } else {
+          cli::cli_alert_warning(
+            "Could not open automatically — open it manually with: \\
+             {.code system(\"open '{out_path}'\")}"
+          )
+        }
+      }
+      cli::cli_rule()
+    }
+  }
+
   invisible(list(
     narrative = narrative,
     digest    = digest,
     model     = response$model,
-    usage     = response$usage
+    usage     = response$usage,
+    file      = out_path
   ))
 }
 
@@ -520,7 +589,8 @@ bn_insights <- function(
 
 # Build the prompts and POST to Anthropic's Messages API. Returns a list with
 # $narrative, $model, $usage. Any HTTP error is surfaced as a cli_abort.
-.bn_insights_call_claude <- function(digest, api_key, model, max_tokens, audience) {
+.bn_insights_call_claude <- function(digest, api_key, model, max_tokens, audience,
+                                     format = "memo", sign_off = NULL) {
 
   # Matches the key-loading convention used by bn_name_groups() and
   # seg_describe_solutions(): env var first, falls back to an interactive
@@ -528,7 +598,8 @@ bn_insights <- function(
   if (is.null(api_key)) api_key <- get_environment_key("ANTHROPIC_API_KEY")
 
   system_prompt <- .bn_insights_system_prompt(audience)
-  user_prompt <- .bn_insights_user_prompt(digest, audience)
+  user_prompt <- .bn_insights_user_prompt(digest, audience, format = format,
+                                          sign_off = sign_off)
 
   body <- list(
     model = model,
@@ -642,7 +713,16 @@ bn_insights <- function(
   }
 }
 
-.bn_insights_user_prompt <- function(digest, audience) {
+.bn_insights_user_prompt <- function(digest, audience, format = "memo",
+                                     sign_off = NULL) {
+  if (identical(format, "email")) {
+    .bn_insights_user_prompt_email(digest, audience, sign_off = sign_off)
+  } else {
+    .bn_insights_user_prompt_memo(digest, audience)
+  }
+}
+
+.bn_insights_user_prompt_memo <- function(digest, audience) {
 
   digest_json <- jsonlite::toJSON(digest, auto_unbox = TRUE, null = "null",
     na = "null", pretty = TRUE)
@@ -711,4 +791,194 @@ bn_insights <- function(
   )
 
   sections
+}
+
+
+# -- email variant ---------------------------------------------------------
+
+.bn_insights_user_prompt_email <- function(digest, audience, sign_off = NULL) {
+
+  digest_json <- jsonlite::toJSON(digest, auto_unbox = TRUE, null = "null",
+    na = "null", pretty = TRUE)
+
+  sign_off_line <- if (!is.null(sign_off) && nzchar(sign_off)) {
+    paste0("Sign off with `Best,\\n", sign_off, "` exactly.")
+  } else {
+    "Sign off with `Best,\\n[Your name]` (leave the placeholder for the user to fill in)."
+  }
+
+  paste(
+    "# Task",
+    "",
+    "Read the study digest below and write a ready-to-send email to the",
+    "client summarizing what the driver analysis found. Same analytical rigor",
+    "as a memo — same ranking fidelity, same numeric fidelity, same jargon",
+    "rules — but this is an EMAIL. Short paragraphs, no section headings, no",
+    "bullet lists unless absolutely necessary.",
+    "",
+    "Required structure, top to bottom:",
+    "",
+    "1. **Subject line** — On the very first line, write `Subject: <line>`",
+    "   where `<line>` names the study in plain language and hints at the",
+    "   headline finding (e.g. `Subject: What drives Brand Consideration in",
+    "   Japan — top-line findings`). Keep it under ~80 characters.",
+    "2. **Blank line**, then a greeting. Default to `Hi team,` unless the",
+    "   study context names a specific stakeholder.",
+    "3. **Opening paragraph (2 to 3 sentences)** — name the study's target",
+    "   outcome (from `study.dv`), and give the single most important",
+    "   takeaway. This must be anchored on `attribute_drivers.rows[0]` — the",
+    "   #1 ranked driver — with its `label` in bold. Do not re-rank.",
+    "4. **Findings paragraph (1 short paragraph, ~4 to 6 sentences)** —",
+    "   synthesize the top drivers into 2 or 3 strategic themes. Look at the",
+    "   top 5-7 rows in `attribute_drivers.rows` in digest order and find the",
+    "   pattern (ease-of-use, trust, quality, price, etc.). Reference at",
+    "   least one concrete number from the digest — either an",
+    "   `attribute_drivers.rows[i].value` or a",
+    "   `prioritization.cumulative_milestones` figure — expressed as a",
+    "   percentage where appropriate. Do NOT invent numbers or aggregate",
+    "   raw fields; the cumulative_milestones are the only pre-computed",
+    "   cumulative figures safe to quote.",
+    "5. **Where-to-focus paragraph (1 short paragraph, ~3 to 5 sentences)** —",
+    "   translate `prioritization.rows` (in that order) into 2 or 3 concrete",
+    "   next steps. Prose form, not a numbered list.",
+    "6. **Subgroup note (1 sentence, optional)** — only if `study.subgroups`",
+    "   has more than a Total / single subgroup AND their drivers diverge",
+    "   meaningfully. Otherwise skip.",
+    "7. **Caveat + next-step sentence (1 sentence)** — flag one limitation and",
+    "   offer to walk through the details.",
+    "8. **Sign-off** —", sign_off_line,
+    "",
+    "Ranking fidelity: every `rank` field in the digest is authoritative.",
+    "Iterate in ascending rank order. Preserve rank when paraphrasing.",
+    "",
+    "Numeric fidelity: every number cited must come directly from a digest",
+    "field. Convert decimals to percentages when quoting. Use",
+    "`prioritization.cumulative_milestones.cum_gain_pp` /",
+    "`cum_gain_pct` for cumulative-gain figures — do not sum",
+    "`marginal_gain` values yourself.",
+    "",
+    if (audience == "client") {
+      paste(
+        "Jargon rules (client audience): no p-values, lift, MaxVmin, mutual",
+        "information, Bayesian networks, conditional probabilities,",
+        "bootstraps, or thresholds. Speak in terms of drivers, priorities,",
+        "and where to focus.",
+        sep = "\n"
+      )
+    } else {
+      paste(
+        "Audience is internal — metric names (lift, MI, MaxVmin) are OK when",
+        "they add clarity, but this is still an email, so use them sparingly.",
+        sep = "\n"
+      )
+    },
+    "",
+    "Tone: warm, professional, confident. Like a senior analyst writing to a",
+    "client they have a working relationship with. Not stiff, not chatty.",
+    "",
+    "# Study digest",
+    "",
+    "```json",
+    digest_json,
+    "```",
+    "",
+    "Respond with ONLY the email — Subject line first, then a blank line,",
+    "then greeting through sign-off. Do not wrap it in code fences. Do not",
+    "add commentary before or after. Markdown bold (`**...**`) is acceptable",
+    "for the #1 driver label in the opening paragraph; otherwise plain text.",
+    sep = "\n"
+  )
+}
+
+
+# -- file output -----------------------------------------------------------
+
+# Write the narrative to disk. For email, write a minimal RFC 5322 .eml so
+# the file double-clicks open in Mail / Outlook. For memo, write Markdown.
+# Returns the resolved absolute path.
+.bn_insights_write_file <- function(narrative, file, format) {
+
+  ext <- if (identical(format, "email")) ".eml" else ".md"
+
+  # Resolve `file = TRUE` to a timestamped path in the current working
+  # directory (easier to find than tempdir()).
+  if (isTRUE(file)) {
+    ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
+    file <- file.path(
+      getwd(),
+      paste0("bn_insights_", format, "_", ts, ext)
+    )
+  }
+  if (!is.character(file) || length(file) != 1L || !nzchar(file)) {
+    cli::cli_abort(c(
+      "{.arg file} must be a single non-empty path, {.code TRUE}, or {.code NULL}.",
+      "x" = "Got: {.val {file}}"
+    ))
+  }
+
+  # Auto-correct extension if missing or wrong.
+  if (!grepl(paste0("\\", ext, "$"), file, ignore.case = TRUE)) {
+    file <- paste0(tools::file_path_sans_ext(file), ext)
+  }
+
+  # Make sure the parent dir exists.
+  parent <- dirname(file)
+  if (!dir.exists(parent)) {
+    dir.create(parent, recursive = TRUE, showWarnings = FALSE)
+  }
+
+  content <- if (identical(format, "email")) {
+    .bn_insights_format_eml(narrative)
+  } else {
+    narrative
+  }
+
+  writeLines(content, con = file, useBytes = TRUE)
+  normalizePath(file, mustWork = TRUE, winslash = "/")
+}
+
+# Convert the email body Claude produced (Subject: line + blank + body) into a
+# minimal RFC 5322 envelope so the file opens cleanly in Mail clients.
+.bn_insights_format_eml <- function(narrative) {
+  lines <- strsplit(narrative, "\n", fixed = TRUE)[[1]]
+
+  # First non-blank line should be `Subject: ...`. If Claude drifted, fall
+  # back to a generic subject and treat the whole narrative as body.
+  first_idx <- which(nzchar(trimws(lines)))[1]
+  subject <- "Driver-analysis findings"
+  body_lines <- lines
+
+  if (!is.na(first_idx) && grepl("^Subject:\\s*", lines[first_idx])) {
+    subject <- trimws(sub("^Subject:\\s*", "", lines[first_idx]))
+    body_lines <- lines[-seq_len(first_idx)]
+    while (length(body_lines) > 0 && !nzchar(trimws(body_lines[1]))) {
+      body_lines <- body_lines[-1]
+    }
+  }
+  body <- paste(body_lines, collapse = "\n")
+
+  paste0(
+    "Subject: ", subject, "\n",
+    "MIME-Version: 1.0\n",
+    "Content-Type: text/plain; charset=UTF-8\n",
+    "Content-Transfer-Encoding: 8bit\n",
+    "\n",
+    body
+  )
+}
+
+# Open a file in the OS default handler. Returns TRUE on success (exit code
+# 0), FALSE otherwise. Never aborts.
+.bn_insights_open_path <- function(path) {
+  os <- Sys.info()[["sysname"]]
+  status <- tryCatch({
+    if (identical(os, "Darwin")) {
+      system2("open", shQuote(path), stdout = FALSE, stderr = FALSE)
+    } else if (identical(os, "Windows")) {
+      tryCatch({ shell.exec(path); 0L }, error = function(e) 1L)
+    } else {
+      system2("xdg-open", shQuote(path), stdout = FALSE, stderr = FALSE)
+    }
+  }, error = function(e) 1L, warning = function(w) 1L)
+  isTRUE(identical(as.integer(status), 0L))
 }

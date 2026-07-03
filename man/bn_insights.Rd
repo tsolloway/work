@@ -12,6 +12,10 @@ bn_insights(
   max_tokens = 2000L,
   top_n = 10L,
   audience = c("client", "internal"),
+  format = c("email", "memo"),
+  sign_off = NULL,
+  file = TRUE,
+  open_file = TRUE,
   dry_run = FALSE
 )
 }
@@ -48,6 +52,31 @@ prioritization steps to include in the digest sent to the API. Default 10.}
 jargon) or \code{"internal"} (uses metric names directly). Controls the prompt
 framing sent to the API.}
 
+\item{format}{Character. Output format. One of \code{"email"} (default — a
+ready-to-send email with subject line, greeting, body paragraphs, and
+sign-off) or \code{"memo"} (a longer client-ready memo with sectioned
+analysis). The underlying digest and analytical rigor are identical;
+only the wrapping changes.}
+
+\item{sign_off}{Optional character. Name to use on the email sign-off.
+Ignored when \code{format = "memo"}. Default \code{NULL} leaves a \verb{[Your name]}
+placeholder in the email.}
+
+\item{file}{Character path, \code{TRUE} (default), or \code{NULL}. When non-NULL,
+the narrative is written to disk. With \code{format = "email"} it writes a
+\code{.eml} file (RFC 5322 minimal envelope; double-click to open in Mail
+/ Outlook ready to edit + send); with \code{format = "memo"} it writes a
+\code{.md} file. Pass an explicit path to control the location; pass \code{TRUE}
+(the default) to drop a timestamped file in \code{getwd()}; pass \code{NULL} to
+skip the file step entirely. The extension is auto-corrected to
+\code{.eml} / \code{.md} if missing. The resolved path is returned in the
+result list as \verb{$file}.}
+
+\item{open_file}{Logical. When \code{TRUE} (default), open the saved file in
+the OS's default handler (Mail.app on macOS for \code{.eml}, Outlook on
+Windows, etc.). Implies \code{file = TRUE} when \code{file} is \code{NULL} — you
+can't open what wasn't written.}
+
 \item{dry_run}{Logical. When TRUE, the function builds the digest and
 returns it WITHOUT calling the Anthropic API. Useful for inspecting what
 the LLM would see (and verifying top-N ordering) without spending
@@ -60,6 +89,8 @@ A list (invisibly) with elements:
 \item \code{digest} — the structured summary that was sent to the API (useful for
 auditing / regression testing).
 \item \code{model}, \code{usage} — the Anthropic response metadata.
+\item \code{file} — resolved path of the written file, or NULL when
+\code{file = NULL}.
 }
 }
 \description{

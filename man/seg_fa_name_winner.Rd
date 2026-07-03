@@ -10,7 +10,7 @@ seg_fa_name_winner(
   from_excel = TRUE,
   max_words = 2,
   min_words = 1,
-  model = "claude-sonnet-4-20250514",
+  model = "claude-sonnet-4-5-20250929",
   api_key = NULL,
   row_header = 4,
   file_location = NULL,
@@ -35,7 +35,7 @@ from the PCA Excel workbook (matches the workflow where
 \item{min_words}{Integer. Minimum words per factor name (default \code{1}).}
 
 \item{model}{Character. Claude model ID (default
-\code{"claude-sonnet-4-20250514"}).}
+\code{"claude-sonnet-4-5-20250929"}).}
 
 \item{api_key}{Character or \code{NULL}. Anthropic API key. If \code{NULL} (default),
 reads from \code{ANTHROPIC_API_KEY} via \code{\link[=get_environment_key]{get_environment_key()}}.}

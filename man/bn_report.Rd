@@ -28,7 +28,8 @@ bn_report(
   impact_outcome_display = NULL,
   shift_type = c("absolute", "proportional", "headroom", "range"),
   add_prioritization_pvalue = FALSE,
-  prioritize_display = NULL
+  prioritize_display = NULL,
+  trim_wb = TRUE
 )
 }
 \arguments{
@@ -150,6 +151,19 @@ prioritization Display dropdown — \code{"Point Change"} or \code{"\% Change"}.
 \code{NULL} (default) auto-detects from the DV type (dichotomous outcomes
 default to \code{"Point Change"}, continuous outcomes default to
 \code{"\% Change"}). Pass an explicit string to override the auto-detection.}
+
+\item{trim_wb}{Logical. When \code{TRUE} (default), strips the unused boot-stat
+columns (\verb{_sd}, \verb{_se}, \verb{_t}, \verb{_ci_low}, \verb{_ci_high}) from the impact
+tables before embedding the JSON payload in the HTML. The dashboard
+only consumes \verb{_mean} and \verb{_p_value}; the other 5 stats are serialized
+but never read. With bootstrapping + many subgroups + brand levels,
+keeping all 7 stats inflates the payload (and the resulting HTML +
+browser parse time) by ~3.5×. The in-memory result is not mutated —
+trimming happens on a copy local to the renderer. When \code{FALSE}, the
+full tables are embedded as-is, and any table exceeding 16,384
+columns aborts with an error (same threshold as \code{bn_write()} — at
+that scale the payload is pathological even though HTML itself has
+no column limit).}
 }
 \value{
 The file path (invisibly).

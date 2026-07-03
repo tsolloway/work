@@ -84,7 +84,7 @@ bn_impacts <- function(
 ) {
 
   # Attribute (unweighted)
-  cli::cli_alert_info("Running attribute impact (unweighted)")
+  if (n_boot == 1) cli::cli_alert_info("Running attribute impact (unweighted)")
   attr_result <- bn_impact(
     obj = obj, df = df, dv = dv, ivs = ivs,
     do_community = FALSE,
@@ -109,7 +109,7 @@ bn_impacts <- function(
   # Attribute (weighted)
   attr_weighted <- NULL
   if (!is.null(weight)) {
-    cli::cli_alert_info("Running attribute impact (weighted)")
+    if (n_boot == 1) cli::cli_alert_info("Running attribute impact (weighted)")
     attr_weighted <- bn_impact(
       obj = obj, df = df, dv = dv, ivs = ivs,
       do_community = FALSE,
@@ -137,7 +137,7 @@ bn_impacts <- function(
   comm_weighted <- NULL
 
   if (do_community) {
-    cli::cli_alert_info("Running community impact (unweighted)")
+    if (n_boot == 1) cli::cli_alert_info("Running community impact (unweighted)")
     comm_result <- bn_impact(
       obj = obj, df = df, dv = dv, ivs = ivs,
       do_community = TRUE,
@@ -161,7 +161,7 @@ bn_impacts <- function(
 
     # Community (weighted)
     if (!is.null(weight)) {
-      cli::cli_alert_info("Running community impact (weighted)")
+      if (n_boot == 1) cli::cli_alert_info("Running community impact (weighted)")
       comm_weighted <- bn_impact(
         obj = obj, df = df, dv = dv, ivs = ivs,
         do_community = TRUE,

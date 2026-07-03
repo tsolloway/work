@@ -20,7 +20,7 @@
 #' @param max_words Integer. Maximum words per factor name (default `2`).
 #' @param min_words Integer. Minimum words per factor name (default `1`).
 #' @param model Character. Claude model ID (default
-#'   `"claude-sonnet-4-20250514"`).
+#'   `"claude-sonnet-4-5-20250929"`).
 #' @param api_key Character or `NULL`. Anthropic API key. If `NULL` (default),
 #'   reads from `ANTHROPIC_API_KEY` via [get_environment_key()].
 #' @param row_header Integer. Row where the data header starts in the PCA
@@ -42,7 +42,7 @@ seg_fa_name_winner <- function(
     from_excel = TRUE,
     max_words = 2,
     min_words = 1,
-    model = "claude-sonnet-4-20250514",
+    model = "claude-sonnet-4-5-20250929",
     api_key = NULL,
     row_header = 4,
     file_location = NULL,

@@ -15,7 +15,7 @@
 #'   pass a list of character vectors in the same order as the results. Each
 #'   vector must match the number of communities in its corresponding engine.
 #'   Default NULL (use Claude).
-#' @param model Character. Claude model ID (default `"claude-sonnet-4-20250514"`).
+#' @param model Character. Claude model ID (default `"claude-sonnet-4-5-20250929"`).
 #' @param max_words Integer. Maximum words per group name (default 3).
 #' @param min_words Integer. Minimum words per group name (default 1).
 #' @param api_key Character or NULL. Anthropic API key. If NULL, reads from
@@ -29,7 +29,7 @@
 #' @export
 bn_name_groups <- function(results,
                            manual_names = NULL,
-                           model = "claude-sonnet-4-20250514",
+                           model = "claude-sonnet-4-5-20250929",
                            max_words = 3,
                            min_words = 1,
                            api_key = NULL,

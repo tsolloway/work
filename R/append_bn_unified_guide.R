@@ -68,12 +68,13 @@ append_bn_unified_guide <- function(
         boot_applied_in_data <- TRUE
         break
       }
-      # Subgroup-nested list form: walk one level deeper.
+      # Subgroup-nested list form: walk one level deeper. Each inner item
+      # is the subgroup's prioritization tibble directly, not a registry
+      # entry — check it as a data frame, not via `$tbl`.
       if (is.list(tbl) && !is.data.frame(tbl)) {
         for (sub in tbl) {
-          if (is.list(sub) && !is.null(sub$tbl) &&
-              "p_value" %in% names(sub$tbl) &&
-              any(!is.na(sub$tbl[["p_value"]]))) {
+          if (is.data.frame(sub) && "p_value" %in% names(sub) &&
+              any(!is.na(sub[["p_value"]]))) {
             boot_applied_in_data <- TRUE
             break
           }

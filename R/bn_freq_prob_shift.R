@@ -242,13 +242,13 @@ bn_freq_prob_shift <- function(
     f_hi <- tilted_mean(hi) - target_mean
 
     for (i in 1:10) {
-      if (sign(f_lo) != sign(f_hi)) break
+      if (is.finite(f_lo) && is.finite(f_hi) && sign(f_lo) != sign(f_hi)) break
       lo <- lo * 2; hi <- hi * 2
       f_lo <- tilted_mean(lo) - target_mean
       f_hi <- tilted_mean(hi) - target_mean
     }
 
-    if (sign(f_lo) == sign(f_hi)) {
+    if (!is.finite(f_lo) || !is.finite(f_hi) || sign(f_lo) == sign(f_hi)) {
       warning("bn_freq_prob_shift: could not bracket root for target_mean = ",
               round(target_mean, 4), " (orig = ", round(orig_mean, 4), "). Returning NA.")
       return(NA_real_)

@@ -96,6 +96,18 @@
 #'   `NULL` (default) auto-detects from the DV type (dichotomous outcomes
 #'   default to `"Point Change"`, continuous outcomes default to
 #'   `"% Change"`). Pass an explicit string to override the auto-detection.
+#' @param trim_wb Logical. When `TRUE` (default), strips the unused boot-stat
+#'   columns (`_sd`, `_se`, `_t`, `_ci_low`, `_ci_high`) from the impact
+#'   tables before embedding the JSON payload in the HTML. The dashboard
+#'   only consumes `_mean` and `_p_value`; the other 5 stats are serialized
+#'   but never read. With bootstrapping + many subgroups + brand levels,
+#'   keeping all 7 stats inflates the payload (and the resulting HTML +
+#'   browser parse time) by ~3.5×. The in-memory result is not mutated —
+#'   trimming happens on a copy local to the renderer. When `FALSE`, the
+#'   full tables are embedded as-is, and any table exceeding 16,384
+#'   columns aborts with an error (same threshold as `bn_write()` — at
+#'   that scale the payload is pathological even though HTML itself has
+#'   no column limit).
 #' @param qc_mode Logical. Enables QC-mode affordances in the HTML report
 #'   — currently: hover tooltips on Impact dashboard cells that expose the
 #'   underlying raw metric value and unrounded index (useful for validating
@@ -147,7 +159,8 @@ bn_report <- function(
     impact_outcome_display = NULL,
     shift_type      = c("absolute", "proportional", "headroom", "range"),
     add_prioritization_pvalue = FALSE,
-    prioritize_display = NULL
+    prioritize_display = NULL,
+    trim_wb = TRUE
 ){
 
   # NULL impact_outcome_display means "auto-detect by DV type" inside the
@@ -275,7 +288,12 @@ bn_report <- function(
     # size by ~(N-1) × payload-size for N layout types when
     # add_additional_results = TRUE.
     shared_scripts <- character(0)
-    impacts_res         <- result[["impacts"]]
+    impacts_res <- result[["impacts"]]
+    if (isTRUE(trim_wb)) {
+      impacts_res <- .bn_impact_drop_unused_boot_stats(impacts_res)
+    } else {
+      .bn_impact_assert_column_cap(impacts_res, fn_label = "bn_report")
+    }
     prioritizations_res <- result[["prioritizations"]]
 
     shared_attr_id <- NULL

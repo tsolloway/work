@@ -78,6 +78,16 @@
 #'   workbooks where stakeholders expect the pre-brand treatment.
 #'   Forwarded to `bn_impact_write()`.
 #' @param path Character. Directory to write the workbook to.
+#' @param trim_wb Logical. When `TRUE` (default), strips the unused boot-stat
+#'   columns (`_sd`, `_se`, `_t`, `_ci_low`, `_ci_high`) from the impact
+#'   tables before writing. The dashboard only consumes `_mean` (for display)
+#'   and `_p_value` (for the blackout rule); the other 5 stats are written
+#'   but never read. With bootstrapping + multiple subgroups + brand levels,
+#'   keeping all 7 stats easily pushes per-sheet column counts past Excel's
+#'   16,384 limit. The in-memory `obj$impacts` is not mutated — trimming
+#'   happens on a copy local to the writer. When `FALSE`, the full tables
+#'   are written as-is, and any table exceeding 16,384 columns aborts with
+#'   an error rather than producing a corrupt workbook.
 #'
 #' @return A list (invisibly) with:
 #'   * `path` — full path of the written `.xlsx` file.
@@ -156,13 +166,19 @@ bn_write <- function(
     # for legacy workbooks where stakeholders expect the old treatment.
     # Forwarded to bn_impact_write.
     color_gradient_resondex = TRUE,
-    path = "."
+    path = ".",
+    trim_wb = TRUE
 ) {
 
   wb_type <- match.arg(wb_type)
   shift_type <- match.arg(shift_type)
 
   impacts <- obj[["impacts"]]
+  if (isTRUE(trim_wb)) {
+    impacts <- .bn_impact_drop_unused_boot_stats(impacts)
+  } else {
+    .bn_impact_assert_column_cap(impacts, fn_label = "bn_write")
+  }
   prioritizations <- obj[["prioritizations"]]
 
   # impact_outcome_display is passed through to bn_impact_write, which owns

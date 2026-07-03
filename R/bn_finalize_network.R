@@ -554,8 +554,11 @@ bn_finalize_network <- function(
   # Populated on both result$meta and per-subgroup meta so writers don't
   # have to know which slot to look in.
   ###############################
+  if (is.null(results[["meta"]])) results[["meta"]] <- list()
+  results[["meta"]][["dv"]] <- dv_original
+  results[["meta"]][["ivs"]] <- if (!is.null(batteries)) batteries else x_ivs
+
   if (!is.null(batteries)) {
-    if (is.null(results[["meta"]])) results[["meta"]] <- list()
     results[["meta"]][["batteries"]] <- batteries
     if (!is.null(results[["bn_subgroups"]])) {
       for (sg in names(results[["bn_subgroups"]])) {

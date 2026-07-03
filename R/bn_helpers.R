@@ -8,6 +8,56 @@
 # there is exactly one copy, under the canonical .bn_report_* name.
 # =============================================================================
 
+# --- internal: drop unused boot-stat columns from an impacts list ---
+# bn_impact emits 7 stats per metric in boot mode
+# (mean / sd / se / t / ci_low / ci_high / p_value). Only `mean` (display)
+# and `p_value` (blackout rule) are consumed by the writers and dashboard.
+# The other 5 are dead weight — they push Excel's per-sheet column count
+# past the 16,384 limit and inflate the bn_report JSON payload. Strip them
+# at the consumer boundary (bn_write / bn_report), not at the engine, so
+# the in-memory impacts object stays full-fat for ad-hoc analysis.
+.bn_impact_drop_unused_boot_stats <- function(impacts) {
+  if (is.null(impacts)) return(impacts)
+  drop_one <- function(tbl) {
+    if (is.null(tbl)) return(tbl)
+    drop_cols <- grep("_(sd|se|t|ci_low|ci_high)$", names(tbl), value = TRUE)
+    if (length(drop_cols)) tbl[, setdiff(names(tbl), drop_cols), drop = FALSE]
+    else tbl
+  }
+  for (k in c("table_attribute", "table_attribute_weighted",
+              "table_community", "table_community_weighted")) {
+    if (!is.null(impacts[[k]])) impacts[[k]] <- drop_one(impacts[[k]])
+  }
+  impacts
+}
+
+# --- internal: assert per-table column count fits Excel's per-sheet cap ---
+# Excel's hard limit is 16,384 columns per sheet (column XFD). When the
+# caller opts out of `trim_wb` and an impact table would overflow, fail
+# loudly here rather than letting openxlsx emit a corrupt workbook. The
+# threshold is also used as a uniform sanity gate by bn_report — at that
+# scale the embedded JSON payload becomes pathological even though HTML
+# itself has no column limit.
+.bn_impact_assert_column_cap <- function(impacts, fn_label = "bn_write",
+                                         cap = 16384L) {
+  if (is.null(impacts)) return(invisible(NULL))
+  for (k in c("table_attribute", "table_attribute_weighted",
+              "table_community", "table_community_weighted")) {
+    tbl <- impacts[[k]]
+    if (!is.null(tbl) && ncol(tbl) > cap) {
+      stop(sprintf(
+        "%s: impacts$%s has %d columns, exceeding the %d-column cap. ",
+        fn_label, k, ncol(tbl), cap
+      ),
+      "Set `trim_wb = TRUE` (the default) to strip the 5 unused boot ",
+      "stats (`_sd`, `_se`, `_t`, `_ci_low`, `_ci_high`) — only `_mean` ",
+      "and `_p_value` are consumed downstream.",
+      call. = FALSE)
+    }
+  }
+  invisible(NULL)
+}
+
 # --- internal: normalize results to named list of engine results ---
 .bn_report_normalize_results <- function(results) {
 

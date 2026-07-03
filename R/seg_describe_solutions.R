@@ -20,7 +20,7 @@
 #' @param n_profile Integer. Number of top profile differentiators to include
 #'   per segment in the prompt (default: `10`).
 #' @param model Character. Claude model to use (default:
-#'   `"claude-sonnet-4-20250514"`).
+#'   `"claude-sonnet-4-5-20250929"`).
 #' @param api_key Character. Anthropic API key. If `NULL` (default), retrieves
 #'   via `get_environment_key("ANTHROPIC_API_KEY")`.
 #' @param prompt Character or `NULL`. Optional additional guidance appended to
@@ -47,7 +47,7 @@ seg_describe_solutions <- function(
     profile_threshold = 0.15,
     n_polar = 15,
     n_profile = 10,
-    model = "claude-sonnet-4-20250514",
+    model = "claude-sonnet-4-5-20250929",
     api_key = NULL,
     prompt = NULL,
     add_to_wb = TRUE,

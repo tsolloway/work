@@ -295,7 +295,24 @@ bn_impact <- function(
 
     first_subgroup <- names(obj)[[1]]
 
+    n_subgroups <- length(obj)
+    subgroup_names <- names(obj)
+    show_subgroup_progress <- isTRUE(n_boot > 1)
+    if (show_subgroup_progress) {
+      progress_prefix <- if (do_community) "community impact" else "attribute impact"
+      weight_tag <- if (is.null(weight)) "unweighted" else "weighted"
+      mode_tag <- if (use_parallel) "parallel" else "serial"
+      progress_suffix <- glue::glue("({weight_tag}, {n_boot} boots, {mode_tag})")
+    }
+
     .engine_call <- function(.x, .y){
+      if (show_subgroup_progress) {
+        i <- match(.y, subgroup_names)
+        sg <- .y
+        cli::cli_alert_info(
+          "Running {progress_prefix} - Subgroup {i} of {n_subgroups} - {sg} {progress_suffix}"
+        )
+      }
       .dual_engine_call(list(
         obj = .x,
         df = df %>%
@@ -329,7 +346,7 @@ bn_impact <- function(
     } else if (use_parallel) {
       output <- furrr::future_imap(
         obj, .engine_call,
-        .options = furrr::furrr_options(seed = TRUE)
+        .options = furrr::furrr_options(seed = TRUE, scheduling = Inf)
       )
     } else {
       output <- purrr::imap(obj, .engine_call)

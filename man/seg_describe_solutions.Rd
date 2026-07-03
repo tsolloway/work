@@ -12,7 +12,7 @@ seg_describe_solutions(
   profile_threshold = 0.15,
   n_polar = 15,
   n_profile = 10,
-  model = "claude-sonnet-4-20250514",
+  model = "claude-sonnet-4-5-20250929",
   api_key = NULL,
   prompt = NULL,
   add_to_wb = TRUE,
@@ -42,7 +42,7 @@ segment in the prompt (default: \code{15}).}
 per segment in the prompt (default: \code{10}).}
 
 \item{model}{Character. Claude model to use (default:
-\code{"claude-sonnet-4-20250514"}).}
+\code{"claude-sonnet-4-5-20250929"}).}
 
 \item{api_key}{Character. Anthropic API key. If \code{NULL} (default), retrieves
 via \code{get_environment_key("ANTHROPIC_API_KEY")}.}
