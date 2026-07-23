@@ -73,7 +73,14 @@ append_bn_impact_dynamic <- function(
     # palette (danger / white / success) so the dynamic dashboard
     # matches the app reactable and bn_report HTML. FALSE falls back to
     # the legacy red / yellow / green Material scale.
-    color_gradient_resondex = TRUE
+    color_gradient_resondex = TRUE,
+    # When TRUE (default), the dashboard's display rows are written in
+    # descending rank of the initial view's metric (first Assess preset /
+    # first subgroup / initial shift + display), so the workbook opens
+    # already sorted. Only the row-write order changes — the Results
+    # sheet and all ID-keyed formulas are order-independent. FALSE keeps
+    # the impact table's incoming row order.
+    sort_rows = TRUE
 ) {
 
   outcome_display <- match.arg(outcome_display)
@@ -347,6 +354,44 @@ append_bn_impact_dynamic <- function(
   assess_metric_keys <- if (has_assess) c(preset_metric_keys, "")   else character(0)
   assess_shift_keys  <- if (has_assess) c(preset_shift_keys, "")    else character(0)
   assess_questions <- if (has_assess) c(preset_questions, "")       else character(0)
+
+  # ---------------------------------------------------------------------------
+  # Pre-sort display rows by the initial view's ranking, so the workbook
+  # opens with row 1 = top driver instead of engine/questionnaire order.
+  # The sort key is the raw metric column the dashboard resolves on first
+  # open: first Assess preset (typically Current Impact) — or the first
+  # Metric dropdown entry when Assess is suppressed — on the first
+  # subgroup, at the initial Shift Type + Outcome Display. The dashboard
+  # index is ABS(raw) / mean(ABS(raw)), monotone in ABS(raw), so ordering
+  # by descending ABS(raw) matches the displayed ranking. Only `table`
+  # (the display set) is reordered; `full_table` / Results and every
+  # ID-keyed formula are position-independent, which is the same property
+  # that makes manual in-Excel sorting safe.
+  if (isTRUE(sort_rows) && nrow(table) > 1L) {
+    sort_base  <- if (has_assess) preset_metric_keys[1] else metric_keys[1]
+    sort_shift <- if (has_assess) preset_shift_keys[1] else {
+      switch(shift_type,
+        "absolute"     = "absshift",
+        "proportional" = "propshift",
+        "headroom"     = "headshift",
+        "range"        = "rangeshift"
+      )
+    }
+    sort_disp <- if (outcome_display == "absolute") "absdisplay" else "propdisplay"
+    sg_prefix <- if (!is.null(sg1)) paste0(sg1, "_") else ""
+    # Candidates in decreasing tag specificity: lift metrics carry
+    # _<shift>_<display>, maxVmin carries _<display> only, mi carries
+    # neither. First existing column wins.
+    sort_candidates <- c(
+      paste0(sg_prefix, sort_base, "_", sort_shift, "_", sort_disp),
+      paste0(sg_prefix, sort_base, "_", sort_disp),
+      paste0(sg_prefix, sort_base)
+    )
+    sort_col <- intersect(sort_candidates, names(table))[1]
+    if (!is.na(sort_col)) {
+      table <- table[order(-abs(table[[sort_col]]), na.last = TRUE), , drop = FALSE]
+    }
+  }
 
   # ---------------------------------------------------------------------------
   # Sheet 1: Dashboard (created first so it appears first)
