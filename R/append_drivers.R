@@ -50,7 +50,10 @@ append_drivers <- function(
     left          = openxlsx::createStyle(halign = "left"),
     total_impact  = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
     separator     = openxlsx::createStyle(fgFill = "black"),
-    neg_sign      = openxlsx::createStyle(textDecoration = c("bold", "italic")),
+    # fontColour matches the HTML dashboards' .rdx-neg danger red so the
+    # "Bold italicized red index" footer note holds across deliverables.
+    neg_sign      = openxlsx::createStyle(textDecoration = c("bold", "italic"),
+                                          fontColour = resondex_brand()$semantic$danger),
     insig         = openxlsx::createStyle(bgFill = "black", fontColour = "white")
   )
 
@@ -138,7 +141,7 @@ append_drivers <- function(
 
   openxlsx::writeData(wb, sheet_name, write_total, startRow = total_impact_row, startCol = col_data_start, colNames = FALSE)
   openxlsx::writeData(wb, sheet_name, footer, startRow = total_impact_row + 1, startCol = col_data_start)
-  openxlsx::writeData(wb, sheet_name, "Bold italicized index means a negative relationship", startRow = total_impact_row + 2, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, "Bold italicized red index means a negative relationship", startRow = total_impact_row + 2, startCol = col_data_start)
   openxlsx::writeData(wb, sheet_name, "Black cells mean an insignificant relationship", startRow = total_impact_row + 3, startCol = col_data_start)
   openxlsx::setColWidths(wb, sheet_name, cols = cols_to_hide, widths = 8.43, hidden = rep(TRUE, length(cols_to_hide)))
 
@@ -191,18 +194,22 @@ append_drivers <- function(
       openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
         style = c("#f66a6e", "#feea8a", "#66bd7d"), type = "colourScale")
 
-      if (length(sign_col_pos) == 1) {
-        sign_excel_col <- sign_col_pos + (col_data_start - 1)
-        neg_formula <- paste0(num2let(sign_excel_col), driver_rows[1], " < 0")
-        openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
-          style = styles$neg_sign, type = "expression", rule = neg_formula)
-      }
-
       if (length(p_col_pos) == 1) {
         p_excel_col <- p_col_pos + (col_data_start - 1)
         p_formula <- paste0(num2let(p_excel_col), driver_rows[1], " > .1")
         openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
           style = styles$insig, type = "expression", rule = p_formula)
+      }
+
+      # neg_sign added LAST so it sits ABOVE insig in Excel's rule order:
+      # on a negative + insignificant cell the red bold italic font wins
+      # the conflict while insig still supplies the black fill (mirrors
+      # the HTML dashboards' compound .rdx-neg.rdx-insig rule).
+      if (length(sign_col_pos) == 1) {
+        sign_excel_col <- sign_col_pos + (col_data_start - 1)
+        neg_formula <- paste0(num2let(sign_excel_col), driver_rows[1], " < 0")
+        openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = driver_rows,
+          style = styles$neg_sign, type = "expression", rule = neg_formula)
       }
     }
   }

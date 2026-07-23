@@ -266,8 +266,9 @@ bn_report <- function(
     .bn_report_render_widget(result, type, do_community_val, result_name,
                               cfg = cfg, state = state)
   }
-  render_membership <- function(result, result_name) {
-    .bn_report_render_membership(result, result_name)
+  render_membership <- function(result, result_name,
+                                xlsx_id = NULL, xlsx_filename = NULL) {
+    .bn_report_render_membership(result, result_name, xlsx_id, xlsx_filename)
   }
 
 
@@ -325,6 +326,37 @@ bn_report <- function(
       }
     }
 
+    # Pre-bake the membership Excel ONCE per result (the Membership tab
+    # repeats across layout types, but every copy's Download Excel button
+    # points at this single base64 <script> payload). Only built when the
+    # Membership tab will actually render (has_tabs). Failure warns and
+    # drops the button rather than killing the report — same posture as
+    # render_widget.
+    memb_xlsx_id <- NULL
+    memb_xlsx_filename <- NULL
+    memb_xlsx_script <- ""
+    if (has_tabs) {
+      memb_b64 <- tryCatch(
+        .bn_report_membership_xlsx_b64(result, name, title, subtitle),
+        error = function(e) {
+          warning("bn_report membership xlsx failed for [", name, "]: ",
+                  conditionMessage(e), call. = FALSE)
+          NULL
+        }
+      )
+      if (!is.null(memb_b64)) {
+        memb_xlsx_id <- as.character(glue::glue("memb_xlsx_{rid}"))
+        memb_xlsx_filename <- paste0(
+          .bn_report_download_prefix(title, subtitle, name, "Membership"),
+          ".xlsx"
+        )
+        memb_xlsx_script <- paste0(
+          '<script type="application/octet-stream" id="', memb_xlsx_id,
+          '" class="membership-xlsx">', memb_b64, '</script>'
+        )
+      }
+    }
+
     # Build type panels — each contains tabs (or single view). Heavy
     # lifting lives in .bn_report_build_type_panel() (bn_helpers.R);
     # this loop just iterates and computes the per-panel id / visibility.
@@ -343,7 +375,8 @@ bn_report <- function(
         qc_mode = qc_mode,
         outcome_display = outcome_display, shift_type = shift_type,
         add_prioritization_pvalue = add_prioritization_pvalue,
-        prioritize_display = prioritize_display
+        prioritize_display = prioritize_display,
+        memb_xlsx_id = memb_xlsx_id, memb_xlsx_filename = memb_xlsx_filename
       )
     })
 
@@ -382,6 +415,7 @@ bn_report <- function(
       '    {download_btn_html}',
       '  </summary>',
       '  {xlsx_script_html}',
+      '  {memb_xlsx_script}',
       '  {shared_scripts_str}',
       '  <div class="accordion-body">',
       '    {type_panels_str}',

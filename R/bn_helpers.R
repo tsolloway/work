@@ -619,25 +619,144 @@
 
 
 # =============================================================================
-# Membership view builder — extracted from bn_report's inner closures.
-# Produces the dual-view (table + card) HTML for a single accordion's
-# Membership tab. Pure function — closes over nothing.
+# Membership grouping — shared by the HTML membership views and the
+# membership Excel download so both always present the same communities in
+# the same order. Returns a tibble (community_name, color, nodes) or NULL
+# when the result carries no attribute_viz_prep.
 # =============================================================================
-.bn_report_render_membership <- function(result, result_name) {
+.bn_report_membership_groups <- function(result) {
   nodes_df <- tryCatch(
     work::find_recursive(result, x_name = "attribute_viz_prep")$nodes,
     error = function(e) NULL
   )
-  if (is.null(nodes_df)) return("")
+  if (is.null(nodes_df)) return(NULL)
 
   # group nodes by community
-  groups <- nodes_df %>%
+  nodes_df %>%
     dplyr::arrange(group) %>%
     dplyr::group_by(community_name, color) %>%
     dplyr::summarise(
       nodes = list(tibble::tibble(id = id, label = label)),
       .groups = "drop"
     )
+}
+
+
+# =============================================================================
+# Membership Excel builder — one workbook per result accordion, embedded
+# base64 in the report and served by the Membership tab's Download Excel
+# button. Communities run across columns: header = community name, member
+# attributes listed underneath, every populated cell filled with that
+# community's network color (font flips white/black by luminance).
+# Follows the bn_prioritize_write dashboard conventions: content anchored
+# at column 2, bold-18 title, bold-italic-14 subtitle, gridLines off,
+# frozen header row. Returns the base64 string, or NULL when the result
+# has no membership to write.
+# =============================================================================
+.bn_report_membership_xlsx_b64 <- function(result, result_name, title, subtitle) {
+  groups <- .bn_report_membership_groups(result)
+  if (is.null(groups) || nrow(groups) == 0) return(NULL)
+
+  labels <- purrr::map(groups$nodes, "label")
+  n_max  <- max(purrr::map_int(labels, length))
+
+  sheet <- "Membership"
+  wb <- work::oxl_create_workbook()
+  openxlsx::addWorksheet(wb, sheet, gridLines = FALSE)
+
+  col_start  <- 2L
+  row_title  <- 2L
+  row_header <- 5L
+  cols <- seq(col_start, col_start + nrow(groups) - 1L)
+
+  # --- title block ---
+  # as.character() + colNames = FALSE on every writeData call: classed
+  # character vectors (glue, factor, ...) fail is.vector(), so writeData
+  # coerces them to a data.frame and emits its auto-generated column name
+  # ("x") into the target cell instead of the value.
+  openxlsx::writeData(wb, sheet, as.character(title),
+    startRow = row_title, startCol = col_start, colNames = FALSE)
+  openxlsx::addStyle(wb, sheet,
+    openxlsx::createStyle(textDecoration = "bold", fontSize = 18),
+    rows = row_title, cols = col_start)
+
+  openxlsx::writeData(wb, sheet, "Community Membership Table",
+    startRow = row_title + 1L, startCol = col_start, colNames = FALSE)
+  openxlsx::addStyle(wb, sheet,
+    openxlsx::createStyle(textDecoration = c("bold", "italic"), fontSize = 14),
+    rows = row_title + 1L, cols = col_start)
+
+  # --- one colored column per community (ragged — each column only fills
+  # down to its own last attribute, mirroring the card view) ---
+  for (j in seq_along(cols)) {
+    col   <- cols[j]
+    color <- groups$color[j]
+    labs  <- labels[[j]]
+
+    # white font on dark community colors, black on light ones
+    channels <- grDevices::col2rgb(color)[, 1]
+    luminance <- sum(c(0.299, 0.587, 0.114) * channels) / 255
+    font_color <- if (luminance > 0.55) "#000000" else "#FFFFFF"
+
+    openxlsx::writeData(wb, sheet, as.character(groups$community_name[j]),
+      startRow = row_header, startCol = col, colNames = FALSE)
+    openxlsx::addStyle(wb, sheet,
+      openxlsx::createStyle(
+        textDecoration = "bold", halign = "center", valign = "center",
+        wrapText = TRUE, fgFill = color, fontColour = font_color,
+        border = "TopBottomLeftRight", borderColour = "#FFFFFF",
+        borderStyle = "thin"
+      ),
+      rows = row_header, cols = col)
+
+    if (length(labs) > 0) {
+      openxlsx::writeData(wb, sheet, as.character(labs),
+        startRow = row_header + 1L, startCol = col, colNames = FALSE)
+      openxlsx::addStyle(wb, sheet,
+        openxlsx::createStyle(
+          halign = "left", valign = "center", wrapText = TRUE,
+          fgFill = color, fontColour = font_color,
+          border = "TopBottomLeftRight", borderColour = "#FFFFFF",
+          borderStyle = "thin"
+        ),
+        rows = seq(row_header + 1L, row_header + length(labs)), cols = col,
+        gridExpand = TRUE)
+    }
+  }
+
+  # medium outer box around the header row and around the full table
+  # (stacked, so the community fills underneath are preserved)
+  work::oxl_outer_box(wb, sheet,
+    row_start = row_header, row_end = row_header,
+    col_start = min(cols), col_end = max(cols),
+    borderStyle = "medium")
+  work::oxl_outer_box(wb, sheet,
+    row_start = row_header, row_end = row_header + n_max,
+    col_start = min(cols), col_end = max(cols),
+    borderStyle = "medium")
+
+  openxlsx::setColWidths(wb, sheet, cols = 1L, widths = 3)
+  openxlsx::setColWidths(wb, sheet, cols = cols, widths = 32)
+  openxlsx::freezePane(wb, sheet, firstActiveRow = row_header + 1L)
+
+  tmp <- tempfile(fileext = ".xlsx")
+  on.exit(unlink(tmp), add = TRUE)
+  openxlsx::saveWorkbook(wb, tmp, overwrite = TRUE)
+  base64enc::base64encode(readBin(tmp, what = "raw", n = file.info(tmp)$size))
+}
+
+
+# =============================================================================
+# Membership view builder — extracted from bn_report's inner closures.
+# Produces the dual-view (table + card) HTML for a single accordion's
+# Membership tab. Pure function — closes over nothing. When `xlsx_id` is
+# non-NULL, the toolbar also gets a Download Excel button wired to the
+# result-level base64 <script> payload via downloadAccordionReport().
+# =============================================================================
+.bn_report_render_membership <- function(result, result_name,
+                                         xlsx_id = NULL, xlsx_filename = NULL) {
+  groups <- .bn_report_membership_groups(result)
+  if (is.null(groups)) return("")
 
   # --- table view ---
   table_rows <- purrr::pmap_chr(groups, function(community_name, color, nodes) {
@@ -679,10 +798,26 @@
   })
   cards_html <- paste0('<div class="membership-cards">', paste(cards, collapse = ""), '</div>')
 
+  # optional Download Excel button — reuses the accordion prebake download
+  # JS (base64 <script> → Blob → <a download>), pointed at the membership
+  # payload embedded at the result level by bn_report().
+  download_btn <- if (!is.null(xlsx_id)) {
+    esc_filename <- htmltools::htmlEscape(
+      xlsx_filename %||% "Membership.xlsx", attribute = TRUE)
+    paste0(
+      '<button class="report-btn membership-toggle" ',
+      'onclick="downloadAccordionReport(this)" ',
+      'data-xlsx-id="', xlsx_id, '" data-filename="', esc_filename, '" ',
+      'title="Download membership table as Excel">',
+      '&#8681; Download Excel</button>'
+    )
+  } else ""
+
   # wrap both views with toggle
   paste0(
     '<div class="membership-wrap" data-result="', result_name, '">',
     '<div class="membership-toolbar">',
+    download_btn,
     '<button class="report-btn membership-toggle" onclick="toggleMembershipView(this)" title="Switch view">',
     '&#9776; Toggle View</button></div>',
     '<div class="membership-view membership-table-view" style="display:none;">', table_html, '</div>',
@@ -883,7 +1018,8 @@
     impacts_res, prioritizations_res,
     shared_attr_id, shared_comm_id,
     qc_mode, outcome_display, shift_type,
-    add_prioritization_pvalue, prioritize_display
+    add_prioritization_pvalue, prioritize_display,
+    memb_xlsx_id = NULL, memb_xlsx_filename = NULL
 ) {
 
   # Per-type layout dropdown — each type-panel carries its own copy with
@@ -936,7 +1072,7 @@
       '</div>',
       '</div>'
     )
-    tab_memb <- render_membership(result, name)
+    tab_memb <- render_membership(result, name, memb_xlsx_id, memb_xlsx_filename)
 
     attr_id <- glue::glue("{panel_id}_attr")
     comm_id <- glue::glue("{panel_id}_comm")
@@ -1452,7 +1588,7 @@
     '  </div>',
     '  <div class="impact-footer">',
     '    <p class="index-note"></p>',
-    '    <p class="muted">Bold italicized index means a negative relationship. ',
+    '    <p class="muted">Bold italicized red index means a negative relationship. ',
     'Black cells mean an insignificant relationship (p &gt; 0.10). ',
     'Lift impacts are not calculated when the base is below ', min_base_for_lift, '.</p>',
     '  </div>',
@@ -1862,6 +1998,7 @@
     '.membership-toolbar {',
     '  display: flex;',
     '  justify-content: flex-end;',
+    '  gap: 8px;',
     '  margin-bottom: 12px;',
     '}',
     # var(--ndr-fs-sm) = 12px — matches the app's brand button sizing.
@@ -2515,6 +2652,13 @@
     '  .impact-ctrl-row .impact-ctrl, .priort-ctrl-row .priort-ctrl {',
     '    max-width: none !important; width: 100% !important;',
     '  }',
+    # Warnings / advisory notes span the full well-panel width. The base
+    # 108px padding-left exists to tuck the note under the select in the
+    # inline label+select layout; in the stacked sidebar layout it just
+    # squeezes the text into a narrow right-hand column.
+    '  .impact-controls .impact-warning, .priort-controls .priort-warning {',
+    '    padding-left: 0 !important;',
+    '  }',
     # Layout dropdown lives inside .network-controls now — zero the
     # padding it carried for its old standalone position (was offsetting
     # the label to match the in-iframe Select-by-ID), since the well
@@ -3141,10 +3285,27 @@
     '    return "";',
     '  }',
     '',
+    '  // Symmetric variant of shiftMeaningSentence for the Average Effect',
+    '  // metric — the engine hardcodes the perturbation at \\u00b15% (lift 0',
+    '  // computes E(+5%) \\u2212 E(\\u22125%)), interpreted per Shift Type.',
+    '  function symmetricShiftSentence(shiftKey) {',
+    '    var k = shiftKey || "propshift";',
+    '    if (k === "propshift") {',
+    '      return "Each attribute\\u2019s mean is shifted \\u00b15% of its current value.";',
+    '    } else if (k === "absshift") {',
+    '      return "Each attribute\\u2019s mean is shifted \\u00b10.05 scale points (a fixed step).";',
+    '    } else if (k === "headshift") {',
+    '      return "Each attribute shifts 5% of its gap to the top upward and 5% of its gap to the bottom downward.";',
+    '    } else if (k === "rangeshift") {',
+    '      return "Each attribute\\u2019s mean is shifted \\u00b15% of its scale\\u2019s range.";',
+    '    }',
+    '    return "";',
+    '  }',
+    '',
     '  function metricDescription(mkey, shiftKey) {',
     '    if (!mkey) return "";',
     '    if (mkey === "lift" || mkey === "lift_0") {',
-    '      return "Indexed by average effect. Measures the outcome\\u2019s sensitivity to a small symmetric perturbation around each attribute\\u2019s current state.";',
+    '      return "Indexed by average effect. Measures the outcome\\u2019s sensitivity to a small symmetric perturbation (\\u00b15%) around each attribute\\u2019s current state. " + symmetricShiftSentence(shiftKey);',
     '    }',
     '    if (mkey.indexOf("lift_") === 0) {',
     '      var pct = mkey.replace("lift_", "");',

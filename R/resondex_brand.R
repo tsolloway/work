@@ -515,15 +515,17 @@ resondex_css <- function(include_import = TRUE) {
   #  inline background (computed by the shared scale helper at Step 3/6).
   # Conditional formatting, applied to every cell in the row EXCEPT the
   # p-value (including the row label):
-  #   .rdx-neg   : negative raw metric → red, italic text (no border, no
-  #                background change — layers over the index colour scale).
+  #   .rdx-neg   : negative raw metric → red, bold italic text (no border,
+  #                no background change — layers over the index colour
+  #                scale). Bold matches the Excel dashboards' neg_sign
+  #                style and the "Bold italicized red index" footer note.
   #   .rdx-insig : insignificant relationship → blackout cell, white text.
   # A cell can be both: the compound .rdx-neg.rdx-insig rule (two-class
   # specificity, so it beats .rdx-insig regardless of order) keeps the
-  # blackout background but restores red italic text.
+  # blackout background but restores red bold italic text.
   table_fmt <- paste(
     c(
-      ".rdx-neg { color: var(--ndr-danger) !important; font-style: italic; }",
+      ".rdx-neg { color: var(--ndr-danger) !important; font-style: italic; font-weight: 700; }",
       ".rdx-insig {",
       "  background: #111 !important; color: #fff !important;",
       "}",

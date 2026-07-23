@@ -354,7 +354,9 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     lift_idx <- if (index_by == "lift_first") 1L else min(2L, length(lift))
     lift_val <- lift[lift_idx]
     if (lift_val == 0) {
-      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation around each attribute's current state"
+      # ±5% = the engine's hardcoded Average Effect perturbation
+      # (lift 0 computes E(+5%) − E(−5%)).
+      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation (±5%) around each attribute's current state"
     } else {
       pct <- round(lift_val * 100)
       paste0(

@@ -492,11 +492,30 @@
   )
 }
 
+# Symmetric variant of the shift-meaning sentence for the Average Effect
+# metric — the engine hardcodes the perturbation at ±5% (lift 0 computes
+# E(+5%) − E(−5%)), interpreted per shift type. Mirrors bn_report's
+# symmetricShiftSentence() JS.
+#' @noRd
+.network_drivers_impacts_symmetric_shift_meaning <- function(shift_key) {
+  k <- shift_key %||% "propshift"
+  switch(k,
+    propshift  = "Each attribute’s mean is shifted ±5% of its current value.",
+    absshift   = "Each attribute’s mean is shifted ±0.05 scale points (a fixed step).",
+    headshift  = "Each attribute shifts 5% of its gap to the top upward and 5% of its gap to the bottom downward.",
+    rangeshift = "Each attribute’s mean is shifted ±5% of its scale’s range.",
+    ""
+  )
+}
+
 #' @noRd
 .network_drivers_impacts_metric_description <- function(metric_key, shift_key) {
   if (is.null(metric_key) || !nzchar(metric_key)) return("")
   if (metric_key %in% c("lift", "lift_0")) {
-    return("Indexed by average effect. Measures the outcome’s sensitivity to a small symmetric perturbation around each attribute’s current state.")
+    return(paste0(
+      "Indexed by average effect. Measures the outcome’s sensitivity to a small symmetric perturbation (±5%) around each attribute’s current state. ",
+      .network_drivers_impacts_symmetric_shift_meaning(shift_key)
+    ))
   }
   if (startsWith(metric_key, "lift_")) {
     pct <- sub("^lift_", "", metric_key)
@@ -533,7 +552,7 @@
       htmltools::p(
         style = "margin: 0; color: var(--ndr-muted);",
         sprintf(
-          "Bold italicized index means a negative relationship. Black cells mean an insignificant relationship (p > %s). Blank cells are not calculated due to insufficient base (below %d).",
+          "Bold italicized red index means a negative relationship. Black cells mean an insignificant relationship (p > %s). Blank cells are not calculated due to insufficient base (below %d).",
           format(sig_threshold, nsmall = 2),
           as.integer(min_base)
         )

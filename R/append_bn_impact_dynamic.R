@@ -392,7 +392,9 @@ append_bn_impact_dynamic <- function(
   # Index description in E column
   index_descriptions <- purrr::map_chr(metric_keys, function(mk) {
     if (mk == "lift" || mk == "lift_0") {
-      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation around each attribute's current state."
+      # ±5% = the engine's hardcoded Average Effect perturbation
+      # (lift 0 computes E(+5%) − E(−5%)).
+      "Indexed by average effect. Measures the outcome's sensitivity to a small symmetric perturbation (±5%) around each attribute's current state."
     } else if (grepl("^lift_", mk)) {
       pct <- gsub("lift_", "", mk)
       paste0(
@@ -576,7 +578,10 @@ append_bn_impact_dynamic <- function(
     left      = openxlsx::createStyle(halign = "left"),
     total_impact = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
     separator = openxlsx::createStyle(fgFill = "black"),
-    neg_sign  = openxlsx::createStyle(textDecoration = c("bold", "italic")),
+    # fontColour matches the HTML dashboards' .rdx-neg danger red so the
+    # "Bold italicized red index" footer note holds across deliverables.
+    neg_sign  = openxlsx::createStyle(textDecoration = c("bold", "italic"),
+                                      fontColour = resondex_brand()$semantic$danger),
     insig     = openxlsx::createStyle(bgFill = "black", fontColour = "white"),
     dropdown_label = openxlsx::createStyle(textDecoration = "bold", halign = "right"),
     dropdown_cell  = openxlsx::createStyle(
@@ -1568,7 +1573,7 @@ append_bn_impact_dynamic <- function(
   )
   openxlsx::writeFormula(wb, dash_sheet, x = footer_formula,
     startRow = footer_start, startCol = col_data_start)
-  openxlsx::writeData(wb, dash_sheet, "Bold italicized index means a negative relationship",
+  openxlsx::writeData(wb, dash_sheet, "Bold italicized red index means a negative relationship",
     startRow = footer_start + 1, startCol = col_data_start)
   openxlsx::writeData(wb, dash_sheet, "Black cells mean an insignificant relationship",
     startRow = footer_start + 2, startCol = col_data_start)
@@ -1601,17 +1606,21 @@ append_bn_impact_dynamic <- function(
     openxlsx::conditionalFormatting(wb, dash_sheet, cols = i, rows = data_rows,
       style = grad_style, type = "colourScale")
 
-    # Bold italic for negative raw metric
-    raw_col_let <- num2let(raw_col)
-    neg_formula <- paste0(raw_col_let, data_rows[1], "<0")
-    openxlsx::conditionalFormatting(wb, dash_sheet, cols = i, rows = data_rows,
-      style = styles$neg_sign, type = "expression", rule = neg_formula)
-
-    # Blackout for insignificant p-value (highest priority)
+    # Blackout for insignificant p-value
     pval_col_let <- num2let(pval_col)
     p_formula <- paste0(pval_col_let, data_rows[1], ">0.1")
     openxlsx::conditionalFormatting(wb, dash_sheet, cols = i, rows = data_rows,
       style = styles$insig, type = "expression", rule = p_formula)
+
+    # Red bold italic for negative raw metric — added LAST so it sits
+    # ABOVE insig in Excel's rule order: on a negative + insignificant
+    # cell the red font wins the conflict while insig still supplies the
+    # black fill (mirrors the HTML dashboards' compound
+    # .rdx-neg.rdx-insig rule).
+    raw_col_let <- num2let(raw_col)
+    neg_formula <- paste0(raw_col_let, data_rows[1], "<0")
+    openxlsx::conditionalFormatting(wb, dash_sheet, cols = i, rows = data_rows,
+      style = styles$neg_sign, type = "expression", rule = neg_formula)
   }
 
   # (Per-battery dashboards are pre-filtered tabs rather than a dropdown,
