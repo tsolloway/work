@@ -149,15 +149,19 @@ value across all DV levels (works with any scale: 3-point, 5-point,
 7-point, etc.). \code{"top_box"} uses \code{P(DV_max | IV=v)} — the
 probability of the highest DV level.}
 
-\item{impact_shift_type}{Character. How \code{lift} values are interpreted
-when shifting IV distributions:
-\code{"proportional"} (default) shifts the IV's mean by a fraction of its
-current value (e.g., 0.10 = 10 percent of current mean);
-\code{"absolute"} shifts the IV's mean by a fixed number of scale points
-(e.g., 0.10 = add 0.10 to the mean regardless of starting value);
-\code{"headroom"} shifts the mean by \code{lift} times the room
-remaining toward the requested boundary — see
-\code{bn_freq_prob_shift()} for details.}
+\item{impact_shift_type}{Character vector. How \code{lift} values are
+interpreted when shifting IV distributions: \code{"proportional"}
+(fraction of the current mean), \code{"absolute"} (fixed scale points),
+\code{"headroom"} (fraction of the room toward the boundary), and
+\code{"range"} (fraction of the theoretical scale range) — see
+\code{bn_freq_prob_shift()}. When several values are supplied (the
+default: all four), a single pass computes every variant and the lift
+columns carry \code{_propshift_} / \code{_absshift_} /
+\code{_headshift_} / \code{_rangeshift_} tags; the boot loop, MI,
+maxVmin, and base are computed once. Supplying a single value
+reproduces the legacy untagged single-variant output (prior to
+2026-07-28 \code{bn_impact()} ran the engine once per variant and
+merged afterwards).}
 
 \item{include_base}{Logical. Whether to include base-size columns alongside
 brand-specific lift columns. Default \code{TRUE}.}

@@ -267,70 +267,17 @@ bn_impact <- function(
   dv_original <- dv
   dv <- unname(dv)
 
-  # Helper: insert a shift-type tag (propshift / absshift) into lift column
-  # names, right after the propdisplay / absdisplay token. Handles both:
-  #   - value cols ending in propdisplay/absdisplay
-  #   - bootstrap stat cols of the form <lift>_<display>_<stat>
-  #     (where <stat> ∈ mean | sd | se | t | ci_low | ci_high | p_value)
-  # so the dashboard's metric-keyed bootstrap p-value lookup resolves to a
-  # consistently-shaped col name. maxVmin / mi / p_val / dv_max_value /
-  # dv_min_value / index don't start with `lift` and are NOT renamed.
-  .insert_shift_suffix <- function(cols, shift_key) {
-    # POSIX regex (no perl=TRUE): R's perl backref handling treats `\\1`
-    # as the byte 0x01 (octal escape) and emits literal control chars
-    # instead of backrefs. Plain POSIX gives reliable backref behavior.
-    sub("^(lift.*)_(propdisplay|absdisplay)(_.*)?$",
-        paste0("\\1_", shift_key, "_\\2\\3"), cols)
-  }
-
-  # Helper: merge engine outputs produced with impact_shift_type =
-  # "proportional", "absolute", "headroom", and "range". Keep everything
-  # from the prop run; from each other run take only the lift columns
-  # and bind alongside, each tagged with the corresponding _<key>shift_
-  # token.
-  .merge_shift_variants <- function(prop_tbl, abs_tbl,
-                                    head_tbl = NULL, range_tbl = NULL) {
-    # Rename lift columns in the prop run to include _propshift_ tag.
-    prop_names <- names(prop_tbl)
-    renamed_prop <- .insert_shift_suffix(prop_names, "propshift")
-    names(prop_tbl) <- renamed_prop
-
-    .extract_lift_only <- function(tbl, shift_key) {
-      lift_cols <- grep("^lift.*_(propdisplay|absdisplay)(_.*)?$",
-        names(tbl), value = TRUE)
-      if (length(lift_cols) == 0) return(NULL)
-      out <- tbl[, lift_cols, drop = FALSE]
-      names(out) <- .insert_shift_suffix(names(out), shift_key)
-      out
-    }
-
-    abs_lift_only   <- .extract_lift_only(abs_tbl,   "absshift")
-    head_lift_only  <- if (!is.null(head_tbl))  .extract_lift_only(head_tbl,  "headshift")  else NULL
-    range_lift_only <- if (!is.null(range_tbl)) .extract_lift_only(range_tbl, "rangeshift") else NULL
-
-    out <- prop_tbl
-    if (!is.null(abs_lift_only))   out <- dplyr::bind_cols(out, abs_lift_only)
-    if (!is.null(head_lift_only))  out <- dplyr::bind_cols(out, head_lift_only)
-    if (!is.null(range_lift_only)) out <- dplyr::bind_cols(out, range_lift_only)
-    out
-  }
-
-  # Run the engine once per shift_type (proportional + absolute +
-  # headroom + range). maxVmin / mi / index values don't depend on
-  # shift_type and would be duplicates, so only the lift columns are
-  # retained from the abs / head / range runs. Order kept stable: prop
-  # first (anchors index/maxVmin/mi), then abs, then head, then range —
-  # downstream regex grabs them by suffix tag.
+  # Run the engine ONCE with all four shift variants (proportional +
+  # absolute + headroom + range). Since 2026-07-28 the engine computes every
+  # variant in a single pass and emits lift columns already tagged with
+  # `_propshift_` / `_absshift_` / `_headshift_` / `_rangeshift_`, so the
+  # bootstrap loop, MI, maxVmin, and base are computed once instead of once
+  # per variant (previously this wrapper ran the engine four times and
+  # merged the lift columns afterwards).
   .dual_engine_call <- function(engine_args) {
-    prop_tbl  <- do.call(bn_impact_engine,
-      c(engine_args, list(impact_shift_type = "proportional")))
-    abs_tbl   <- do.call(bn_impact_engine,
-      c(engine_args, list(impact_shift_type = "absolute")))
-    head_tbl  <- do.call(bn_impact_engine,
-      c(engine_args, list(impact_shift_type = "headroom")))
-    range_tbl <- do.call(bn_impact_engine,
-      c(engine_args, list(impact_shift_type = "range")))
-    .merge_shift_variants(prop_tbl, abs_tbl, head_tbl, range_tbl)
+    do.call(bn_impact_engine, c(engine_args, list(
+      impact_shift_type = c("proportional", "absolute", "headroom", "range")
+    )))
   }
 
   if(process_subgroups){

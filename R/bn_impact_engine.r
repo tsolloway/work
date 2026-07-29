@@ -104,15 +104,19 @@
 #'   value across all DV levels (works with any scale: 3-point, 5-point,
 #'   7-point, etc.). \code{"top_box"} uses \code{P(DV_max | IV=v)} — the
 #'   probability of the highest DV level.
-#' @param impact_shift_type Character. How \code{lift} values are interpreted
-#'   when shifting IV distributions:
-#'   \code{"proportional"} (default) shifts the IV's mean by a fraction of its
-#'   current value (e.g., 0.10 = 10 percent of current mean);
-#'   \code{"absolute"} shifts the IV's mean by a fixed number of scale points
-#'   (e.g., 0.10 = add 0.10 to the mean regardless of starting value);
-#'   \code{"headroom"} shifts the mean by \code{lift} times the room
-#'   remaining toward the requested boundary — see
-#'   \code{bn_freq_prob_shift()} for details.
+#' @param impact_shift_type Character vector. How \code{lift} values are
+#'   interpreted when shifting IV distributions: \code{"proportional"}
+#'   (fraction of the current mean), \code{"absolute"} (fixed scale points),
+#'   \code{"headroom"} (fraction of the room toward the boundary), and
+#'   \code{"range"} (fraction of the theoretical scale range) — see
+#'   \code{bn_freq_prob_shift()}. When several values are supplied (the
+#'   default: all four), a single pass computes every variant and the lift
+#'   columns carry \code{_propshift_} / \code{_absshift_} /
+#'   \code{_headshift_} / \code{_rangeshift_} tags; the boot loop, MI,
+#'   maxVmin, and base are computed once. Supplying a single value
+#'   reproduces the legacy untagged single-variant output (prior to
+#'   2026-07-28 \code{bn_impact()} ran the engine once per variant and
+#'   merged afterwards).
 #' @section Outcome-display variants:
 #'   Both proportional and absolute variants of the DV-outcome metrics are
 #'   always emitted as separate columns, so downstream writers (e.g., the
@@ -299,7 +303,7 @@ bn_impact_engine <- function(
 
   type <- match.arg(type)
   index_by <- match.arg(index_by)
-  impact_shift_type <- match.arg(impact_shift_type)
+  impact_shift_type <- match.arg(impact_shift_type, several.ok = TRUE)
   dv_metric <- match.arg(dv_metric)
   impact_readoff <- match.arg(impact_readoff)
   community_lift <- match.arg(community_lift)
@@ -762,48 +766,41 @@ bn_impact_engine <- function(
 
       multi_lift <- length(lift) > 1
       lift_labels_base <- if (multi_lift) paste0("lift_", round(lift * 100)) else "lift"
-      # Emit both outcome-display variants per lift percent. Order per lift
-      # percent is (propdisplay, absdisplay); this must line up with the
-      # interleaved output of compute_lift_vals below.
-      lift_labels <- as.vector(rbind(
-        paste0(lift_labels_base, "_propdisplay"),
-        paste0(lift_labels_base, "_absdisplay")
-      ))
+      # One-pass shift variants: when impact_shift_type carries several
+      # values (the default since 2026-07-28), a single engine pass emits
+      # every requested shift variant with its `_propshift_`-style tag baked
+      # into the column names, so the boot loop, MI, maxVmin, and base are
+      # computed once instead of once per variant. A single value reproduces
+      # the legacy untagged output (previously the wrapper ran the engine
+      # once per variant and tagged/merged afterwards).
+      shift_key_map <- c(proportional = "propshift", absolute = "absshift",
+                         headroom = "headshift", range = "rangeshift")
+      one_pass_shifts <- length(impact_shift_type) > 1
+      shift_tag <- function(st) if (one_pass_shifts) paste0("_", shift_key_map[[st]]) else ""
+      # Emit both outcome-display variants per lift percent, interleaved as
+      # (propdisplay, absdisplay) — must line up with compute_lift_vals.
+      # Within each shift block market columns come first, then per-brand
+      # columns; name format "lift_N_{brand}_{shift}_{display}" — brand goes
+      # BEFORE the shift tag (the Excel / HTML dashboards' column-name
+      # formulas assume `{sg}_{lift_N}_{brand}_{shift}_{display}`). Blocks
+      # concatenate in impact_shift_type order, mirroring the legacy
+      # prop/abs/head/range merge order.
+      labels_for <- function(st, b = NULL) {
+        mid <- if (is.null(b)) "" else paste0("_", b)
+        as.vector(rbind(
+          paste0(lift_labels_base, mid, shift_tag(st), "_propdisplay"),
+          paste0(lift_labels_base, mid, shift_tag(st), "_absdisplay")
+        ))
+      }
       brand_levels <- if (!is.null(brand)) sort(unique(as.character(dat_boot[[brand]]))) else NULL
       if (!is.null(brand_levels) && !is.null(brand_names)) {
         brand_levels <- intersect(brand_levels, brand_names)
         if (length(brand_levels) == 0) brand_levels <- NULL
       }
-
-      # Build column names — market lift always included.
-      market_lift_col_names <- lift_labels
-      if (is.null(brand_levels)) {
-        lift_col_names <- lift_labels
-      } else {
-        # Per-brand columns follow the same 2× outcome-display expansion.
-        # Name format: "lift_N_{brand}_{display}" — brand goes BEFORE the
-        # display tag so that (a) Pass-B's `.insert_shift_suffix` regex
-        # (anchored to trailing `_propdisplay`/`_absdisplay`) also renames
-        # brand cols, and (b) the Excel / HTML dashboards' column-name
-        # formulas (which assume `{sg}_{lift_N}_{brand}_{shift}_{display}`)
-        # resolve correctly. Do NOT change to `_{display}_{brand}` — it
-        # silently breaks both dashboards.
-        #
-        # Build the name by explicit split-and-concatenate (no sub backref)
-        # so we sidestep R's `\1` / `\\1` string-escape subtlety entirely.
-        brand_lift_col_names <- expand.grid(
-          lift_label = lift_labels,
-          brand = brand_levels,
-          stringsAsFactors = FALSE
-        ) %>%
-          with(mapply(function(ll, b) {
-            # ll is always "...<base>_propdisplay" or "...<base>_absdisplay"
-            disp <- if (endsWith(ll, "_propdisplay")) "propdisplay" else "absdisplay"
-            base <- substr(ll, 1, nchar(ll) - nchar(disp) - 1L)  # drop "_<disp>"
-            paste0(base, "_", b, "_", disp)
-          }, lift_label, brand, USE.NAMES = FALSE))
-        lift_col_names <- c(lift_labels, brand_lift_col_names)
-      }
+      lift_col_names <- unlist(lapply(impact_shift_type, function(st) {
+        c(labels_for(st),
+          unlist(lapply(brand_levels, function(b) labels_for(st, b))))
+      }))
 
       # Helper: weighted frequency table (falls back to table() when weight is NULL)
       wtd_table <- function(x, w = NULL, levels = NULL) {
@@ -817,7 +814,7 @@ bn_impact_engine <- function(
       # (propdisplay, absdisplay) for each lift percent. Order must match
       # `lift_labels` above so the final column naming lines up.
       # `iv_name` is used to look up an optional scale_range override.
-      compute_lift_vals <- function(freq, dv_probs, iv_name = NULL) {
+      compute_lift_vals <- function(freq, dv_probs, iv_name = NULL, st) {
         if (sum(freq) < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
         p_observed <- as.numeric(freq) / sum(freq)
         observed_expected <- sum(dv_probs * p_observed)
@@ -826,13 +823,13 @@ bn_impact_engine <- function(
           use_sym <- (l == 0)
           if (use_sym) {
             p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05,
-              impact_shift_type = impact_shift_type, scale_range = sr)
+              impact_shift_type = st, scale_range = sr)
             p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05,
-              impact_shift_type = impact_shift_type, scale_range = sr)
+              impact_shift_type = st, scale_range = sr)
             lift_abs <- sum(dv_probs * p_up) - sum(dv_probs * p_down)
           } else {
             p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l,
-              impact_shift_type = impact_shift_type, scale_range = sr)
+              impact_shift_type = st, scale_range = sr)
             lift_abs <- sum(dv_probs * p_shifted) - observed_expected
           }
           # Proportional display = absolute lift scaled by the observed
@@ -858,7 +855,9 @@ bn_impact_engine <- function(
       compute_joint_lift_vals <- function(iv_vars, mask) {
         w_all <- if (!is.null(weight)) dat_boot[[weight]] else rep(1, nrow(dat_boot))
         w_s <- w_all[mask]
-        if (sum(w_s) < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
+        if (sum(w_s) < min_base_for_lift) {
+          return(lapply(impact_shift_type, function(st) rep(NA_real_, length(lift) * 2L)))
+        }
         members <- dat_boot[mask, iv_vars, drop = FALSE]
         freqs <- lapply(iv_vars, function(v) {
           wtd_table(members[[v]], w = if (is.null(weight)) NULL else w_s)
@@ -866,12 +865,12 @@ bn_impact_engine <- function(
         dv_s <- dv_emp_y[mask]
         e_obs <- stats::weighted.mean(dv_s, w_s)
 
-        targets_for <- function(l) {
+        targets_for <- function(l, st) {
           lapply(iv_vars, function(v) {
             fr <- freqs[[v]]
             sr <- if (!is.null(scale_ranges)) scale_ranges[[v]] else NULL
             tgt <- bn_freq_prob_shift(fr, type = "exponential", lift = l,
-              impact_shift_type = impact_shift_type, scale_range = sr) %>%
+              impact_shift_type = st, scale_range = sr) %>%
               as.numeric() %>% setNames(names(fr))
             tgt[as.numeric(fr) <= 0] <- 0
             tot <- sum(tgt)
@@ -879,30 +878,37 @@ bn_impact_engine <- function(
             tgt
           }) %>% setNames(iv_vars)
         }
-        e_raked <- function(l) {
-          r <- .bn_ipf_rake(members, w_s, targets_for(l))
+        e_raked <- function(l, st) {
+          r <- .bn_ipf_rake(members, w_s, targets_for(l, st))
           stats::weighted.mean(dv_s, r)
         }
 
-        purrr::map(lift, function(l) {
-          lift_abs <- if (l == 0) e_raked(0.05) - e_raked(-0.05) else e_raked(l) - e_obs
-          lift_prop <- if (is.finite(e_obs) && e_obs != 0) lift_abs / e_obs else NA_real_
-          c(lift_prop, lift_abs)   # (propdisplay, absdisplay)
-        }) %>% unlist()
+        # One list element per shift variant (freqs / dv_s / e_obs shared);
+        # each element interleaves (propdisplay, absdisplay) per lift.
+        lapply(impact_shift_type, function(st) {
+          purrr::map(lift, function(l) {
+            lift_abs <- if (l == 0) e_raked(0.05, st) - e_raked(-0.05, st) else e_raked(l, st) - e_obs
+            lift_prop <- if (is.finite(e_obs) && e_obs != 0) lift_abs / e_obs else NA_real_
+            c(lift_prop, lift_abs)   # (propdisplay, absdisplay)
+          }) %>% unlist()
+        })
       }
 
       lift_results <- temp_ivs_r %>%
         purrr::imap(function(iv_vars, iv_name) {
 
           if (!is.null(community_assignment) && community_lift == "joint") {
-            market_vals <- compute_joint_lift_vals(iv_vars, rep(TRUE, nrow(dat_boot)))
-            vals <- if (is.null(brand_levels)) {
-              market_vals
-            } else {
-              c(market_vals, purrr::map(brand_levels, function(b) {
-                compute_joint_lift_vals(iv_vars, dat_boot[[brand]] %in% b)
-              }) %>% unlist())
-            }
+            # Rake each focus scope once (per shift variant, inside), then
+            # assemble shift-block-major to match lift_col_names order.
+            scope_masks <- c(
+              list(rep(TRUE, nrow(dat_boot))),
+              if (is.null(brand_levels)) NULL else
+                lapply(brand_levels, function(b) dat_boot[[brand]] %in% b)
+            )
+            per_scope <- lapply(scope_masks, function(m) compute_joint_lift_vals(iv_vars, m))
+            vals <- unlist(lapply(seq_along(impact_shift_type), function(si) {
+              unlist(lapply(per_scope, function(ps) ps[[si]]))
+            }))
             return(dplyr::bind_cols(
               data.frame(variable = iv_name),
               as.data.frame(t(setNames(vals, lift_col_names)))
@@ -961,22 +967,23 @@ bn_impact_engine <- function(
               }
             }
 
-            # Market lift: always computed on full distribution
-            market_vals <- compute_lift_vals(freq_full, dv_probs, iv_name = single_iv)
+            # Brand frequency tables are shift-independent — build once,
+            # reuse across every shift variant.
+            brand_freqs <- if (is.null(brand_levels)) NULL else lapply(brand_levels, function(b) {
+              brand_mask <- dat_boot[[brand]] == b
+              w_b <- if (!is.null(weight)) dat_boot[[weight]][brand_mask] else NULL
+              wtd_table(dat_boot[[single_iv]][brand_mask], w = w_b, levels = levels_v)
+            })
 
-            if (is.null(brand_levels)) {
-              market_vals
-            } else {
-              # Per-brand lift appended after market lift
-              brand_vals <- purrr::map(brand_levels, function(b) {
-                brand_mask <- dat_boot[[brand]] == b
-                w_b <- if (!is.null(weight)) dat_boot[[weight]][brand_mask] else NULL
-                freq_b <- wtd_table(dat_boot[[single_iv]][brand_mask], w = w_b, levels = levels_v)
-                compute_lift_vals(freq_b, dv_probs, iv_name = single_iv)
-              }) %>%
-                unlist()
-              c(market_vals, brand_vals)
-            }
+            # Per shift variant: market lift on the full distribution, then
+            # per-brand lifts — matching lift_col_names block order.
+            unlist(lapply(impact_shift_type, function(st) {
+              market_vals <- compute_lift_vals(freq_full, dv_probs, iv_name = single_iv, st = st)
+              if (is.null(brand_levels)) return(market_vals)
+              c(market_vals, unlist(lapply(brand_freqs, function(freq_b) {
+                compute_lift_vals(freq_b, dv_probs, iv_name = single_iv, st = st)
+              })))
+            }))
           }) %>%
             do.call(rbind, .)
 
@@ -1244,6 +1251,11 @@ bn_impact_engine <- function(
       lift_cols <- lift_cols[!grepl("_mean$|_sd$|_ci_lo$|_ci_hi$", lift_cols)]
       # Market lift only (no brand suffix), absolute-display variant.
       market_lift_cols <- lift_cols[grep("^lift(_\\d+)?_absdisplay$", lift_cols)]
+      if (length(market_lift_cols) == 0) {
+        # One-pass tagged output: index on the propshift variant (matches
+        # the legacy behavior of indexing on the proportional-shift pass).
+        market_lift_cols <- lift_cols[grep("^lift(_\\d+)?_propshift_absdisplay$", lift_cols)]
+      }
       if (length(market_lift_cols) == 0) market_lift_cols <- lift_cols
       if (length(market_lift_cols) == 0) {
         warning("index_by = '", index_by, "': no lift columns found. Skipping index.")
