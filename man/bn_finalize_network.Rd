@@ -20,7 +20,7 @@ bn_finalize_network(
   weight = NULL,
   dv_metric = c("mean", "top_box"),
   min_base_for_calc = 100,
-  n_boot_final = 100,
+  mi_n_boot = 100,
   do_impacts = TRUE,
   impact_type = c("gr", "cp", "mi"),
   impact_index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
@@ -54,7 +54,8 @@ bn_finalize_network(
   viz_include_dv = FALSE,
   model_parallel = FALSE,
   impact_parallel = TRUE,
-  seed = 1
+  seed = 1,
+  n_boot_final = NULL
 )
 }
 \arguments{
@@ -102,9 +103,13 @@ Default \code{"mean"}.}
 calculations in \code{bn_impacts()} and for bootstrap p-values in
 \code{bn_prioritizations()}. Default 100.}
 
-\item{n_boot_final}{Integer. Bootstrap replicates used for community MI
-in \code{bn_impacts()} and for p-values in \code{bn_prioritizations()}.
-Default 100.}
+\item{mi_n_boot}{Integer. Bootstrap replicates for the nested
+community-MI bootstrap in \code{bn_impacts()} (the
+\code{mi_boot_lower} / \code{mi_boot_upper} CI columns) and for
+p-values in \code{bn_prioritizations()}. Runs INSIDE each
+\code{impact_n_boot} replicate for community MI, so it multiplies
+community-stage runtime. Renamed from \code{n_boot_final} on
+2026-07-29. Default 100.}
 
 \item{do_impacts}{Logical. If TRUE, run \code{bn_impacts()} to produce full
 attribute/community, weighted/unweighted impact tables. Default TRUE.}
@@ -227,6 +232,10 @@ Default FALSE.}
 estimation. Default TRUE.}
 
 \item{seed}{Integer. Random seed. Default 1.}
+
+\item{n_boot_final}{Deprecated alias for \code{mi_n_boot}. If supplied,
+a warning is issued and its value is used unless \code{mi_n_boot} is
+also given explicitly.}
 }
 \value{
 A list with:

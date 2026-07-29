@@ -34,9 +34,16 @@
 #' @param min_base_for_calc Integer. Minimum sample size for brand lift
 #'   calculations in \code{bn_impacts()} and for bootstrap p-values in
 #'   \code{bn_prioritizations()}. Default 100.
-#' @param n_boot_final Integer. Bootstrap replicates used for community MI
-#'   in \code{bn_impacts()} and for p-values in \code{bn_prioritizations()}.
-#'   Default 100.
+#' @param mi_n_boot Integer. Bootstrap replicates for the nested
+#'   community-MI bootstrap in \code{bn_impacts()} (the
+#'   \code{mi_boot_lower} / \code{mi_boot_upper} CI columns) and for
+#'   p-values in \code{bn_prioritizations()}. Runs INSIDE each
+#'   \code{impact_n_boot} replicate for community MI, so it multiplies
+#'   community-stage runtime. Renamed from \code{n_boot_final} on
+#'   2026-07-29. Default 100.
+#' @param n_boot_final Deprecated alias for \code{mi_n_boot}. If supplied,
+#'   a warning is issued and its value is used unless \code{mi_n_boot} is
+#'   also given explicitly.
 #' @param do_impacts Logical. If TRUE, run \code{bn_impacts()} to produce full
 #'   attribute/community, weighted/unweighted impact tables. Default TRUE.
 #' @param impact_type Character. Impact estimation type: \code{"gr"},
@@ -166,7 +173,7 @@ bn_finalize_network <- function(
     # --- Model ---
     dv_metric = c("mean", "top_box"),
     min_base_for_calc = 100,
-    n_boot_final = 100,
+    mi_n_boot = 100,
     # --- Impact ---
     do_impacts = TRUE,
     impact_type = c("gr", "cp", "mi"),
@@ -227,7 +234,9 @@ bn_finalize_network <- function(
     # --- Parallel ---
     model_parallel = FALSE,
     impact_parallel = TRUE,
-    seed = 1
+    seed = 1,
+    # Deprecated alias for mi_n_boot (renamed 2026-07-29).
+    n_boot_final = NULL
 ){
 
   node_label_type <- match.arg(node_label_type)
@@ -235,6 +244,14 @@ bn_finalize_network <- function(
   impact_readoff <- match.arg(impact_readoff)
   community_lift <- match.arg(community_lift)
   max_impact_anchor <- match.arg(max_impact_anchor)
+
+  if (!is.null(n_boot_final)) {
+    cli::cli_warn(c(
+      "!" = "{.arg n_boot_final} is deprecated; use {.arg mi_n_boot}.",
+      "i" = "It sets the nested community-MI bootstrap (and prioritization p-values)."
+    ))
+    if (missing(mi_n_boot)) mi_n_boot <- n_boot_final
+  }
   prioritize_shift_type <- match.arg(prioritize_shift_type)
   dv_metric <- match.arg(dv_metric)
 
@@ -528,7 +545,7 @@ bn_finalize_network <- function(
       include_base = impact_include_base,
       dv_metric = dv_metric,
       weight = weight,
-      mi_boot = n_boot_final,
+      mi_boot = mi_n_boot,
       scale_ranges = scale_ranges,
       use_parallel = impact_parallel,
       boot_nonzero = boot_nonzero,
@@ -559,7 +576,7 @@ bn_finalize_network <- function(
       impact_shift_type = prioritize_shift_type,
       threshold = prioritize_threshold,
       max_rounds = prioritize_max_rounds,
-      n_boot_final = n_boot_final,
+      n_boot_final = mi_n_boot,
       noise_tail = prioritize_noise_tail,
       sig_threshold = prioritize_sig_threshold,
       marginal_threshold = prioritize_marginal_threshold,
