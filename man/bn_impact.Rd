@@ -77,7 +77,7 @@ community metric across all subgroups and shift variants; ignored when
 \code{do_community = FALSE}. See \code{\link{bn_impact_engine}}.}
 
 \item{impact_readoff}{Character. \code{"empirical"} (default) reads
-E\link{DV | IV = level} for the lift metrics directly from the data;
+E[DV | IV = level] for the lift metrics directly from the data;
 \code{"model"} uses the fitted network's conditionals - the methodology
 used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.}
 

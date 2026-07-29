@@ -66,7 +66,7 @@ NULL includes all attributes. Errors if a declared battery matches no IV.
 Attribute-level tables are never affected.}
 
 \item{impact_readoff}{Character. \code{"empirical"} (default) reads
-E\link{DV | IV = level} for the lift metrics directly from the data;
+E[DV | IV = level] for the lift metrics directly from the data;
 \code{"model"} uses the fitted network's conditionals - the methodology
 used prior to 2026-07-28. Applies to attribute and community lift
 columns alike. See \code{\link{bn_impact_engine}}.}

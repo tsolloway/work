@@ -31,7 +31,7 @@
 #'   Applies to every community metric (lift, maxVmin, MI, base); ignored when
 #'   \code{do_community = FALSE}.
 #' @param impact_readoff Character. Where the per-level DV expectation
-#'   E[DV | IV = level] used by the lift metrics comes from.
+#'   E\[DV | IV = level\] used by the lift metrics comes from.
 #'   \code{"empirical"} (default): weighted conditional means computed
 #'   directly from the (resampled) data - deterministic, no inference
 #'   queries. \code{"model"}: the fitted network's conditional via
@@ -57,7 +57,7 @@
 #'   least \code{max_impact_min_support} respondents - for a single
 #'   attribute, the max/min scale levels among supported levels (sign
 #'   semantics preserved); for a community, the observed joint member
-#'   profiles with the highest/lowest empirical weighted E[DV]. Anchor
+#'   profiles with the highest/lowest empirical weighted E\[DV\]. Anchor
 #'   selection is always empirical; the anchor VALUES are then read per
 #'   \code{impact_readoff} (\code{"model"} queries the network at the two
 #'   chosen observed anchors). \code{"theoretical"}: hypothetical
@@ -71,7 +71,7 @@
 #'   Default 5.
 #' @param max_impact_shrinkage Numeric >= 0. Empirical-Bayes prior weight
 #'   used under \code{max_impact_anchor = "observed"}: each anchor
-#'   candidate's E[DV] is shrunk toward the scope mean with this many
+#'   candidate's E\[DV\] is shrunk toward the scope mean with this many
 #'   pseudo-respondents before ranking (and, under
 #'   \code{impact_readoff = "empirical"}, before reading the anchor
 #'   values). Guards the Best-vs-Worst argmax against winner's curse -
