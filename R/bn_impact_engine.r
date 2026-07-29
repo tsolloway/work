@@ -828,22 +828,40 @@ bn_impact_engine <- function(
       # (propdisplay, absdisplay) for each lift percent. Order must match
       # `lift_labels` above so the final column naming lines up.
       # `iv_name` is used to look up an optional scale_range override.
-      compute_lift_vals <- function(freq, dv_probs, iv_name = NULL, st) {
+      compute_lift_vals <- function(freq, dv_probs, iv_name = NULL, st,
+                                    unsupported = NULL) {
         if (sum(freq) < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
         p_observed <- as.numeric(freq) / sum(freq)
         observed_expected <- sum(dv_probs * p_observed)
         sr <- if (!is.null(scale_ranges) && !is.null(iv_name)) scale_ranges[[iv_name]] else NULL
+        # `unsupported` marks levels whose empirical DV conditional does not
+        # exist (zero rows in this resample - e.g. a rare bottom level the
+        # draw missed; dv_probs was zero-filled there). bn_freq_prob_shift
+        # floors empty cells at ~1e-6, so negligible mass there is stripped
+        # and the target renormalized; a shift that demands REAL mass (> 1%)
+        # on an unsupported level is empirically unestimable for this
+        # replicate - clean_shift returns NULL and the lift records NA.
+        clean_shift <- function(p) {
+          p <- as.numeric(p)
+          if (is.null(unsupported) || !any(unsupported)) return(p)
+          excess <- sum(p[unsupported])
+          if (!is.finite(excess) || excess > 0.01) return(NULL)
+          p[unsupported] <- 0
+          p / sum(p)
+        }
         purrr::map(lift, function(l) {
           use_sym <- (l == 0)
           if (use_sym) {
-            p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05,
-              impact_shift_type = st, scale_range = sr)
-            p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05,
-              impact_shift_type = st, scale_range = sr)
+            p_up   <- clean_shift(bn_freq_prob_shift(freq, type = "exponential", lift = 0.05,
+              impact_shift_type = st, scale_range = sr))
+            p_down <- clean_shift(bn_freq_prob_shift(freq, type = "exponential", lift = -0.05,
+              impact_shift_type = st, scale_range = sr))
+            if (is.null(p_up) || is.null(p_down)) return(c(NA_real_, NA_real_))
             lift_abs <- sum(dv_probs * p_up) - sum(dv_probs * p_down)
           } else {
-            p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l,
-              impact_shift_type = st, scale_range = sr)
+            p_shifted <- clean_shift(bn_freq_prob_shift(freq, type = "exponential", lift = l,
+              impact_shift_type = st, scale_range = sr))
+            if (is.null(p_shifted)) return(c(NA_real_, NA_real_))
             lift_abs <- sum(dv_probs * p_shifted) - observed_expected
           }
           # Proportional display = absolute lift scaled by the observed
@@ -967,6 +985,15 @@ bn_impact_engine <- function(
                   stats::weighted.mean(dv_emp_y[mask], w_vec[mask])
                 }
               })
+              # A retained factor level with zero rows in this resample
+              # (rare bottom levels under bootstrap) yields mean(empty) =
+              # NaN, and 0 * NaN would poison every lift sum even though
+              # the level carries no mass. Zero-fill and remember which
+              # levels are unsupported; compute_lift_vals NAs only the
+              # shifts that put real target mass on them. Model read-off
+              # never hits this (smoothed conditionals exist everywhere).
+              unsupported_lv <- !is.finite(dv_probs)
+              dv_probs[unsupported_lv] <- 0
             } else if (type == "gr") {
               dv_probs <- purrr::map_dbl(levels_v, function(v) {
                 ev <- stats::setNames(list(v), single_iv)
@@ -1011,11 +1038,14 @@ bn_impact_engine <- function(
 
             # Per shift variant: market lift on the full distribution, then
             # per-brand lifts — matching lift_col_names block order.
+            unsup <- if (impact_readoff == "empirical") unsupported_lv else NULL
             unlist(lapply(impact_shift_type, function(st) {
-              market_vals <- compute_lift_vals(freq_full, dv_probs, iv_name = single_iv, st = st)
+              market_vals <- compute_lift_vals(freq_full, dv_probs, iv_name = single_iv,
+                                               st = st, unsupported = unsup)
               if (is.null(brand_levels)) return(market_vals)
               c(market_vals, unlist(lapply(brand_freqs, function(freq_b) {
-                compute_lift_vals(freq_b, dv_probs, iv_name = single_iv, st = st)
+                compute_lift_vals(freq_b, dv_probs, iv_name = single_iv,
+                                  st = st, unsupported = unsup)
               })))
             }))
           }) %>%
