@@ -30,6 +30,17 @@
 #'   Errors if a declared battery matches no IV in the community assignment.
 #'   Applies to every community metric (lift, maxVmin, MI, base); ignored when
 #'   \code{do_community = FALSE}.
+#' @param impact_readoff Character. Where the per-level DV expectation
+#'   E[DV | IV = level] used by the lift metrics comes from.
+#'   \code{"empirical"} (default): weighted conditional means computed
+#'   directly from the (resampled) data - deterministic, no inference
+#'   queries. \code{"model"}: the fitted network's conditional via
+#'   \code{gRain::querygrain()} / \code{bnlearn::cpquery()} - this was the
+#'   methodology used prior to 2026-07-28. In networks built with direct
+#'   DV connections (\code{all_ivs_connect_to_dv = TRUE}) the two are
+#'   numerically near-identical; they can diverge when IVs connect to the
+#'   DV only through other nodes. Does not affect the maxVmin family
+#'   (see \code{max_impact_anchor}) or MI.
 #' @param lift Numeric scalar or vector. Target percentage lift(s) for
 #'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
 #'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
@@ -226,6 +237,7 @@ bn_impact_engine <- function(
     do_community = FALSE,
     community_assignment = NULL,
     community_impact_attributes = NULL,
+    impact_readoff = c("empirical", "model"),
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -248,6 +260,7 @@ bn_impact_engine <- function(
   index_by <- match.arg(index_by)
   impact_shift_type <- match.arg(impact_shift_type)
   dv_metric <- match.arg(dv_metric)
+  impact_readoff <- match.arg(impact_readoff)
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
   # ---------------------------
@@ -563,6 +576,20 @@ bn_impact_engine <- function(
 
       if(!is.null(community_assignment)) temp_ivs_r <- community_assignment else temp_ivs_r <- ivs %>% setNames(ivs)
 
+      # impact_readoff = "empirical": the DV as a per-respondent numeric
+      # outcome (scale value, or top-box indicator), read once for the whole
+      # lift block. Conditional means over this vector replace the
+      # querygrain/cpquery model conditionals ("model" = pre-2026-07-28
+      # methodology).
+      if (impact_readoff == "empirical") {
+        dv_emp_num <- dat_boot[[dv]] %>% as.character() %>% as.numeric()
+        dv_emp_y <- if (dv_metric == "top_box") {
+          as.numeric(dv_emp_num == max(dv_emp_num, na.rm = TRUE))
+        } else {
+          dv_emp_num
+        }
+      }
+
       multi_lift <- length(lift) > 1
       lift_labels_base <- if (multi_lift) paste0("lift_", round(lift * 100)) else "lift"
       # Emit both outcome-display variants per lift percent. Order per lift
@@ -659,10 +686,19 @@ bn_impact_engine <- function(
             freq_full <- wtd_table(dat_boot[[single_iv]], w = w_vec)
             levels_v <- names(freq_full)
 
-            # Query DV distribution per IV level (shared across brands)
+            # DV expectation per IV level (shared across brands)
             # dv_metric = "top_box": P(DV_max | IV=v)
             # dv_metric = "mean":    E[DV | IV=v] = Σ d × P(DV=d | IV=v)
-            if (type == "gr") {
+            if (impact_readoff == "empirical") {
+              dv_probs <- purrr::map_dbl(levels_v, function(v) {
+                mask <- dat_boot[[single_iv]] == v
+                if (is.null(w_vec)) {
+                  mean(dv_emp_y[mask])
+                } else {
+                  stats::weighted.mean(dv_emp_y[mask], w_vec[mask])
+                }
+              })
+            } else if (type == "gr") {
               dv_probs <- purrr::map_dbl(levels_v, function(v) {
                 ev <- stats::setNames(list(v), single_iv)
                 dist <- gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE)

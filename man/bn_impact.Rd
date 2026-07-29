@@ -14,6 +14,7 @@ bn_impact(
   do_community = FALSE,
   community_assignment = NULL,
   community_impact_attributes = NULL,
+  impact_readoff = c("empirical", "model"),
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -70,6 +71,11 @@ when computing community-level impacts. Default NULL includes all
 attributes. Errors if a declared battery matches no IV. Applies to every
 community metric across all subgroups and shift variants; ignored when
 \code{do_community = FALSE}. See \code{\link{bn_impact_engine}}.}
+
+\item{impact_readoff}{Character. \code{"empirical"} (default) reads
+E\link{DV | IV = level} for the lift metrics directly from the data;
+\code{"model"} uses the fitted network's conditionals - the methodology
+used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.}
 
 \item{lift}{Numeric vector. Target lift(s) for the shifted-distribution
 metric (both proportional and absolute shift variants are precomputed).

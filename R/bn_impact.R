@@ -86,6 +86,10 @@
 #'   attributes. Errors if a declared battery matches no IV. Applies to every
 #'   community metric across all subgroups and shift variants; ignored when
 #'   \code{do_community = FALSE}. See \code{\link{bn_impact_engine}}.
+#' @param impact_readoff Character. \code{"empirical"} (default) reads
+#'   E[DV | IV = level] for the lift metrics directly from the data;
+#'   \code{"model"} uses the fitted network's conditionals - the methodology
+#'   used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Target lift(s) for the shifted-distribution
 #'   metric (both proportional and absolute shift variants are precomputed).
 #'   Default \code{c(0, 0.1)}.
@@ -212,6 +216,7 @@ bn_impact <- function(
     do_community = FALSE,
     community_assignment = NULL,
     community_impact_attributes = NULL,
+    impact_readoff = c("empirical", "model"),
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -234,6 +239,7 @@ bn_impact <- function(
   type <- match.arg(type)
   index_by <- match.arg(index_by)
   dv_metric <- match.arg(dv_metric)
+  impact_readoff <- match.arg(impact_readoff)
 
   # Preserve named dv for meta, strip for bnlearn
   dv_original <- dv
@@ -338,6 +344,7 @@ bn_impact <- function(
         do_community = do_community,
         community_assignment = community_assignment,
         community_impact_attributes = community_impact_attributes,
+        impact_readoff = impact_readoff,
         type = type,
         index_by = index_by,
         n_boot = n_boot,
@@ -385,6 +392,7 @@ bn_impact <- function(
       do_community = do_community,
       community_assignment = community_assignment,
       community_impact_attributes = community_impact_attributes,
+      impact_readoff = impact_readoff,
       type = type,
       index_by = index_by,
       n_boot = n_boot,

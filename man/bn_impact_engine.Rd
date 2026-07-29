@@ -12,6 +12,7 @@ bn_impact_engine(
   do_community = FALSE,
   community_assignment = NULL,
   community_impact_attributes = NULL,
+  impact_readoff = c("empirical", "model"),
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -60,6 +61,18 @@ name with the trailing \code{"_<number>"} suffix removed
 Errors if a declared battery matches no IV in the community assignment.
 Applies to every community metric (lift, maxVmin, MI, base); ignored when
 \code{do_community = FALSE}.}
+
+\item{impact_readoff}{Character. Where the per-level DV expectation
+E\link{DV | IV = level} used by the lift metrics comes from.
+\code{"empirical"} (default): weighted conditional means computed
+directly from the (resampled) data - deterministic, no inference
+queries. \code{"model"}: the fitted network's conditional via
+\code{gRain::querygrain()} / \code{bnlearn::cpquery()} - this was the
+methodology used prior to 2026-07-28. In networks built with direct
+DV connections (\code{all_ivs_connect_to_dv = TRUE}) the two are
+numerically near-identical; they can diverge when IVs connect to the
+DV only through other nodes. Does not affect the maxVmin family
+(see \code{max_impact_anchor}) or MI.}
 
 \item{lift}{Numeric scalar or vector. Target percentage lift(s) for
 distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each

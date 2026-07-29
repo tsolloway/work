@@ -31,6 +31,7 @@ bn_finalize_network(
   prioritize_shift_type = c("headroom", "proportional", "absolute", "range"),
   impact_include_base = TRUE,
   community_impact_attributes = NULL,
+  impact_readoff = c("empirical", "model"),
   batteries = NULL,
   battery_groups = NULL,
   do_prioritizations = TRUE,
@@ -141,6 +142,11 @@ attributes. Errors before model estimation if a declared battery matches
 no IV. Flows through \code{bn_impacts()} to every community metric in
 both the unweighted and weighted community tables; attribute-level
 tables (and their per-battery dashboard cuts) are never affected.}
+
+\item{impact_readoff}{Character. \code{"empirical"} (default) reads
+E\link{DV | IV = level} for the lift metrics directly from the data;
+\code{"model"} uses the fitted network's conditionals - the methodology
+used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.}
 
 \item{do_prioritizations}{Logical. If TRUE, run \code{bn_prioritizations()}
 to produce prioritization analysis. Default TRUE.}

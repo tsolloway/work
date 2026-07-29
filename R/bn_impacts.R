@@ -23,6 +23,11 @@
 #'   (lift, maxVmin, MI, base) across all subgroups and shift types. Default
 #'   NULL includes all attributes. Errors if a declared battery matches no IV.
 #'   Attribute-level tables are never affected.
+#' @param impact_readoff Character. \code{"empirical"} (default) reads
+#'   E[DV | IV = level] for the lift metrics directly from the data;
+#'   \code{"model"} uses the fitted network's conditionals - the methodology
+#'   used prior to 2026-07-28. Applies to attribute and community lift
+#'   columns alike. See \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size for brand lift.
 #'   Default 75.
@@ -78,6 +83,7 @@ bn_impacts <- function(
     do_community = TRUE,
     community_assignment = NULL,
     community_impact_attributes = NULL,
+    impact_readoff = c("empirical", "model"),
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -120,6 +126,7 @@ bn_impacts <- function(
     obj = obj, df = df, dv = dv, ivs = ivs,
     do_community = FALSE,
     community_assignment = community_assignment,
+    impact_readoff = impact_readoff,
     type = type, index_by = index_by,
     process_subgroups = process_subgroups,
     dictionary = dictionary,
@@ -146,6 +153,7 @@ bn_impacts <- function(
       obj = obj, df = df, dv = dv, ivs = ivs,
       do_community = FALSE,
       community_assignment = community_assignment,
+      impact_readoff = impact_readoff,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -176,6 +184,7 @@ bn_impacts <- function(
       do_community = TRUE,
       community_assignment = community_assignment,
       community_impact_attributes = community_impact_attributes,
+      impact_readoff = impact_readoff,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -202,6 +211,7 @@ bn_impacts <- function(
         do_community = TRUE,
         community_assignment = community_assignment,
         community_impact_attributes = community_impact_attributes,
+        impact_readoff = impact_readoff,
         type = type, index_by = index_by,
         process_subgroups = process_subgroups,
         dictionary = dictionary,
