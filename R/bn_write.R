@@ -89,6 +89,9 @@
 #'   are written as-is, and any table exceeding 16,384 columns aborts with
 #'   an error rather than producing a corrupt workbook.
 #'
+#' @param sig_highlight_threshold Numeric. P-value above which impact cells
+#'   are highlighted as insignificant (black-cell blackout in the Excel
+#'   dashboards and HTML report, and the footnote text). Default 0.1.
 #' @return A list (invisibly) with:
 #'   * `path` — full path of the written `.xlsx` file.
 #'   * `obj` — the `bn_finalize_network()` object that was passed in (pass-through
@@ -167,7 +170,9 @@ bn_write <- function(
     # Forwarded to bn_impact_write.
     color_gradient_resondex = TRUE,
     path = ".",
-    trim_wb = TRUE
+    trim_wb = TRUE,
+    sig_highlight_threshold = 0.1
+
 ) {
 
   wb_type <- match.arg(wb_type)
@@ -246,6 +251,7 @@ bn_write <- function(
 
   if (has_impacts) {
     wb <- bn_impact_write(
+      sig_highlight_threshold = sig_highlight_threshold,
       bn_impact_result   = impacts,
       bn_obj             = obj,
       df                 = df,

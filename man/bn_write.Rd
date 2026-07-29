@@ -38,7 +38,8 @@ bn_write(
   prioritize_display = NULL,
   color_gradient_resondex = TRUE,
   path = ".",
-  trim_wb = TRUE
+  trim_wb = TRUE,
+  sig_highlight_threshold = 0.1
 )
 }
 \arguments{
@@ -143,6 +144,10 @@ keeping all 7 stats easily pushes per-sheet column counts past Excel's
 happens on a copy local to the writer. When \code{FALSE}, the full tables
 are written as-is, and any table exceeding 16,384 columns aborts with
 an error rather than producing a corrupt workbook.}
+
+\item{sig_highlight_threshold}{Numeric. P-value above which impact cells
+are highlighted as insignificant (black-cell blackout in the Excel
+dashboards and HTML report, and the footnote text). Default 0.1.}
 }
 \value{
 A list (invisibly) with:

@@ -24,6 +24,9 @@
 #'   scale (\code{#f66a6e, #feea8a, #66bd7d}). Pass FALSE for legacy
 #'   workbooks where stakeholders expect the old colour treatment.
 #'
+#' @param sig_highlight_threshold Numeric. P-value above which impact cells
+#'   are highlighted as insignificant (black-cell blackout in the Excel
+#'   dashboards and HTML report, and the footnote text). Default 0.1.
 #' @return Modified workbook object.
 #'
 #' @export
@@ -38,7 +41,8 @@ append_bn_impact <- function(
     variable_width = 20,
     label_width = "auto",
     index_by = "lift_first",
-    color_gradient_resondex = TRUE
+    color_gradient_resondex = TRUE,
+    sig_highlight_threshold = 0.1
 ){
 
   if (is.null(wb)) wb <- oxl_create_workbook()
@@ -199,7 +203,7 @@ append_bn_impact <- function(
   openxlsx::writeData(wb, sheet_name, write_total, startRow = total_impact_row, startCol = col_data_start, colNames = FALSE)
   openxlsx::writeData(wb, sheet_name, footer, startRow = total_impact_row + 1, startCol = col_data_start)
   openxlsx::writeData(wb, sheet_name, "Bold italicized red index means a negative relationship", startRow = total_impact_row + 2, startCol = col_data_start)
-  openxlsx::writeData(wb, sheet_name, "Black cells mean an insignificant relationship", startRow = total_impact_row + 3, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, paste0("Black cells mean an insignificant relationship (p > ", sig_highlight_threshold, ")"), startRow = total_impact_row + 3, startCol = col_data_start)
   if (length(cols_to_hide) > 0) {
     openxlsx::setColWidths(wb, sheet_name, cols = cols_to_hide, widths = 8.43, hidden = rep(TRUE, length(cols_to_hide)))
   }
@@ -293,7 +297,7 @@ append_bn_impact <- function(
 
       if (length(p_col_pos) == 1) {
         p_excel_col <- p_col_pos + (col_data_start - 1)
-        p_formula <- paste0(num2let(p_excel_col), data_rows[1], " > .1")
+        p_formula <- paste0(num2let(p_excel_col), data_rows[1], " > ", sig_highlight_threshold)
         openxlsx::conditionalFormatting(wb, sheet_name, cols = i, rows = data_rows,
           style = styles$insig, type = "expression", rule = p_formula)
       }

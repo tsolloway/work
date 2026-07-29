@@ -116,6 +116,9 @@
 #'   so the displayed integer indices aren't shadowed by scientific-notation
 #'   hover text. Default `FALSE`.
 #'
+#' @param sig_highlight_threshold Numeric. P-value above which impact cells
+#'   are highlighted as insignificant (black-cell blackout in the Excel
+#'   dashboards and HTML report, and the footnote text). Default 0.1.
 #' @return The file path (invisibly).
 #'
 #' @examples
@@ -159,6 +162,7 @@ bn_report <- function(
     impact_outcome_display = NULL,
     shift_type      = c("absolute", "proportional", "headroom", "range"),
     add_prioritization_pvalue = FALSE,
+    sig_highlight_threshold = 0.1,
     prioritize_display = NULL,
     trim_wb = TRUE
 ){
@@ -290,6 +294,10 @@ bn_report <- function(
     # add_additional_results = TRUE.
     shared_scripts <- character(0)
     impacts_res <- result[["impacts"]]
+    if (!is.null(impacts_res)) {
+      if (is.null(impacts_res[["meta"]])) impacts_res[["meta"]] <- list()
+      impacts_res[["meta"]][["sig_highlight_threshold"]] <- sig_highlight_threshold
+    }
     if (isTRUE(trim_wb)) {
       impacts_res <- .bn_impact_drop_unused_boot_stats(impacts_res)
     } else {

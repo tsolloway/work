@@ -28,6 +28,7 @@ bn_report(
   impact_outcome_display = NULL,
   shift_type = c("absolute", "proportional", "headroom", "range"),
   add_prioritization_pvalue = FALSE,
+  sig_highlight_threshold = 0.1,
   prioritize_display = NULL,
   trim_wb = TRUE
 )
@@ -145,6 +146,10 @@ impact table emitted the corresponding shift variant.}
 dashboard table includes its \code{p-value} column (current behavior). If
 \code{FALSE} (default), the p-value column is removed from the prioritization
 table.}
+
+\item{sig_highlight_threshold}{Numeric. P-value above which impact cells
+are highlighted as insignificant (black-cell blackout in the Excel
+dashboards and HTML report, and the footnote text). Default 0.1.}
 
 \item{prioritize_display}{Character or \code{NULL}. Initial value of the
 prioritization Display dropdown — \code{"Point Change"} or \code{"\% Change"}.

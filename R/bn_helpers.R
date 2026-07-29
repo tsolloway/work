@@ -210,6 +210,7 @@
   meta <- impacts[["meta"]] %||% list()
   has_weights <- !is.null(tbl_w)
   min_base_for_lift <- meta[["min_base_for_lift"]] %||% 75L
+  sig_highlight_threshold <- meta[["sig_highlight_threshold"]] %||% 0.1
 
   all_cols <- names(tbl)
   sgs <- meta[["subgroups"]]
@@ -329,6 +330,7 @@
     meta                = meta,
     has_weights         = has_weights,
     min_base_for_lift   = min_base_for_lift,
+    sig_highlight_threshold = sig_highlight_threshold,
     is_dichotomous_dv   = is_dichotomous_dv,
     sgs                 = sgs,
     metric_info         = metric_info,
@@ -1212,6 +1214,7 @@
   meta                <- m$meta
   has_weights         <- m$has_weights
   min_base_for_lift   <- m$min_base_for_lift
+  sig_highlight_threshold <- m$sig_highlight_threshold %||% 0.1
   is_dichotomous_dv   <- m$is_dichotomous_dv
   sgs                 <- m$sgs
   metric_info         <- m$metric_info
@@ -1297,6 +1300,7 @@
     # of the static MI chi-squared p_val.
     boot_applied      = any(grepl("_p_value$", all_cols)),
     min_base_for_lift = as.integer(min_base_for_lift),
+    sig_highlight_threshold = sig_highlight_threshold,
     qc_mode           = isTRUE(qc_mode),
     rows_unweighted   = .flatten(tbl),
     rows_weighted     = if (has_weights) .flatten(tbl_w) else NULL
@@ -1596,7 +1600,7 @@
     'maxima are not simultaneously achievable, so read it as a theoretical ',
     'upper bound &#8212; not an expected outcome.</p>',
     '    <p class="muted">Bold italicized red index means a negative relationship. ',
-    'Black cells mean an insignificant relationship (p &gt; 0.10). ',
+    'Black cells mean an insignificant relationship (p &gt; ', sig_highlight_threshold, '). ',
     'Lift impacts are not calculated when the base is below ', min_base_for_lift, '.</p>',
     '  </div>',
     if (is.null(shared_data_id)) {
@@ -3060,7 +3064,8 @@
     '    } else {',
     '      pv = sgData.p_val;',
     '    }',
-    '    return (pv != null && pv > 0.10);',
+    '    var sigThr = (data.sig_highlight_threshold != null) ? data.sig_highlight_threshold : 0.10;',
+    '    return (pv != null && pv > sigThr);',
     '  }',
     '',
     '  function getRaw(row, sg, focus) {',
