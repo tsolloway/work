@@ -28,6 +28,7 @@ seg_cluster_with_profiles(
   force_inputs = NULL,
   remove_nzv = TRUE,
   cor_threshold = 0.9,
+  seed = 1,
   keep_raw = FALSE
 )
 }
@@ -99,6 +100,12 @@ profile variables before clustering via \code{\link[caret:nearZeroVar]{caret::ne
 \item{cor_threshold}{Numeric or \code{NULL}. If numeric, removes collinear profile
 variables where \verb{|r|} exceeds this threshold via \code{\link[caret:findCorrelation]{caret::findCorrelation()}}.
 Default: \code{0.90}. Set to \code{NULL} to skip.}
+
+\item{seed}{Integer or \code{NULL}. Random seed for reproducibility (default: \code{1}),
+passed to \code{\link[=cluster_kmeans]{cluster_kmeans()}}. \code{NULL} skips seeding, making k-means depend on
+ambient RNG state. Note that the greedy polar selection in
+\code{\link[=get_greedy_vars]{get_greedy_vars()}} seeds itself at \code{1} regardless of this argument, so
+varying \code{seed} re-rolls the k-means starts but not the input selection.}
 }
 \value{
 The seg object with updated \code{seg$solutions$analysis[[solution_name]]},

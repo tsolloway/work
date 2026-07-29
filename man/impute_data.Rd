@@ -7,6 +7,8 @@
 impute_data(
   df,
   vars,
+  id = NULL,
+  weight = NULL,
   threshold_impute = 0.8,
   make_factor = TRUE,
   un_make_factor = FALSE
@@ -17,6 +19,15 @@ impute_data(
 
 \item{vars}{Character vector (or named list of character vectors) specifying
 the columns to impute. Lists are flattened and names are stripped.}
+
+\item{id}{Name of the row-id column used to re-join \code{weight} after
+imputation. Default \code{NULL}, which is treated as \code{"uuid_stack"}. Only used
+when \code{weight} is supplied.}
+
+\item{weight}{Name of a weight column. Default \code{NULL}. If supplied, the
+weight is set aside before imputation (so it is excluded from the
+completeness filter and the BN), then joined back by \code{id} and placed
+after \code{brand_name} (or after \code{id} if \code{brand_name} is absent).}
 
 \item{threshold_impute}{Numeric 0-1. Minimum proportion of non-missing
 values a row must have to be kept. Rows below this threshold are dropped
@@ -54,5 +65,7 @@ The imputation workflow:
 \item Impute missing values in the full (filtered) subset.
 \item Re-attach non-\code{vars} columns.
 \item Optionally convert back to numeric (\code{un_make_factor}).
+\item If \code{weight} was supplied, join it back by \code{id} and relocate it after
+\code{brand_name}.
 }
 }

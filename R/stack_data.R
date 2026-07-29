@@ -10,6 +10,8 @@
 #' @param brand_table Data frame with `id` and `name` columns defining brands.
 #'   Row order must match the column order within each `instructions` entry.
 #' @param labels Named character vector of variable labels (names = var names).
+#'   Also consulted for variables created via `dv_mutates` / `ivs_mutates`;
+#'   mutate-created variables without an entry get a title-cased fallback.
 #' @param uuid_flat Name of the respondent ID column in `df`.
 #' @param dv Character vector of variable names (from `instructions`) to tag as
 #'   dependent variables in the dictionary.
@@ -230,7 +232,11 @@ stack_data <- function(
 
     new_dict_rows <- tibble::tibble(
       var = new_dvs,
-      label = new_dvs %>% gsub("_", " ", .) %>% stringr::str_to_title(),
+      # Prefer a label supplied via `labels`; fall back to a title-cased name
+      label = dplyr::coalesce(
+        unname(labels[new_dvs]),
+        new_dvs %>% gsub("_", " ", .) %>% stringr::str_to_title()
+      ),
       id = FALSE,
       subgroup = FALSE,
       assigner = FALSE,
@@ -254,7 +260,11 @@ stack_data <- function(
 
     new_dict_rows <- tibble::tibble(
       var = new_ivs,
-      label = new_ivs %>% gsub("_", " ", .) %>% stringr::str_to_title(),
+      # Prefer a label supplied via `labels`; fall back to a title-cased name
+      label = dplyr::coalesce(
+        unname(labels[new_ivs]),
+        new_ivs %>% gsub("_", " ", .) %>% stringr::str_to_title()
+      ),
       id = FALSE,
       subgroup = FALSE,
       assigner = FALSE,

@@ -13,6 +13,7 @@ bn_impact(
   process_subgroups = TRUE,
   do_community = FALSE,
   community_assignment = NULL,
+  community_impact_attributes = NULL,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -28,6 +29,7 @@ bn_impact(
   verbose = TRUE,
   use_parallel = TRUE,
   scale_ranges = NULL,
+  boot_nonzero = FALSE,
   seed = 1
 )
 }
@@ -61,6 +63,13 @@ If \code{FALSE}, compute once on the full \code{df}. Default TRUE.}
 
 \item{community_assignment}{Optional. Community assignment object used when
 \code{do_community = TRUE}.}
+
+\item{community_impact_attributes}{Character vector or NULL. Battery names
+(variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+when computing community-level impacts. Default NULL includes all
+attributes. Errors if a declared battery matches no IV. Applies to every
+community metric across all subgroups and shift variants; ignored when
+\code{do_community = FALSE}. See \code{\link{bn_impact_engine}}.}
 
 \item{lift}{Numeric vector. Target lift(s) for the shifted-distribution
 metric (both proportional and absolute shift variants are precomputed).
@@ -116,6 +125,13 @@ that provides its own progress indication.}
 
 \item{use_parallel}{Logical. Whether to parallelize subgroup processing
 via \code{work::imap_progress()}. Default \code{TRUE}.}
+
+\item{boot_nonzero}{Logical. Default \code{FALSE}: classical bootstrap
+inference - the SD of the bootstrap replicates is used directly as the
+standard error, so p-values are invariant to \code{n_boot}. \code{TRUE}
+restores the legacy behavior (\code{se = sd/sqrt(n_boot)}), which tests
+whether the mean of the boot distribution is nonzero and shrinks
+p-values as \code{n_boot} grows.}
 
 \item{seed}{Integer. Random seed passed through to the engine for
 reproducibility. Default 1.}

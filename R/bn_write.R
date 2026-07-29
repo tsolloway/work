@@ -318,7 +318,11 @@ bn_write <- function(
       wb = wb, bn_full = obj, network_type = network_type,
       defer_images = TRUE,
       attribute_font_size = attribute_map_font_size,
-      community_font_size = community_map_font_size
+      community_font_size = community_map_font_size,
+      # Size the dots by whatever view the Drivers sheets open on, so the
+      # map and the table rank attributes the same way.
+      impact_outcome_display = impact_outcome_display,
+      shift_type = shift_type
     )
   }
 

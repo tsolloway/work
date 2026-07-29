@@ -16,6 +16,13 @@
 #'   results. If FALSE, only attribute-level results are returned.
 #' @param community_assignment Optional. Community assignment object for
 #'   community-level analysis.
+#' @param community_impact_attributes Character vector or NULL. Battery names
+#'   (variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+#'   when computing community-level impacts — applied to both the unweighted
+#'   and weighted community variants and every community metric within them
+#'   (lift, maxVmin, MI, base) across all subgroups and shift types. Default
+#'   NULL includes all attributes. Errors if a declared battery matches no IV.
+#'   Attribute-level tables are never affected.
 #' @param lift Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size for brand lift.
 #'   Default 75.
@@ -41,6 +48,10 @@
 #' @param mi_boot Integer or NULL. Bootstrap replicates for community MI.
 #'   Only applied to community variants. Default 100.
 #' @param use_parallel Logical. Use parallel plan if available. Default TRUE.
+#' @param boot_nonzero Logical. Default \code{FALSE}: classical bootstrap
+#'   inference (replicate SD used directly as the SE, p-values invariant to
+#'   \code{n_boot}). \code{TRUE} restores the legacy
+#'   \code{se = sd/sqrt(n_boot)} behavior.
 #' @param seed Integer. Random seed. Default 1.
 #'
 #' @return A list with:
@@ -66,6 +77,7 @@ bn_impacts <- function(
     process_subgroups = TRUE,
     do_community = TRUE,
     community_assignment = NULL,
+    community_impact_attributes = NULL,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -80,8 +92,27 @@ bn_impacts <- function(
     mi_boot = 100,
     use_parallel = TRUE,
     scale_ranges = NULL,
+    boot_nonzero = FALSE,
     seed = 1
 ) {
+
+  # Validate community_impact_attributes up front so a bad battery name
+  # errors before the (potentially long) attribute runs, not after them.
+  # The engine re-validates per call; this is purely a fail-fast check and
+  # is skipped when the assignment can't be resolved here (the engine's
+  # own resolution then governs).
+  if (do_community && !is.null(community_impact_attributes)) {
+    ca_check <- community_assignment
+    if (is.null(ca_check)) {
+      obj_first <- if (process_subgroups) obj[[1]] else obj
+      ca_check <- obj_first[["viz_prep"]][["attribute_viz_prep"]][["nodes"]]
+    }
+    if (!is.null(ca_check)) {
+      check_ids <- ca_check[["id"]]
+      if (!is.null(ivs)) check_ids <- intersect(check_ids, unlist(ivs, use.names = FALSE))
+      invisible(.bn_community_impact_ids(check_ids, community_impact_attributes))
+    }
+  }
 
   # Attribute (unweighted)
   if (n_boot == 1) cli::cli_alert_info("Running attribute impact (unweighted)")
@@ -103,6 +134,7 @@ bn_impacts <- function(
     verbose = FALSE,
     use_parallel = use_parallel,
     scale_ranges = scale_ranges,
+    boot_nonzero = boot_nonzero,
     seed = seed
   )
 
@@ -128,6 +160,7 @@ bn_impacts <- function(
       verbose = FALSE,
       use_parallel = use_parallel,
       scale_ranges = scale_ranges,
+      boot_nonzero = boot_nonzero,
       seed = seed
     )
   }
@@ -142,6 +175,7 @@ bn_impacts <- function(
       obj = obj, df = df, dv = dv, ivs = ivs,
       do_community = TRUE,
       community_assignment = community_assignment,
+      community_impact_attributes = community_impact_attributes,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -156,6 +190,7 @@ bn_impacts <- function(
       verbose = FALSE,
       use_parallel = use_parallel,
       scale_ranges = scale_ranges,
+      boot_nonzero = boot_nonzero,
       seed = seed
     )
 
@@ -166,6 +201,7 @@ bn_impacts <- function(
         obj = obj, df = df, dv = dv, ivs = ivs,
         do_community = TRUE,
         community_assignment = community_assignment,
+        community_impact_attributes = community_impact_attributes,
         type = type, index_by = index_by,
         process_subgroups = process_subgroups,
         dictionary = dictionary,
@@ -180,6 +216,7 @@ bn_impacts <- function(
         verbose = FALSE,
         use_parallel = use_parallel,
         scale_ranges = scale_ranges,
+        boot_nonzero = boot_nonzero,
         seed = seed
       )
     }

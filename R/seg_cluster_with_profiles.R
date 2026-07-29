@@ -56,6 +56,11 @@
 #' @param cor_threshold Numeric or `NULL`. If numeric, removes collinear profile
 #'   variables where `|r|` exceeds this threshold via [caret::findCorrelation()].
 #'   Default: `0.90`. Set to `NULL` to skip.
+#' @param seed Integer or `NULL`. Random seed for reproducibility (default: `1`),
+#'   passed to [cluster_kmeans()]. `NULL` skips seeding, making k-means depend on
+#'   ambient RNG state. Note that the greedy polar selection in
+#'   [get_greedy_vars()] seeds itself at `1` regardless of this argument, so
+#'   varying `seed` re-rolls the k-means starts but not the input selection.
 #'
 #' @return The seg object with updated `seg$solutions$analysis[[solution_name]]`,
 #'   `seg$solutions$summary_table`, `seg$solutions$df_segment_append`, and
@@ -86,6 +91,7 @@ seg_cluster_with_profiles <- function(
     force_inputs = NULL,
     remove_nzv = TRUE,
     cor_threshold = 0.90,
+    seed = 1,
     keep_raw = FALSE
 ){
 
@@ -321,7 +327,8 @@ seg_cluster_with_profiles <- function(
       n_max = n_max,
       priors = priors,
       iter_max = iter_max,
-      nstart = nstart
+      nstart = nstart,
+      seed = seed
     ),
     warning = function(w) {
       message("cluster_kmeans warning: ", conditionMessage(w))

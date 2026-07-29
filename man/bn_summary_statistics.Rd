@@ -36,16 +36,26 @@ A named list with elements:
 \describe{
 \item{\code{confusion_matrix}}{A confusion matrix (if \code{dv} specified).}
 \item{\code{nodes}}{A tibble of node-level scores (BIC, EBIC, AIC, log-likelihood).}
-\item{\code{model}}{A tibble of overall model scores and, if applicable, accuracy metrics.}
+\item{\code{model}}{A tibble of overall model scores (including \code{r2_mcfadden}) and, if
+applicable, accuracy metrics (\code{accuracy}, \code{kappa}, \code{r2_mcfadden_dv}, and the
+naive-Bayes comparisons).}
 }
 }
 \description{
 Computes key summary statistics for a fitted or unfitted Bayesian network, including
-node-level scores (BIC, EBIC, AIC, log-likelihood), model-level scores, and—if a
-dependent variable (\code{dv}) is provided—prediction accuracy and comparison against a
-naive Bayes baseline.
+node-level scores (BIC, EBIC, AIC, log-likelihood), model-level scores, McFadden's
+pseudo-R² against the independence (empty-graph) null model, and—if a dependent
+variable (\code{dv}) is provided—prediction accuracy, Cohen's kappa, a DV-specific
+pseudo-R², and comparison against a naive Bayes baseline.
 }
 \details{
 BIC values from \code{bnlearn::score()} are \emph{rescaled} (multiplied by -2) in \code{bnlearn},
 so higher values indicate better models.
+
+\code{r2_mcfadden} is McFadden's pseudo-R² for the whole network: \code{1 - loglik / loglik_null}, where the null model is the empty graph (all nodes independent).
+\code{r2_mcfadden_dv} applies the same idea to the \code{dv} node alone, comparing the
+log-likelihood of the observed DV values under the network's predictive
+distribution (\code{bayes-lw}, full Markov blanket) to their marginal log-likelihood
+under the null. McFadden values run low relative to OLS R²—0.2 to 0.4 already
+indicates excellent fit.
 }

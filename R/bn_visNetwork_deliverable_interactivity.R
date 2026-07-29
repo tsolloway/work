@@ -41,7 +41,7 @@
 #' @export
 bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = "none", key_json = NULL, key_width = 0.1, panel_ns = NULL, download_prefix = "network"){
 
-  obj %>%
+  viz <- obj %>%
     visNetwork::visInteraction(
       dragNodes = TRUE,       # allow moving nodes
       dragView  = TRUE,       # allow moving the canvas
@@ -606,6 +606,24 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         } catch(e) {}
       })();
 
+      // Baseline node sizes, cached before the report's impact dashboard can
+      // resize anything (see the nodeSizeUpdate handler below). Dot size in
+      // the report follows whatever metric the dashboard is showing, but that
+      // is a *view* — a saved layout has to round-trip the baseline, or a
+      // transient Assess choice gets permanently baked into the file. Manual
+      // edits via the node dialog DO rewrite this baseline, since those are
+      // deliberate.
+      var originalNodeValues = {};
+      (function snapshotOriginalValues() {
+        try {
+          network.body.data.nodes.get().forEach(function(n) {
+            if (n.value !== undefined && n.value !== null) {
+              originalNodeValues[n.id] = n.value;
+            }
+          });
+        } catch(e) {}
+      })();
+
       // helper: snapshot full node state (positions + edits)
       function getNodeSnapshot() {
         var nodes = network.body.data.nodes.get();
@@ -618,7 +636,13 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
             x: Math.round(pos.x),
             y: Math.round(pos.y)
           };
-          if (n.value !== undefined) snap.value = n.value;
+          // Serialize the baseline size, never the live one — the impact
+          // dashboard may currently be driving n.value.
+          if (originalNodeValues[n.id] !== undefined) {
+            snap.value = originalNodeValues[n.id];
+          } else if (n.value !== undefined) {
+            snap.value = n.value;
+          }
           if (n.font && n.font.size) snap.fontSize = n.font.size;
           // Use the cached original color, never the (possibly faded) live one.
           if (originalNodeColors[n.id] !== undefined) snap.color = originalNodeColors[n.id];
@@ -634,7 +658,11 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
           layout.forEach(function(item) {
             var update = { id: item.id, x: item.x, y: item.y };
             if (item.label !== undefined) update.label = item.label;
-            if (item.value !== undefined) update.value = item.value;
+            if (item.value !== undefined) {
+              update.value = item.value;
+              // A loaded layout redefines the baseline size.
+              originalNodeValues[update.id] = item.value;
+            }
             if (item.fontSize !== undefined) {
               update.font = { size: item.fontSize };
               lastFontSize = item.fontSize;
@@ -648,7 +676,11 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
             var item = layout[id];
             var update = { id: id, x: item.x, y: item.y };
             if (item.label !== undefined) update.label = item.label;
-            if (item.value !== undefined) update.value = item.value;
+            if (item.value !== undefined) {
+              update.value = item.value;
+              // A loaded layout redefines the baseline size.
+              originalNodeValues[update.id] = item.value;
+            }
             if (item.fontSize !== undefined) {
               update.font = { size: item.fontSize };
               lastFontSize = item.fontSize;
@@ -810,7 +842,14 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
         } catch(e) {}
       }
 
+      // Raised while the impact dashboard is driving node sizes. Any
+      // nodes.update() fires the DataSet 'update' listener wired below, which
+      // would otherwise persist derived sizes to localStorage and push them
+      // to the parent — making a transient metric choice permanent.
+      var suppressStateSave = false;
+
       function saveState() {
+        if (suppressStateSave) return;
         saveToLocalStorage();
         pushToParent();
       }
@@ -899,7 +938,12 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
             color: orig.color
           };
           var val = document.getElementById('editValue').value;
-          if (val !== '') update.value = parseFloat(val);
+          if (val !== '') {
+            update.value = parseFloat(val);
+            // A hand-typed size is deliberate, so it becomes the new baseline
+            // and survives save/load and impact-dashboard driven resizes.
+            originalNodeValues[editNodeId] = update.value;
+          }
           network.body.data.nodes.update(update);
           modal.style.display = 'none';
           // only sync to legend/attribute if this is a community tab (no keyData)
@@ -1038,6 +1082,46 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
           network.fit();
         }
 
+        // The report's impact dashboard changed metric / shift / focus /
+        // weight, so dot size follows the index it is now showing. Sizes are
+        // keyed by node id: attribute maps key on the variable name, community
+        // maps on the community name. An empty map means restore baselines.
+        //
+        // suppressStateSave keeps this out of localStorage and out of the
+        // parent's snapshot store — dot size here is a view, not an edit.
+        if (evt.data.type === 'nodeSizeUpdate') {
+          var sizeMap = evt.data.sizes || {};
+          var hasSizes = Object.keys(sizeMap).length > 0;
+          var sizeUpdates = [];
+          network.body.data.nodes.get().forEach(function(n) {
+            var next = hasSizes ? sizeMap[n.id] : undefined;
+            // No impact row for this node (the DV, typically) — hold baseline.
+            if (next === undefined || next === null) next = originalNodeValues[n.id];
+            if (next === undefined || next === null) return;
+            if (n.value === next) return;
+            // vis-network re-parses a node's options on every update and drops
+            // the per-node colour unless it is restated, falling back to the
+            // group/global default (dots render vis.js blue until something
+            // else rewrites them — a click, via highlightNearest's restore).
+            // This is why legendUpdate and the node dialog above also carry
+            // group + colour. Use the cached original, never the live value:
+            // a highlighted node's colour is faded, and feeding the parsed
+            // colour object back recurses inside setOptions.
+            var up = { id: n.id, value: next };
+            if (n.group !== undefined) up.group = n.group;
+            if (originalNodeColors[n.id] !== undefined) up.color = originalNodeColors[n.id];
+            sizeUpdates.push(up);
+          });
+          if (sizeUpdates.length > 0) {
+            suppressStateSave = true;
+            try {
+              network.body.data.nodes.update(sizeUpdates);
+            } finally {
+              suppressStateSave = false;
+            }
+          }
+        }
+
         // parent broadcasts a dark/light mode change.
         //   Stage 1 (CSS): toggle data-bs-theme on the iframe's <html> →
         //     flips every brand-token-driven surface (legend, toolbar
@@ -1149,6 +1233,23 @@ bn_visNetwork_deliverable_interactivity <- function(obj, physics = TRUE, type = 
     }
   ")
     )
+
+  # visNetwork registers x$events only AFTER the network's first draw. On a
+  # small or quickly-settling network there is no further redraw, so
+  # afterDrawing never fires and none of the above installs -- no toolbar, no
+  # legend, no parent message listener. Inside bn_report the iframe's
+  # fitNetwork + visibility changes always force another draw, which is why
+  # this only ever bit standalone saveWidget() output.
+  #
+  # Force exactly one redraw once the widget has rendered. The handler's
+  # leading `if (document.getElementById('fontButton')) return;` guard makes
+  # this a no-op wherever it already initialised.
+  htmlwidgets::onRender(viz, "
+function(el) {
+  var g = document.getElementById('graph' + el.id);
+  if (!g || !g.chart) return;
+  setTimeout(function() { try { g.chart.redraw(); } catch(e) {} }, 0);
+}")
 
 }
 

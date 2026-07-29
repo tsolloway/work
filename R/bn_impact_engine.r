@@ -22,6 +22,14 @@
 #'   level by jointly setting all IVs within each community. Default FALSE.
 #' @param community_assignment Optional data frame with \code{id} and
 #'   \code{community_name} columns mapping IVs to communities.
+#' @param community_impact_attributes Character vector or NULL. Battery names
+#'   (variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+#'   when computing community-level impacts. An IV's battery is its variable
+#'   name with the trailing \code{"_<number>"} suffix removed
+#'   (\code{q14a_1} -> \code{"q14a"}). Default NULL includes all attributes.
+#'   Errors if a declared battery matches no IV in the community assignment.
+#'   Applies to every community metric (lift, maxVmin, MI, base); ignored when
+#'   \code{do_community = FALSE}.
 #' @param lift Numeric scalar or vector. Target percentage lift(s) for
 #'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
 #'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
@@ -104,6 +112,13 @@
 #'   composite factor has too many levels relative to sample size. Bootstrap
 #'   p-value is the proportion of replicates with MI at or below zero.
 #'   Default NULL (use analytic p-value).
+#' @param boot_nonzero Logical. Default \code{FALSE}: classical bootstrap
+#'   inference - the SD of the bootstrap replicates is used directly as the
+#'   standard error of each metric, so p-values are invariant to
+#'   \code{n_boot}. \code{TRUE} restores the legacy behavior
+#'   (\code{se = sd/sqrt(n_boot)}), which tests whether the mean of the
+#'   boot distribution is nonzero and mechanically shrinks p-values as
+#'   \code{n_boot} grows.
 #' @param seed Integer. Random seed for reproducibility.
 #'
 #' @details
@@ -210,6 +225,7 @@ bn_impact_engine <- function(
     ivs = NULL,
     do_community = FALSE,
     community_assignment = NULL,
+    community_impact_attributes = NULL,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -224,6 +240,7 @@ bn_impact_engine <- function(
     weight = NULL,
     mi_boot = NULL,
     scale_ranges = NULL,
+    boot_nonzero = FALSE,
     seed = 1
 ){
 
@@ -289,7 +306,11 @@ bn_impact_engine <- function(
     fit <- obj
   } else if (inherits(obj, "bn")) {
     bn <- obj
-    fit <- bnlearn::bn.fit(bn, df, method = "bayes")
+    # Brand/weight columns are not network nodes (weight may be numeric, which
+    # the "bayes" estimator rejects), so exclude them from the fitting data
+    exclude_cols <- c(brand, weight)
+    fit_data <- if (length(exclude_cols) > 0) df[, setdiff(names(df), exclude_cols), drop = FALSE] else df
+    fit <- bnlearn::bn.fit(bn, fit_data, method = "bayes")
   } else {
     stop("'obj' must be a 'bnlearn::bn', 'bnlearn::bn.fit', or a list returned from bn_engine().")
   }
@@ -315,7 +336,20 @@ bn_impact_engine <- function(
 
   if(do_community){
     community_assignment <- community_assignment %>%
-      dplyr::filter(id %in% ivs) %>%
+      dplyr::filter(id %in% ivs)
+
+    # Restrict community membership to the declared batteries. Runs BEFORE
+    # the list conversion below so every community metric downstream (lift,
+    # maxVmin, MI, base) sees the same filtered membership.
+    if(!is.null(community_impact_attributes)){
+      keep_ids <- .bn_community_impact_ids(
+        community_assignment[["id"]], community_impact_attributes
+      )
+      community_assignment <- community_assignment %>%
+        dplyr::filter(id %in% keep_ids)
+    }
+
+    community_assignment <- community_assignment %>%
       dplyr::select(community_name, id) %>%
       dplyr::group_split(community_name) %>%
       setNames(
@@ -725,16 +759,31 @@ bn_impact_engine <- function(
       results_mi <- temp_ivs %>%
         purrr::imap(
           ~{
-            xmi <- bnlearn::ci.test(
-              apply(fit_data[.x], 1, paste0, collapse = "_") %>% as.factor(),
-              fit_data[[dv]], test = "mi"
-            )
+            composite <- apply(fit_data[.x], 1, paste0, collapse = "_") %>% as.factor()
 
-            dplyr::tibble(
-              "variable" = .y,
-              "mi" = xmi$statistic / (2 * nrow(dat_boot)),
-              "p_val" = xmi$p.value
-            )
+            # A bootstrap resample can leave the composite (or the DV) with a
+            # single observed level - e.g. a near-constant binary q19a item in
+            # a skewed subgroup, where the resample misses the handful of rows
+            # on the rare level. as.factor() on the pasted values keeps only
+            # OBSERVED levels, so ci.test()'s check.data() hard-errors with
+            # "variable x in the data must have at least two levels". A
+            # constant variable carries exactly zero mutual information, so
+            # return mi = 0 for this draw instead of crashing the boot.
+            if (nlevels(composite) < 2 || dplyr::n_distinct(fit_data[[dv]]) < 2) {
+              dplyr::tibble(
+                "variable" = .y,
+                "mi" = 0,
+                "p_val" = 1
+              )
+            } else {
+              xmi <- bnlearn::ci.test(composite, fit_data[[dv]], test = "mi")
+
+              dplyr::tibble(
+                "variable" = .y,
+                "mi" = xmi$statistic / (2 * nrow(dat_boot)),
+                "p_val" = xmi$p.value
+              )
+            }
           }
         ) %>%
         dplyr::bind_rows()
@@ -768,10 +817,18 @@ bn_impact_engine <- function(
               # unaffected in the aggregate. The warning is purely cosmetic
               # at this scope, and with n_mi_boot >> 1 it fires repeatedly
               # for the same root cause and drowns out anything meaningful.
-              xmi <- suppressWarnings(
-                bnlearn::ci.test(composite, boot_data[[dv]], test = "mi")
-              )
-              xmi$statistic / (2 * n_obs)
+              if (nlevels(composite) < 2 || dplyr::n_distinct(boot_data[[dv]]) < 2) {
+                # A replicate where the composite (or the DV) is constant
+                # carries zero mutual information by definition - contribute 0
+                # rather than letting check.data() error out (same guard as
+                # the attribute-MI block above).
+                0
+              } else {
+                xmi <- suppressWarnings(
+                  bnlearn::ci.test(composite, boot_data[[dv]], test = "mi")
+                )
+                xmi$statistic / (2 * n_obs)
+              }
             })
 
             # P-value: proportion of bootstrap replicates at or below zero
@@ -813,6 +870,10 @@ bn_impact_engine <- function(
   # ---------------------------
 
   if (n_boot > 1) {
+    # Seed the resample draw - without this the boot indices depend on ambient
+    # RNG state and boot p-values are not reproducible across runs, despite
+    # the documented `seed` parameter.
+    if (!is.null(seed)) set.seed(seed)
     index_sets <- replicate(n_boot, sample(seq_len(nrow(df)), replace = TRUE), simplify = FALSE)
 
     result <- index_sets %>%
@@ -837,7 +898,13 @@ bn_impact_engine <- function(
         .groups = "drop"
       ) %>%
       dplyr::mutate(
-        se      = sd / sqrt(pmax(n_boot, 1)),
+        # boot_nonzero = FALSE (default): classical bootstrap inference - the
+        # SD of the bootstrap replicates IS the standard-error estimate of the
+        # statistic, so p-values are invariant to n_boot.
+        # boot_nonzero = TRUE: legacy behavior - se = sd/sqrt(n_boot), which
+        # tests whether the MEAN of the boot distribution is nonzero and
+        # therefore mechanically shrinks p-values as n_boot grows.
+        se      = if (boot_nonzero) sd / sqrt(pmax(n_boot, 1)) else sd,
         t       = mean / se,
         tcrit   = stats::qt(0.975, df = pmax(n_boot - 1, 1)),
         ci_low  = mean - tcrit * se,
@@ -945,5 +1012,40 @@ bn_impact_engine <- function(
   }
 
   return(result)
+}
+
+
+#' Resolve community-impact attribute ids from declared battery names
+#'
+#' An IV's battery is its variable name with the trailing "_<number>" suffix
+#' removed (q14a_1 -> "q14a"); ids without a numeric suffix are their own
+#' battery. Returns the subset of `ids` whose battery is declared. Stops if
+#' any declared battery matches no id, listing the batteries that are
+#' available.
+#'
+#' @noRd
+.bn_community_impact_ids <- function(ids, community_impact_attributes) {
+
+  if (!is.character(community_impact_attributes) ||
+      length(community_impact_attributes) == 0 ||
+      anyNA(community_impact_attributes)) {
+    stop("'community_impact_attributes' must be a character vector of battery names (or NULL).")
+  }
+
+  id_batteries <- sub("_[0-9]+$", "", ids)
+  available <- unique(id_batteries)
+  unidentified <- setdiff(community_impact_attributes, available)
+
+  if (length(unidentified) > 0) {
+    stop(
+      "'community_impact_attributes' declares unidentified batter",
+      if (length(unidentified) > 1) "ies: " else "y: ",
+      paste0("'", unidentified, "'", collapse = ", "),
+      ". Available batteries: ",
+      paste0("'", sort(available), "'", collapse = ", "), "."
+    )
+  }
+
+  ids[id_batteries %in% community_impact_attributes]
 }
 

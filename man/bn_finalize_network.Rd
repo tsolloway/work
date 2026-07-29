@@ -25,10 +25,12 @@ bn_finalize_network(
   impact_type = c("gr", "cp", "mi"),
   impact_index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
   impact_n_boot = 1,
+  boot_nonzero = FALSE,
   impact_n_querry = 10000,
   impact_lift = c(0, 0.25),
   prioritize_shift_type = c("headroom", "proportional", "absolute", "range"),
   impact_include_base = TRUE,
+  community_impact_attributes = NULL,
   batteries = NULL,
   battery_groups = NULL,
   do_prioritizations = TRUE,
@@ -109,6 +111,11 @@ attribute/community, weighted/unweighted impact tables. Default TRUE.}
 
 \item{impact_n_boot}{Integer. Bootstrap replicates for impact. Default 1.}
 
+\item{boot_nonzero}{Logical. Default \code{FALSE}: classical bootstrap
+inference for impact p-values (replicate SD used directly as the SE,
+p-values invariant to \code{impact_n_boot}). \code{TRUE} restores the
+legacy \code{se = sd/sqrt(n_boot)} behavior.}
+
 \item{impact_n_querry}{Integer. Query sample size. Default 1e4.}
 
 \item{impact_lift}{Numeric vector. Lift fractions for impact. Default
@@ -126,6 +133,14 @@ proportional and absolute variants — no parameter needed there.)}
 
 \item{impact_include_base}{Logical. Include base sizes in impact tables.
 Default TRUE.}
+
+\item{community_impact_attributes}{Character vector or NULL. Battery names
+(variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+when computing community-level impacts. Default NULL includes all
+attributes. Errors before model estimation if a declared battery matches
+no IV. Flows through \code{bn_impacts()} to every community metric in
+both the unweighted and weighted community tables; attribute-level
+tables (and their per-battery dashboard cuts) are never affected.}
 
 \item{do_prioritizations}{Logical. If TRUE, run \code{bn_prioritizations()}
 to produce prioritization analysis. Default TRUE.}

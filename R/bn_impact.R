@@ -80,6 +80,12 @@
 #'   (passed through to the engine). Default FALSE.
 #' @param community_assignment Optional. Community assignment object used when
 #'   \code{do_community = TRUE}.
+#' @param community_impact_attributes Character vector or NULL. Battery names
+#'   (variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+#'   when computing community-level impacts. Default NULL includes all
+#'   attributes. Errors if a declared battery matches no IV. Applies to every
+#'   community metric across all subgroups and shift variants; ignored when
+#'   \code{do_community = FALSE}. See \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Target lift(s) for the shifted-distribution
 #'   metric (both proportional and absolute shift variants are precomputed).
 #'   Default \code{c(0, 0.1)}.
@@ -137,6 +143,12 @@
 #'   that provides its own progress indication.
 #' @param use_parallel Logical. Whether to parallelize subgroup processing
 #'   via \code{work::imap_progress()}. Default \code{TRUE}.
+#' @param boot_nonzero Logical. Default \code{FALSE}: classical bootstrap
+#'   inference - the SD of the bootstrap replicates is used directly as the
+#'   standard error, so p-values are invariant to \code{n_boot}. \code{TRUE}
+#'   restores the legacy behavior (\code{se = sd/sqrt(n_boot)}), which tests
+#'   whether the mean of the boot distribution is nonzero and shrinks
+#'   p-values as \code{n_boot} grows.
 #' @param seed Integer. Random seed passed through to the engine for
 #'   reproducibility. Default 1.
 #'
@@ -199,6 +211,7 @@ bn_impact <- function(
     process_subgroups = TRUE,
     do_community = FALSE,
     community_assignment = NULL,
+    community_impact_attributes = NULL,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -214,6 +227,7 @@ bn_impact <- function(
     verbose = TRUE,
     use_parallel = TRUE,
     scale_ranges = NULL,
+    boot_nonzero = FALSE,
     seed = 1
 ){
 
@@ -323,6 +337,7 @@ bn_impact <- function(
         ivs = ivs,
         do_community = do_community,
         community_assignment = community_assignment,
+        community_impact_attributes = community_impact_attributes,
         type = type,
         index_by = index_by,
         n_boot = n_boot,
@@ -336,6 +351,7 @@ bn_impact <- function(
         weight = weight,
         mi_boot = mi_boot,
         scale_ranges = scale_ranges,
+        boot_nonzero = boot_nonzero,
         seed = seed
       )) %>%
         setNames(glue::glue("{.y}_{names(.)}"))
@@ -368,6 +384,7 @@ bn_impact <- function(
       ivs = ivs,
       do_community = do_community,
       community_assignment = community_assignment,
+      community_impact_attributes = community_impact_attributes,
       type = type,
       index_by = index_by,
       n_boot = n_boot,
@@ -381,6 +398,7 @@ bn_impact <- function(
       weight = weight,
       mi_boot = mi_boot,
       scale_ranges = scale_ranges,
+      boot_nonzero = boot_nonzero,
       seed = seed
     )) %>%
       dplyr::rename(Variable = variable)

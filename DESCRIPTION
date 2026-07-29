@@ -17,6 +17,7 @@ Imports:
     base64enc,
     bnlearn,
     bslib,
+    ca,
     car,
     caret,
     cli,

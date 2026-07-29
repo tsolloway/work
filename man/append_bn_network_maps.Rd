@@ -12,7 +12,9 @@ append_bn_network_maps(
   height = 8,
   defer_images = FALSE,
   attribute_font_size = NULL,
-  community_font_size = NULL
+  community_font_size = NULL,
+  impact_outcome_display = NULL,
+  shift_type = c("absolute", "proportional", "headroom", "range")
 )
 }
 \arguments{
@@ -40,6 +42,13 @@ for the Attribute Network PNG. NULL leaves vis.js's default 14 px.}
 
 \item{community_font_size}{Numeric or NULL. Node-label font size (in pixels)
 for the Community Network PNG. NULL leaves vis.js's default 14 px.}
+
+\item{impact_outcome_display}{Character or NULL. The workbook's Outcome
+default, \code{"Point Change"} or \code{"\% Change"}. NULL auto-detects
+from the DV type, matching \code{bn_impact_write()}.}
+
+\item{shift_type}{Character. The workbook's Shift Type default. Overridden
+whenever an Assess preset exists -- see \code{bn_default_index_column()}.}
 }
 \value{
 The modified workbook object (invisibly).

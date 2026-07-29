@@ -92,11 +92,15 @@ retained during complexity expansion.}
 \value{
 A list with elements:
 \itemize{
-\item \code{bn}: the learned \code{bnlearn} network.
+\item \code{bn}: the learned \code{bnlearn} network. When \code{connections_max > 1}, this
+(and \code{fit}, \code{viz_prep}, \code{summary}) is the final, most-complex layer.
 \item \code{fit}: the fitted parameters (\code{bn.fit}).
 \item \code{viz_prep}: visualization-prep object from \code{bn_to_netviz_prep()}.
-\item \code{summary}: model summary list from \code{bn_summary_statistics()} (no accuracy metrics).
-\item \code{results_layers} (optional): list with per-layer results when \code{connections_max > 1}.
+\item \code{summary}: model summary list from \code{bn_summary_statistics()} (no accuracy
+metrics). When \code{connections_max > 1}, also carries \verb{$layers}, the combined
+per-layer model-summary table.
+\item \code{results_layers} (optional): list with per-layer results when
+\code{connections_max > 1} (layer 1 = base structure).
 \item \code{meta}: list with metadata (\code{analysis = "bn_model_unsupervised"}).
 }
 }

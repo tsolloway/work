@@ -63,6 +63,13 @@
 #'   dropdowns for both Shift Type and Outcome Display.
 #' @param impact_include_base Logical. Include base sizes in impact tables.
 #'   Default TRUE.
+#' @param community_impact_attributes Character vector or NULL. Battery names
+#'   (variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+#'   when computing community-level impacts. Default NULL includes all
+#'   attributes. Errors before model estimation if a declared battery matches
+#'   no IV. Flows through \code{bn_impacts()} to every community metric in
+#'   both the unweighted and weighted community tables; attribute-level
+#'   tables (and their per-battery dashboard cuts) are never affected.
 #' @param do_prioritizations Logical. If TRUE, run \code{bn_prioritizations()}
 #'   to produce prioritization analysis. Default TRUE.
 #' @param prioritize_lift Numeric. Lift fraction for prioritization. Default
@@ -95,6 +102,10 @@
 #'   Default FALSE.
 #' @param impact_parallel Logical. Parallelize impact and prioritization
 #'   estimation. Default TRUE.
+#' @param boot_nonzero Logical. Default \code{FALSE}: classical bootstrap
+#'   inference for impact p-values (replicate SD used directly as the SE,
+#'   p-values invariant to \code{impact_n_boot}). \code{TRUE} restores the
+#'   legacy \code{se = sd/sqrt(n_boot)} behavior.
 #' @param seed Integer. Random seed. Default 1.
 #'
 #' @return A list with:
@@ -135,10 +146,12 @@ bn_finalize_network <- function(
     impact_type = c("gr", "cp", "mi"),
     impact_index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     impact_n_boot = 1,
+    boot_nonzero = FALSE,
     impact_n_querry = 1e4,
     impact_lift = c(0, 0.25),
     prioritize_shift_type = c("headroom", "proportional", "absolute", "range"),
     impact_include_base = TRUE,
+    community_impact_attributes = NULL,
     # Survey-battery grouping for the "Index By: Battery" feature in the
     # impact dashboards. Named list of vectors mapping battery name -> IVs.
     # If NULL, resolved from obj$meta$ivs when that's a named list (the
@@ -314,6 +327,13 @@ bn_finalize_network <- function(
 
   if(is.null(x_ivs)) x_ivs <- x_nodes %>% setdiff(dv)
 
+  # Validate community_impact_attributes against the resolved IVs BEFORE the
+  # (expensive) model estimation and impact runs, so a bad battery name
+  # errors immediately. bn_impacts/the engine re-validate downstream.
+  if (do_impacts && !is.null(community_impact_attributes)) {
+    invisible(.bn_community_impact_ids(x_ivs, community_impact_attributes))
+  }
+
 
   # --- scale_ranges auto-detection ---
   # When scale_ranges = "auto" (default), pull each IV's range from the
@@ -453,6 +473,7 @@ bn_finalize_network <- function(
       ivs = x_ivs,
       do_community = TRUE,
       community_assignment = attribute_nodes,
+      community_impact_attributes = community_impact_attributes,
       type = impact_type,
       index_by = impact_index_by,
       process_subgroups = TRUE,
@@ -469,6 +490,7 @@ bn_finalize_network <- function(
       mi_boot = n_boot_final,
       scale_ranges = scale_ranges,
       use_parallel = impact_parallel,
+      boot_nonzero = boot_nonzero,
       seed = seed
     )
 
@@ -557,6 +579,7 @@ bn_finalize_network <- function(
   if (is.null(results[["meta"]])) results[["meta"]] <- list()
   results[["meta"]][["dv"]] <- dv_original
   results[["meta"]][["ivs"]] <- if (!is.null(batteries)) batteries else x_ivs
+  results[["meta"]][["community_impact_attributes"]] <- community_impact_attributes
 
   if (!is.null(batteries)) {
     results[["meta"]][["batteries"]] <- batteries

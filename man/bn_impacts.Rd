@@ -13,6 +13,7 @@ bn_impacts(
   process_subgroups = TRUE,
   do_community = TRUE,
   community_assignment = NULL,
+  community_impact_attributes = NULL,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -27,6 +28,7 @@ bn_impacts(
   mi_boot = 100,
   use_parallel = TRUE,
   scale_ranges = NULL,
+  boot_nonzero = FALSE,
   seed = 1
 )
 }
@@ -49,6 +51,14 @@ results. If FALSE, only attribute-level results are returned.}
 
 \item{community_assignment}{Optional. Community assignment object for
 community-level analysis.}
+
+\item{community_impact_attributes}{Character vector or NULL. Battery names
+(variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+when computing community-level impacts — applied to both the unweighted
+and weighted community variants and every community metric within them
+(lift, maxVmin, MI, base) across all subgroups and shift types. Default
+NULL includes all attributes. Errors if a declared battery matches no IV.
+Attribute-level tables are never affected.}
 
 \item{lift}{Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.}
 
@@ -83,6 +93,11 @@ weighted variants are omitted from the output.}
 Only applied to community variants. Default 100.}
 
 \item{use_parallel}{Logical. Use parallel plan if available. Default TRUE.}
+
+\item{boot_nonzero}{Logical. Default \code{FALSE}: classical bootstrap
+inference (replicate SD used directly as the SE, p-values invariant to
+\code{n_boot}). \code{TRUE} restores the legacy
+\code{se = sd/sqrt(n_boot)} behavior.}
 
 \item{seed}{Integer. Random seed. Default 1.}
 }

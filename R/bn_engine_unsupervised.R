@@ -58,11 +58,15 @@
 #'
 #' @return A list with elements:
 #' \itemize{
-#'   \item `bn`: the learned `bnlearn` network.
+#'   \item `bn`: the learned `bnlearn` network. When `connections_max > 1`, this
+#'     (and `fit`, `viz_prep`, `summary`) is the final, most-complex layer.
 #'   \item `fit`: the fitted parameters (`bn.fit`).
 #'   \item `viz_prep`: visualization-prep object from `bn_to_netviz_prep()`.
-#'   \item `summary`: model summary list from `bn_summary_statistics()` (no accuracy metrics).
-#'   \item `results_layers` (optional): list with per-layer results when `connections_max > 1`.
+#'   \item `summary`: model summary list from `bn_summary_statistics()` (no accuracy
+#'     metrics). When `connections_max > 1`, also carries `$layers`, the combined
+#'     per-layer model-summary table.
+#'   \item `results_layers` (optional): list with per-layer results when
+#'     `connections_max > 1` (layer 1 = base structure).
 #'   \item `meta`: list with metadata (`analysis = "bn_model_unsupervised"`).
 #' }
 #'
@@ -398,9 +402,23 @@ bn_engine_unsupervised <- function(
   )
 
 
+  # promote the final (most complex) layer so `$bn`, `$fit`, `$viz_prep`, and
+  # `$summary` describe the network delivered at `connections_max`; the base
+  # structure remains as layer 1 of `$results_layers`, and the per-layer
+  # comparison table is kept at `$summary$layers`
   if (!is.null(results_layers)) {
     results[["results_layers"]] <- results_layers
-    results[["summary"]] <- results_layers[["summary"]]
+
+    layers <- results_layers[names(results_layers) != "summary"]
+    if (length(layers) > 0) {
+      final_layer <- layers[[length(layers)]]
+      results[["bn"]] <- final_layer[["bn"]]
+      results[["fit"]] <- final_layer[["fit"]]
+      results[["viz_prep"]] <- final_layer[["viz_prep"]]
+      results[["summary"]] <- final_layer[["summary"]]
+    }
+
+    results[["summary"]][["layers"]] <- results_layers[["summary"]]
   }
 
 

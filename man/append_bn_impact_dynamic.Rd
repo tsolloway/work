@@ -26,7 +26,8 @@ append_bn_impact_dynamic(
   write_helper_sheets = TRUE,
   outcome_display = c("absolute", "proportional"),
   shift_type = c("absolute", "proportional", "headroom", "range"),
-  color_gradient_resondex = TRUE
+  color_gradient_resondex = TRUE,
+  sort_rows = TRUE
 )
 }
 \arguments{

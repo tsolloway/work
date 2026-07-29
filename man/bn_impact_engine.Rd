@@ -11,6 +11,7 @@ bn_impact_engine(
   ivs = NULL,
   do_community = FALSE,
   community_assignment = NULL,
+  community_impact_attributes = NULL,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -25,6 +26,7 @@ bn_impact_engine(
   weight = NULL,
   mi_boot = NULL,
   scale_ranges = NULL,
+  boot_nonzero = FALSE,
   seed = 1
 )
 }
@@ -49,6 +51,15 @@ level by jointly setting all IVs within each community. Default FALSE.}
 
 \item{community_assignment}{Optional data frame with \code{id} and
 \code{community_name} columns mapping IVs to communities.}
+
+\item{community_impact_attributes}{Character vector or NULL. Battery names
+(variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+when computing community-level impacts. An IV's battery is its variable
+name with the trailing \code{"_<number>"} suffix removed
+(\code{q14a_1} -> \code{"q14a"}). Default NULL includes all attributes.
+Errors if a declared battery matches no IV in the community assignment.
+Applies to every community metric (lift, maxVmin, MI, base); ignored when
+\code{do_community = FALSE}.}
 
 \item{lift}{Numeric scalar or vector. Target percentage lift(s) for
 distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
@@ -128,6 +139,14 @@ chi-squared p-value is unreliable for community-level MI because the
 composite factor has too many levels relative to sample size. Bootstrap
 p-value is the proportion of replicates with MI at or below zero.
 Default NULL (use analytic p-value).}
+
+\item{boot_nonzero}{Logical. Default \code{FALSE}: classical bootstrap
+inference - the SD of the bootstrap replicates is used directly as the
+standard error of each metric, so p-values are invariant to
+\code{n_boot}. \code{TRUE} restores the legacy behavior
+(\code{se = sd/sqrt(n_boot)}), which tests whether the mean of the
+boot distribution is nonzero and mechanically shrinks p-values as
+\code{n_boot} grows.}
 
 \item{seed}{Integer. Random seed for reproducibility.}
 }

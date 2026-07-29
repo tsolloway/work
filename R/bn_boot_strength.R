@@ -16,8 +16,11 @@
 #' @param set_dif_arcs_df Optional data frame of arcs (and their reverses) to exclude from the final bootstrap output.
 #' @param evaluate_only_arcs_df Optional data frame of arcs (and their reverses) to specifically evaluate from the bootstrap results.
 #' @param align_direction Logical; if `TRUE`, arcs are oriented to match the majority-supported direction.
-#' @param threshold Numeric or `"auto"`. Minimum strength to retain arcs, or `"auto"` to select top arcs based on `auto_threshold_ratio`.
-#' @param auto_threshold_ratio Numeric. Proportion of arcs to retain if `threshold = "auto"` (default = 1/4).
+#' @param threshold Numeric or `"auto"`. Minimum strength to retain arcs, or `"auto"`
+#'   to keep the top `auto_threshold_ratio` share of candidate arcs by strength.
+#' @param auto_threshold_ratio Numeric. Proportion of candidate arcs to retain if
+#'   `threshold = "auto"` (default = 1/4). Rank-based (ties at the cutoff do not
+#'   inflate the kept set); always keeps at least one arc.
 #' @param strength_min Numeric. Minimum strength below which arcs are removed (default = 0.01).
 #' @param return_direction Logical. If `TRUE`, includes the `direction` column in the returned data.
 #' @param seed Optional integer for reproducibility. If NULL, no seed is set.
@@ -163,27 +166,34 @@ bn_boot_strength <- function(
       }
 
 
-      temp_threshold <- df %>%
-        ncol() %>%
+      # rank-based: keep the top share of candidate arcs. A strength-value
+      # cutoff would also keep every arc tied at the cutoff, which retains
+      # everything when strengths saturate at 1 (common with few bootstrap
+      # reps and whitelist-forced structure).
+      temp_keep_n <- bn_boot %>%
+        nrow() %>%
         multiply_by(auto_threshold_ratio) %>%
-        round(0)
+        round(0) %>%
+        max(1)
 
 
-      threshold <- bn_boot %>%
-        dplyr::arrange(dplyr::desc(.data[["strength"]])) %>%
-        dplyr::slice(temp_threshold) %>%
-        dplyr::pull(.data[["strength"]])
+      bn_boot <- bn_boot %>%
+        dplyr::arrange(
+          dplyr::desc(.data[["strength"]]),
+          dplyr::desc(.data[["direction"]])
+        ) %>%
+        dplyr::slice(seq_len(temp_keep_n))
+
+    } else {
+
+      if (threshold > 1 || threshold < 0) {
+        stop("threshold must be between 0 and 1")
+      }
+
+
+      bn_boot <- bn_boot %>%
+        dplyr::filter(strength >= threshold)
     }
-
-
-    if (threshold > 1 || threshold < 0) {
-      stop("threshold must be between 0 and 1")
-    }
-
-
-    bn_boot <- bn_boot %>%
-      dplyr::filter(strength >= threshold)
-
   }
 
 

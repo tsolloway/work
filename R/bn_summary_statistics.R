@@ -2,9 +2,10 @@
 #'
 #' @description
 #' Computes key summary statistics for a fitted or unfitted Bayesian network, including
-#' node-level scores (BIC, EBIC, AIC, log-likelihood), model-level scores, and—if a
-#' dependent variable (`dv`) is provided—prediction accuracy and comparison against a
-#' naive Bayes baseline.
+#' node-level scores (BIC, EBIC, AIC, log-likelihood), model-level scores, McFadden's
+#' pseudo-R² against the independence (empty-graph) null model, and—if a dependent
+#' variable (`dv`) is provided—prediction accuracy, Cohen's kappa, a DV-specific
+#' pseudo-R², and comparison against a naive Bayes baseline.
 #'
 #' @param bn A fitted or unfitted Bayesian network object (class `"bn"`).
 #' @param df A data frame used for scoring or fitting the Bayesian network.
@@ -20,12 +21,22 @@
 #' \describe{
 #'   \item{`confusion_matrix`}{A confusion matrix (if `dv` specified).}
 #'   \item{`nodes`}{A tibble of node-level scores (BIC, EBIC, AIC, log-likelihood).}
-#'   \item{`model`}{A tibble of overall model scores and, if applicable, accuracy metrics.}
+#'   \item{`model`}{A tibble of overall model scores (including `r2_mcfadden`) and, if
+#'     applicable, accuracy metrics (`accuracy`, `kappa`, `r2_mcfadden_dv`, and the
+#'     naive-Bayes comparisons).}
 #' }
 #'
 #' @details
 #' BIC values from `bnlearn::score()` are *rescaled* (multiplied by -2) in `bnlearn`,
 #' so higher values indicate better models.
+#'
+#' `r2_mcfadden` is McFadden's pseudo-R² for the whole network: `1 - loglik /
+#' loglik_null`, where the null model is the empty graph (all nodes independent).
+#' `r2_mcfadden_dv` applies the same idea to the `dv` node alone, comparing the
+#' log-likelihood of the observed DV values under the network's predictive
+#' distribution (`bayes-lw`, full Markov blanket) to their marginal log-likelihood
+#' under the null. McFadden values run low relative to OLS R²—0.2 to 0.4 already
+#' indicates excellent fit.
 #'
 #' @importFrom caret confusionMatrix
 #' @importFrom dplyr mutate relocate as_tibble bind_cols
@@ -43,6 +54,12 @@ bn_summary_statistics <- function(
 ){
 
   results <- list()
+
+
+  # --- Null (independence) model log-likelihoods for pseudo-R² ---
+  loglik_null_nodes <- bnlearn::score(
+    bnlearn::empty.graph(names(df)), df, type = "loglik", by.node = TRUE
+  )
 
 
   # --- Node-level statistics ---
@@ -63,7 +80,8 @@ bn_summary_statistics <- function(
     aic    = bnlearn::score(bn, df, type = "aic"),
     loglik = bnlearn::score(bn, df, type = "loglik")
   ) %>%
-    as_tibble()
+    as_tibble() %>%
+    dplyr::mutate(r2_mcfadden = 1 - loglik / sum(loglik_null_nodes))
 
 
 
@@ -76,12 +94,18 @@ bn_summary_statistics <- function(
     }
 
 
-    df_predict <- bnlearn:::predict.bn.fit(
+    if (!is.null(seed)) set.seed(seed)
+    predicted_dv <- bnlearn:::predict.bn.fit(
       object = fit,
       node = dv,
       data = df,
-      method = "bayes-lw"
+      method = "bayes-lw",
+      prob = TRUE
     ) %>%
+      suppressMessages()
+
+
+    df_predict <- predicted_dv %>%
       dplyr::bind_cols(df[[dv]]) %>%
       setNames(c("predicted", "actual")) %>%
       suppressMessages()
@@ -93,10 +117,24 @@ bn_summary_statistics <- function(
     )
 
 
+    # DV conditional log-likelihood from the predictive probabilities: the
+    # by-node loglik decomposition only reflects the DV's parents, so it is
+    # flat (pseudo-R² = 0) whenever the DV sits upstream in the DAG; the
+    # predictive distribution uses the full Markov blanket.
+    prob_dv <- attr(predicted_dv, "prob")
+    obs_prob <- prob_dv[cbind(
+      match(as.character(df[[dv]]), rownames(prob_dv)),
+      seq_along(df[[dv]])
+    )]
+    loglik_dv <- sum(log(pmax(obs_prob, .Machine$double.eps)))
+
+
     results[["model"]] <- results[["model"]] %>%
       dplyr::mutate(
         dv = dv,
-        accuracy = results[["confusion_matrix"]][["overall"]][["Accuracy"]]
+        accuracy = results[["confusion_matrix"]][["overall"]][["Accuracy"]],
+        kappa = results[["confusion_matrix"]][["overall"]][["Kappa"]],
+        r2_mcfadden_dv = 1 - loglik_dv / loglik_null_nodes[[dv]]
       ) %>%
       dplyr::relocate(dv, accuracy)
 
