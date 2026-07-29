@@ -112,6 +112,11 @@
 #'   replicates that must yield a value for a metric cell to be reported;
 #'   cells below it are blanked and passing cells use the feasible count
 #'   for the df. Default 0.9. See \code{\link{bn_impact_engine}}.
+#' @param boot_inference_legacy Logical. \code{TRUE} reproduces the
+#'   pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
+#'   blackout, NA rare-level replicates silently excluded) for
+#'   replicating historical deliverables; known to overstate
+#'   significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Target lift(s) for the shifted-distribution
 #'   metric (both proportional and absolute shift variants are precomputed).
 #'   Default \code{c(0, 0.1)}.
@@ -244,6 +249,7 @@ bn_impact <- function(
     max_impact_min_support = 5,
     max_impact_shrinkage = 20,
     min_boot_coverage = 0.9,
+    boot_inference_legacy = FALSE,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -326,6 +332,7 @@ bn_impact <- function(
         max_impact_min_support = max_impact_min_support,
         max_impact_shrinkage = max_impact_shrinkage,
         min_boot_coverage = min_boot_coverage,
+        boot_inference_legacy = boot_inference_legacy,
         type = type,
         index_by = index_by,
         n_boot = n_boot,
@@ -379,6 +386,7 @@ bn_impact <- function(
       max_impact_min_support = max_impact_min_support,
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
+      boot_inference_legacy = boot_inference_legacy,
       type = type,
       index_by = index_by,
       n_boot = n_boot,

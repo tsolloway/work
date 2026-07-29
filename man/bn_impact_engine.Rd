@@ -18,6 +18,7 @@ bn_impact_engine(
   max_impact_min_support = 5,
   max_impact_shrinkage = 20,
   min_boot_coverage = 0.9,
+  boot_inference_legacy = FALSE,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -132,6 +133,15 @@ and p-value blanked rather than silently averaging the surviving
 replicates (a selection-biased subset). Cells that pass use the
 feasible-replicate count for the se / t degrees of freedom. Only
 applies when \code{n_boot > 1}. Default 0.9.}
+
+\item{boot_inference_legacy}{Logical. \code{TRUE} reproduces the
+bootstrap bookkeeping used prior to 2026-07-29, retained for
+replicating historical deliverables only - it is known to overstate
+significance for cells with incomplete replicate sets: the se / t
+degrees of freedom always assume all \code{n_boot} replicates, the
+\code{min_boot_coverage} blackout is disabled, and (empirical
+read-off) replicates that drop a rare level return NA and are
+silently excluded from the mean/sd. Default \code{FALSE}.}
 
 \item{lift}{Numeric scalar or vector. Target percentage lift(s) for
 distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each

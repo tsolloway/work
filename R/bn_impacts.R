@@ -50,6 +50,11 @@
 #'   replicates that must yield a value for a metric cell to be reported;
 #'   cells below it are blanked and passing cells use the feasible count
 #'   for the df. Default 0.9. See \code{\link{bn_impact_engine}}.
+#' @param boot_inference_legacy Logical. \code{TRUE} reproduces the
+#'   pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
+#'   blackout, NA rare-level replicates silently excluded) for
+#'   replicating historical deliverables; known to overstate
+#'   significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size for brand lift.
 #'   Default 75.
@@ -111,6 +116,7 @@ bn_impacts <- function(
     max_impact_min_support = 5,
     max_impact_shrinkage = 20,
     min_boot_coverage = 0.9,
+    boot_inference_legacy = FALSE,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -130,6 +136,12 @@ bn_impacts <- function(
 ) {
 
   impact_readoff <- match.arg(impact_readoff)
+  if (isTRUE(boot_inference_legacy) && n_boot > 1) {
+    cli::cli_warn(c(
+      "!" = "boot_inference_legacy = TRUE reproduces the pre-2026-07-29 bootstrap bookkeeping.",
+      "i" = "It overstates significance for cells with incomplete replicate sets - use only to replicate historical deliverables."
+    ))
+  }
   community_lift <- match.arg(community_lift)
   max_impact_anchor <- match.arg(max_impact_anchor)
   if (do_community && community_lift == "joint" && impact_readoff == "model") {
@@ -169,6 +181,7 @@ bn_impacts <- function(
     max_impact_min_support = max_impact_min_support,
     max_impact_shrinkage = max_impact_shrinkage,
     min_boot_coverage = min_boot_coverage,
+    boot_inference_legacy = boot_inference_legacy,
     type = type, index_by = index_by,
     process_subgroups = process_subgroups,
     dictionary = dictionary,
@@ -200,6 +213,7 @@ bn_impacts <- function(
       max_impact_min_support = max_impact_min_support,
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
+      boot_inference_legacy = boot_inference_legacy,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -236,6 +250,7 @@ bn_impacts <- function(
       max_impact_min_support = max_impact_min_support,
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
+      boot_inference_legacy = boot_inference_legacy,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -268,6 +283,7 @@ bn_impacts <- function(
         max_impact_min_support = max_impact_min_support,
         max_impact_shrinkage = max_impact_shrinkage,
         min_boot_coverage = min_boot_coverage,
+        boot_inference_legacy = boot_inference_legacy,
         type = type, index_by = index_by,
         process_subgroups = process_subgroups,
         dictionary = dictionary,

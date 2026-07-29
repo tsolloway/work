@@ -37,6 +37,7 @@ bn_finalize_network(
   max_impact_min_support = 5,
   max_impact_shrinkage = 20,
   min_boot_coverage = 0.9,
+  boot_inference_legacy = FALSE,
   batteries = NULL,
   battery_groups = NULL,
   do_prioritizations = TRUE,
@@ -184,6 +185,12 @@ against winner's curse. \code{0} disables. Default 20. See
 replicates that must yield a value for a metric cell to be reported;
 cells below it are blanked and passing cells use the feasible count
 for the df. Default 0.9. See \code{\link{bn_impact_engine}}.}
+
+\item{boot_inference_legacy}{Logical. \code{TRUE} reproduces the
+pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
+blackout, NA rare-level replicates silently excluded) for
+replicating historical deliverables; known to overstate
+significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.}
 
 \item{do_prioritizations}{Logical. If TRUE, run \code{bn_prioritizations()}
 to produce prioritization analysis. Default TRUE.}

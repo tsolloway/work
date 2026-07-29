@@ -90,6 +90,14 @@
 #'   replicates (a selection-biased subset). Cells that pass use the
 #'   feasible-replicate count for the se / t degrees of freedom. Only
 #'   applies when \code{n_boot > 1}. Default 0.9.
+#' @param boot_inference_legacy Logical. \code{TRUE} reproduces the
+#'   bootstrap bookkeeping used prior to 2026-07-29, retained for
+#'   replicating historical deliverables only - it is known to overstate
+#'   significance for cells with incomplete replicate sets: the se / t
+#'   degrees of freedom always assume all \code{n_boot} replicates, the
+#'   \code{min_boot_coverage} blackout is disabled, and (empirical
+#'   read-off) replicates that drop a rare level return NA and are
+#'   silently excluded from the mean/sd. Default \code{FALSE}.
 #' @param lift Numeric scalar or vector. Target percentage lift(s) for
 #'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
 #'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
@@ -296,6 +304,7 @@ bn_impact_engine <- function(
     max_impact_min_support = 5,
     max_impact_shrinkage = 20,
     min_boot_coverage = 0.9,
+    boot_inference_legacy = FALSE,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -329,6 +338,10 @@ bn_impact_engine <- function(
   if (!is.numeric(min_boot_coverage) || length(min_boot_coverage) != 1 ||
       is.na(min_boot_coverage) || min_boot_coverage <= 0 || min_boot_coverage > 1) {
     stop("'min_boot_coverage' must be a single number in (0, 1].")
+  }
+  if (!is.logical(boot_inference_legacy) || length(boot_inference_legacy) != 1 ||
+      is.na(boot_inference_legacy)) {
+    stop("'boot_inference_legacy' must be TRUE or FALSE.")
   }
 
   ivs <- ivs %>% unlist() %>% setNames(NULL)
@@ -995,8 +1008,14 @@ bn_impact_engine <- function(
               # levels are unsupported; compute_lift_vals NAs only the
               # shifts that put real target mass on them. Model read-off
               # never hits this (smoothed conditionals exist everywhere).
-              unsupported_lv <- !is.finite(dv_probs)
-              dv_probs[unsupported_lv] <- 0
+              # Under boot_inference_legacy the NaN propagates as it did
+              # prior to 2026-07-29 (replicate silently excluded).
+              if (boot_inference_legacy) {
+                unsupported_lv <- rep(FALSE, length(dv_probs))
+              } else {
+                unsupported_lv <- !is.finite(dv_probs)
+                dv_probs[unsupported_lv] <- 0
+              }
             } else if (type == "gr") {
               dv_probs <- purrr::map_dbl(levels_v, function(v) {
                 ev <- stats::setNames(list(v), single_iv)
@@ -1254,7 +1273,8 @@ bn_impact_engine <- function(
         # df. Cells that pass use n_ok for the effective df, so fully
         # feasible cells (n_ok == n_boot) reproduce the previous
         # statistics exactly.
-        blackout = n_ok < min_boot_coverage * n_boot,
+        blackout = if (boot_inference_legacy) FALSE else n_ok < min_boot_coverage * n_boot,
+        n_eff    = if (boot_inference_legacy) n_boot else n_ok,
         mean     = ifelse(blackout, NA_real_, mean),
         sd       = ifelse(blackout, NA_real_, sd),
         # boot_nonzero = FALSE (default): classical bootstrap inference - the
@@ -1263,14 +1283,14 @@ bn_impact_engine <- function(
         # boot_nonzero = TRUE: legacy behavior - se = sd/sqrt(n_boot), which
         # tests whether the MEAN of the boot distribution is nonzero and
         # therefore mechanically shrinks p-values as n_boot grows.
-        se      = if (boot_nonzero) sd / sqrt(pmax(n_ok, 1)) else sd,
+        se      = if (boot_nonzero) sd / sqrt(pmax(n_eff, 1)) else sd,
         t       = mean / se,
-        tcrit   = stats::qt(0.975, df = pmax(n_ok - 1, 1)),
+        tcrit   = stats::qt(0.975, df = pmax(n_eff - 1, 1)),
         ci_low  = mean - tcrit * se,
         ci_high = mean + tcrit * se,
-        p_value = 2 * stats::pt(-abs(t), df = pmax(n_ok - 1, 1)) %>% round(4)
+        p_value = 2 * stats::pt(-abs(t), df = pmax(n_eff - 1, 1)) %>% round(4)
       ) %>%
-      dplyr::select(-tcrit, -n_ok, -blackout) %>%   # housekeeping
+      dplyr::select(-tcrit, -n_ok, -n_eff, -blackout) %>%   # housekeeping
       tidyr::pivot_wider(
         id_cols = variable,
         names_from = metric,

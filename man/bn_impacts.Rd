@@ -20,6 +20,7 @@ bn_impacts(
   max_impact_min_support = 5,
   max_impact_shrinkage = 20,
   min_boot_coverage = 0.9,
+  boot_inference_legacy = FALSE,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -98,6 +99,12 @@ against winner's curse. \code{0} disables. Default 20. See
 replicates that must yield a value for a metric cell to be reported;
 cells below it are blanked and passing cells use the feasible count
 for the df. Default 0.9. See \code{\link{bn_impact_engine}}.}
+
+\item{boot_inference_legacy}{Logical. \code{TRUE} reproduces the
+pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
+blackout, NA rare-level replicates silently excluded) for
+replicating historical deliverables; known to overstate
+significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.}
 
 \item{lift}{Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.}
 
