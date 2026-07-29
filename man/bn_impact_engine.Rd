@@ -14,6 +14,9 @@ bn_impact_engine(
   community_impact_attributes = NULL,
   impact_readoff = c("empirical", "model"),
   community_lift = c("joint", "average"),
+  max_impact_anchor = c("observed", "theoretical"),
+  max_impact_min_support = 5,
+  max_impact_shrinkage = 20,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -85,6 +88,36 @@ only ever places mass on observed joint profiles. Requires
 of the members' individually-computed lifts - this was the methodology
 used prior to 2026-07-28. Attribute-level runs and the maxVmin / MI /
 base columns are unaffected.}
+
+\item{max_impact_anchor}{Character. How the Best-vs-Worst (maxVmin) family
+(\code{dv_max_value}, \code{dv_min_value}, \code{maxVmin_*}) is
+anchored. \code{"observed"} (default): anchors must be observed with at
+least \code{max_impact_min_support} respondents - for a single
+attribute, the max/min scale levels among supported levels (sign
+semantics preserved); for a community, the observed joint member
+profiles with the highest/lowest empirical weighted E\link{DV}. Anchor
+selection is always empirical; the anchor VALUES are then read per
+\code{impact_readoff} (\code{"model"} queries the network at the two
+chosen observed anchors). \code{"theoretical"}: hypothetical
+all-max / all-min evidence configurations - this was the methodology
+used prior to 2026-07-28; for multi-member communities those
+configurations are mostly unobserved, so values there lean on CPT
+smoothing (extrapolation).}
+
+\item{max_impact_min_support}{Integer. Minimum respondent count for an
+anchor candidate under \code{max_impact_anchor = "observed"}. Falls
+back to all observed candidates if fewer than two clear the threshold.
+Default 5.}
+
+\item{max_impact_shrinkage}{Numeric >= 0. Empirical-Bayes prior weight
+used under \code{max_impact_anchor = "observed"}: each anchor
+candidate's E\link{DV} is shrunk toward the scope mean with this many
+pseudo-respondents before ranking (and, under
+\code{impact_readoff = "empirical"}, before reading the anchor
+values). Guards the Best-vs-Worst argmax against winner's curse -
+with a binary DV and raw means, the best observed profile is
+otherwise routinely a small all-top-box cell at exactly 1.0.
+\code{0} disables shrinkage. Default 20.}
 
 \item{lift}{Numeric scalar or vector. Target percentage lift(s) for
 distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each

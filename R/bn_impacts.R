@@ -34,6 +34,16 @@
 #'   lifts - the methodology used prior to 2026-07-28. \code{"joint"}
 #'   requires \code{impact_readoff = "empirical"}. See
 #'   \code{\link{bn_impact_engine}}.
+#' @param max_impact_anchor Character. \code{"observed"} (default) anchors
+#'   the Best-vs-Worst (maxVmin) family at observed, support-guarded anchors;
+#'   \code{"theoretical"} uses hypothetical all-max / all-min evidence - the
+#'   methodology used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
+#' @param max_impact_min_support Integer. Minimum respondent count for an
+#'   observed anchor candidate. Default 5.
+#' @param max_impact_shrinkage Numeric >= 0. Empirical-Bayes prior weight
+#'   (pseudo-respondents toward the scope mean) guarding observed anchors
+#'   against winner's curse. \code{0} disables. Default 20. See
+#'   \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size for brand lift.
 #'   Default 75.
@@ -91,6 +101,9 @@ bn_impacts <- function(
     community_impact_attributes = NULL,
     impact_readoff = c("empirical", "model"),
     community_lift = c("joint", "average"),
+    max_impact_anchor = c("observed", "theoretical"),
+    max_impact_min_support = 5,
+    max_impact_shrinkage = 20,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -111,6 +124,7 @@ bn_impacts <- function(
 
   impact_readoff <- match.arg(impact_readoff)
   community_lift <- match.arg(community_lift)
+  max_impact_anchor <- match.arg(max_impact_anchor)
   if (do_community && community_lift == "joint" && impact_readoff == "model") {
     stop("community_lift = \"joint\" requires impact_readoff = \"empirical\". ",
          "Use community_lift = \"average\" for the model read-off ",
@@ -142,6 +156,9 @@ bn_impacts <- function(
     do_community = FALSE,
     community_assignment = community_assignment,
     impact_readoff = impact_readoff,
+    max_impact_anchor = max_impact_anchor,
+    max_impact_min_support = max_impact_min_support,
+    max_impact_shrinkage = max_impact_shrinkage,
     type = type, index_by = index_by,
     process_subgroups = process_subgroups,
     dictionary = dictionary,
@@ -169,6 +186,9 @@ bn_impacts <- function(
       do_community = FALSE,
       community_assignment = community_assignment,
       impact_readoff = impact_readoff,
+      max_impact_anchor = max_impact_anchor,
+      max_impact_min_support = max_impact_min_support,
+      max_impact_shrinkage = max_impact_shrinkage,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -201,6 +221,9 @@ bn_impacts <- function(
       community_impact_attributes = community_impact_attributes,
       impact_readoff = impact_readoff,
       community_lift = community_lift,
+      max_impact_anchor = max_impact_anchor,
+      max_impact_min_support = max_impact_min_support,
+      max_impact_shrinkage = max_impact_shrinkage,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -229,6 +252,9 @@ bn_impacts <- function(
         community_impact_attributes = community_impact_attributes,
         impact_readoff = impact_readoff,
         community_lift = community_lift,
+        max_impact_anchor = max_impact_anchor,
+        max_impact_min_support = max_impact_min_support,
+        max_impact_shrinkage = max_impact_shrinkage,
         type = type, index_by = index_by,
         process_subgroups = process_subgroups,
         dictionary = dictionary,

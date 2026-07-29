@@ -16,6 +16,9 @@ bn_impacts(
   community_impact_attributes = NULL,
   impact_readoff = c("empirical", "model"),
   community_lift = c("joint", "average"),
+  max_impact_anchor = c("observed", "theoretical"),
+  max_impact_min_support = 5,
+  max_impact_shrinkage = 20,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -73,6 +76,19 @@ community lift columns by raking (IPF) to all member targets at once -
 the theme effect; \code{"average"} takes the arithmetic mean of member
 lifts - the methodology used prior to 2026-07-28. \code{"joint"}
 requires \code{impact_readoff = "empirical"}. See
+\code{\link{bn_impact_engine}}.}
+
+\item{max_impact_anchor}{Character. \code{"observed"} (default) anchors
+the Best-vs-Worst (maxVmin) family at observed, support-guarded anchors;
+\code{"theoretical"} uses hypothetical all-max / all-min evidence - the
+methodology used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.}
+
+\item{max_impact_min_support}{Integer. Minimum respondent count for an
+observed anchor candidate. Default 5.}
+
+\item{max_impact_shrinkage}{Numeric >= 0. Empirical-Bayes prior weight
+(pseudo-respondents toward the scope mean) guarding observed anchors
+against winner's curse. \code{0} disables. Default 20. See
 \code{\link{bn_impact_engine}}.}
 
 \item{lift}{Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.}

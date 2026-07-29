@@ -96,6 +96,16 @@
 #'   lifts - the methodology used prior to 2026-07-28. \code{"joint"}
 #'   requires \code{impact_readoff = "empirical"}. See
 #'   \code{\link{bn_impact_engine}}.
+#' @param max_impact_anchor Character. \code{"observed"} (default) anchors
+#'   the Best-vs-Worst (maxVmin) family at observed, support-guarded anchors;
+#'   \code{"theoretical"} uses hypothetical all-max / all-min evidence - the
+#'   methodology used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
+#' @param max_impact_min_support Integer. Minimum respondent count for an
+#'   observed anchor candidate. Default 5.
+#' @param max_impact_shrinkage Numeric >= 0. Empirical-Bayes prior weight
+#'   (pseudo-respondents toward the scope mean) guarding observed anchors
+#'   against winner's curse. \code{0} disables. Default 20. See
+#'   \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Target lift(s) for the shifted-distribution
 #'   metric (both proportional and absolute shift variants are precomputed).
 #'   Default \code{c(0, 0.1)}.
@@ -224,6 +234,9 @@ bn_impact <- function(
     community_impact_attributes = NULL,
     impact_readoff = c("empirical", "model"),
     community_lift = c("joint", "average"),
+    max_impact_anchor = c("observed", "theoretical"),
+    max_impact_min_support = 5,
+    max_impact_shrinkage = 20,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -248,6 +261,7 @@ bn_impact <- function(
   dv_metric <- match.arg(dv_metric)
   impact_readoff <- match.arg(impact_readoff)
   community_lift <- match.arg(community_lift)
+  max_impact_anchor <- match.arg(max_impact_anchor)
 
   # Preserve named dv for meta, strip for bnlearn
   dv_original <- dv
@@ -354,6 +368,9 @@ bn_impact <- function(
         community_impact_attributes = community_impact_attributes,
         impact_readoff = impact_readoff,
         community_lift = community_lift,
+        max_impact_anchor = max_impact_anchor,
+        max_impact_min_support = max_impact_min_support,
+        max_impact_shrinkage = max_impact_shrinkage,
         type = type,
         index_by = index_by,
         n_boot = n_boot,
@@ -403,6 +420,9 @@ bn_impact <- function(
       community_impact_attributes = community_impact_attributes,
       impact_readoff = impact_readoff,
       community_lift = community_lift,
+      max_impact_anchor = max_impact_anchor,
+      max_impact_min_support = max_impact_min_support,
+      max_impact_shrinkage = max_impact_shrinkage,
       type = type,
       index_by = index_by,
       n_boot = n_boot,

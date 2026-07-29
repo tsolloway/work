@@ -51,6 +51,33 @@
 #'   of the members' individually-computed lifts - this was the methodology
 #'   used prior to 2026-07-28. Attribute-level runs and the maxVmin / MI /
 #'   base columns are unaffected.
+#' @param max_impact_anchor Character. How the Best-vs-Worst (maxVmin) family
+#'   (\code{dv_max_value}, \code{dv_min_value}, \code{maxVmin_*}) is
+#'   anchored. \code{"observed"} (default): anchors must be observed with at
+#'   least \code{max_impact_min_support} respondents - for a single
+#'   attribute, the max/min scale levels among supported levels (sign
+#'   semantics preserved); for a community, the observed joint member
+#'   profiles with the highest/lowest empirical weighted E[DV]. Anchor
+#'   selection is always empirical; the anchor VALUES are then read per
+#'   \code{impact_readoff} (\code{"model"} queries the network at the two
+#'   chosen observed anchors). \code{"theoretical"}: hypothetical
+#'   all-max / all-min evidence configurations - this was the methodology
+#'   used prior to 2026-07-28; for multi-member communities those
+#'   configurations are mostly unobserved, so values there lean on CPT
+#'   smoothing (extrapolation).
+#' @param max_impact_min_support Integer. Minimum respondent count for an
+#'   anchor candidate under \code{max_impact_anchor = "observed"}. Falls
+#'   back to all observed candidates if fewer than two clear the threshold.
+#'   Default 5.
+#' @param max_impact_shrinkage Numeric >= 0. Empirical-Bayes prior weight
+#'   used under \code{max_impact_anchor = "observed"}: each anchor
+#'   candidate's E[DV] is shrunk toward the scope mean with this many
+#'   pseudo-respondents before ranking (and, under
+#'   \code{impact_readoff = "empirical"}, before reading the anchor
+#'   values). Guards the Best-vs-Worst argmax against winner's curse -
+#'   with a binary DV and raw means, the best observed profile is
+#'   otherwise routinely a small all-top-box cell at exactly 1.0.
+#'   \code{0} disables shrinkage. Default 20.
 #' @param lift Numeric scalar or vector. Target percentage lift(s) for
 #'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
 #'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
@@ -249,6 +276,9 @@ bn_impact_engine <- function(
     community_impact_attributes = NULL,
     impact_readoff = c("empirical", "model"),
     community_lift = c("joint", "average"),
+    max_impact_anchor = c("observed", "theoretical"),
+    max_impact_min_support = 5,
+    max_impact_shrinkage = 20,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -273,6 +303,12 @@ bn_impact_engine <- function(
   dv_metric <- match.arg(dv_metric)
   impact_readoff <- match.arg(impact_readoff)
   community_lift <- match.arg(community_lift)
+  max_impact_anchor <- match.arg(max_impact_anchor)
+  work::assert_positive_integer(max_impact_min_support, "max_impact_min_support")
+  if (!is.numeric(max_impact_shrinkage) || length(max_impact_shrinkage) != 1 ||
+      is.na(max_impact_shrinkage) || max_impact_shrinkage < 0) {
+    stop("'max_impact_shrinkage' must be a single non-negative number.")
+  }
 
   if (do_community && community_lift == "joint" && impact_readoff == "model") {
     stop("community_lift = \"joint\" requires impact_readoff = \"empirical\". ",
@@ -514,7 +550,18 @@ bn_impact_engine <- function(
 
     if(type != "mi"){
 
-      if(is.null(fit)) fit_boot <- bnlearn::bn.fit(bn, fit_data, method = "bayes") else fit_boot <- fit
+      # The fitted network / compiled junction tree are only needed when a
+      # model read-off or theoretical anchoring is in play. Under the
+      # defaults (empirical read-off + observed anchors) both are skipped -
+      # the main per-replicate cost of the bootstrap.
+      need_model <- impact_readoff == "model" || max_impact_anchor == "theoretical"
+      need_fit   <- need_model || type == "cp"
+
+      if(is.null(fit)) {
+        fit_boot <- if (need_fit) bnlearn::bn.fit(bn, fit_data, method = "bayes") else NULL
+      } else {
+        fit_boot <- fit
+      }
 
       if(!all(purrr::map_lgl(ivs, ~ ivs_max[[.x]] %in% dat_boot[[.x]]))){
         iv_boot_max <- dat_boot %>% dplyr::summarise(dplyr::across(dplyr::all_of(ivs), ~as.character(.x) %>% as.numeric() %>% max(na.rm = TRUE))) %>% as.list()
@@ -549,7 +596,7 @@ bn_impact_engine <- function(
         iv_boot_max <- iv_boot_max %>% lapply(as.character)
         iv_boot_min <- iv_boot_min %>% lapply(as.character)
 
-        grain_bn <- bnlearn::as.grain(fit_boot) %>% gRain:::compile.grain()
+        grain_bn <- if (need_model) bnlearn::as.grain(fit_boot) %>% gRain:::compile.grain() else NULL
 
       }
     }
@@ -559,25 +606,130 @@ bn_impact_engine <- function(
 
       if(!is.null(community_assignment)) temp_ivs <- community_assignment else temp_ivs <- ivs %>% setNames(ivs)
 
+      if (max_impact_anchor == "observed") {
 
-      results <- temp_ivs %>%
-        purrr::imap(
-          ~engine_diff_single_attribute(
-            fit_boot = fit_boot,
-            grain_bn = grain_bn,
-            dv = dv,
-            iv = .y,
-            attr_iv_boot_max = iv_boot_max[.x],
-            attr_iv_boot_min = iv_boot_min[.x],
-            attr_dv_boot_max = dv_boot_max,
-            type = type,
-            n_querry = n_querry,
-            dv_metric = dv_metric,
-            seed = seed
-          )
-        ) %>%
-        dplyr::bind_rows() %>%
-        dplyr::as_tibble()
+        # Observed anchoring ("theoretical" all-max/all-min evidence was the
+        # pre-2026-07-28 methodology). Anchors are restricted to what the
+        # (resampled) data actually contains with >= max_impact_min_support
+        # respondents: single attributes keep their max/min SCALE levels
+        # (so negative relationships keep their sign) but only among
+        # supported levels; communities anchor at the observed joint member
+        # profiles with the highest/lowest empirical weighted E[DV] - the
+        # place where theoretical configurations are mostly unobserved and
+        # values would otherwise lean on CPT smoothing. Anchor selection is
+        # empirical; anchor values are read per impact_readoff.
+        w_anchor <- if (!is.null(weight)) dat_boot[[weight]] else rep(1, nrow(dat_boot))
+        dv_anchor_num <- dat_boot[[dv]] %>% as.character() %>% as.numeric()
+        dv_anchor_y <- if (dv_metric == "top_box") {
+          as.numeric(dv_anchor_num == max(dv_anchor_num, na.rm = TRUE))
+        } else {
+          dv_anchor_num
+        }
+        scope_mean <- stats::weighted.mean(dv_anchor_y, w_anchor)
+
+        # Empirical-Bayes shrunk E[DV] for one anchor candidate: prior =
+        # scope mean with max_impact_shrinkage pseudo-respondents. Used for
+        # ranking and for the empirical read-off, so a 5-person all-top-box
+        # cell can't win the argmax at a saturated 1.0.
+        shrunk_mean <- function(m) {
+          (sum(dv_anchor_y[m] * w_anchor[m]) + max_impact_shrinkage * scope_mean) /
+            (sum(w_anchor[m]) + max_impact_shrinkage)
+        }
+
+        model_read <- function(ev) {
+          if (type == "gr") {
+            dist <- gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE)
+            if (dv_metric == "top_box") {
+              dist %>% dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+            } else {
+              sum(as.numeric(names(dist)) * as.numeric(dist))
+            }
+          } else {
+            ev_txt <- paste0("list(", paste0(names(ev), " = '", unlist(ev), "'", collapse = ", "), ")")
+            if (dv_metric == "top_box") {
+              if (!is.null(seed)) set.seed(seed)
+              eval(parse(text = glue::glue(
+                "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{dv_boot_max}'), evidence = {ev_txt}, n = {n_querry}, method = 'lw')"
+              )))
+            } else {
+              dv_scale <- fit_boot[[dv]] %>% dimnames() %>% .[[1]] %>% as.numeric()
+              purrr::map_dbl(dv_scale, function(d) {
+                if (!is.null(seed)) set.seed(seed)
+                eval(parse(text = glue::glue(
+                  "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{d}'), evidence = {ev_txt}, n = {n_querry}, method = 'lw')"
+                )))
+              }) %>% { sum(dv_scale * .) }
+            }
+          }
+        }
+
+        results <- temp_ivs %>%
+          purrr::imap(function(iv_vars, iv_name) {
+
+            key <- if (length(iv_vars) == 1) {
+              as.character(dat_boot[[iv_vars]])
+            } else {
+              apply(dat_boot[iv_vars], 1, paste0, collapse = "\r")
+            }
+            counts <- table(key)
+            eligible <- names(counts)[counts >= max_impact_min_support]
+            if (length(eligible) < 2) eligible <- names(counts)
+
+            if (length(iv_vars) == 1) {
+              lev_num <- suppressWarnings(as.numeric(eligible))
+              anchor_max <- eligible[which.max(lev_num)]
+              anchor_min <- eligible[which.min(lev_num)]
+            } else {
+              prof_means <- vapply(eligible, function(k) shrunk_mean(key == k), numeric(1))
+              anchor_max <- eligible[which.max(prof_means)]
+              anchor_min <- eligible[which.min(prof_means)]
+            }
+
+            read_at <- function(k) {
+              m <- key == k
+              if (impact_readoff == "empirical") {
+                shrunk_mean(m)
+              } else {
+                ridx <- which(m)[1]
+                ev <- lapply(dat_boot[ridx, iv_vars, drop = FALSE], as.character)
+                model_read(ev)
+              }
+            }
+            p1 <- read_at(anchor_max)
+            p0 <- read_at(anchor_min)
+
+            data.frame(
+              variable            = iv_name,
+              dv_max_value        = p1,
+              dv_min_value        = p0,
+              maxVmin_propdisplay = (p1 - p0) / p0,
+              maxVmin_absdisplay  = p1 - p0
+            )
+          }) %>%
+          dplyr::bind_rows() %>%
+          dplyr::as_tibble()
+
+      } else {
+
+        results <- temp_ivs %>%
+          purrr::imap(
+            ~engine_diff_single_attribute(
+              fit_boot = fit_boot,
+              grain_bn = grain_bn,
+              dv = dv,
+              iv = .y,
+              attr_iv_boot_max = iv_boot_max[.x],
+              attr_iv_boot_min = iv_boot_min[.x],
+              attr_dv_boot_max = dv_boot_max,
+              type = type,
+              n_querry = n_querry,
+              dv_metric = dv_metric,
+              seed = seed
+            )
+          ) %>%
+          dplyr::bind_rows() %>%
+          dplyr::as_tibble()
+      }
 
     }
 
