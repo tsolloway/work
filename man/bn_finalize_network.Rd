@@ -32,6 +32,7 @@ bn_finalize_network(
   impact_include_base = TRUE,
   community_impact_attributes = NULL,
   impact_readoff = c("empirical", "model"),
+  community_lift = c("joint", "average"),
   batteries = NULL,
   battery_groups = NULL,
   do_prioritizations = TRUE,
@@ -147,6 +148,13 @@ tables (and their per-battery dashboard cuts) are never affected.}
 E\link{DV | IV = level} for the lift metrics directly from the data;
 \code{"model"} uses the fitted network's conditionals - the methodology
 used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.}
+
+\item{community_lift}{Character. \code{"joint"} (default) computes
+community lift columns by raking (IPF) to all member targets at once -
+the theme effect; \code{"average"} takes the arithmetic mean of member
+lifts - the methodology used prior to 2026-07-28. \code{"joint"}
+requires \code{impact_readoff = "empirical"}. See
+\code{\link{bn_impact_engine}}.}
 
 \item{do_prioritizations}{Logical. If TRUE, run \code{bn_prioritizations()}
 to produce prioritization analysis. Default TRUE.}

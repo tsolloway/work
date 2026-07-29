@@ -28,6 +28,12 @@
 #'   \code{"model"} uses the fitted network's conditionals - the methodology
 #'   used prior to 2026-07-28. Applies to attribute and community lift
 #'   columns alike. See \code{\link{bn_impact_engine}}.
+#' @param community_lift Character. \code{"joint"} (default) computes
+#'   community lift columns by raking (IPF) to all member targets at once -
+#'   the theme effect; \code{"average"} takes the arithmetic mean of member
+#'   lifts - the methodology used prior to 2026-07-28. \code{"joint"}
+#'   requires \code{impact_readoff = "empirical"}. See
+#'   \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size for brand lift.
 #'   Default 75.
@@ -84,6 +90,7 @@ bn_impacts <- function(
     community_assignment = NULL,
     community_impact_attributes = NULL,
     impact_readoff = c("empirical", "model"),
+    community_lift = c("joint", "average"),
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -101,6 +108,14 @@ bn_impacts <- function(
     boot_nonzero = FALSE,
     seed = 1
 ) {
+
+  impact_readoff <- match.arg(impact_readoff)
+  community_lift <- match.arg(community_lift)
+  if (do_community && community_lift == "joint" && impact_readoff == "model") {
+    stop("community_lift = \"joint\" requires impact_readoff = \"empirical\". ",
+         "Use community_lift = \"average\" for the model read-off ",
+         "(the pre-2026-07-28 combination).")
+  }
 
   # Validate community_impact_attributes up front so a bad battery name
   # errors before the (potentially long) attribute runs, not after them.
@@ -185,6 +200,7 @@ bn_impacts <- function(
       community_assignment = community_assignment,
       community_impact_attributes = community_impact_attributes,
       impact_readoff = impact_readoff,
+      community_lift = community_lift,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -212,6 +228,7 @@ bn_impacts <- function(
         community_assignment = community_assignment,
         community_impact_attributes = community_impact_attributes,
         impact_readoff = impact_readoff,
+        community_lift = community_lift,
         type = type, index_by = index_by,
         process_subgroups = process_subgroups,
         dictionary = dictionary,

@@ -41,6 +41,16 @@
 #'   numerically near-identical; they can diverge when IVs connect to the
 #'   DV only through other nodes. Does not affect the maxVmin family
 #'   (see \code{max_impact_anchor}) or MI.
+#' @param community_lift Character. How community-level lift columns are
+#'   computed. \code{"joint"} (default): theme effect - rake (IPF) the
+#'   observed rows' weights so every member attribute's marginal matches its
+#'   shifted target simultaneously, then read the DV change under the raked
+#'   weights; preserves the observed correlation structure among members and
+#'   only ever places mass on observed joint profiles. Requires
+#'   \code{impact_readoff = "empirical"}. \code{"average"}: arithmetic mean
+#'   of the members' individually-computed lifts - this was the methodology
+#'   used prior to 2026-07-28. Attribute-level runs and the maxVmin / MI /
+#'   base columns are unaffected.
 #' @param lift Numeric scalar or vector. Target percentage lift(s) for
 #'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
 #'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
@@ -238,6 +248,7 @@ bn_impact_engine <- function(
     community_assignment = NULL,
     community_impact_attributes = NULL,
     impact_readoff = c("empirical", "model"),
+    community_lift = c("joint", "average"),
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -261,6 +272,13 @@ bn_impact_engine <- function(
   impact_shift_type <- match.arg(impact_shift_type)
   dv_metric <- match.arg(dv_metric)
   impact_readoff <- match.arg(impact_readoff)
+  community_lift <- match.arg(community_lift)
+
+  if (do_community && community_lift == "joint" && impact_readoff == "model") {
+    stop("community_lift = \"joint\" requires impact_readoff = \"empirical\". ",
+         "Use community_lift = \"average\" for the model read-off ",
+         "(the pre-2026-07-28 combination).")
+  }
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
   # ---------------------------
@@ -677,8 +695,67 @@ bn_impact_engine <- function(
         }) %>% unlist()
       }
 
+      # community_lift = "joint": theme effect for one community and one
+      # focus scope (market rows or a brand's rows). Rake the scope's weights
+      # so every member's marginal hits its bn_freq_prob_shift target
+      # simultaneously, then read the DV change empirically under the raked
+      # weights. Targets are zeroed and renormalized on levels the scope
+      # never observes, so mass only moves across observed joint profiles
+      # (support blackout). Requires impact_readoff = "empirical" (enforced
+      # up front); "average" below was the pre-2026-07-28 methodology.
+      compute_joint_lift_vals <- function(iv_vars, mask) {
+        w_all <- if (!is.null(weight)) dat_boot[[weight]] else rep(1, nrow(dat_boot))
+        w_s <- w_all[mask]
+        if (sum(w_s) < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
+        members <- dat_boot[mask, iv_vars, drop = FALSE]
+        freqs <- lapply(iv_vars, function(v) {
+          wtd_table(members[[v]], w = if (is.null(weight)) NULL else w_s)
+        }) %>% setNames(iv_vars)
+        dv_s <- dv_emp_y[mask]
+        e_obs <- stats::weighted.mean(dv_s, w_s)
+
+        targets_for <- function(l) {
+          lapply(iv_vars, function(v) {
+            fr <- freqs[[v]]
+            sr <- if (!is.null(scale_ranges)) scale_ranges[[v]] else NULL
+            tgt <- bn_freq_prob_shift(fr, type = "exponential", lift = l,
+              impact_shift_type = impact_shift_type, scale_range = sr) %>%
+              as.numeric() %>% setNames(names(fr))
+            tgt[as.numeric(fr) <= 0] <- 0
+            tot <- sum(tgt)
+            if (tot > 0) tgt <- tgt / tot
+            tgt
+          }) %>% setNames(iv_vars)
+        }
+        e_raked <- function(l) {
+          r <- .bn_ipf_rake(members, w_s, targets_for(l))
+          stats::weighted.mean(dv_s, r)
+        }
+
+        purrr::map(lift, function(l) {
+          lift_abs <- if (l == 0) e_raked(0.05) - e_raked(-0.05) else e_raked(l) - e_obs
+          lift_prop <- if (is.finite(e_obs) && e_obs != 0) lift_abs / e_obs else NA_real_
+          c(lift_prop, lift_abs)   # (propdisplay, absdisplay)
+        }) %>% unlist()
+      }
+
       lift_results <- temp_ivs_r %>%
         purrr::imap(function(iv_vars, iv_name) {
+
+          if (!is.null(community_assignment) && community_lift == "joint") {
+            market_vals <- compute_joint_lift_vals(iv_vars, rep(TRUE, nrow(dat_boot)))
+            vals <- if (is.null(brand_levels)) {
+              market_vals
+            } else {
+              c(market_vals, purrr::map(brand_levels, function(b) {
+                compute_joint_lift_vals(iv_vars, dat_boot[[brand]] %in% b)
+              }) %>% unlist())
+            }
+            return(dplyr::bind_cols(
+              data.frame(variable = iv_name),
+              as.data.frame(t(setNames(vals, lift_col_names)))
+            ))
+          }
 
           # Matrix: rows = iv_vars, cols = lift_col_names
           per_iv_mat <- purrr::map(iv_vars, function(single_iv) {
@@ -1083,5 +1160,44 @@ bn_impact_engine <- function(
   }
 
   ids[id_batteries %in% community_impact_attributes]
+}
+
+
+#' Iterative proportional fitting of row weights to per-member marginal targets
+#'
+#' member_df holds one column per community member (factor/character), w the
+#' starting weights, targets a named list (per member) of target proportions
+#' named by that member's observed levels. Cycles members, scaling weights so
+#' each member's weighted marginal matches its target, until the worst
+#' marginal gap is below tol or max_iter is hit (correlated members can make
+#' the margins jointly infeasible - the weights then sit at the closest
+#' reachable point, which is the intended support-respecting behavior).
+#' Deterministic; no RNG.
+#'
+#' @noRd
+.bn_ipf_rake <- function(member_df, w, targets, tol = 1e-6, max_iter = 50L) {
+
+  r <- as.numeric(w)
+  idx <- lapply(names(targets), function(v) {
+    match(as.character(member_df[[v]]), names(targets[[v]]))
+  }) %>% setNames(names(targets))
+
+  for (i in seq_len(max_iter)) {
+    max_gap <- 0
+    for (v in names(targets)) {
+      tgt <- targets[[v]]
+      ix <- idx[[v]]
+      cur <- numeric(length(tgt))
+      rs <- rowsum(r, ix)
+      cur[as.integer(rownames(rs))] <- rs[, 1]
+      cur_p <- cur / sum(r)
+      max_gap <- max(max_gap, max(abs(cur_p - tgt)))
+      ratio <- ifelse(cur_p > 0, tgt / cur_p, 0)
+      r <- r * ratio[ix]
+    }
+    if (max_gap < tol) break
+  }
+
+  r
 }
 

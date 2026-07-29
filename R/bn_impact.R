@@ -90,6 +90,12 @@
 #'   E[DV | IV = level] for the lift metrics directly from the data;
 #'   \code{"model"} uses the fitted network's conditionals - the methodology
 #'   used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
+#' @param community_lift Character. \code{"joint"} (default) computes
+#'   community lift columns by raking (IPF) to all member targets at once -
+#'   the theme effect; \code{"average"} takes the arithmetic mean of member
+#'   lifts - the methodology used prior to 2026-07-28. \code{"joint"}
+#'   requires \code{impact_readoff = "empirical"}. See
+#'   \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Target lift(s) for the shifted-distribution
 #'   metric (both proportional and absolute shift variants are precomputed).
 #'   Default \code{c(0, 0.1)}.
@@ -217,6 +223,7 @@ bn_impact <- function(
     community_assignment = NULL,
     community_impact_attributes = NULL,
     impact_readoff = c("empirical", "model"),
+    community_lift = c("joint", "average"),
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -240,6 +247,7 @@ bn_impact <- function(
   index_by <- match.arg(index_by)
   dv_metric <- match.arg(dv_metric)
   impact_readoff <- match.arg(impact_readoff)
+  community_lift <- match.arg(community_lift)
 
   # Preserve named dv for meta, strip for bnlearn
   dv_original <- dv
@@ -345,6 +353,7 @@ bn_impact <- function(
         community_assignment = community_assignment,
         community_impact_attributes = community_impact_attributes,
         impact_readoff = impact_readoff,
+        community_lift = community_lift,
         type = type,
         index_by = index_by,
         n_boot = n_boot,
@@ -393,6 +402,7 @@ bn_impact <- function(
       community_assignment = community_assignment,
       community_impact_attributes = community_impact_attributes,
       impact_readoff = impact_readoff,
+      community_lift = community_lift,
       type = type,
       index_by = index_by,
       n_boot = n_boot,

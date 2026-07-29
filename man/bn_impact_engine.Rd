@@ -13,6 +13,7 @@ bn_impact_engine(
   community_assignment = NULL,
   community_impact_attributes = NULL,
   impact_readoff = c("empirical", "model"),
+  community_lift = c("joint", "average"),
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -73,6 +74,17 @@ DV connections (\code{all_ivs_connect_to_dv = TRUE}) the two are
 numerically near-identical; they can diverge when IVs connect to the
 DV only through other nodes. Does not affect the maxVmin family
 (see \code{max_impact_anchor}) or MI.}
+
+\item{community_lift}{Character. How community-level lift columns are
+computed. \code{"joint"} (default): theme effect - rake (IPF) the
+observed rows' weights so every member attribute's marginal matches its
+shifted target simultaneously, then read the DV change under the raked
+weights; preserves the observed correlation structure among members and
+only ever places mass on observed joint profiles. Requires
+\code{impact_readoff = "empirical"}. \code{"average"}: arithmetic mean
+of the members' individually-computed lifts - this was the methodology
+used prior to 2026-07-28. Attribute-level runs and the maxVmin / MI /
+base columns are unaffected.}
 
 \item{lift}{Numeric scalar or vector. Target percentage lift(s) for
 distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each

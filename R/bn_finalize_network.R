@@ -74,6 +74,12 @@
 #'   E[DV | IV = level] for the lift metrics directly from the data;
 #'   \code{"model"} uses the fitted network's conditionals - the methodology
 #'   used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
+#' @param community_lift Character. \code{"joint"} (default) computes
+#'   community lift columns by raking (IPF) to all member targets at once -
+#'   the theme effect; \code{"average"} takes the arithmetic mean of member
+#'   lifts - the methodology used prior to 2026-07-28. \code{"joint"}
+#'   requires \code{impact_readoff = "empirical"}. See
+#'   \code{\link{bn_impact_engine}}.
 #' @param do_prioritizations Logical. If TRUE, run \code{bn_prioritizations()}
 #'   to produce prioritization analysis. Default TRUE.
 #' @param prioritize_lift Numeric. Lift fraction for prioritization. Default
@@ -157,6 +163,7 @@ bn_finalize_network <- function(
     impact_include_base = TRUE,
     community_impact_attributes = NULL,
     impact_readoff = c("empirical", "model"),
+    community_lift = c("joint", "average"),
     # Survey-battery grouping for the "Index By: Battery" feature in the
     # impact dashboards. Named list of vectors mapping battery name -> IVs.
     # If NULL, resolved from obj$meta$ivs when that's a named list (the
@@ -206,6 +213,7 @@ bn_finalize_network <- function(
   node_label_type <- match.arg(node_label_type)
   impact_type <- match.arg(impact_type)
   impact_readoff <- match.arg(impact_readoff)
+  community_lift <- match.arg(community_lift)
   prioritize_shift_type <- match.arg(prioritize_shift_type)
   dv_metric <- match.arg(dv_metric)
 
@@ -481,6 +489,7 @@ bn_finalize_network <- function(
       community_assignment = attribute_nodes,
       community_impact_attributes = community_impact_attributes,
       impact_readoff = impact_readoff,
+      community_lift = community_lift,
       type = impact_type,
       index_by = impact_index_by,
       process_subgroups = TRUE,
@@ -588,6 +597,7 @@ bn_finalize_network <- function(
   results[["meta"]][["ivs"]] <- if (!is.null(batteries)) batteries else x_ivs
   results[["meta"]][["community_impact_attributes"]] <- community_impact_attributes
   results[["meta"]][["impact_readoff"]] <- impact_readoff
+  results[["meta"]][["community_lift"]] <- community_lift
 
   if (!is.null(batteries)) {
     results[["meta"]][["batteries"]] <- batteries

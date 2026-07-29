@@ -15,6 +15,7 @@ bn_impacts(
   community_assignment = NULL,
   community_impact_attributes = NULL,
   impact_readoff = c("empirical", "model"),
+  community_lift = c("joint", "average"),
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -66,6 +67,13 @@ E\link{DV | IV = level} for the lift metrics directly from the data;
 \code{"model"} uses the fitted network's conditionals - the methodology
 used prior to 2026-07-28. Applies to attribute and community lift
 columns alike. See \code{\link{bn_impact_engine}}.}
+
+\item{community_lift}{Character. \code{"joint"} (default) computes
+community lift columns by raking (IPF) to all member targets at once -
+the theme effect; \code{"average"} takes the arithmetic mean of member
+lifts - the methodology used prior to 2026-07-28. \code{"joint"}
+requires \code{impact_readoff = "empirical"}. See
+\code{\link{bn_impact_engine}}.}
 
 \item{lift}{Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.}
 
