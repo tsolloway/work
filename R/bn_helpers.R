@@ -443,7 +443,7 @@
       vapply(x$rows, function(r) r$dv_estimate %||% NA_real_, numeric(1))
     }))
     dv_vals <- dv_vals[!is.na(dv_vals)]
-    length(dv_vals) > 0 && min(dv_vals) >= -1e-6 && max(dv_vals) <= 1 + 1e-6
+    length(dv_vals) > 0 && min(dv_vals) >= -1e-4 && max(dv_vals) <= 1 + 1e-4
   }
 
   list(

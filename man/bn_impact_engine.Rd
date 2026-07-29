@@ -17,6 +17,7 @@ bn_impact_engine(
   max_impact_anchor = c("observed", "theoretical"),
   max_impact_min_support = 5,
   max_impact_shrinkage = 20,
+  min_boot_coverage = 0.9,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -118,6 +119,16 @@ values). Guards the Best-vs-Worst argmax against winner's curse -
 with a binary DV and raw means, the best observed profile is
 otherwise routinely a small all-top-box cell at exactly 1.0.
 \code{0} disables shrinkage. Default 20.}
+
+\item{min_boot_coverage}{Numeric in (0, 1]. Minimum share of bootstrap
+replicates that must yield a value for a metric cell to be reported.
+Cells below the threshold - e.g. joint community shifts that are
+infeasible in most resamples of a small subgroup, or brand scopes
+flickering around \code{min_base_for_lift} - have their value, sd, CI,
+and p-value blanked rather than silently averaging the surviving
+replicates (a selection-biased subset). Cells that pass use the
+feasible-replicate count for the se / t degrees of freedom. Only
+applies when \code{n_boot > 1}. Default 0.9.}
 
 \item{lift}{Numeric scalar or vector. Target percentage lift(s) for
 distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each

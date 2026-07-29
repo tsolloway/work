@@ -106,6 +106,10 @@
 #'   (pseudo-respondents toward the scope mean) guarding observed anchors
 #'   against winner's curse. \code{0} disables. Default 20. See
 #'   \code{\link{bn_impact_engine}}.
+#' @param min_boot_coverage Numeric in (0, 1]. Minimum share of bootstrap
+#'   replicates that must yield a value for a metric cell to be reported;
+#'   cells below it are blanked and passing cells use the feasible count
+#'   for the df. Default 0.9. See \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Target lift(s) for the shifted-distribution
 #'   metric (both proportional and absolute shift variants are precomputed).
 #'   Default \code{c(0, 0.1)}.
@@ -237,6 +241,7 @@ bn_impact <- function(
     max_impact_anchor = c("observed", "theoretical"),
     max_impact_min_support = 5,
     max_impact_shrinkage = 20,
+    min_boot_coverage = 0.9,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -318,6 +323,7 @@ bn_impact <- function(
         max_impact_anchor = max_impact_anchor,
         max_impact_min_support = max_impact_min_support,
         max_impact_shrinkage = max_impact_shrinkage,
+        min_boot_coverage = min_boot_coverage,
         type = type,
         index_by = index_by,
         n_boot = n_boot,
@@ -370,6 +376,7 @@ bn_impact <- function(
       max_impact_anchor = max_impact_anchor,
       max_impact_min_support = max_impact_min_support,
       max_impact_shrinkage = max_impact_shrinkage,
+      min_boot_coverage = min_boot_coverage,
       type = type,
       index_by = index_by,
       n_boot = n_boot,

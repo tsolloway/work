@@ -90,6 +90,10 @@
 #'   (pseudo-respondents toward the scope mean) guarding observed anchors
 #'   against winner's curse. \code{0} disables. Default 20. See
 #'   \code{\link{bn_impact_engine}}.
+#' @param min_boot_coverage Numeric in (0, 1]. Minimum share of bootstrap
+#'   replicates that must yield a value for a metric cell to be reported;
+#'   cells below it are blanked and passing cells use the feasible count
+#'   for the df. Default 0.9. See \code{\link{bn_impact_engine}}.
 #' @param do_prioritizations Logical. If TRUE, run \code{bn_prioritizations()}
 #'   to produce prioritization analysis. Default TRUE.
 #' @param prioritize_lift Numeric. Lift fraction for prioritization. Default
@@ -177,6 +181,7 @@ bn_finalize_network <- function(
     max_impact_anchor = c("observed", "theoretical"),
     max_impact_min_support = 5,
     max_impact_shrinkage = 20,
+    min_boot_coverage = 0.9,
     # Survey-battery grouping for the "Index By: Battery" feature in the
     # impact dashboards. Named list of vectors mapping battery name -> IVs.
     # If NULL, resolved from obj$meta$ivs when that's a named list (the
@@ -507,6 +512,7 @@ bn_finalize_network <- function(
       max_impact_anchor = max_impact_anchor,
       max_impact_min_support = max_impact_min_support,
       max_impact_shrinkage = max_impact_shrinkage,
+      min_boot_coverage = min_boot_coverage,
       type = impact_type,
       index_by = impact_index_by,
       process_subgroups = TRUE,
@@ -618,6 +624,7 @@ bn_finalize_network <- function(
   results[["meta"]][["max_impact_anchor"]] <- max_impact_anchor
   results[["meta"]][["max_impact_min_support"]] <- max_impact_min_support
   results[["meta"]][["max_impact_shrinkage"]] <- max_impact_shrinkage
+  results[["meta"]][["min_boot_coverage"]] <- min_boot_coverage
 
   if (!is.null(batteries)) {
     results[["meta"]][["batteries"]] <- batteries

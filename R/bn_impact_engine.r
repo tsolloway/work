@@ -78,6 +78,15 @@
 #'   with a binary DV and raw means, the best observed profile is
 #'   otherwise routinely a small all-top-box cell at exactly 1.0.
 #'   \code{0} disables shrinkage. Default 20.
+#' @param min_boot_coverage Numeric in (0, 1]. Minimum share of bootstrap
+#'   replicates that must yield a value for a metric cell to be reported.
+#'   Cells below the threshold - e.g. joint community shifts that are
+#'   infeasible in most resamples of a small subgroup, or brand scopes
+#'   flickering around \code{min_base_for_lift} - have their value, sd, CI,
+#'   and p-value blanked rather than silently averaging the surviving
+#'   replicates (a selection-biased subset). Cells that pass use the
+#'   feasible-replicate count for the se / t degrees of freedom. Only
+#'   applies when \code{n_boot > 1}. Default 0.9.
 #' @param lift Numeric scalar or vector. Target percentage lift(s) for
 #'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
 #'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
@@ -283,6 +292,7 @@ bn_impact_engine <- function(
     max_impact_anchor = c("observed", "theoretical"),
     max_impact_min_support = 5,
     max_impact_shrinkage = 20,
+    min_boot_coverage = 0.9,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -312,6 +322,10 @@ bn_impact_engine <- function(
   if (!is.numeric(max_impact_shrinkage) || length(max_impact_shrinkage) != 1 ||
       is.na(max_impact_shrinkage) || max_impact_shrinkage < 0) {
     stop("'max_impact_shrinkage' must be a single non-negative number.")
+  }
+  if (!is.numeric(min_boot_coverage) || length(min_boot_coverage) != 1 ||
+      is.na(min_boot_coverage) || min_boot_coverage <= 0 || min_boot_coverage > 1) {
+    stop("'min_boot_coverage' must be a single number in (0, 1].")
   }
 
   if (do_community && community_lift == "joint" && impact_readoff == "model") {
@@ -1192,25 +1206,38 @@ bn_impact_engine <- function(
       tidyr::pivot_longer(cols = !variable, names_to = "metric") %>%
       dplyr::group_by(variable, metric) %>%
       dplyr::summarise(
+        n_ok = sum(!is.na(value)),
         mean = mean(value, na.rm = TRUE),
         sd   = sd(value,   na.rm = TRUE),
         .groups = "drop"
       ) %>%
       dplyr::mutate(
+        # Coverage blackout: a cell whose value exists in fewer than
+        # min_boot_coverage of the replicates (infeasible joint rakes in
+        # small subgroups, brand scopes flickering around
+        # min_base_for_lift) is blanked entirely - the surviving
+        # replicates are a selection-biased subset, and averaging them
+        # silently would report a conditional estimand with an overstated
+        # df. Cells that pass use n_ok for the effective df, so fully
+        # feasible cells (n_ok == n_boot) reproduce the previous
+        # statistics exactly.
+        blackout = n_ok < min_boot_coverage * n_boot,
+        mean     = ifelse(blackout, NA_real_, mean),
+        sd       = ifelse(blackout, NA_real_, sd),
         # boot_nonzero = FALSE (default): classical bootstrap inference - the
         # SD of the bootstrap replicates IS the standard-error estimate of the
         # statistic, so p-values are invariant to n_boot.
         # boot_nonzero = TRUE: legacy behavior - se = sd/sqrt(n_boot), which
         # tests whether the MEAN of the boot distribution is nonzero and
         # therefore mechanically shrinks p-values as n_boot grows.
-        se      = if (boot_nonzero) sd / sqrt(pmax(n_boot, 1)) else sd,
+        se      = if (boot_nonzero) sd / sqrt(pmax(n_ok, 1)) else sd,
         t       = mean / se,
-        tcrit   = stats::qt(0.975, df = pmax(n_boot - 1, 1)),
+        tcrit   = stats::qt(0.975, df = pmax(n_ok - 1, 1)),
         ci_low  = mean - tcrit * se,
         ci_high = mean + tcrit * se,
-        p_value = 2 * stats::pt(-abs(t), df = pmax(n_boot - 1, 1)) %>% round(4)
+        p_value = 2 * stats::pt(-abs(t), df = pmax(n_ok - 1, 1)) %>% round(4)
       ) %>%
-      dplyr::select(-tcrit) %>%   # housekeeping
+      dplyr::select(-tcrit, -n_ok, -blackout) %>%   # housekeeping
       tidyr::pivot_wider(
         id_cols = variable,
         names_from = metric,
