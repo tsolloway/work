@@ -865,6 +865,13 @@ bn_impact_engine <- function(
         dv_s <- dv_emp_y[mask]
         e_obs <- stats::weighted.mean(dv_s, w_s)
 
+        # Level indices are identical for every rake in this scope (targets
+        # are always named by names(freqs[[v]])) - build once, reuse across
+        # all shift variants and lifts.
+        rake_idx <- lapply(iv_vars, function(v) {
+          match(as.character(members[[v]]), names(freqs[[v]]))
+        }) %>% setNames(iv_vars)
+
         targets_for <- function(l, st) {
           lapply(iv_vars, function(v) {
             fr <- freqs[[v]]
@@ -879,7 +886,7 @@ bn_impact_engine <- function(
           }) %>% setNames(iv_vars)
         }
         e_raked <- function(l, st) {
-          r <- .bn_ipf_rake(members, w_s, targets_for(l, st))
+          r <- .bn_ipf_rake(members, w_s, targets_for(l, st), idx = rake_idx)
           stats::weighted.mean(dv_s, r)
         }
 
@@ -1068,10 +1075,17 @@ bn_impact_engine <- function(
 
         mi_boot_results <- temp_ivs %>%
           purrr::imap(function(iv_vars, comm_name) {
+            # Paste the community composite ONCE over the outer replicate's
+            # rows; each nested resample just indexes into it. The row-wise
+            # apply(paste) was rebuilt per nested replicate and dominated the
+            # community boot cost. RNG-neutral (only sample() draws), so
+            # mi_boot values are bit-identical to the per-replicate paste.
+            composite_full <- apply(fit_data[iv_vars], 1, paste0, collapse = "_")
+            dv_full <- fit_data[[dv]]
             boot_mi <- replicate(n_mi_boot, {
               boot_idx <- sample(n_obs, replace = TRUE)
-              boot_data <- fit_data[boot_idx, , drop = FALSE]
-              composite <- apply(boot_data[iv_vars], 1, paste0, collapse = "_") %>% as.factor()
+              composite <- factor(composite_full[boot_idx])
+              dv_b <- dv_full[boot_idx]
               # Suppress bnlearn "variable X has levels that are not observed
               # in the data" warnings from ci.test().
               #
@@ -1089,7 +1103,7 @@ bn_impact_engine <- function(
               # unaffected in the aggregate. The warning is purely cosmetic
               # at this scope, and with n_mi_boot >> 1 it fires repeatedly
               # for the same root cause and drowns out anything meaningful.
-              if (nlevels(composite) < 2 || dplyr::n_distinct(boot_data[[dv]]) < 2) {
+              if (nlevels(composite) < 2 || dplyr::n_distinct(dv_b) < 2) {
                 # A replicate where the composite (or the DV) is constant
                 # carries zero mutual information by definition - contribute 0
                 # rather than letting check.data() error out (same guard as
@@ -1097,7 +1111,7 @@ bn_impact_engine <- function(
                 0
               } else {
                 xmi <- suppressWarnings(
-                  bnlearn::ci.test(composite, boot_data[[dv]], test = "mi")
+                  bnlearn::ci.test(composite, dv_b, test = "mi")
                 )
                 xmi$statistic / (2 * n_obs)
               }
@@ -1339,12 +1353,19 @@ bn_impact_engine <- function(
 #' Deterministic; no RNG.
 #'
 #' @noRd
-.bn_ipf_rake <- function(member_df, w, targets, tol = 1e-6, max_iter = 50L) {
+.bn_ipf_rake <- function(member_df, w, targets, tol = 1e-4, max_iter = 50L,
+                         idx = NULL) {
 
   r <- as.numeric(w)
-  idx <- lapply(names(targets), function(v) {
-    match(as.character(member_df[[v]]), names(targets[[v]]))
-  }) %>% setNames(names(targets))
+  # idx: precomputed per-member level indices (match of each row's level into
+  # that member's target names). Callers raking the same members repeatedly
+  # (one rake per shift variant x lift) should build this once and pass it -
+  # rebuilding match() per rake was a measurable share of the rake cost.
+  if (is.null(idx)) {
+    idx <- lapply(names(targets), function(v) {
+      match(as.character(member_df[[v]]), names(targets[[v]]))
+    }) %>% setNames(names(targets))
+  }
 
   for (i in seq_len(max_iter)) {
     max_gap <- 0
