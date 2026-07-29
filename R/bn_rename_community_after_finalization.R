@@ -25,13 +25,13 @@
 #' @examples
 #' \dontrun{
 #' bn_final <- bn_final %>%
-#'   bn_rename_community(c("Modern Expertise" = "Premium Signals"))
+#'   bn_rename_community_after_finalization(c("Modern Expertise" = "Premium Signals"))
 #' }
 #'
 #' @seealso [bn_finalize_network()], [bn_move_attribute_to()]
 #'
 #' @export
-bn_rename_community <- function(obj, rename, verbose = TRUE) {
+bn_rename_community_after_finalization <- function(obj, rename, verbose = TRUE) {
 
   if (!is.list(obj)) stop("'obj' must be a bn_finalize_network() result.")
   if (!is.character(rename) || length(rename) == 0 || is.null(names(rename)) ||
