@@ -84,8 +84,11 @@ computed. \code{"joint"} (default): theme effect - rake (IPF) the
 observed rows' weights so every member attribute's marginal matches its
 shifted target simultaneously, then read the DV change under the raked
 weights; preserves the observed correlation structure among members and
-only ever places mass on observed joint profiles. Requires
-\code{impact_readoff = "empirical"}. \code{"average"}: arithmetic mean
+only ever places mass on observed joint profiles. The rake's read-off
+is inherently empirical; paired with \code{impact_readoff = "model"}
+the attribute lifts and anchor values stay model-based while the
+community lift columns are empirical (\code{bn_impacts()} warns once
+about the mix). \code{"average"}: arithmetic mean
 of the members' individually-computed lifts - this was the methodology
 used prior to 2026-07-28. Attribute-level runs and the maxVmin / MI /
 base columns are unaffected.}

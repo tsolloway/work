@@ -46,8 +46,11 @@
 #'   observed rows' weights so every member attribute's marginal matches its
 #'   shifted target simultaneously, then read the DV change under the raked
 #'   weights; preserves the observed correlation structure among members and
-#'   only ever places mass on observed joint profiles. Requires
-#'   \code{impact_readoff = "empirical"}. \code{"average"}: arithmetic mean
+#'   only ever places mass on observed joint profiles. The rake's read-off
+#'   is inherently empirical; paired with \code{impact_readoff = "model"}
+#'   the attribute lifts and anchor values stay model-based while the
+#'   community lift columns are empirical (\code{bn_impacts()} warns once
+#'   about the mix). \code{"average"}: arithmetic mean
 #'   of the members' individually-computed lifts - this was the methodology
 #'   used prior to 2026-07-28. Attribute-level runs and the maxVmin / MI /
 #'   base columns are unaffected.
@@ -328,11 +331,6 @@ bn_impact_engine <- function(
     stop("'min_boot_coverage' must be a single number in (0, 1].")
   }
 
-  if (do_community && community_lift == "joint" && impact_readoff == "model") {
-    stop("community_lift = \"joint\" requires impact_readoff = \"empirical\". ",
-         "Use community_lift = \"average\" for the model read-off ",
-         "(the pre-2026-07-28 combination).")
-  }
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
   # ---------------------------
@@ -768,8 +766,13 @@ bn_impact_engine <- function(
       # outcome (scale value, or top-box indicator), read once for the whole
       # lift block. Conditional means over this vector replace the
       # querygrain/cpquery model conditionals ("model" = pre-2026-07-28
-      # methodology).
-      if (impact_readoff == "empirical") {
+      # methodology). The joint community rake always needs this vector -
+      # its read-off is inherently empirical - so it is also built when a
+      # community run pairs community_lift = "joint" with the model
+      # read-off (attribute lifts and anchor values stay model-based;
+      # bn_impacts() warns once about the mixed semantics).
+      if (impact_readoff == "empirical" ||
+          (!is.null(community_assignment) && community_lift == "joint")) {
         dv_emp_num <- dat_boot[[dv]] %>% as.character() %>% as.numeric()
         dv_emp_y <- if (dv_metric == "top_box") {
           as.numeric(dv_emp_num == max(dv_emp_num, na.rm = TRUE))

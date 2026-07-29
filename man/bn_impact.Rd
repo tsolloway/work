@@ -85,8 +85,10 @@ used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.}
 \item{community_lift}{Character. \code{"joint"} (default) computes
 community lift columns by raking (IPF) to all member targets at once -
 the theme effect; \code{"average"} takes the arithmetic mean of member
-lifts - the methodology used prior to 2026-07-28. \code{"joint"}
-requires \code{impact_readoff = "empirical"}. See
+lifts - the methodology used prior to 2026-07-28. The joint rake's
+read-off is inherently empirical; combined with
+\code{impact_readoff = "model"}, attribute lifts stay model-based
+while community lifts are empirical (warning issued). See
 \code{\link{bn_impact_engine}}.}
 
 \item{max_impact_anchor}{Character. \code{"observed"} (default) anchors

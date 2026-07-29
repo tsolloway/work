@@ -31,8 +31,10 @@
 #' @param community_lift Character. \code{"joint"} (default) computes
 #'   community lift columns by raking (IPF) to all member targets at once -
 #'   the theme effect; \code{"average"} takes the arithmetic mean of member
-#'   lifts - the methodology used prior to 2026-07-28. \code{"joint"}
-#'   requires \code{impact_readoff = "empirical"}. See
+#'   lifts - the methodology used prior to 2026-07-28. The joint rake's
+#'   read-off is inherently empirical; combined with
+#'   \code{impact_readoff = "model"} a warning is issued and attribute
+#'   lifts stay model-based while community lifts are empirical. See
 #'   \code{\link{bn_impact_engine}}.
 #' @param max_impact_anchor Character. \code{"observed"} (default) anchors
 #'   the Best-vs-Worst (maxVmin) family at observed, support-guarded anchors;
@@ -131,9 +133,11 @@ bn_impacts <- function(
   community_lift <- match.arg(community_lift)
   max_impact_anchor <- match.arg(max_impact_anchor)
   if (do_community && community_lift == "joint" && impact_readoff == "model") {
-    stop("community_lift = \"joint\" requires impact_readoff = \"empirical\". ",
-         "Use community_lift = \"average\" for the model read-off ",
-         "(the pre-2026-07-28 combination).")
+    cli::cli_warn(c(
+      "!" = "community_lift = \"joint\" always uses the empirical read-off for community lift columns.",
+      "i" = "impact_readoff = \"model\" still governs attribute lifts and maxVmin anchor values.",
+      "i" = "Use community_lift = \"average\" for fully model-based community lifts (the pre-2026-07-28 combination)."
+    ))
   }
 
   # Validate community_impact_attributes up front so a bad battery name
