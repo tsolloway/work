@@ -872,21 +872,34 @@ bn_impact_engine <- function(
           match(as.character(members[[v]]), names(freqs[[v]]))
         }) %>% setNames(iv_vars)
 
+        # Returns NULL when any member's shifted target is undefined for
+        # this (resampled) scope - e.g. bn_freq_prob_shift returns NA for an
+        # unshiftable distribution, or all target mass lands on unsupported
+        # levels. The scope's joint lift is then NA for this replicate,
+        # mirroring how the averaging path degrades to NA member lifts.
         targets_for <- function(l, st) {
-          lapply(iv_vars, function(v) {
+          out <- lapply(iv_vars, function(v) {
             fr <- freqs[[v]]
             sr <- if (!is.null(scale_ranges)) scale_ranges[[v]] else NULL
-            tgt <- bn_freq_prob_shift(fr, type = "exponential", lift = l,
-              impact_shift_type = st, scale_range = sr) %>%
-              as.numeric() %>% setNames(names(fr))
+            tgt <- suppressWarnings(as.numeric(
+              bn_freq_prob_shift(fr, type = "exponential", lift = l,
+                impact_shift_type = st, scale_range = sr)
+            ))
+            if (length(tgt) != length(fr) || anyNA(tgt)) return(NULL)
+            tgt <- setNames(tgt, names(fr))
             tgt[as.numeric(fr) <= 0] <- 0
             tot <- sum(tgt)
-            if (tot > 0) tgt <- tgt / tot
-            tgt
+            if (!is.finite(tot) || tot <= 0) return(NULL)
+            tgt / tot
           }) %>% setNames(iv_vars)
+          if (any(vapply(out, is.null, logical(1)))) return(NULL)
+          out
         }
         e_raked <- function(l, st) {
-          r <- .bn_ipf_rake(members, w_s, targets_for(l, st), idx = rake_idx)
+          tg <- targets_for(l, st)
+          if (is.null(tg)) return(NA_real_)
+          r <- .bn_ipf_rake(members, w_s, tg, idx = rake_idx)
+          if (is.null(r)) return(NA_real_)
           stats::weighted.mean(dv_s, r)
         }
 
@@ -1370,18 +1383,26 @@ bn_impact_engine <- function(
   for (i in seq_len(max_iter)) {
     max_gap <- 0
     for (v in names(targets)) {
+      # Saturated targets on several correlated members can zero out every
+      # row (no observed joint profile carries the demanded mass). That is
+      # an infeasible joint shift for this scope - return NULL and let the
+      # caller record NA rather than dividing by a zero total.
+      sr <- sum(r)
+      if (!is.finite(sr) || sr <= 0) return(NULL)
       tgt <- targets[[v]]
       ix <- idx[[v]]
       cur <- numeric(length(tgt))
       rs <- rowsum(r, ix)
       cur[as.integer(rownames(rs))] <- rs[, 1]
-      cur_p <- cur / sum(r)
+      cur_p <- cur / sr
       max_gap <- max(max_gap, max(abs(cur_p - tgt)))
       ratio <- ifelse(cur_p > 0, tgt / cur_p, 0)
       r <- r * ratio[ix]
     }
+    if (!is.finite(max_gap)) return(NULL)
     if (max_gap < tol) break
   }
+  if (!is.finite(sum(r)) || sum(r) <= 0) return(NULL)
 
   r
 }
