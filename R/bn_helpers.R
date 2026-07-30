@@ -31,6 +31,54 @@
   impacts
 }
 
+# --- internal: drop per-brand focus columns, keeping the Market view ---
+# Brand focuses are ~86% of an impact table's width (one block of lift
+# columns plus a base column per brand), so dropping them is what makes a
+# many-subgroup workbook fit Excel's 16,384-column ceiling. Both dashboard
+# writers derive the Focus dropdown from the COLUMNS (see
+# append_bn_impact_dynamic's brand_lift_suffixes and the html prep's
+# brand_lift_bases), so removing the columns collapses the control to
+# "Market" on its own; the meta fields are cleared too so the guide text
+# doesn't advertise a Focus dropdown that isn't there.
+.bn_impact_keep_market_focus <- function(impacts) {
+  if (is.null(impacts)) return(impacts)
+
+  tbls <- c("table_attribute", "table_attribute_weighted",
+            "table_community", "table_community_weighted")
+
+  brands <- impacts[["meta"]][["brand_names"]]
+  if (is.null(brands) || length(brands) == 0L) {
+    # Fall back to reading the brand names out of the column names, the same
+    # way the writers do: market lift is `lift_<n>_<shift>shift_<display>`,
+    # a brand block inserts the name before the shift token.
+    nm <- unique(unlist(lapply(tbls, function(k) names(impacts[[k]]))))
+    mt <- regmatches(nm, regexec(
+      "_lift_?\\d*_(.+?)_(prop|abs|head|range)shift_", nm, perl = TRUE))
+    mt <- mt[lengths(mt) > 0]
+    brands <- unique(vapply(mt, `[`, character(1), 2L))
+  }
+  if (length(brands) == 0L) return(impacts)
+
+  for (k in tbls) {
+    tbl <- impacts[[k]]
+    if (is.null(tbl)) next
+    nm <- names(tbl)
+    drop <- rep(FALSE, length(nm))
+    for (b in brands) {
+      # fixed = TRUE throughout: brand labels carry regex metacharacters
+      # ("Enfa A+ C-Biome", "S-26 SMA/ Promill").
+      drop <- drop |
+        grepl(paste0("_", b, "_"), nm, fixed = TRUE) |
+        endsWith(nm, paste0("_base_", b))
+    }
+    impacts[[k]] <- tbl[, !drop, drop = FALSE]
+  }
+
+  impacts[["meta"]][["brand"]] <- NULL
+  impacts[["meta"]][["brand_names"]] <- NULL
+  impacts
+}
+
 # --- internal: assert per-table column count fits Excel's per-sheet cap ---
 # Excel's hard limit is 16,384 columns per sheet (column XFD). openxlsx
 # writes past it WITHOUT complaint; the failure only surfaces later as

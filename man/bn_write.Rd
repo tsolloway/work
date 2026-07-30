@@ -39,6 +39,7 @@ bn_write(
   color_gradient_resondex = TRUE,
   path = ".",
   trim_wb = TRUE,
+  only_market_focus = FALSE,
   sig_highlight_threshold = 0.1
 )
 }
@@ -144,6 +145,17 @@ keeping all 7 stats easily pushes per-sheet column counts past Excel's
 happens on a copy local to the writer. When \code{FALSE}, the full tables
 are written as-is, and any table exceeding 16,384 columns aborts with
 an error rather than producing a corrupt workbook.}
+
+\item{only_market_focus}{Logical. When \code{TRUE}, only the Market focus
+is written - every per-brand focus column (its lift block and its base
+column) is dropped and the dashboards' Focus dropdown collapses to
+"Market". Brand focuses are the bulk of an impact table's width
+(~33 columns per brand per subgroup against ~55 for Market and the
+shared metrics), so this is the lever for fitting a many-subgroup run
+under Excel's 16,384-column-per-sheet limit. Filters the already
+computed tables - no re-estimation - so the underlying object is
+unchanged and can still be written in full elsewhere. Default
+\code{FALSE}.}
 
 \item{sig_highlight_threshold}{Numeric. P-value above which impact cells
 are highlighted as insignificant (black-cell blackout in the Excel

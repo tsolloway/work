@@ -89,6 +89,16 @@
 #'   are written as-is, and any table exceeding 16,384 columns aborts with
 #'   an error rather than producing a corrupt workbook.
 #'
+#' @param only_market_focus Logical. When \code{TRUE}, only the Market focus
+#'   is written - every per-brand focus column (its lift block and its base
+#'   column) is dropped and the dashboards' Focus dropdown collapses to
+#'   "Market". Brand focuses are the bulk of an impact table's width
+#'   (~33 columns per brand per subgroup against ~55 for Market and the
+#'   shared metrics), so this is the lever for fitting a many-subgroup run
+#'   under Excel's 16,384-column-per-sheet limit. Filters the already
+#'   computed tables - no re-estimation - so the underlying object is
+#'   unchanged and can still be written in full elsewhere. Default
+#'   \code{FALSE}.
 #' @param sig_highlight_threshold Numeric. P-value above which impact cells
 #'   are highlighted as insignificant (black-cell blackout in the Excel
 #'   dashboards and HTML report, and the footnote text). Default 0.1.
@@ -171,6 +181,7 @@ bn_write <- function(
     color_gradient_resondex = TRUE,
     path = ".",
     trim_wb = TRUE,
+    only_market_focus = FALSE,
     sig_highlight_threshold = 0.1
 
 ) {
@@ -180,6 +191,7 @@ bn_write <- function(
 
   impacts <- obj[["impacts"]]
   if (isTRUE(trim_wb)) impacts <- .bn_impact_drop_unused_boot_stats(impacts)
+  if (isTRUE(only_market_focus)) impacts <- .bn_impact_keep_market_focus(impacts)
   # Always assert against the table that will actually be written: trimming
   # only halves the width, so a wide-subgroup run can still overflow and
   # openxlsx would emit it silently (surfacing as openxlsx2's "Column
