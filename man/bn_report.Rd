@@ -28,6 +28,7 @@ bn_report(
   impact_outcome_display = NULL,
   shift_type = c("absolute", "proportional", "headroom", "range"),
   add_prioritization_pvalue = FALSE,
+  only_market_focus = FALSE,
   sig_highlight_threshold = 0.1,
   prioritize_display = NULL,
   trim_wb = TRUE
@@ -146,6 +147,14 @@ impact table emitted the corresponding shift variant.}
 dashboard table includes its \code{p-value} column (current behavior). If
 \code{FALSE} (default), the p-value column is removed from the prioritization
 table.}
+
+\item{only_market_focus}{Logical. When \code{TRUE}, per-brand focus
+columns are dropped and the dashboards' Focus dropdown collapses to
+"Market", matching \code{bn_write(only_market_focus = TRUE)}. HTML has
+no column limit, so this is about payload size and browser
+responsiveness rather than feasibility - and about keeping the report
+consistent with a market-only workbook. Filters already computed
+tables; no re-estimation. Default \code{FALSE}.}
 
 \item{sig_highlight_threshold}{Numeric. P-value above which impact cells
 are highlighted as insignificant (black-cell blackout in the Excel

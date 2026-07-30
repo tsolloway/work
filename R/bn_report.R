@@ -116,6 +116,13 @@
 #'   so the displayed integer indices aren't shadowed by scientific-notation
 #'   hover text. Default `FALSE`.
 #'
+#' @param only_market_focus Logical. When \code{TRUE}, per-brand focus
+#'   columns are dropped and the dashboards' Focus dropdown collapses to
+#'   "Market", matching \code{bn_write(only_market_focus = TRUE)}. HTML has
+#'   no column limit, so this is about payload size and browser
+#'   responsiveness rather than feasibility - and about keeping the report
+#'   consistent with a market-only workbook. Filters already computed
+#'   tables; no re-estimation. Default \code{FALSE}.
 #' @param sig_highlight_threshold Numeric. P-value above which impact cells
 #'   are highlighted as insignificant (black-cell blackout in the Excel
 #'   dashboards and HTML report, and the footnote text). Default 0.1.
@@ -162,6 +169,7 @@ bn_report <- function(
     impact_outcome_display = NULL,
     shift_type      = c("absolute", "proportional", "headroom", "range"),
     add_prioritization_pvalue = FALSE,
+    only_market_focus = FALSE,
     sig_highlight_threshold = 0.1,
     prioritize_display = NULL,
     trim_wb = TRUE
@@ -299,8 +307,10 @@ bn_report <- function(
       impacts_res[["meta"]][["sig_highlight_threshold"]] <- sig_highlight_threshold
     }
     if (isTRUE(trim_wb)) impacts_res <- .bn_impact_drop_unused_boot_stats(impacts_res)
-    .bn_impact_assert_column_cap(impacts_res, fn_label = "bn_report",
-                                 trimmed = isTRUE(trim_wb))
+    if (isTRUE(only_market_focus)) impacts_res <- .bn_impact_keep_market_focus(impacts_res)
+    # HTML has no column ceiling - only a practical payload-size cost - so
+    # this warns rather than blocking the way bn_write must.
+    .bn_impact_payload_warn(impacts_res, fn_label = "bn_report")
     prioritizations_res <- result[["prioritizations"]]
 
     shared_attr_id <- NULL

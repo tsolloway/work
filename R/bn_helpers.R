@@ -79,6 +79,37 @@
   impacts
 }
 
+# --- internal: warn when an HTML report's embedded payload gets large ---
+# HTML has no column limit - Excel's 16,384 does not apply here, and gating
+# bn_report on it would reject reports that render fine (a ~34 MB report
+# ships today). What does degrade is browser parse time on open, which
+# tracks the payload's byte size, so warn on the estimate instead. The
+# ~55 bytes/value constant is measured from generated reports: a 12-subgroup
+# all-focus payload (370k values) lands ~21 MB, a 58-subgroup market-only
+# one (223k values) ~9 MB. Boot columns dominate - they carry a p-value and
+# full double precision per metric.
+.bn_impact_payload_warn <- function(impacts, fn_label = "bn_report",
+                                    warn_mb = 20) {
+  if (is.null(impacts)) return(invisible(NULL))
+  est <- 0
+  for (k in c("table_attribute", "table_attribute_weighted",
+              "table_community", "table_community_weighted")) {
+    tbl <- impacts[[k]]
+    if (!is.null(tbl)) est <- est + ncol(tbl) * nrow(tbl) * 55 / 1e6
+  }
+  if (est <= warn_mb) return(invisible(NULL))
+
+  n_sg <- length(impacts[["meta"]][["subgroups"]] %||% character(0))
+  cli::cli_warn(c(
+    "!" = paste0(fn_label, ": embedded impact payload is roughly ",
+                 round(est), " MB",
+                 if (n_sg > 0) paste0(" (", n_sg, " subgroups)") else "", "."),
+    "i" = "The report will render, but may be slow to open in a browser.",
+    "i" = "Reduce it with {.code only_market_focus = TRUE} (drops the per-brand focus columns) or fewer subgroups."
+  ))
+  invisible(NULL)
+}
+
 # --- internal: assert per-table column count fits Excel's per-sheet cap ---
 # Excel's hard limit is 16,384 columns per sheet (column XFD). openxlsx
 # writes past it WITHOUT complaint; the failure only surfaces later as
@@ -108,8 +139,9 @@
         if (!is.na(per_sg)) sprintf(
           "This run has %d subgroups at ~%d columns each; about %d fit. ",
           n_sg, per_sg, max(1L, floor(cap / per_sg))) else "",
-        "Split the subgroups across several workbooks (call bn_write() on ",
-        "subsets), or reduce the number of brand focuses."
+        "Set `only_market_focus = TRUE` to drop the per-brand focus columns ",
+        "(usually the large majority of the width), or split the subgroups ",
+        "across several workbooks by calling bn_write() on subsets."
       )
     } else {
       paste0(
