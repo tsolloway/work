@@ -298,11 +298,9 @@ bn_report <- function(
       if (is.null(impacts_res[["meta"]])) impacts_res[["meta"]] <- list()
       impacts_res[["meta"]][["sig_highlight_threshold"]] <- sig_highlight_threshold
     }
-    if (isTRUE(trim_wb)) {
-      impacts_res <- .bn_impact_drop_unused_boot_stats(impacts_res)
-    } else {
-      .bn_impact_assert_column_cap(impacts_res, fn_label = "bn_report")
-    }
+    if (isTRUE(trim_wb)) impacts_res <- .bn_impact_drop_unused_boot_stats(impacts_res)
+    .bn_impact_assert_column_cap(impacts_res, fn_label = "bn_report",
+                                 trimmed = isTRUE(trim_wb))
     prioritizations_res <- result[["prioritizations"]]
 
     shared_attr_id <- NULL

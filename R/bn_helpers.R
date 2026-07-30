@@ -32,28 +32,49 @@
 }
 
 # --- internal: assert per-table column count fits Excel's per-sheet cap ---
-# Excel's hard limit is 16,384 columns per sheet (column XFD). When the
-# caller opts out of `trim_wb` and an impact table would overflow, fail
-# loudly here rather than letting openxlsx emit a corrupt workbook. The
-# threshold is also used as a uniform sanity gate by bn_report — at that
-# scale the embedded JSON payload becomes pathological even though HTML
-# itself has no column limit.
+# Excel's hard limit is 16,384 columns per sheet (column XFD). openxlsx
+# writes past it WITHOUT complaint; the failure only surfaces later as
+# openxlsx2's opaque "Column exceeds valid range" when bn_write round-trips
+# through wb_load to attach deferred network images / chart XML (and would
+# otherwise ship a workbook Excel refuses to open). So this must run on
+# whatever table is actually written — trimming the 5 unused boot stats only
+# halves the width, which is not enough past ~42 subgroups. The threshold is
+# also used as a uniform sanity gate by bn_report — at that scale the
+# embedded JSON payload becomes pathological even though HTML itself has no
+# column limit.
 .bn_impact_assert_column_cap <- function(impacts, fn_label = "bn_write",
-                                         cap = 16384L) {
+                                         cap = 16384L, trimmed = FALSE) {
   if (is.null(impacts)) return(invisible(NULL))
+  n_sg <- length(impacts[["meta"]][["subgroups"]] %||% character(0))
   for (k in c("table_attribute", "table_attribute_weighted",
               "table_community", "table_community_weighted")) {
     tbl <- impacts[[k]]
-    if (!is.null(tbl) && ncol(tbl) > cap) {
-      stop(sprintf(
-        "%s: impacts$%s has %d columns, exceeding the %d-column cap. ",
-        fn_label, k, ncol(tbl), cap
-      ),
-      "Set `trim_wb = TRUE` (the default) to strip the 5 unused boot ",
-      "stats (`_sd`, `_se`, `_t`, `_ci_low`, `_ci_high`) — only `_mean` ",
-      "and `_p_value` are consumed downstream.",
-      call. = FALSE)
+    if (is.null(tbl) || ncol(tbl) <= cap) next
+
+    fix <- if (isTRUE(trimmed)) {
+      # trim_wb is already on — the only remaining levers are fewer
+      # subgroups or fewer brand focuses per workbook.
+      per_sg <- if (n_sg > 0) ceiling(ncol(tbl) / n_sg) else NA_integer_
+      paste0(
+        "`trim_wb = TRUE` is already applied. ",
+        if (!is.na(per_sg)) sprintf(
+          "This run has %d subgroups at ~%d columns each; about %d fit. ",
+          n_sg, per_sg, max(1L, floor(cap / per_sg))) else "",
+        "Split the subgroups across several workbooks (call bn_write() on ",
+        "subsets), or reduce the number of brand focuses."
+      )
+    } else {
+      paste0(
+        "Set `trim_wb = TRUE` (the default) to strip the 5 unused boot ",
+        "stats (`_sd`, `_se`, `_t`, `_ci_low`, `_ci_high`) — only `_mean` ",
+        "and `_p_value` are consumed downstream."
+      )
     }
+
+    stop(sprintf(
+      "%s: impacts$%s has %d columns, exceeding Excel's %d-column-per-sheet limit. ",
+      fn_label, k, ncol(tbl), cap
+    ), fix, call. = FALSE)
   }
   invisible(NULL)
 }

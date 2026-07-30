@@ -179,11 +179,13 @@ bn_write <- function(
   shift_type <- match.arg(shift_type)
 
   impacts <- obj[["impacts"]]
-  if (isTRUE(trim_wb)) {
-    impacts <- .bn_impact_drop_unused_boot_stats(impacts)
-  } else {
-    .bn_impact_assert_column_cap(impacts, fn_label = "bn_write")
-  }
+  if (isTRUE(trim_wb)) impacts <- .bn_impact_drop_unused_boot_stats(impacts)
+  # Always assert against the table that will actually be written: trimming
+  # only halves the width, so a wide-subgroup run can still overflow and
+  # openxlsx would emit it silently (surfacing as openxlsx2's "Column
+  # exceeds valid range" at save time, or a workbook Excel won't open).
+  .bn_impact_assert_column_cap(impacts, fn_label = "bn_write",
+                               trimmed = isTRUE(trim_wb))
   prioritizations <- obj[["prioritizations"]]
 
   # impact_outcome_display is passed through to bn_impact_write, which owns
