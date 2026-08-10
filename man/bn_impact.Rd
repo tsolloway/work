@@ -14,14 +14,13 @@ bn_impact(
   do_community = FALSE,
   community_assignment = NULL,
   community_impact_attributes = NULL,
-  impact_readoff = c("empirical", "model"),
+  impact_readoff = c("empirical", "model", "empirical_brand_control"),
   community_lift = c("joint", "average"),
   max_impact_anchor = c("observed", "theoretical"),
   max_impact_min_support = 5,
   max_impact_shrinkage = 20,
   min_boot_coverage = 0.9,
   boot_inference_legacy = FALSE,
-  impact_control = NULL,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -82,7 +81,14 @@ community metric across all subgroups and shift variants; ignored when
 \item{impact_readoff}{Character. \code{"empirical"} (default) reads
 E[DV | IV = level] for the lift metrics directly from the data;
 \code{"model"} uses the fitted network's conditionals - the methodology
-used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.}
+used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
+\code{"empirical_brand_control"}: empirical with the \code{brand}
+column's composition held fixed - the back-door adjustment for
+stacked designs, where exposure-type IVs double as markers for which
+brand a row describes. Adjusts lifts, observed-anchor maxVmin, and
+pins brand margins in the joint community rake; MI unaffected.
+Requires \code{brand}. Global switch - also removes the brand-level
+component of perception batteries. See \code{\link{bn_impact_engine}}.}
 
 \item{community_lift}{Character. \code{"joint"} (default) computes
 community lift columns by raking (IPF) to all member targets at once -
@@ -116,12 +122,6 @@ pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
 blackout, NA rare-level replicates silently excluded) for
 replicating historical deliverables; known to overstate
 significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.}
-
-\item{impact_control}{Character or \code{NULL} (default). Column in
-\code{df} (typically the brand column) held fixed while impacts are
-estimated - the back-door adjustment for stacked designs. See
-\code{\link{bn_impact_engine}} for the full semantics. \code{NULL}
-reproduces the unadjusted methodology exactly.}
 
 \item{lift}{Numeric vector. Target lift(s) for the shifted-distribution
 metric (both proportional and absolute shift variants are precomputed).

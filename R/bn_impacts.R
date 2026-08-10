@@ -28,6 +28,13 @@
 #'   \code{"model"} uses the fitted network's conditionals - the methodology
 #'   used prior to 2026-07-28. Applies to attribute and community lift
 #'   columns alike. See \code{\link{bn_impact_engine}}.
+#'   \code{"empirical_brand_control"}: empirical with the \code{brand}
+#'   column's composition held fixed - the back-door adjustment for
+#'   stacked designs, where exposure-type IVs double as markers for which
+#'   brand a row describes. Adjusts lifts, observed-anchor maxVmin, and
+#'   pins brand margins in the joint community rake; MI unaffected.
+#'   Requires \code{brand}. Global switch - also removes the brand-level
+#'   component of perception batteries. See \code{\link{bn_impact_engine}}.
 #' @param community_lift Character. \code{"joint"} (default) computes
 #'   community lift columns by raking (IPF) to all member targets at once -
 #'   the theme effect; \code{"average"} takes the arithmetic mean of member
@@ -55,13 +62,6 @@
 #'   blackout, NA rare-level replicates silently excluded) for
 #'   replicating historical deliverables; known to overstate
 #'   significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.
-#' @param impact_control Character or \code{NULL} (default). Column in
-#'   \code{df} (typically the brand column) held fixed while impacts are
-#'   estimated - the back-door adjustment for stacked designs, where
-#'   exposure-type IVs double as markers for which brand a row describes.
-#'   Adjusts the lift family and observed-anchor maxVmin; MI is untouched.
-#'   See \code{\link{bn_impact_engine}}. \code{NULL} reproduces the
-#'   unadjusted methodology exactly.
 #' @param lift Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size for brand lift.
 #'   Default 75.
@@ -117,14 +117,13 @@ bn_impacts <- function(
     do_community = TRUE,
     community_assignment = NULL,
     community_impact_attributes = NULL,
-    impact_readoff = c("empirical", "model"),
+    impact_readoff = c("empirical", "model", "empirical_brand_control"),
     community_lift = c("joint", "average"),
     max_impact_anchor = c("observed", "theoretical"),
     max_impact_min_support = 5,
     max_impact_shrinkage = 20,
     min_boot_coverage = 0.9,
     boot_inference_legacy = FALSE,
-    impact_control = NULL,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -159,18 +158,24 @@ bn_impacts <- function(
       "i" = "Use community_lift = \"average\" for fully model-based community lifts (the pre-2026-07-28 combination)."
     ))
   }
-  if (!is.null(impact_control) && impact_readoff == "model") {
+  if (impact_readoff == "empirical_brand_control") {
+    if (is.null(brand)) {
+      cli::cli_abort(c(
+        "x" = "impact_readoff = \"empirical_brand_control\" requires {.arg brand}.",
+        "i" = "There is no column whose composition to hold fixed."
+      ))
+    }
     cli::cli_warn(c(
-      "!" = "impact_control forces the empirical read-off for the adjusted metrics (lifts and observed-anchor maxVmin).",
-      "i" = "The control column is not a network node, so model conditionals cannot hold it fixed.",
-      "i" = "impact_readoff = \"model\" still governs any metric impact_control does not adjust."
+      "!" = "impact_readoff = \"empirical_brand_control\" is a GLOBAL adjustment, not an exposure-battery patch.",
+      "i" = "It also removes the brand-level component of perception batteries, where brand is partly upstream of the perception - a fixed-effects stance on the whole workbook.",
+      "i" = "Compare against an \"empirical\" run battery-by-battery before shipping."
     ))
-  }
-  if (!is.null(impact_control) && max_impact_anchor == "theoretical") {
-    cli::cli_warn(c(
-      "!" = "impact_control does not adjust the theoretical-anchor maxVmin family.",
-      "i" = "Use max_impact_anchor = \"observed\" for control-adjusted Best-vs-Worst values."
-    ))
+    if (max_impact_anchor == "theoretical") {
+      cli::cli_warn(c(
+        "!" = "The theoretical-anchor maxVmin family is not brand-adjusted.",
+        "i" = "Use max_impact_anchor = \"observed\" for brand-adjusted Best-vs-Worst values."
+      ))
+    }
   }
 
   # Validate community_impact_attributes up front so a bad battery name
@@ -203,7 +208,6 @@ bn_impacts <- function(
     max_impact_shrinkage = max_impact_shrinkage,
     min_boot_coverage = min_boot_coverage,
     boot_inference_legacy = boot_inference_legacy,
-    impact_control = impact_control,
     type = type, index_by = index_by,
     process_subgroups = process_subgroups,
     dictionary = dictionary,
@@ -236,7 +240,6 @@ bn_impacts <- function(
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
       boot_inference_legacy = boot_inference_legacy,
-      impact_control = impact_control,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -274,7 +277,6 @@ bn_impacts <- function(
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
       boot_inference_legacy = boot_inference_legacy,
-      impact_control = impact_control,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -308,7 +310,6 @@ bn_impacts <- function(
         max_impact_shrinkage = max_impact_shrinkage,
         min_boot_coverage = min_boot_coverage,
         boot_inference_legacy = boot_inference_legacy,
-        impact_control = impact_control,
         type = type, index_by = index_by,
         process_subgroups = process_subgroups,
         dictionary = dictionary,

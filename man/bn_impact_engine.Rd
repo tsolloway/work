@@ -12,14 +12,13 @@ bn_impact_engine(
   do_community = FALSE,
   community_assignment = NULL,
   community_impact_attributes = NULL,
-  impact_readoff = c("empirical", "model"),
+  impact_readoff = c("empirical", "model", "empirical_brand_control"),
   community_lift = c("joint", "average"),
   max_impact_anchor = c("observed", "theoretical"),
   max_impact_min_support = 5,
   max_impact_shrinkage = 20,
   min_boot_coverage = 0.9,
   boot_inference_legacy = FALSE,
-  impact_control = NULL,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -78,8 +77,28 @@ queries. \code{"model"}: the fitted network's conditional via
 methodology used prior to 2026-07-28. In networks built with direct
 DV connections (\code{all_ivs_connect_to_dv = TRUE}) the two are
 numerically near-identical; they can diverge when IVs connect to the
-DV only through other nodes. Does not affect the maxVmin family
-(see \code{max_impact_anchor}) or MI.}
+DV only through other nodes. \code{"empirical"} and \code{"model"} do
+not affect the maxVmin family (see \code{max_impact_anchor}) or MI.
+
+\code{"empirical_brand_control"}: as \code{"empirical"}, but holds the
+\code{brand} column's composition fixed - the back-door adjustment for
+stacked designs. In stacked data an exposure-type IV (a touchpoint
+battery: where the respondent encountered this brand) doubles as a
+marker for WHICH brand a row describes, because brands differ in where
+they are encountered. Its pooled conditional therefore inherits the DV
+level of the brands it attaches to, and can carry the wrong sign
+entirely. This read-off replaces every conditional with its
+brand-standardized counterpart, \eqn{\sum_b \pi_b E[DV | IV, brand=b]}
+with \eqn{\pi_b} the scope's observed (weighted) brand shares, so the
+brand mix is held at its observed margins while the IV shifts.
+Applies to the lift family, the observed-anchor maxVmin read-offs
+(including community anchor selection), and pins the brand margins in
+the joint community rake. MI and theoretical-anchor maxVmin are
+unaffected. Requires \code{brand}. Note this is a global switch: it
+also removes the brand-level component of PERCEPTION batteries, where
+brand is partly upstream of the perception rather than a pure
+confounder - a fixed-effects stance on the whole workbook, not a
+correction to exposure batteries alone.}
 
 \item{community_lift}{Character. How community-level lift columns are
 computed. \code{"joint"} (default): theme effect - rake (IPF) the
@@ -143,20 +162,6 @@ degrees of freedom always assume all \code{n_boot} replicates, the
 \code{min_boot_coverage} blackout is disabled, and (empirical
 read-off) replicates that drop a rare level return NA and are
 silently excluded from the mean/sd. Default \code{FALSE}.}
-
-\item{impact_control}{Character or \code{NULL} (default). Name of a column
-in \code{df} (typically the brand column of a stacked design) whose
-composition is held fixed while impacts are estimated - the back-door
-adjustment. Exposure-type IVs in stacked data double as markers for
-which brand a row describes, so their pooled conditionals inherit the
-DV level of the brands they attach to; \code{impact_control}
-standardizes the lift conditionals and the observed-anchor maxVmin
-read-offs over the control column
-(\eqn{\sum_b \pi_b E[DV | IV, b]}) and pins the control margins in the
-joint community rake. Forces the empirical read-off for the adjusted
-metrics (the control column is not a network node); MI and
-theoretical-anchor maxVmin are unaffected. \code{NULL} reproduces the
-unadjusted methodology exactly.}
 
 \item{lift}{Numeric scalar or vector. Target percentage lift(s) for
 distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
