@@ -21,6 +21,7 @@ bn_impact(
   max_impact_shrinkage = 20,
   min_boot_coverage = 0.9,
   boot_inference_legacy = FALSE,
+  impact_control = NULL,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -115,6 +116,12 @@ pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
 blackout, NA rare-level replicates silently excluded) for
 replicating historical deliverables; known to overstate
 significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.}
+
+\item{impact_control}{Character or \code{NULL} (default). Column in
+\code{df} (typically the brand column) held fixed while impacts are
+estimated - the back-door adjustment for stacked designs. See
+\code{\link{bn_impact_engine}} for the full semantics. \code{NULL}
+reproduces the unadjusted methodology exactly.}
 
 \item{lift}{Numeric vector. Target lift(s) for the shifted-distribution
 metric (both proportional and absolute shift variants are precomputed).

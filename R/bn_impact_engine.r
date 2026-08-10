@@ -98,6 +98,19 @@
 #'   \code{min_boot_coverage} blackout is disabled, and (empirical
 #'   read-off) replicates that drop a rare level return NA and are
 #'   silently excluded from the mean/sd. Default \code{FALSE}.
+#' @param impact_control Character or \code{NULL} (default). Name of a column
+#'   in \code{df} (typically the brand column of a stacked design) whose
+#'   composition is held fixed while impacts are estimated - the back-door
+#'   adjustment. Exposure-type IVs in stacked data double as markers for
+#'   which brand a row describes, so their pooled conditionals inherit the
+#'   DV level of the brands they attach to; \code{impact_control}
+#'   standardizes the lift conditionals and the observed-anchor maxVmin
+#'   read-offs over the control column
+#'   (\eqn{\sum_b \pi_b E[DV | IV, b]}) and pins the control margins in the
+#'   joint community rake. Forces the empirical read-off for the adjusted
+#'   metrics (the control column is not a network node); MI and
+#'   theoretical-anchor maxVmin are unaffected. \code{NULL} reproduces the
+#'   unadjusted methodology exactly.
 #' @param lift Numeric scalar or vector. Target percentage lift(s) for
 #'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
 #'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
@@ -305,6 +318,7 @@ bn_impact_engine <- function(
     max_impact_shrinkage = 20,
     min_boot_coverage = 0.9,
     boot_inference_legacy = FALSE,
+    impact_control = NULL,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -356,6 +370,18 @@ bn_impact_engine <- function(
     stop("'brand' column '", brand, "' not found in df. Available columns: ",
          paste(head(names(df), 20), collapse = ", "))
   }
+  if (!is.null(impact_control)) {
+    if (!is.character(impact_control) || length(impact_control) != 1) {
+      stop("'impact_control' must be NULL or a single column name.")
+    }
+    if (!impact_control %in% names(df)) {
+      stop("'impact_control' column '", impact_control, "' not found in df.")
+    }
+    if (anyNA(df[[impact_control]])) {
+      stop("'impact_control' column '", impact_control, "' contains NA - ",
+           "the back-door adjustment needs every row assigned to a control level.")
+    }
+  }
   if (!is.null(weight) && !weight %in% names(df)) {
     stop("'weight' column '", weight, "' not found in df. Available columns: ",
          paste(head(names(df), 20), collapse = ", "))
@@ -402,9 +428,9 @@ bn_impact_engine <- function(
     fit <- obj
   } else if (inherits(obj, "bn")) {
     bn <- obj
-    # Brand/weight columns are not network nodes (weight may be numeric, which
-    # the "bayes" estimator rejects), so exclude them from the fitting data
-    exclude_cols <- c(brand, weight)
+    # Brand/weight/control columns are not network nodes (weight may be numeric,
+    # which the "bayes" estimator rejects), so exclude them from the fitting data
+    exclude_cols <- c(brand, weight, impact_control)
     fit_data <- if (length(exclude_cols) > 0) df[, setdiff(names(df), exclude_cols), drop = FALSE] else df
     fit <- bnlearn::bn.fit(bn, fit_data, method = "bayes")
   } else {
@@ -414,7 +440,7 @@ bn_impact_engine <- function(
 
   df <- df %>%
     dplyr::select(dplyr::all_of(
-      c(dv, ivs, brand, weight) %>% unlist() %>% setNames(NULL)
+      c(dv, ivs, brand, weight, impact_control) %>% unlist() %>% unique() %>% setNames(NULL)
     )) %>%
     as.data.frame()
 
@@ -573,9 +599,27 @@ bn_impact_engine <- function(
 
     if(!is.null(indices)) dat_boot <- data[indices, , drop = FALSE] else dat_boot <- data
 
-    # Exclude brand column from model fitting data
-    exclude_cols <- c(brand, weight)
+    # Exclude brand/weight/control columns from model fitting data
+    exclude_cols <- c(brand, weight, impact_control)
     fit_data <- if (length(exclude_cols) > 0) dat_boot[, setdiff(names(dat_boot), exclude_cols), drop = FALSE] else dat_boot
+
+    # impact_control: back-door adjustment scaffolding shared by the maxVmin
+    # and lift blocks. In a stacked design an exposure-type IV doubles as a
+    # marker for WHICH brand a row describes (brands differ in where they are
+    # encountered), so the pooled conditional E[DV | IV] inherits the DV level
+    # of the brands the IV attaches to. Standardizing over the control column
+    # - Sum_b pi_b * E[DV | IV, control = b], with pi_b the scope's observed
+    # (weighted) control shares - holds the brand mix fixed while the IV
+    # shifts: the back-door formula, computed per replicate so the bootstrap
+    # sees the adjusted statistic. Shares are recomputed from dat_boot so
+    # resampled brand composition flows through.
+    if (!is.null(impact_control)) {
+      ctrl_vec <- as.character(dat_boot[[impact_control]])
+      w_ctrl <- if (!is.null(weight)) dat_boot[[weight]] else rep(1, nrow(dat_boot))
+      ctrl_pi <- tapply(w_ctrl, ctrl_vec, sum)
+      ctrl_pi <- ctrl_pi / sum(ctrl_pi)
+      ctrl_levels <- names(ctrl_pi)
+    }
 
     if(type != "mi"){
 
@@ -665,6 +709,22 @@ bn_impact_engine <- function(
             (sum(w_anchor[m]) + max_impact_shrinkage)
         }
 
+        # impact_control: control-standardized anchor read-off. Each anchor
+        # cell's E[DV] is the pi-weighted average of its per-control-level
+        # shrunk means (same EB prior per cell); a (cell x control) slice the
+        # resample never observes falls back to the pooled shrunk mean, so
+        # thin cells degrade toward the unadjusted read rather than to NA.
+        ctrl_shrunk_mean <- function(m) {
+          per_b <- vapply(ctrl_levels, function(b) {
+            mb <- m & ctrl_vec == b
+            if (!any(mb)) return(NA_real_)
+            shrunk_mean(mb)
+          }, numeric(1))
+          pooled <- shrunk_mean(m)
+          sum(ifelse(is.na(per_b), pooled, per_b) * ctrl_pi)
+        }
+        anchor_read <- if (!is.null(impact_control)) ctrl_shrunk_mean else shrunk_mean
+
         model_read <- function(ev) {
           if (type == "gr") {
             dist <- gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE)
@@ -709,15 +769,23 @@ bn_impact_engine <- function(
               anchor_max <- eligible[which.max(lev_num)]
               anchor_min <- eligible[which.min(lev_num)]
             } else {
-              prof_means <- vapply(eligible, function(k) shrunk_mean(key == k), numeric(1))
+              # Community anchors are chosen by empirical E[DV] - under
+              # impact_control the adjusted read also drives selection, so the
+              # argmax can't be won by a profile that merely marks a
+              # high-preference brand mix.
+              prof_means <- vapply(eligible, function(k) anchor_read(key == k), numeric(1))
               anchor_max <- eligible[which.max(prof_means)]
               anchor_min <- eligible[which.min(prof_means)]
             }
 
+            # impact_control forces the empirical (adjusted) read even under
+            # impact_readoff = "model": the control column is not a network
+            # node, so model conditionals cannot hold it fixed. bn_impacts()
+            # warns once about the mixed semantics.
             read_at <- function(k) {
               m <- key == k
-              if (impact_readoff == "empirical") {
-                shrunk_mean(m)
+              if (impact_readoff == "empirical" || !is.null(impact_control)) {
+                anchor_read(m)
               } else {
                 ridx <- which(m)[1]
                 ev <- lapply(dat_boot[ridx, iv_vars, drop = FALSE], as.character)
@@ -784,7 +852,7 @@ bn_impact_engine <- function(
       # community run pairs community_lift = "joint" with the model
       # read-off (attribute lifts and anchor values stay model-based;
       # bn_impacts() warns once about the mixed semantics).
-      if (impact_readoff == "empirical" ||
+      if (impact_readoff == "empirical" || !is.null(impact_control) ||
           (!is.null(community_assignment) && community_lift == "joint")) {
         dv_emp_num <- dat_boot[[dv]] %>% as.character() %>% as.numeric()
         dv_emp_y <- if (dv_metric == "top_box") {
@@ -920,6 +988,23 @@ bn_impact_engine <- function(
           match(as.character(members[[v]]), names(freqs[[v]]))
         }) %>% setNames(iv_vars)
 
+        # impact_control: pin the control margins. The rake must hit every
+        # member's shifted target while the scope's control (brand) mix stays
+        # at its OBSERVED margins - the back-door counterpart for joint
+        # community lifts. Without the pin, reweighting rows toward the
+        # shifted member targets drags the brand composition along (members
+        # correlate with brand), importing brand-level DV differences into
+        # the community lift. Within a single-brand focus scope the pinned
+        # margin is a one-level no-op.
+        ctrl_tgt <- NULL
+        if (!is.null(impact_control)) {
+          ctrl_s <- ctrl_vec[mask]
+          ctrl_freq <- wtd_table(ctrl_s, w = if (is.null(weight)) NULL else w_s)
+          ctrl_tgt <- as.numeric(ctrl_freq) / sum(ctrl_freq)
+          names(ctrl_tgt) <- names(ctrl_freq)
+          rake_idx[[impact_control]] <- match(ctrl_s, names(ctrl_tgt))
+        }
+
         # Returns NULL when any member's shifted target is undefined for
         # this (resampled) scope - e.g. bn_freq_prob_shift returns NA for an
         # unshiftable distribution, or all target mass lands on unsupported
@@ -946,6 +1031,7 @@ bn_impact_engine <- function(
         e_raked <- function(l, st) {
           tg <- targets_for(l, st)
           if (is.null(tg)) return(NA_real_)
+          if (!is.null(ctrl_tgt)) tg[[impact_control]] <- ctrl_tgt
           r <- .bn_ipf_rake(members, w_s, tg, idx = rake_idx)
           if (is.null(r)) return(NA_real_)
           stats::weighted.mean(dv_s, r)
@@ -992,7 +1078,10 @@ bn_impact_engine <- function(
             # DV expectation per IV level (shared across brands)
             # dv_metric = "top_box": P(DV_max | IV=v)
             # dv_metric = "mean":    E[DV | IV=v] = Σ d × P(DV=d | IV=v)
-            if (impact_readoff == "empirical") {
+            # impact_control forces the empirical branch even under the model
+            # read-off (the control column is not a network node); the pooled
+            # conditionals computed here then get standardized below.
+            if (impact_readoff == "empirical" || !is.null(impact_control)) {
               dv_probs <- purrr::map_dbl(levels_v, function(v) {
                 mask <- dat_boot[[single_iv]] == v
                 if (is.null(w_vec)) {
@@ -1015,6 +1104,32 @@ bn_impact_engine <- function(
               } else {
                 unsupported_lv <- !is.finite(dv_probs)
                 dv_probs[unsupported_lv] <- 0
+              }
+
+              # impact_control: replace each pooled conditional with its
+              # control-standardized (back-door) counterpart -
+              # Sum_b pi_b * E[DV | IV=v, control=b]. A (level x control) cell
+              # with zero rows in this resample falls back to the pooled
+              # conditional for that level, so thin cells degrade toward the
+              # unadjusted read rather than to NA. Unsupported levels keep
+              # their zero-fill (mask never matches). Every downstream lift -
+              # all shift variants, market and brand focus - inherits the
+              # adjusted conditionals through compute_lift_vals unchanged.
+              if (!is.null(impact_control)) {
+                dv_probs <- purrr::map_dbl(seq_along(levels_v), function(vi) {
+                  mask_v <- dat_boot[[single_iv]] == levels_v[vi]
+                  if (!any(mask_v)) return(dv_probs[vi])
+                  per_b <- vapply(ctrl_levels, function(b) {
+                    mb <- mask_v & ctrl_vec == b
+                    if (!any(mb)) return(NA_real_)
+                    if (is.null(w_vec)) {
+                      mean(dv_emp_y[mb])
+                    } else {
+                      stats::weighted.mean(dv_emp_y[mb], w_vec[mb])
+                    }
+                  }, numeric(1))
+                  sum(ifelse(is.na(per_b), dv_probs[vi], per_b) * ctrl_pi)
+                })
               }
             } else if (type == "gr") {
               dv_probs <- purrr::map_dbl(levels_v, function(v) {
@@ -1060,7 +1175,7 @@ bn_impact_engine <- function(
 
             # Per shift variant: market lift on the full distribution, then
             # per-brand lifts — matching lift_col_names block order.
-            unsup <- if (impact_readoff == "empirical") unsupported_lv else NULL
+            unsup <- if (impact_readoff == "empirical" || !is.null(impact_control)) unsupported_lv else NULL
             unlist(lapply(impact_shift_type, function(st) {
               market_vals <- compute_lift_vals(freq_full, dv_probs, iv_name = single_iv,
                                                st = st, unsupported = unsup)

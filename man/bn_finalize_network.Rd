@@ -38,6 +38,7 @@ bn_finalize_network(
   max_impact_shrinkage = 20,
   min_boot_coverage = 0.9,
   boot_inference_legacy = FALSE,
+  impact_control = NULL,
   batteries = NULL,
   battery_groups = NULL,
   do_prioritizations = TRUE,
@@ -191,6 +192,16 @@ pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
 blackout, NA rare-level replicates silently excluded) for
 replicating historical deliverables; known to overstate
 significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.}
+
+\item{impact_control}{Character or \code{NULL} (default). Column in
+\code{df} (typically the \code{brand} column of the stacked design)
+held fixed while impacts are estimated - the back-door adjustment for
+exposure-type batteries (e.g. touchpoints), whose items double as
+markers for which brand a row describes and otherwise inherit the DV
+level of the brands they attach to. Adjusts the lift family and
+observed-anchor maxVmin; MI is untouched. See
+\code{\link{bn_impact_engine}}. \code{NULL} reproduces the unadjusted
+methodology exactly.}
 
 \item{do_prioritizations}{Logical. If TRUE, run \code{bn_prioritizations()}
 to produce prioritization analysis. Default TRUE.}

@@ -19,6 +19,7 @@ bn_impact_engine(
   max_impact_shrinkage = 20,
   min_boot_coverage = 0.9,
   boot_inference_legacy = FALSE,
+  impact_control = NULL,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -142,6 +143,20 @@ degrees of freedom always assume all \code{n_boot} replicates, the
 \code{min_boot_coverage} blackout is disabled, and (empirical
 read-off) replicates that drop a rare level return NA and are
 silently excluded from the mean/sd. Default \code{FALSE}.}
+
+\item{impact_control}{Character or \code{NULL} (default). Name of a column
+in \code{df} (typically the brand column of a stacked design) whose
+composition is held fixed while impacts are estimated - the back-door
+adjustment. Exposure-type IVs in stacked data double as markers for
+which brand a row describes, so their pooled conditionals inherit the
+DV level of the brands they attach to; \code{impact_control}
+standardizes the lift conditionals and the observed-anchor maxVmin
+read-offs over the control column
+(\eqn{\sum_b \pi_b E[DV | IV, b]}) and pins the control margins in the
+joint community rake. Forces the empirical read-off for the adjusted
+metrics (the control column is not a network node); MI and
+theoretical-anchor maxVmin are unaffected. \code{NULL} reproduces the
+unadjusted methodology exactly.}
 
 \item{lift}{Numeric scalar or vector. Target percentage lift(s) for
 distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each

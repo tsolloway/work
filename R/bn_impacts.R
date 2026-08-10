@@ -55,6 +55,13 @@
 #'   blackout, NA rare-level replicates silently excluded) for
 #'   replicating historical deliverables; known to overstate
 #'   significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.
+#' @param impact_control Character or \code{NULL} (default). Column in
+#'   \code{df} (typically the brand column) held fixed while impacts are
+#'   estimated - the back-door adjustment for stacked designs, where
+#'   exposure-type IVs double as markers for which brand a row describes.
+#'   Adjusts the lift family and observed-anchor maxVmin; MI is untouched.
+#'   See \code{\link{bn_impact_engine}}. \code{NULL} reproduces the
+#'   unadjusted methodology exactly.
 #' @param lift Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size for brand lift.
 #'   Default 75.
@@ -117,6 +124,7 @@ bn_impacts <- function(
     max_impact_shrinkage = 20,
     min_boot_coverage = 0.9,
     boot_inference_legacy = FALSE,
+    impact_control = NULL,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -151,6 +159,19 @@ bn_impacts <- function(
       "i" = "Use community_lift = \"average\" for fully model-based community lifts (the pre-2026-07-28 combination)."
     ))
   }
+  if (!is.null(impact_control) && impact_readoff == "model") {
+    cli::cli_warn(c(
+      "!" = "impact_control forces the empirical read-off for the adjusted metrics (lifts and observed-anchor maxVmin).",
+      "i" = "The control column is not a network node, so model conditionals cannot hold it fixed.",
+      "i" = "impact_readoff = \"model\" still governs any metric impact_control does not adjust."
+    ))
+  }
+  if (!is.null(impact_control) && max_impact_anchor == "theoretical") {
+    cli::cli_warn(c(
+      "!" = "impact_control does not adjust the theoretical-anchor maxVmin family.",
+      "i" = "Use max_impact_anchor = \"observed\" for control-adjusted Best-vs-Worst values."
+    ))
+  }
 
   # Validate community_impact_attributes up front so a bad battery name
   # errors before the (potentially long) attribute runs, not after them.
@@ -182,6 +203,7 @@ bn_impacts <- function(
     max_impact_shrinkage = max_impact_shrinkage,
     min_boot_coverage = min_boot_coverage,
     boot_inference_legacy = boot_inference_legacy,
+    impact_control = impact_control,
     type = type, index_by = index_by,
     process_subgroups = process_subgroups,
     dictionary = dictionary,
@@ -214,6 +236,7 @@ bn_impacts <- function(
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
       boot_inference_legacy = boot_inference_legacy,
+      impact_control = impact_control,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -251,6 +274,7 @@ bn_impacts <- function(
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
       boot_inference_legacy = boot_inference_legacy,
+      impact_control = impact_control,
       type = type, index_by = index_by,
       process_subgroups = process_subgroups,
       dictionary = dictionary,
@@ -284,6 +308,7 @@ bn_impacts <- function(
         max_impact_shrinkage = max_impact_shrinkage,
         min_boot_coverage = min_boot_coverage,
         boot_inference_legacy = boot_inference_legacy,
+        impact_control = impact_control,
         type = type, index_by = index_by,
         process_subgroups = process_subgroups,
         dictionary = dictionary,

@@ -117,6 +117,11 @@
 #'   blackout, NA rare-level replicates silently excluded) for
 #'   replicating historical deliverables; known to overstate
 #'   significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.
+#' @param impact_control Character or \code{NULL} (default). Column in
+#'   \code{df} (typically the brand column) held fixed while impacts are
+#'   estimated - the back-door adjustment for stacked designs. See
+#'   \code{\link{bn_impact_engine}} for the full semantics. \code{NULL}
+#'   reproduces the unadjusted methodology exactly.
 #' @param lift Numeric vector. Target lift(s) for the shifted-distribution
 #'   metric (both proportional and absolute shift variants are precomputed).
 #'   Default \code{c(0, 0.1)}.
@@ -250,6 +255,7 @@ bn_impact <- function(
     max_impact_shrinkage = 20,
     min_boot_coverage = 0.9,
     boot_inference_legacy = FALSE,
+    impact_control = NULL,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -333,6 +339,7 @@ bn_impact <- function(
         max_impact_shrinkage = max_impact_shrinkage,
         min_boot_coverage = min_boot_coverage,
         boot_inference_legacy = boot_inference_legacy,
+        impact_control = impact_control,
         type = type,
         index_by = index_by,
         n_boot = n_boot,
@@ -387,6 +394,7 @@ bn_impact <- function(
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
       boot_inference_legacy = boot_inference_legacy,
+      impact_control = impact_control,
       type = type,
       index_by = index_by,
       n_boot = n_boot,

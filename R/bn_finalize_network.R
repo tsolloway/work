@@ -108,6 +108,15 @@
 #'   blackout, NA rare-level replicates silently excluded) for
 #'   replicating historical deliverables; known to overstate
 #'   significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.
+#' @param impact_control Character or \code{NULL} (default). Column in
+#'   \code{df} (typically the \code{brand} column of the stacked design)
+#'   held fixed while impacts are estimated - the back-door adjustment for
+#'   exposure-type batteries (e.g. touchpoints), whose items double as
+#'   markers for which brand a row describes and otherwise inherit the DV
+#'   level of the brands they attach to. Adjusts the lift family and
+#'   observed-anchor maxVmin; MI is untouched. See
+#'   \code{\link{bn_impact_engine}}. \code{NULL} reproduces the unadjusted
+#'   methodology exactly.
 #' @param do_prioritizations Logical. If TRUE, run \code{bn_prioritizations()}
 #'   to produce prioritization analysis. Default TRUE.
 #' @param prioritize_lift Numeric. Lift fraction for prioritization. Default
@@ -197,6 +206,7 @@ bn_finalize_network <- function(
     max_impact_shrinkage = 20,
     min_boot_coverage = 0.9,
     boot_inference_legacy = FALSE,
+    impact_control = NULL,
     # Survey-battery grouping for the "Index By: Battery" feature in the
     # impact dashboards. Named list of vectors mapping battery name -> IVs.
     # If NULL, resolved from obj$meta$ivs when that's a named list (the
@@ -539,6 +549,7 @@ bn_finalize_network <- function(
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
       boot_inference_legacy = boot_inference_legacy,
+      impact_control = impact_control,
       type = impact_type,
       index_by = impact_index_by,
       process_subgroups = TRUE,
@@ -652,6 +663,7 @@ bn_finalize_network <- function(
   results[["meta"]][["max_impact_shrinkage"]] <- max_impact_shrinkage
   results[["meta"]][["min_boot_coverage"]] <- min_boot_coverage
   results[["meta"]][["boot_inference_legacy"]] <- boot_inference_legacy
+  results[["meta"]][["impact_control"]] <- impact_control
 
   if (!is.null(batteries)) {
     results[["meta"]][["batteries"]] <- batteries
