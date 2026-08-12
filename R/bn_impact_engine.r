@@ -194,6 +194,20 @@
 #' @param brand_names Character vector or NULL. When provided, only compute
 #'   brand-specific lift for these brand levels. Brands not in this vector are
 #'   skipped. Market-level lift is always computed. Default NULL (all brands).
+#' @param id Character or \code{NULL}. Column in \code{df} identifying the
+#'   respondent. Default \code{"uuid"}. Base counts are reported as DISTINCT
+#'   RESPONDENTS rather than stacked records: in a stacked design one
+#'   respondent contributes one row per brand rated, so a record count
+#'   overstates the base a client reads (Danone TH: 1763 records vs 682
+#'   respondents). Errors if the column is absent. Brand-focus bases keep
+#'   essentially the same values - a respondent appears at most once per
+#'   brand - but become EXACT scope counts: under \code{n_boot > 1} the
+#'   record-count path reports each brand's mean resampled count, which
+#'   wobbles around the true count and carries spurious CI columns. All
+#'   bases are counted on the un-resampled scope so the value is invariant
+#'   across bootstrap replicates. \code{NULL} restores stacked-record
+#'   counts (the pre-2026-08-10 behaviour). Does not affect
+#'   \code{min_base_for_lift}, which still gates on records.
 #' @param weight Character or NULL. Column name in \code{df} containing
 #'   observation weights. When provided, frequency distributions used for
 #'   lift calculations are weighted. Default NULL.
@@ -337,6 +351,7 @@ bn_impact_engine <- function(
     brand = NULL,
     brand_names = NULL,
     weight = NULL,
+    id = "uuid",
     mi_boot = NULL,
     scale_ranges = NULL,
     boot_nonzero = FALSE,
@@ -395,6 +410,16 @@ bn_impact_engine <- function(
     stop("'weight' column '", weight, "' not found in df. Available columns: ",
          paste(head(names(df), 20), collapse = ", "))
   }
+  if (!is.null(id)) {
+    if (!is.character(id) || length(id) != 1) {
+      stop("'id' must be NULL or a single column name.")
+    }
+    if (!id %in% names(df)) {
+      stop("'id' column '", id, "' not found in df. Base counts DISTINCT ",
+           "RESPONDENTS, so a respondent identifier is required. Pass ",
+           "id = NULL to count stacked records instead (the pre-2026-08-10 behaviour).")
+    }
+  }
 
   # Ensure DV and IV(s) are provided
   if (is.null(dv) && !"meta" %in% names(obj)) {
@@ -439,7 +464,7 @@ bn_impact_engine <- function(
     bn <- obj
     # Brand/weight columns are not network nodes (weight may be numeric,
     # which the "bayes" estimator rejects), so exclude them from the fitting data
-    exclude_cols <- c(brand, weight)
+    exclude_cols <- c(brand, weight, id)
     fit_data <- if (length(exclude_cols) > 0) df[, setdiff(names(df), exclude_cols), drop = FALSE] else df
     fit <- bnlearn::bn.fit(bn, fit_data, method = "bayes")
   } else {
@@ -449,7 +474,7 @@ bn_impact_engine <- function(
 
   df <- df %>%
     dplyr::select(dplyr::all_of(
-      c(dv, ivs, brand, weight) %>% unlist() %>% unique() %>% setNames(NULL)
+      c(dv, ivs, brand, weight, id) %>% unlist() %>% unique() %>% setNames(NULL)
     )) %>%
     as.data.frame()
 
@@ -609,7 +634,7 @@ bn_impact_engine <- function(
     if(!is.null(indices)) dat_boot <- data[indices, , drop = FALSE] else dat_boot <- data
 
     # Exclude brand/weight columns from model fitting data
-    exclude_cols <- c(brand, weight)
+    exclude_cols <- c(brand, weight, id)
     fit_data <- if (length(exclude_cols) > 0) dat_boot[, setdiff(names(dat_boot), exclude_cols), drop = FALSE] else dat_boot
 
     # brand_control: back-door adjustment scaffolding shared by the maxVmin
@@ -1210,13 +1235,36 @@ bn_impact_engine <- function(
       if (include_base) {
         base_results <- temp_ivs_r %>%
           purrr::imap(function(iv_vars, iv_name) {
+            # With `id` supplied, bases are DISTINCT RESPONDENTS rather than
+            # stacked records. In a stacked design one respondent contributes
+            # one row per brand rated, so a record count overstates the base a
+            # client reads (Danone TH: 1763 records vs 682 respondents). Brand-
+            # focus bases keep essentially the same values - a respondent
+            # appears at most once per brand - but become exact scope counts
+            # instead of per-replicate resample counts, whose boot means
+            # wobble around the true count with spurious CI columns.
+            #
+            # Counted on `data` (the un-resampled scope) rather than `dat_boot`:
+            # a distinct-respondent count on a bootstrap resample returns only
+            # ~63% of the true value, and downstream consumers assume base is
+            # invariant across replicates (see the pivot's base note). The
+            # record-count branch still reads dat_boot, so id = NULL is
+            # bit-identical to the pre-2026-08-10 behaviour.
             per_iv_bases <- purrr::map(iv_vars, function(single_iv) {
-              market_base <- c(base = sum(table(dat_boot[[single_iv]])))
+              market_base <- c(base = if (is.null(id)) {
+                sum(table(dat_boot[[single_iv]]))
+              } else {
+                dplyr::n_distinct(data[[id]][!is.na(data[[single_iv]])])
+              })
               if (is.null(brand_levels)) {
                 market_base
               } else {
                 brand_bases <- purrr::map_dbl(brand_levels, function(b) {
-                  sum(dat_boot[[brand]] == b, na.rm = TRUE)
+                  if (is.null(id)) {
+                    sum(dat_boot[[brand]] == b, na.rm = TRUE)
+                  } else {
+                    dplyr::n_distinct(data[[id]][!is.na(data[[brand]]) & data[[brand]] == b])
+                  }
                 }) %>%
                   setNames(paste0("base_", brand_levels))
                 c(market_base, brand_bases)

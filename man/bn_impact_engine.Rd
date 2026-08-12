@@ -31,6 +31,7 @@ bn_impact_engine(
   brand = NULL,
   brand_names = NULL,
   weight = NULL,
+  id = "uuid",
   mi_boot = NULL,
   scale_ranges = NULL,
   boot_nonzero = FALSE,
@@ -237,6 +238,21 @@ skipped. Market-level lift is always computed. Default NULL (all brands).}
 \item{weight}{Character or NULL. Column name in \code{df} containing
 observation weights. When provided, frequency distributions used for
 lift calculations are weighted. Default NULL.}
+
+\item{id}{Character or \code{NULL}. Column in \code{df} identifying the
+respondent. Default \code{"uuid"}. Base counts are reported as DISTINCT
+RESPONDENTS rather than stacked records: in a stacked design one
+respondent contributes one row per brand rated, so a record count
+overstates the base a client reads (Danone TH: 1763 records vs 682
+respondents). Errors if the column is absent. Brand-focus bases keep
+essentially the same values - a respondent appears at most once per
+brand - but become EXACT scope counts: under \code{n_boot > 1} the
+record-count path reports each brand's mean resampled count, which
+wobbles around the true count and carries spurious CI columns. All
+bases are counted on the un-resampled scope so the value is invariant
+across bootstrap replicates. \code{NULL} restores stacked-record
+counts (the pre-2026-08-10 behaviour). Does not affect
+\code{min_base_for_lift}, which still gates on records.}
 
 \item{mi_boot}{Integer or NULL. When set and \code{do_community = TRUE},
 bootstraps the MI calculation this many times to derive a p-value from the

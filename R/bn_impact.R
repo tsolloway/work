@@ -170,6 +170,11 @@
 #' @param brand_names Character vector or NULL. When provided, only compute
 #'   brand-specific lift for these brand levels. Brands not in this vector are
 #'   skipped. Market-level lift is always computed. Default NULL (all brands).
+#' @param id Character or \code{NULL}. Column in \code{df} identifying the
+#'   respondent. Default \code{"uuid"}. Bases are reported as DISTINCT
+#'   RESPONDENTS rather than stacked records; errors if the column is absent.
+#'   \code{NULL} restores stacked-record counts. See
+#'   \code{\link{bn_impact_engine}}.
 #' @param weight Character or NULL. Column name in \code{df} containing
 #'   observation weights. When provided, frequency distributions used for
 #'   lift calculations are weighted. Default NULL.
@@ -268,6 +273,7 @@ bn_impact <- function(
     brand = NULL,
     brand_names = NULL,
     weight = NULL,
+    id = "uuid",
     mi_boot = NULL,
     verbose = TRUE,
     use_parallel = TRUE,
@@ -340,6 +346,7 @@ bn_impact <- function(
         max_impact_shrinkage = max_impact_shrinkage,
         min_boot_coverage = min_boot_coverage,
         boot_inference_legacy = boot_inference_legacy,
+        id = id,
         type = type,
         index_by = index_by,
         n_boot = n_boot,
@@ -394,6 +401,7 @@ bn_impact <- function(
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
       boot_inference_legacy = boot_inference_legacy,
+      id = id,
       type = type,
       index_by = index_by,
       n_boot = n_boot,

@@ -28,6 +28,11 @@
 #' @param brand Character or NULL. Brand column name. Default NULL.
 #' @param brand_names Character vector or NULL. Brand levels to include.
 #'   Default NULL (all brands).
+#' @param id Character or \code{NULL}. Column in \code{df} identifying the
+#'   respondent. Default \code{"uuid"}. Bases are reported as DISTINCT
+#'   RESPONDENTS rather than stacked records; errors if the column is absent.
+#'   \code{NULL} restores stacked-record counts. See
+#'   \code{\link{bn_impact_engine}}.
 #' @param weight Character or NULL. Weight column name. Default NULL.
 #' @param dv_metric Character. \code{"mean"} or \code{"top_box"}.
 #'   Default \code{"mean"}.
@@ -182,6 +187,7 @@ bn_finalize_network <- function(
     brand = NULL,
     brand_names = NULL,
     weight = NULL,
+    id = "uuid",
     # --- Model ---
     dv_metric = c("mean", "top_box"),
     min_base_for_calc = 100,
@@ -546,6 +552,7 @@ bn_finalize_network <- function(
       max_impact_shrinkage = max_impact_shrinkage,
       min_boot_coverage = min_boot_coverage,
       boot_inference_legacy = boot_inference_legacy,
+      id = id,
       type = impact_type,
       index_by = impact_index_by,
       process_subgroups = TRUE,

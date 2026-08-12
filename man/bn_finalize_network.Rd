@@ -18,6 +18,7 @@ bn_finalize_network(
   brand = NULL,
   brand_names = NULL,
   weight = NULL,
+  id = "uuid",
   dv_metric = c("mean", "top_box"),
   min_base_for_calc = 100,
   mi_n_boot = 100,
@@ -96,6 +97,12 @@ subgroup).}
 Default NULL (all brands).}
 
 \item{weight}{Character or NULL. Weight column name. Default NULL.}
+
+\item{id}{Character or \code{NULL}. Column in \code{df} identifying the
+respondent. Default \code{"uuid"}. Bases are reported as DISTINCT
+RESPONDENTS rather than stacked records; errors if the column is absent.
+\code{NULL} restores stacked-record counts. See
+\code{\link{bn_impact_engine}}.}
 
 \item{dv_metric}{Character. \code{"mean"} or \code{"top_box"}.
 Default \code{"mean"}.}

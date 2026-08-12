@@ -32,6 +32,7 @@ bn_impacts(
   brand = NULL,
   brand_names = NULL,
   weight = NULL,
+  id = "uuid",
   mi_boot = 100,
   use_parallel = TRUE,
   scale_ranges = NULL,
@@ -141,6 +142,12 @@ brand-specific lift for these brand levels. Default NULL (all brands).}
 
 \item{weight}{Character scalar or NULL. Column name for weights. When NULL,
 weighted variants are omitted from the output.}
+
+\item{id}{Character or \code{NULL}. Column in \code{df} identifying the
+respondent. Default \code{"uuid"}. Bases are reported as DISTINCT
+RESPONDENTS rather than stacked records; errors if the column is absent.
+\code{NULL} restores stacked-record counts. See
+\code{\link{bn_impact_engine}}.}
 
 \item{mi_boot}{Integer or NULL. Bootstrap replicates for community MI.
 Only applied to community variants. Default 100.}

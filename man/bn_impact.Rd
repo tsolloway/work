@@ -32,6 +32,7 @@ bn_impact(
   brand = NULL,
   brand_names = NULL,
   weight = NULL,
+  id = "uuid",
   mi_boot = NULL,
   verbose = TRUE,
   use_parallel = TRUE,
@@ -166,6 +167,12 @@ skipped. Market-level lift is always computed. Default NULL (all brands).}
 \item{weight}{Character or NULL. Column name in \code{df} containing
 observation weights. When provided, frequency distributions used for
 lift calculations are weighted. Default NULL.}
+
+\item{id}{Character or \code{NULL}. Column in \code{df} identifying the
+respondent. Default \code{"uuid"}. Bases are reported as DISTINCT
+RESPONDENTS rather than stacked records; errors if the column is absent.
+\code{NULL} restores stacked-record counts. See
+\code{\link{bn_impact_engine}}.}
 
 \item{mi_boot}{Integer or NULL. Number of bootstrap replicates specifically
 for the mutual information significance test. Overrides \code{n_boot} for
