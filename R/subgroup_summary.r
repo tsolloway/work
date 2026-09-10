@@ -24,7 +24,7 @@ subgroup_summary <- function(
     t() %>%
     as.data.frame() %>%
     mutate(
-      Subroup = rownames(.) %>% gsub("_", " ", .),
+      Subgroup = rownames(.) %>% gsub("_", " ", .),
       .before = 1
     ) %>%
     as_tibble() %>%
