@@ -80,12 +80,65 @@
 #'   (passed through to the engine). Default FALSE.
 #' @param community_assignment Optional. Community assignment object used when
 #'   \code{do_community = TRUE}.
+#' @param community_impact_attributes Character vector or NULL. Battery names
+#'   (variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+#'   when computing community-level impacts. Default NULL includes all
+#'   attributes. Errors if a declared battery matches no IV. Applies to every
+#'   community metric across all subgroups and shift variants; ignored when
+#'   \code{do_community = FALSE}. See \code{\link{bn_impact_engine}}.
+#' @param impact_readoff Character. \code{"empirical"} (default) reads
+#'   E\[DV | IV = level\] for the lift metrics directly from the data;
+#'   \code{"model"} uses the fitted network's conditionals - the methodology
+#'   used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
+#'   \code{"empirical_brand_control"}: empirical with the \code{brand}
+#'   column's composition held fixed - the back-door adjustment for
+#'   stacked designs, where exposure-type IVs double as markers for which
+#'   brand a row describes. Adjusts lifts, observed-anchor maxVmin, and
+#'   pins brand margins in the joint community rake; MI unaffected.
+#'   Requires \code{brand}. Global switch - also removes the brand-level
+#'   component of perception batteries. See \code{\link{bn_impact_engine}}.
+#' @param community_lift Character. \code{"joint"} (default) computes
+#'   community lift columns by raking (IPF) to all member targets at once -
+#'   the theme effect; \code{"average"} takes the arithmetic mean of member
+#'   lifts - the methodology used prior to 2026-07-28. The joint rake's
+#'   read-off is inherently empirical; combined with
+#'   \code{impact_readoff = "model"}, attribute lifts stay model-based
+#'   while community lifts are empirical (warning issued). See
+#'   \code{\link{bn_impact_engine}}.
+#' @param max_impact_anchor Character. \code{"observed"} (default) anchors
+#'   the Best-vs-Worst (maxVmin) family at observed, support-guarded anchors;
+#'   \code{"theoretical"} uses hypothetical all-max / all-min evidence - the
+#'   methodology used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
+#' @param max_impact_min_support Integer. Minimum respondent count for an
+#'   observed anchor candidate. Default 5.
+#' @param max_impact_shrinkage Numeric >= 0. Empirical-Bayes prior weight
+#'   (pseudo-respondents toward the scope mean) guarding observed anchors
+#'   against winner's curse. \code{0} disables. Default 20. See
+#'   \code{\link{bn_impact_engine}}.
+#' @param min_boot_coverage Numeric in (0, 1]. Minimum share of bootstrap
+#'   replicates that must yield a value for a metric cell to be reported;
+#'   cells below it are blanked and passing cells use the feasible count
+#'   for the df. Default 0.9. See \code{\link{bn_impact_engine}}.
+#' @param boot_inference_legacy Logical. \code{TRUE} reproduces the
+#'   pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
+#'   blackout, NA rare-level replicates silently excluded) for
+#'   replicating historical deliverables; known to overstate
+#'   significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Target lift(s) for the shifted-distribution
 #'   metric (both proportional and absolute shift variants are precomputed).
 #'   Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size required for a brand
 #'   subgroup to compute lift estimates. Brands below this threshold are
-#'   excluded. Default 75.
+#'   excluded. Counted as distinct respondents when \code{id} is set, otherwise
+#'   as stacked records - see \code{\link{bn_impact_engine}}. Default 75.
+#' @param override_min_base_for_lift Character vector or NULL. Subgroup names
+#'   exempted from \code{min_base_for_lift}: every lift cell inside them is
+#'   computed however thin its base, market and brand focus alike. For a
+#'   must-report audience cut whose base the client has already accepted.
+#'   Matched against the names of \code{obj} when \code{process_subgroups =
+#'   TRUE}; when \code{FALSE} the single run is treated as \code{"Total"}.
+#'   Truly empty scopes still return \code{NA} - there is no distribution to
+#'   shift. Default NULL (no exemptions).
 #' @param type Character. Engine type: \code{"gr"} (gRain exact inference,
 #'   default), \code{"cp"} (cpdist sampling), or \code{"mi"} (mutual
 #'   information).
@@ -126,6 +179,11 @@
 #' @param brand_names Character vector or NULL. When provided, only compute
 #'   brand-specific lift for these brand levels. Brands not in this vector are
 #'   skipped. Market-level lift is always computed. Default NULL (all brands).
+#' @param id Character or \code{NULL}. Column in \code{df} identifying the
+#'   respondent. Default \code{"uuid"}. Bases are reported as DISTINCT
+#'   RESPONDENTS rather than stacked records; errors if the column is absent.
+#'   \code{NULL} restores stacked-record counts. See
+#'   \code{\link{bn_impact_engine}}.
 #' @param weight Character or NULL. Column name in \code{df} containing
 #'   observation weights. When provided, frequency distributions used for
 #'   lift calculations are weighted. Default NULL.
@@ -137,6 +195,12 @@
 #'   that provides its own progress indication.
 #' @param use_parallel Logical. Whether to parallelize subgroup processing
 #'   via \code{work::imap_progress()}. Default \code{TRUE}.
+#' @param boot_nonzero Logical. Default \code{FALSE}: classical bootstrap
+#'   inference - the SD of the bootstrap replicates is used directly as the
+#'   standard error, so p-values are invariant to \code{n_boot}. \code{TRUE}
+#'   restores the legacy behavior (\code{se = sd/sqrt(n_boot)}), which tests
+#'   whether the mean of the boot distribution is nonzero and shrinks
+#'   p-values as \code{n_boot} grows.
 #' @param seed Integer. Random seed passed through to the engine for
 #'   reproducibility. Default 1.
 #'
@@ -199,8 +263,17 @@ bn_impact <- function(
     process_subgroups = TRUE,
     do_community = FALSE,
     community_assignment = NULL,
+    community_impact_attributes = NULL,
+    impact_readoff = c("empirical", "model", "empirical_brand_control"),
+    community_lift = c("joint", "average"),
+    max_impact_anchor = c("observed", "theoretical"),
+    max_impact_min_support = 5,
+    max_impact_shrinkage = 20,
+    min_boot_coverage = 0.9,
+    boot_inference_legacy = FALSE,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
+    override_min_base_for_lift = NULL,
     type = c("gr", "cp", "mi"),
     dv_metric = c("mean", "top_box"),
     include_base = TRUE,
@@ -210,85 +283,46 @@ bn_impact <- function(
     brand = NULL,
     brand_names = NULL,
     weight = NULL,
+    id = "uuid",
     mi_boot = NULL,
     verbose = TRUE,
     use_parallel = TRUE,
     scale_ranges = NULL,
+    boot_nonzero = FALSE,
     seed = 1
 ){
 
   type <- match.arg(type)
   index_by <- match.arg(index_by)
   dv_metric <- match.arg(dv_metric)
+  impact_readoff <- match.arg(impact_readoff)
+  community_lift <- match.arg(community_lift)
+  max_impact_anchor <- match.arg(max_impact_anchor)
 
   # Preserve named dv for meta, strip for bnlearn
   dv_original <- dv
   dv <- unname(dv)
 
-  # Helper: insert a shift-type tag (propshift / absshift) into lift column
-  # names, right after the propdisplay / absdisplay token. Handles both:
-  #   - value cols ending in propdisplay/absdisplay
-  #   - bootstrap stat cols of the form <lift>_<display>_<stat>
-  #     (where <stat> ∈ mean | sd | se | t | ci_low | ci_high | p_value)
-  # so the dashboard's metric-keyed bootstrap p-value lookup resolves to a
-  # consistently-shaped col name. maxVmin / mi / p_val / dv_max_value /
-  # dv_min_value / index don't start with `lift` and are NOT renamed.
-  .insert_shift_suffix <- function(cols, shift_key) {
-    # POSIX regex (no perl=TRUE): R's perl backref handling treats `\\1`
-    # as the byte 0x01 (octal escape) and emits literal control chars
-    # instead of backrefs. Plain POSIX gives reliable backref behavior.
-    sub("^(lift.*)_(propdisplay|absdisplay)(_.*)?$",
-        paste0("\\1_", shift_key, "_\\2\\3"), cols)
+  # An exempted subgroup gets the engine's threshold dropped to 0 rather than a
+  # flag threaded through the engine: the gate is a single `base_n <
+  # min_base_for_lift` test, so 0 disables it outright while the engine's
+  # separate empty-scope guard still blanks scopes with nothing to shift.
+  .min_base_for <- function(sg_name) {
+    if (!is.null(override_min_base_for_lift) &&
+        sg_name %in% override_min_base_for_lift) 0 else min_base_for_lift
   }
 
-  # Helper: merge engine outputs produced with impact_shift_type =
-  # "proportional", "absolute", "headroom", and "range". Keep everything
-  # from the prop run; from each other run take only the lift columns
-  # and bind alongside, each tagged with the corresponding _<key>shift_
-  # token.
-  .merge_shift_variants <- function(prop_tbl, abs_tbl,
-                                    head_tbl = NULL, range_tbl = NULL) {
-    # Rename lift columns in the prop run to include _propshift_ tag.
-    prop_names <- names(prop_tbl)
-    renamed_prop <- .insert_shift_suffix(prop_names, "propshift")
-    names(prop_tbl) <- renamed_prop
-
-    .extract_lift_only <- function(tbl, shift_key) {
-      lift_cols <- grep("^lift.*_(propdisplay|absdisplay)(_.*)?$",
-        names(tbl), value = TRUE)
-      if (length(lift_cols) == 0) return(NULL)
-      out <- tbl[, lift_cols, drop = FALSE]
-      names(out) <- .insert_shift_suffix(names(out), shift_key)
-      out
-    }
-
-    abs_lift_only   <- .extract_lift_only(abs_tbl,   "absshift")
-    head_lift_only  <- if (!is.null(head_tbl))  .extract_lift_only(head_tbl,  "headshift")  else NULL
-    range_lift_only <- if (!is.null(range_tbl)) .extract_lift_only(range_tbl, "rangeshift") else NULL
-
-    out <- prop_tbl
-    if (!is.null(abs_lift_only))   out <- dplyr::bind_cols(out, abs_lift_only)
-    if (!is.null(head_lift_only))  out <- dplyr::bind_cols(out, head_lift_only)
-    if (!is.null(range_lift_only)) out <- dplyr::bind_cols(out, range_lift_only)
-    out
-  }
-
-  # Run the engine once per shift_type (proportional + absolute +
-  # headroom + range). maxVmin / mi / index values don't depend on
-  # shift_type and would be duplicates, so only the lift columns are
-  # retained from the abs / head / range runs. Order kept stable: prop
-  # first (anchors index/maxVmin/mi), then abs, then head, then range —
-  # downstream regex grabs them by suffix tag.
+  # Run the engine ONCE with all four shift variants (proportional +
+  # absolute + headroom + range). Since 2026-07-28 the engine computes every
+  # variant in a single pass and emits lift columns already tagged with
+  # `_propshift_` / `_absshift_` / `_headshift_` / `_rangeshift_`, so the
+  # bootstrap loop, MI, maxVmin, and base are computed once instead of once
+  # per variant (previously this wrapper ran the engine four times and
+  # merged the lift columns afterwards).
   .dual_engine_call <- function(engine_args) {
-    prop_tbl  <- do.call(bn_impact_engine,
-      c(engine_args, list(impact_shift_type = "proportional")))
-    abs_tbl   <- do.call(bn_impact_engine,
-      c(engine_args, list(impact_shift_type = "absolute")))
-    head_tbl  <- do.call(bn_impact_engine,
-      c(engine_args, list(impact_shift_type = "headroom")))
-    range_tbl <- do.call(bn_impact_engine,
-      c(engine_args, list(impact_shift_type = "range")))
-    .merge_shift_variants(prop_tbl, abs_tbl, head_tbl, range_tbl)
+    do.call(bn_impact_engine, c(engine_args, list(
+      impact_shift_type = c("proportional", "absolute", "headroom", "range")
+    )))
   }
 
   if(process_subgroups){
@@ -323,6 +357,15 @@ bn_impact <- function(
         ivs = ivs,
         do_community = do_community,
         community_assignment = community_assignment,
+        community_impact_attributes = community_impact_attributes,
+        impact_readoff = impact_readoff,
+        community_lift = community_lift,
+        max_impact_anchor = max_impact_anchor,
+        max_impact_min_support = max_impact_min_support,
+        max_impact_shrinkage = max_impact_shrinkage,
+        min_boot_coverage = min_boot_coverage,
+        boot_inference_legacy = boot_inference_legacy,
+        id = id,
         type = type,
         index_by = index_by,
         n_boot = n_boot,
@@ -330,12 +373,13 @@ bn_impact <- function(
         lift = lift,
         brand = brand,
         brand_names = brand_names,
-        min_base_for_lift = min_base_for_lift,
+        min_base_for_lift = .min_base_for(.y),
         include_base = include_base,
         dv_metric = dv_metric,
         weight = weight,
         mi_boot = mi_boot,
         scale_ranges = scale_ranges,
+        boot_nonzero = boot_nonzero,
         seed = seed
       )) %>%
         setNames(glue::glue("{.y}_{names(.)}"))
@@ -368,6 +412,15 @@ bn_impact <- function(
       ivs = ivs,
       do_community = do_community,
       community_assignment = community_assignment,
+      community_impact_attributes = community_impact_attributes,
+      impact_readoff = impact_readoff,
+      community_lift = community_lift,
+      max_impact_anchor = max_impact_anchor,
+      max_impact_min_support = max_impact_min_support,
+      max_impact_shrinkage = max_impact_shrinkage,
+      min_boot_coverage = min_boot_coverage,
+      boot_inference_legacy = boot_inference_legacy,
+      id = id,
       type = type,
       index_by = index_by,
       n_boot = n_boot,
@@ -375,12 +428,13 @@ bn_impact <- function(
       lift = lift,
       brand = brand,
       brand_names = brand_names,
-      min_base_for_lift = min_base_for_lift,
+      min_base_for_lift = .min_base_for("Total"),
       include_base = include_base,
       dv_metric = dv_metric,
       weight = weight,
       mi_boot = mi_boot,
       scale_ranges = scale_ranges,
+      boot_nonzero = boot_nonzero,
       seed = seed
     )) %>%
       dplyr::rename(Variable = variable)
@@ -481,6 +535,12 @@ bn_impact <- function(
       brand = brand,
       brand_names = brand_names_resolved,
       min_base_for_lift = min_base_for_lift,
+      # Subgroups the threshold above was waived for, so writers can caveat
+      # their cells rather than presenting them as having cleared the base.
+      override_min_base_for_lift = override_min_base_for_lift,
+      # Respondent-level id column (or NULL). Governs whether min_base_for_lift
+      # and the reported bases count respondents or stacked records.
+      id = id,
       # Survey-weight column name (or NULL). Retained so downstream writers
       # (e.g. append_bn_simulator) can use the same weight without having
       # to re-thread it through every caller.

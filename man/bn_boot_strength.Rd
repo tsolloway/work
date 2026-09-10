@@ -43,9 +43,12 @@ bn_boot_strength(
 
 \item{align_direction}{Logical; if \code{TRUE}, arcs are oriented to match the majority-supported direction.}
 
-\item{threshold}{Numeric or \code{"auto"}. Minimum strength to retain arcs, or \code{"auto"} to select top arcs based on \code{auto_threshold_ratio}.}
+\item{threshold}{Numeric or \code{"auto"}. Minimum strength to retain arcs, or \code{"auto"}
+to keep the top \code{auto_threshold_ratio} share of candidate arcs by strength.}
 
-\item{auto_threshold_ratio}{Numeric. Proportion of arcs to retain if \code{threshold = "auto"} (default = 1/4).}
+\item{auto_threshold_ratio}{Numeric. Proportion of candidate arcs to retain if
+\code{threshold = "auto"} (default = 1/4). Rank-based (ties at the cutoff do not
+inflate the kept set); always keeps at least one arc.}
 
 \item{strength_min}{Numeric. Minimum strength below which arcs are removed (default = 0.01).}
 

@@ -13,8 +13,17 @@ bn_impacts(
   process_subgroups = TRUE,
   do_community = TRUE,
   community_assignment = NULL,
+  community_impact_attributes = NULL,
+  impact_readoff = c("empirical", "model", "empirical_brand_control"),
+  community_lift = c("joint", "average"),
+  max_impact_anchor = c("observed", "theoretical"),
+  max_impact_min_support = 5,
+  max_impact_shrinkage = 20,
+  min_boot_coverage = 0.9,
+  boot_inference_legacy = FALSE,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
+  override_min_base_for_lift = NULL,
   type = c("gr", "cp", "mi"),
   dv_metric = c("mean", "top_box"),
   include_base = TRUE,
@@ -24,9 +33,11 @@ bn_impacts(
   brand = NULL,
   brand_names = NULL,
   weight = NULL,
+  id = "uuid",
   mi_boot = 100,
   use_parallel = TRUE,
   scale_ranges = NULL,
+  boot_nonzero = FALSE,
   seed = 1
 )
 }
@@ -50,9 +61,69 @@ results. If FALSE, only attribute-level results are returned.}
 \item{community_assignment}{Optional. Community assignment object for
 community-level analysis.}
 
+\item{community_impact_attributes}{Character vector or NULL. Battery names
+(variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+when computing community-level impacts — applied to both the unweighted
+and weighted community variants and every community metric within them
+(lift, maxVmin, MI, base) across all subgroups and shift types. Default
+NULL includes all attributes. Errors if a declared battery matches no IV.
+Attribute-level tables are never affected.}
+
+\item{impact_readoff}{Character. \code{"empirical"} (default) reads
+E[DV | IV = level] for the lift metrics directly from the data;
+\code{"model"} uses the fitted network's conditionals - the methodology
+used prior to 2026-07-28. Applies to attribute and community lift
+columns alike. See \code{\link{bn_impact_engine}}.
+\code{"empirical_brand_control"}: empirical with the \code{brand}
+column's composition held fixed - the back-door adjustment for
+stacked designs, where exposure-type IVs double as markers for which
+brand a row describes. Adjusts lifts, observed-anchor maxVmin, and
+pins brand margins in the joint community rake; MI unaffected.
+Requires \code{brand}. Global switch - also removes the brand-level
+component of perception batteries. See \code{\link{bn_impact_engine}}.}
+
+\item{community_lift}{Character. \code{"joint"} (default) computes
+community lift columns by raking (IPF) to all member targets at once -
+the theme effect; \code{"average"} takes the arithmetic mean of member
+lifts - the methodology used prior to 2026-07-28. The joint rake's
+read-off is inherently empirical; combined with
+\code{impact_readoff = "model"} a warning is issued and attribute
+lifts stay model-based while community lifts are empirical. See
+\code{\link{bn_impact_engine}}.}
+
+\item{max_impact_anchor}{Character. \code{"observed"} (default) anchors
+the Best-vs-Worst (maxVmin) family at observed, support-guarded anchors;
+\code{"theoretical"} uses hypothetical all-max / all-min evidence - the
+methodology used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.}
+
+\item{max_impact_min_support}{Integer. Minimum respondent count for an
+observed anchor candidate. Default 5.}
+
+\item{max_impact_shrinkage}{Numeric >= 0. Empirical-Bayes prior weight
+(pseudo-respondents toward the scope mean) guarding observed anchors
+against winner's curse. \code{0} disables. Default 20. See
+\code{\link{bn_impact_engine}}.}
+
+\item{min_boot_coverage}{Numeric in (0, 1]. Minimum share of bootstrap
+replicates that must yield a value for a metric cell to be reported;
+cells below it are blanked and passing cells use the feasible count
+for the df. Default 0.9. See \code{\link{bn_impact_engine}}.}
+
+\item{boot_inference_legacy}{Logical. \code{TRUE} reproduces the
+pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
+blackout, NA rare-level replicates silently excluded) for
+replicating historical deliverables; known to overstate
+significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.}
+
 \item{lift}{Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.}
 
 \item{min_base_for_lift}{Integer. Minimum sample size for brand lift.
+Counted as distinct respondents when \code{id} is set, otherwise as
+stacked records. See \code{\link{bn_impact_engine}}.}
+
+\item{override_min_base_for_lift}{Character vector or NULL. Subgroup
+names exempted from \code{min_base_for_lift} - every lift cell inside
+them is computed however thin its base. Default NULL.
 Default 75.}
 
 \item{type}{Character. Impact type: \code{"gr"}, \code{"cp"}, or
@@ -79,10 +150,21 @@ brand-specific lift for these brand levels. Default NULL (all brands).}
 \item{weight}{Character scalar or NULL. Column name for weights. When NULL,
 weighted variants are omitted from the output.}
 
+\item{id}{Character or \code{NULL}. Column in \code{df} identifying the
+respondent. Default \code{"uuid"}. Bases are reported as DISTINCT
+RESPONDENTS rather than stacked records; errors if the column is absent.
+\code{NULL} restores stacked-record counts. See
+\code{\link{bn_impact_engine}}.}
+
 \item{mi_boot}{Integer or NULL. Bootstrap replicates for community MI.
 Only applied to community variants. Default 100.}
 
 \item{use_parallel}{Logical. Use parallel plan if available. Default TRUE.}
+
+\item{boot_nonzero}{Logical. Default \code{FALSE}: classical bootstrap
+inference (replicate SD used directly as the SE, p-values invariant to
+\code{n_boot}). \code{TRUE} restores the legacy
+\code{se = sd/sqrt(n_boot)} behavior.}
 
 \item{seed}{Integer. Random seed. Default 1.}
 }

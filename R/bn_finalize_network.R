@@ -28,15 +28,43 @@
 #' @param brand Character or NULL. Brand column name. Default NULL.
 #' @param brand_names Character vector or NULL. Brand levels to include.
 #'   Default NULL (all brands).
+#' @param id Character or \code{NULL}. Column in \code{df} identifying the
+#'   respondent. Default \code{"uuid"}. Bases are reported as DISTINCT
+#'   RESPONDENTS rather than stacked records; errors if the column is absent.
+#'   \code{NULL} restores stacked-record counts. See
+#'   \code{\link{bn_impact_engine}}.
 #' @param weight Character or NULL. Weight column name. Default NULL.
 #' @param dv_metric Character. \code{"mean"} or \code{"top_box"}.
 #'   Default \code{"mean"}.
 #' @param min_base_for_calc Integer. Minimum sample size for brand lift
 #'   calculations in \code{bn_impacts()} and for bootstrap p-values in
-#'   \code{bn_prioritizations()}. Default 100.
-#' @param n_boot_final Integer. Bootstrap replicates used for community MI
-#'   in \code{bn_impacts()} and for p-values in \code{bn_prioritizations()}.
-#'   Default 100.
+#'   \code{bn_prioritizations()}. The count compared against it follows
+#'   \code{id}: with \code{id} set it is DISTINCT RESPONDENTS - the same number
+#'   the cell reports as its base - and with \code{id = NULL} it is stacked
+#'   records, which in a stacked design overstates the base a client reads and
+#'   lets cells through the gate on rows rather than people (Danone TH: 1763
+#'   records vs 682 respondents). Records were the only behaviour before
+#'   2026-09-09. Default 100.
+#' @param override_min_base_for_calc Character vector or NULL. Subgroup names
+#'   exempted from \code{min_base_for_calc}. Inside an exempted subgroup every
+#'   impact lift cell is computed however thin its base (market and brand focus
+#'   alike), every brand slice is run as a prioritization task, and bootstrap
+#'   p-values are computed rather than skipped. For a must-report audience cut
+#'   whose base the client has already accepted. Names must appear in
+#'   \code{subgroups} (or be \code{"Total"} when \code{subgroups} is NULL);
+#'   unmatched names error rather than silently doing nothing. Scopes with no
+#'   observations at all still return \code{NA} - an exemption cannot conjure a
+#'   distribution to shift. Default NULL (no exemptions).
+#' @param mi_n_boot Integer. Bootstrap replicates for the nested
+#'   community-MI bootstrap in \code{bn_impacts()} (the
+#'   \code{mi_boot_lower} / \code{mi_boot_upper} CI columns) and for
+#'   p-values in \code{bn_prioritizations()}. Runs INSIDE each
+#'   \code{impact_n_boot} replicate for community MI, so it multiplies
+#'   community-stage runtime. Renamed from \code{n_boot_final} on
+#'   2026-07-29. Default 100.
+#' @param n_boot_final Deprecated alias for \code{mi_n_boot}. If supplied,
+#'   a warning is issued and its value is used unless \code{mi_n_boot} is
+#'   also given explicitly.
 #' @param do_impacts Logical. If TRUE, run \code{bn_impacts()} to produce full
 #'   attribute/community, weighted/unweighted impact tables. Default TRUE.
 #' @param impact_type Character. Impact estimation type: \code{"gr"},
@@ -63,6 +91,51 @@
 #'   dropdowns for both Shift Type and Outcome Display.
 #' @param impact_include_base Logical. Include base sizes in impact tables.
 #'   Default TRUE.
+#' @param community_impact_attributes Character vector or NULL. Battery names
+#'   (variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+#'   when computing community-level impacts. Default NULL includes all
+#'   attributes. Errors before model estimation if a declared battery matches
+#'   no IV. Flows through \code{bn_impacts()} to every community metric in
+#'   both the unweighted and weighted community tables; attribute-level
+#'   tables (and their per-battery dashboard cuts) are never affected.
+#' @param impact_readoff Character. \code{"empirical"} (default) reads
+#'   E\[DV | IV = level\] for the lift metrics directly from the data;
+#'   \code{"model"} uses the fitted network's conditionals - the methodology
+#'   used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
+#'   \code{"empirical_brand_control"}: empirical with the \code{brand}
+#'   column's composition held fixed - the back-door adjustment for
+#'   stacked designs, where exposure-type IVs double as markers for which
+#'   brand a row describes. Adjusts lifts, observed-anchor maxVmin, and
+#'   pins brand margins in the joint community rake; MI unaffected.
+#'   Requires \code{brand}. Global switch - also removes the brand-level
+#'   component of perception batteries. See \code{\link{bn_impact_engine}}.
+#' @param community_lift Character. \code{"joint"} (default) computes
+#'   community lift columns by raking (IPF) to all member targets at once -
+#'   the theme effect; \code{"average"} takes the arithmetic mean of member
+#'   lifts - the methodology used prior to 2026-07-28. The joint rake's
+#'   read-off is inherently empirical; combined with
+#'   \code{impact_readoff = "model"}, attribute lifts stay model-based
+#'   while community lifts are empirical (warning issued). See
+#'   \code{\link{bn_impact_engine}}.
+#' @param max_impact_anchor Character. \code{"observed"} (default) anchors
+#'   the Best-vs-Worst (maxVmin) family at observed, support-guarded anchors;
+#'   \code{"theoretical"} uses hypothetical all-max / all-min evidence - the
+#'   methodology used prior to 2026-07-28. See \code{\link{bn_impact_engine}}.
+#' @param max_impact_min_support Integer. Minimum respondent count for an
+#'   observed anchor candidate. Default 5.
+#' @param max_impact_shrinkage Numeric >= 0. Empirical-Bayes prior weight
+#'   (pseudo-respondents toward the scope mean) guarding observed anchors
+#'   against winner's curse. \code{0} disables. Default 20. See
+#'   \code{\link{bn_impact_engine}}.
+#' @param min_boot_coverage Numeric in (0, 1]. Minimum share of bootstrap
+#'   replicates that must yield a value for a metric cell to be reported;
+#'   cells below it are blanked and passing cells use the feasible count
+#'   for the df. Default 0.9. See \code{\link{bn_impact_engine}}.
+#' @param boot_inference_legacy Logical. \code{TRUE} reproduces the
+#'   pre-2026-07-29 bootstrap bookkeeping (nominal df, no coverage
+#'   blackout, NA rare-level replicates silently excluded) for
+#'   replicating historical deliverables; known to overstate
+#'   significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.
 #' @param do_prioritizations Logical. If TRUE, run \code{bn_prioritizations()}
 #'   to produce prioritization analysis. Default TRUE.
 #' @param prioritize_lift Numeric. Lift fraction for prioritization. Default
@@ -95,6 +168,10 @@
 #'   Default FALSE.
 #' @param impact_parallel Logical. Parallelize impact and prioritization
 #'   estimation. Default TRUE.
+#' @param boot_nonzero Logical. Default \code{FALSE}: classical bootstrap
+#'   inference for impact p-values (replicate SD used directly as the SE,
+#'   p-values invariant to \code{impact_n_boot}). \code{TRUE} restores the
+#'   legacy \code{se = sd/sqrt(n_boot)} behavior.
 #' @param seed Integer. Random seed. Default 1.
 #'
 #' @return A list with:
@@ -126,19 +203,30 @@ bn_finalize_network <- function(
     brand = NULL,
     brand_names = NULL,
     weight = NULL,
+    id = "uuid",
     # --- Model ---
     dv_metric = c("mean", "top_box"),
     min_base_for_calc = 100,
-    n_boot_final = 100,
+    override_min_base_for_calc = NULL,
+    mi_n_boot = 100,
     # --- Impact ---
     do_impacts = TRUE,
     impact_type = c("gr", "cp", "mi"),
     impact_index_by = c("lift_first", "lift_second", "maxVmin", "mi", "none"),
     impact_n_boot = 1,
+    boot_nonzero = FALSE,
     impact_n_querry = 1e4,
     impact_lift = c(0, 0.25),
     prioritize_shift_type = c("headroom", "proportional", "absolute", "range"),
     impact_include_base = TRUE,
+    community_impact_attributes = NULL,
+    impact_readoff = c("empirical", "model", "empirical_brand_control"),
+    community_lift = c("joint", "average"),
+    max_impact_anchor = c("observed", "theoretical"),
+    max_impact_min_support = 5,
+    max_impact_shrinkage = 20,
+    min_boot_coverage = 0.9,
+    boot_inference_legacy = FALSE,
     # Survey-battery grouping for the "Index By: Battery" feature in the
     # impact dashboards. Named list of vectors mapping battery name -> IVs.
     # If NULL, resolved from obj$meta$ivs when that's a named list (the
@@ -182,11 +270,24 @@ bn_finalize_network <- function(
     # --- Parallel ---
     model_parallel = FALSE,
     impact_parallel = TRUE,
-    seed = 1
+    seed = 1,
+    # Deprecated alias for mi_n_boot (renamed 2026-07-29).
+    n_boot_final = NULL
 ){
 
   node_label_type <- match.arg(node_label_type)
   impact_type <- match.arg(impact_type)
+  impact_readoff <- match.arg(impact_readoff)
+  community_lift <- match.arg(community_lift)
+  max_impact_anchor <- match.arg(max_impact_anchor)
+
+  if (!is.null(n_boot_final)) {
+    cli::cli_warn(c(
+      "!" = "{.arg n_boot_final} is deprecated; use {.arg mi_n_boot}.",
+      "i" = "It sets the nested community-MI bootstrap (and prioritization p-values)."
+    ))
+    if (missing(mi_n_boot)) mi_n_boot <- n_boot_final
+  }
   prioritize_shift_type <- match.arg(prioritize_shift_type)
   dv_metric <- match.arg(dv_metric)
 
@@ -314,6 +415,13 @@ bn_finalize_network <- function(
 
   if(is.null(x_ivs)) x_ivs <- x_nodes %>% setdiff(dv)
 
+  # Validate community_impact_attributes against the resolved IVs BEFORE the
+  # (expensive) model estimation and impact runs, so a bad battery name
+  # errors immediately. bn_impacts/the engine re-validate downstream.
+  if (do_impacts && !is.null(community_impact_attributes)) {
+    invisible(.bn_community_impact_ids(x_ivs, community_impact_attributes))
+  }
+
 
   # --- scale_ranges auto-detection ---
   # When scale_ranges = "auto" (default), pull each IV's range from the
@@ -351,6 +459,26 @@ bn_finalize_network <- function(
   if(is.null(subgroups)){
     subgroups <- "Total"
     if(!"Total" %in% names(df)) df[["Total"]] <- 1L
+  }
+
+  # --- min_base_for_calc exemptions ---
+  # Validated once the subgroup list is known. A typo'd name would otherwise be
+  # a silent no-op: the run completes, the thin cells stay blank, and nothing
+  # says the exemption never matched.
+  if (!is.null(override_min_base_for_calc)) {
+    if (!is.character(override_min_base_for_calc)) {
+      stop("'override_min_base_for_calc' must be NULL or a character vector ",
+           "of subgroup names.")
+    }
+    unknown <- setdiff(override_min_base_for_calc, subgroups)
+    if (length(unknown) > 0) {
+      stop("'override_min_base_for_calc' names subgroup(s) not in `subgroups`: ",
+           paste(unknown, collapse = ", "), ". Available: ",
+           paste(subgroups, collapse = ", "), ".")
+    }
+    cli::cli_alert_warning(
+      "Waiving min_base_for_calc ({min_base_for_calc}) for subgroup{?s} {.val {override_min_base_for_calc}}"
+    )
   }
 
 
@@ -453,6 +581,15 @@ bn_finalize_network <- function(
       ivs = x_ivs,
       do_community = TRUE,
       community_assignment = attribute_nodes,
+      community_impact_attributes = community_impact_attributes,
+      impact_readoff = impact_readoff,
+      community_lift = community_lift,
+      max_impact_anchor = max_impact_anchor,
+      max_impact_min_support = max_impact_min_support,
+      max_impact_shrinkage = max_impact_shrinkage,
+      min_boot_coverage = min_boot_coverage,
+      boot_inference_legacy = boot_inference_legacy,
+      id = id,
       type = impact_type,
       index_by = impact_index_by,
       process_subgroups = TRUE,
@@ -463,12 +600,14 @@ bn_finalize_network <- function(
       brand = brand,
       brand_names = brand_names,
       min_base_for_lift = min_base_for_calc,
+      override_min_base_for_lift = override_min_base_for_calc,
       include_base = impact_include_base,
       dv_metric = dv_metric,
       weight = weight,
-      mi_boot = n_boot_final,
+      mi_boot = mi_n_boot,
       scale_ranges = scale_ranges,
       use_parallel = impact_parallel,
+      boot_nonzero = boot_nonzero,
       seed = seed
     )
 
@@ -496,11 +635,13 @@ bn_finalize_network <- function(
       impact_shift_type = prioritize_shift_type,
       threshold = prioritize_threshold,
       max_rounds = prioritize_max_rounds,
-      n_boot_final = n_boot_final,
+      n_boot_final = mi_n_boot,
       noise_tail = prioritize_noise_tail,
       sig_threshold = prioritize_sig_threshold,
       marginal_threshold = prioritize_marginal_threshold,
       min_base_for_boot = min_base_for_calc,
+      override_min_base_for_boot = override_min_base_for_calc,
+      id = id,
       dictionary = dictionary,
       community_assignment = attribute_nodes,
       use_parallel = impact_parallel,
@@ -557,6 +698,14 @@ bn_finalize_network <- function(
   if (is.null(results[["meta"]])) results[["meta"]] <- list()
   results[["meta"]][["dv"]] <- dv_original
   results[["meta"]][["ivs"]] <- if (!is.null(batteries)) batteries else x_ivs
+  results[["meta"]][["community_impact_attributes"]] <- community_impact_attributes
+  results[["meta"]][["impact_readoff"]] <- impact_readoff
+  results[["meta"]][["community_lift"]] <- community_lift
+  results[["meta"]][["max_impact_anchor"]] <- max_impact_anchor
+  results[["meta"]][["max_impact_min_support"]] <- max_impact_min_support
+  results[["meta"]][["max_impact_shrinkage"]] <- max_impact_shrinkage
+  results[["meta"]][["min_boot_coverage"]] <- min_boot_coverage
+  results[["meta"]][["boot_inference_legacy"]] <- boot_inference_legacy
 
   if (!is.null(batteries)) {
     results[["meta"]][["batteries"]] <- batteries

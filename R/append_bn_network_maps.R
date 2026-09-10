@@ -21,6 +21,11 @@
 #'   for the Attribute Network PNG. NULL leaves vis.js's default 14 px.
 #' @param community_font_size Numeric or NULL. Node-label font size (in pixels)
 #'   for the Community Network PNG. NULL leaves vis.js's default 14 px.
+#' @param impact_outcome_display Character or NULL. The workbook's Outcome
+#'   default, \code{"Point Change"} or \code{"\% Change"}. NULL auto-detects
+#'   from the DV type, matching \code{bn_impact_write()}.
+#' @param shift_type Character. The workbook's Shift Type default. Overridden
+#'   whenever an Assess preset exists -- see \code{bn_default_index_column()}.
 #'
 #' @return The modified workbook object (invisibly).
 #'
@@ -33,8 +38,12 @@ append_bn_network_maps <- function(
     height = 8,
     defer_images = FALSE,
     attribute_font_size = NULL,
-    community_font_size = NULL
+    community_font_size = NULL,
+    impact_outcome_display = NULL,
+    shift_type = c("absolute", "proportional", "headroom", "range")
 ) {
+
+  shift_type <- match.arg(shift_type)
 
   if (!requireNamespace("webshot2", quietly = TRUE)) {
     warning("webshot2 package required for network maps. Install with install.packages('webshot2')")
@@ -50,6 +59,79 @@ append_bn_network_maps <- function(
   attr(wb, "tmp_dirs") <- c(existing_tmp, tmp_dir)
 
   title_style <- openxlsx::createStyle(textDecoration = "bold", fontSize = 18)
+
+  ###############################
+  # Size dots by the workbook's opening view
+  ###############################
+
+  # bn_finalize_network() bakes an index into node `value` at build time, but
+  # that index is hard-wired to prop-shift + abs-display (only the
+  # proportional engine run emits it). The Attribute Drivers sheet opens on
+  # the first Assess preset instead — typically Average Effect + range shift —
+  # so the PNG and the sheet disagree about which attribute is biggest.
+  #
+  # Recompute `value` from the same column the sheet opens on. bn_full is a
+  # local copy here, so this never mutates the caller's result object; that
+  # matches bn_write()'s no-mutation contract.
+  impacts_meta <- bn_full[["impacts"]][["meta"]]
+
+  outcome_display <- if (is.null(impact_outcome_display)) {
+    # Same auto-detection as bn_impact_write().
+    if (isTRUE(impacts_meta[["is_dichotomous_dv"]])) "absolute" else "proportional"
+  } else {
+    impact_outcome_display <- match.arg(impact_outcome_display,
+      c("Point Change", "% Change"))
+    if (impact_outcome_display == "Point Change") "absolute" else "proportional"
+  }
+
+  .resize_nodes_by_default_view <- function(nodes, impacts, id_col) {
+
+    if (is.null(nodes) || is.null(impacts)) return(nodes)
+    if (!id_col %in% names(impacts)) return(nodes)
+    if (!"value" %in% names(nodes)) return(nodes)
+
+    sg1 <- impacts_meta[["subgroups"]]
+    sg1 <- if (length(sg1) > 0) sg1[[1]] else NULL
+
+    index_col <- bn_default_index_column(
+      col_names       = names(impacts),
+      subgroup        = sg1,
+      outcome_display = outcome_display,
+      shift_type      = shift_type
+    )
+    if (is.na(index_col)) return(nodes)
+
+    raw   <- impacts[[index_col]]
+    denom <- mean(abs(raw), na.rm = TRUE)
+    if (!is.finite(denom) || denom <= 0) return(nodes)
+
+    idx <- stats::setNames(
+      abs(raw) / denom * 100,
+      as.character(impacts[[id_col]])
+    )
+
+    hit <- unname(idx[as.character(nodes[["id"]])])
+    # Nodes with no impact row (the DV, typically) keep their existing size.
+    nodes[["value"]] <- ifelse(is.na(hit), nodes[["value"]], hit)
+
+    nodes
+  }
+
+  if (!is.null(bn_full[["impacts"]])) {
+    bn_full[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]] <-
+      .resize_nodes_by_default_view(
+        bn_full[["bn"]][["viz_prep"]][["attribute_viz_prep"]][["nodes"]],
+        bn_full[["impacts"]][["table_attribute"]],
+        "Variable"
+      )
+
+    bn_full[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]] <-
+      .resize_nodes_by_default_view(
+        bn_full[["bn"]][["viz_prep"]][["community_viz_prep"]][["nodes"]],
+        bn_full[["impacts"]][["table_community"]],
+        "Community"
+      )
+  }
 
   # Parallel-safe: render ONE PNG, return its path (or NA on failure).
   # No workbook mutation — safe to run in a future worker.

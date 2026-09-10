@@ -7,8 +7,9 @@
 bn_assign_lone_nodes(
   obj,
   return_type = c("input", "node_table", "attribute_viz_prep"),
+  enforce_contiguity = TRUE,
   unassigned_color = "#FF0000",
-  max_iter = 50
+  max_iter = 200
 )
 }
 \arguments{
@@ -20,10 +21,16 @@ with \code{nodes} updated. \code{"node_table"} returns just the reassigned \code
 data frame, ready to pass as \code{manual_groups} to \code{bn_to_netviz_prep()}.
 \code{"attribute_viz_prep"} returns the inner list with updated \code{nodes}.}
 
+\item{enforce_contiguity}{Logical; if \code{TRUE} (default), minority fragments
+of assigned communities are also reassigned so each community ends up
+as one connected region.}
+
 \item{unassigned_color}{Color flagging unassigned nodes. Defaults to
 \code{"#FF0000"} (the fallback color in \code{bn_to_netviz_prep()}).}
 
-\item{max_iter}{Safeguard for the propagation loop.}
+\item{max_iter}{Safeguard for the propagation loop. Deadlocks resolve one
+node per iteration, so allow at least as many iterations as there are
+unassigned nodes.}
 }
 \value{
 An object whose shape is determined by \code{return_type}.
@@ -31,9 +38,19 @@ An object whose shape is determined by \code{return_type}.
 \description{
 Assigns nodes that fell outside the manual_groups join (i.e. flagged with
 the unassigned color) to the group, community_name, and color of their
-nearest neighbor. Nearest is the connected node with the strongest edge
-weight (\code{value} column on edges). Iterates so chains of unassigned nodes
-resolve once any one reaches an assigned anchor.
+strongest neighbor (by the \code{value} column on edges). A node resolves only
+once its strongest neighbor overall is itself assigned, so chains of
+unassigned nodes inherit along their strongest path rather than flooding
+from whichever community the chain touches first. Deadlocks (mutually
+strongest unassigned pairs) are broken one node at a time via the
+strongest edge to any assigned neighbor.
+
+When \code{enforce_contiguity = TRUE} (default), assigned communities that are
+split across disconnected fragments of the network (e.g. groups carried
+over from a previous network) are repaired first: the largest connected
+component anchors the community and the minority fragments are flagged
+unassigned, so the propagation re-homes them. Every community in the
+result is then a single connected region.
 
 Accepts an \code{attribute_viz_prep} (with \code{nodes}/\code{edges}), a \code{viz_prep} (with
 \code{attribute_viz_prep} nested), or a full \code{bn} engine result. By default the

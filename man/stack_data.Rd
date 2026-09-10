@@ -34,7 +34,9 @@ source columns (one per brand). Each entry is pivoted into a single column.}
 \item{brand_table}{Data frame with \code{id} and \code{name} columns defining brands.
 Row order must match the column order within each \code{instructions} entry.}
 
-\item{labels}{Named character vector of variable labels (names = var names).}
+\item{labels}{Named character vector of variable labels (names = var names).
+Also consulted for variables created via \code{dv_mutates} / \code{ivs_mutates};
+mutate-created variables without an entry get a title-cased fallback.}
 
 \item{uuid_flat}{Name of the respondent ID column in \code{df}.}
 

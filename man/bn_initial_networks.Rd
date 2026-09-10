@@ -30,7 +30,7 @@ bn_initial_networks(
   force_white_list_direction = FALSE,
   ensure_connectivity = TRUE,
   connectivity_boot_n = 50,
-  complexity_boot_n = 10,
+  complexity_boot_n = 100,
   complexity_boot_strength_min = 0.01,
   suppress_bn_warning = FALSE,
   on_exit_detach_igraph = TRUE,

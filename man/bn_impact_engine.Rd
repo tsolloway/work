@@ -11,6 +11,14 @@ bn_impact_engine(
   ivs = NULL,
   do_community = FALSE,
   community_assignment = NULL,
+  community_impact_attributes = NULL,
+  impact_readoff = c("empirical", "model", "empirical_brand_control"),
+  community_lift = c("joint", "average"),
+  max_impact_anchor = c("observed", "theoretical"),
+  max_impact_min_support = 5,
+  max_impact_shrinkage = 20,
+  min_boot_coverage = 0.9,
+  boot_inference_legacy = FALSE,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
   type = c("gr", "cp", "mi"),
@@ -23,8 +31,10 @@ bn_impact_engine(
   brand = NULL,
   brand_names = NULL,
   weight = NULL,
+  id = "uuid",
   mi_boot = NULL,
   scale_ranges = NULL,
+  boot_nonzero = FALSE,
   seed = 1
 )
 }
@@ -50,6 +60,110 @@ level by jointly setting all IVs within each community. Default FALSE.}
 \item{community_assignment}{Optional data frame with \code{id} and
 \code{community_name} columns mapping IVs to communities.}
 
+\item{community_impact_attributes}{Character vector or NULL. Battery names
+(variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+when computing community-level impacts. An IV's battery is its variable
+name with the trailing \code{"_<number>"} suffix removed
+(\code{q14a_1} -> \code{"q14a"}). Default NULL includes all attributes.
+Errors if a declared battery matches no IV in the community assignment.
+Applies to every community metric (lift, maxVmin, MI, base); ignored when
+\code{do_community = FALSE}.}
+
+\item{impact_readoff}{Character. Where the per-level DV expectation
+E[DV | IV = level] used by the lift metrics comes from.
+\code{"empirical"} (default): weighted conditional means computed
+directly from the (resampled) data - deterministic, no inference
+queries. \code{"model"}: the fitted network's conditional via
+\code{gRain::querygrain()} / \code{bnlearn::cpquery()} - this was the
+methodology used prior to 2026-07-28. In networks built with direct
+DV connections (\code{all_ivs_connect_to_dv = TRUE}) the two are
+numerically near-identical; they can diverge when IVs connect to the
+DV only through other nodes. \code{"empirical"} and \code{"model"} do
+not affect the maxVmin family (see \code{max_impact_anchor}) or MI.
+
+\code{"empirical_brand_control"}: as \code{"empirical"}, but holds the
+\code{brand} column's composition fixed - the back-door adjustment for
+stacked designs. In stacked data an exposure-type IV (a touchpoint
+battery: where the respondent encountered this brand) doubles as a
+marker for WHICH brand a row describes, because brands differ in where
+they are encountered. Its pooled conditional therefore inherits the DV
+level of the brands it attaches to, and can carry the wrong sign
+entirely. This read-off replaces every conditional with its
+brand-standardized counterpart, \eqn{\sum_b \pi_b E[DV | IV, brand=b]}
+with \eqn{\pi_b} the scope's observed (weighted) brand shares, so the
+brand mix is held at its observed margins while the IV shifts.
+Applies to the lift family, the observed-anchor maxVmin read-offs
+(including community anchor selection), and pins the brand margins in
+the joint community rake. MI and theoretical-anchor maxVmin are
+unaffected. Requires \code{brand}. Note this is a global switch: it
+also removes the brand-level component of PERCEPTION batteries, where
+brand is partly upstream of the perception rather than a pure
+confounder - a fixed-effects stance on the whole workbook, not a
+correction to exposure batteries alone.}
+
+\item{community_lift}{Character. How community-level lift columns are
+computed. \code{"joint"} (default): theme effect - rake (IPF) the
+observed rows' weights so every member attribute's marginal matches its
+shifted target simultaneously, then read the DV change under the raked
+weights; preserves the observed correlation structure among members and
+only ever places mass on observed joint profiles. The rake's read-off
+is inherently empirical; paired with \code{impact_readoff = "model"}
+the attribute lifts and anchor values stay model-based while the
+community lift columns are empirical (\code{bn_impacts()} warns once
+about the mix). \code{"average"}: arithmetic mean
+of the members' individually-computed lifts - this was the methodology
+used prior to 2026-07-28. Attribute-level runs and the maxVmin / MI /
+base columns are unaffected.}
+
+\item{max_impact_anchor}{Character. How the Best-vs-Worst (maxVmin) family
+(\code{dv_max_value}, \code{dv_min_value}, \code{maxVmin_*}) is
+anchored. \code{"observed"} (default): anchors must be observed with at
+least \code{max_impact_min_support} respondents - for a single
+attribute, the max/min scale levels among supported levels (sign
+semantics preserved); for a community, the observed joint member
+profiles with the highest/lowest empirical weighted E[DV]. Anchor
+selection is always empirical; the anchor VALUES are then read per
+\code{impact_readoff} (\code{"model"} queries the network at the two
+chosen observed anchors). \code{"theoretical"}: hypothetical
+all-max / all-min evidence configurations - this was the methodology
+used prior to 2026-07-28; for multi-member communities those
+configurations are mostly unobserved, so values there lean on CPT
+smoothing (extrapolation).}
+
+\item{max_impact_min_support}{Integer. Minimum respondent count for an
+anchor candidate under \code{max_impact_anchor = "observed"}. Falls
+back to all observed candidates if fewer than two clear the threshold.
+Default 5.}
+
+\item{max_impact_shrinkage}{Numeric >= 0. Empirical-Bayes prior weight
+used under \code{max_impact_anchor = "observed"}: each anchor
+candidate's E[DV] is shrunk toward the scope mean with this many
+pseudo-respondents before ranking (and, under
+\code{impact_readoff = "empirical"}, before reading the anchor
+values). Guards the Best-vs-Worst argmax against winner's curse -
+with a binary DV and raw means, the best observed profile is
+otherwise routinely a small all-top-box cell at exactly 1.0.
+\code{0} disables shrinkage. Default 20.}
+
+\item{min_boot_coverage}{Numeric in (0, 1]. Minimum share of bootstrap
+replicates that must yield a value for a metric cell to be reported.
+Cells below the threshold - e.g. joint community shifts that are
+infeasible in most resamples of a small subgroup, or brand scopes
+flickering around \code{min_base_for_lift} - have their value, sd, CI,
+and p-value blanked rather than silently averaging the surviving
+replicates (a selection-biased subset). Cells that pass use the
+feasible-replicate count for the se / t degrees of freedom. Only
+applies when \code{n_boot > 1}. Default 0.9.}
+
+\item{boot_inference_legacy}{Logical. \code{TRUE} reproduces the
+bootstrap bookkeeping used prior to 2026-07-29, retained for
+replicating historical deliverables only - it is known to overstate
+significance for cells with incomplete replicate sets: the se / t
+degrees of freedom always assume all \code{n_boot} replicates, the
+\code{min_boot_coverage} blackout is disabled, and (empirical
+read-off) replicates that drop a rare level return NA and are
+silently excluded from the mean/sd. Default \code{FALSE}.}
+
 \item{lift}{Numeric scalar or vector. Target percentage lift(s) for
 distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
 IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
@@ -60,10 +174,13 @@ E_(-5 percent). A scalar produces a single \code{lift} column; a vector
 (e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
 \code{lift_10}. Default \code{c(0, 0.1)}.}
 
-\item{min_base_for_lift}{Integer. Minimum sample size (frequency count)
-required to compute a lift value. If the distribution has fewer than this
-many observations, the lift cell returns \code{NA}. Applied per-brand when
-\code{brand} is set. Default \code{75}.}
+\item{min_base_for_lift}{Integer. Minimum sample size required to compute a
+lift value; scopes below it return \code{NA}. Applied per-brand when
+\code{brand} is set. The count compared against it follows \code{id}: with
+\code{id} set it is DISTINCT RESPONDENTS on the un-resampled scope - the
+same number the cell reports as its \code{base} - and with \code{id = NULL}
+it is the stacked-record frequency total (sum of weights when \code{weight}
+is supplied), the pre-2026-09-09 behaviour. Default \code{75}.}
 
 \item{type}{Character. Estimation method:
 \itemize{
@@ -80,15 +197,19 @@ value across all DV levels (works with any scale: 3-point, 5-point,
 7-point, etc.). \code{"top_box"} uses \code{P(DV_max | IV=v)} — the
 probability of the highest DV level.}
 
-\item{impact_shift_type}{Character. How \code{lift} values are interpreted
-when shifting IV distributions:
-\code{"proportional"} (default) shifts the IV's mean by a fraction of its
-current value (e.g., 0.10 = 10 percent of current mean);
-\code{"absolute"} shifts the IV's mean by a fixed number of scale points
-(e.g., 0.10 = add 0.10 to the mean regardless of starting value);
-\code{"headroom"} shifts the mean by \code{lift} times the room
-remaining toward the requested boundary — see
-\code{bn_freq_prob_shift()} for details.}
+\item{impact_shift_type}{Character vector. How \code{lift} values are
+interpreted when shifting IV distributions: \code{"proportional"}
+(fraction of the current mean), \code{"absolute"} (fixed scale points),
+\code{"headroom"} (fraction of the room toward the boundary), and
+\code{"range"} (fraction of the theoretical scale range) — see
+\code{bn_freq_prob_shift()}. When several values are supplied (the
+default: all four), a single pass computes every variant and the lift
+columns carry \code{_propshift_} / \code{_absshift_} /
+\code{_headshift_} / \code{_rangeshift_} tags; the boot loop, MI,
+maxVmin, and base are computed once. Supplying a single value
+reproduces the legacy untagged single-variant output (prior to
+2026-07-28 \code{bn_impact()} ran the engine once per variant and
+merged afterwards).}
 
 \item{include_base}{Logical. Whether to include base-size columns alongside
 brand-specific lift columns. Default \code{TRUE}.}
@@ -121,6 +242,23 @@ skipped. Market-level lift is always computed. Default NULL (all brands).}
 observation weights. When provided, frequency distributions used for
 lift calculations are weighted. Default NULL.}
 
+\item{id}{Character or \code{NULL}. Column in \code{df} identifying the
+respondent. Default \code{"uuid"}. Base counts are reported as DISTINCT
+RESPONDENTS rather than stacked records: in a stacked design one
+respondent contributes one row per brand rated, so a record count
+overstates the base a client reads (Danone TH: 1763 records vs 682
+respondents). Errors if the column is absent. Brand-focus bases keep
+essentially the same values - a respondent appears at most once per
+brand - but become EXACT scope counts: under \code{n_boot > 1} the
+record-count path reports each brand's mean resampled count, which
+wobbles around the true count and carries spurious CI columns. All
+bases are counted on the un-resampled scope so the value is invariant
+across bootstrap replicates. \code{NULL} restores stacked-record
+counts (the pre-2026-08-10 behaviour). Since 2026-09-09 this also
+governs \code{min_base_for_lift}, which gates on the same
+distinct-respondent count it reports rather than on records - so a
+thin scope is blanked on the number the client actually reads.}
+
 \item{mi_boot}{Integer or NULL. When set and \code{do_community = TRUE},
 bootstraps the MI calculation this many times to derive a p-value from the
 bootstrap distribution instead of the chi-squared approximation. The
@@ -128,6 +266,14 @@ chi-squared p-value is unreliable for community-level MI because the
 composite factor has too many levels relative to sample size. Bootstrap
 p-value is the proportion of replicates with MI at or below zero.
 Default NULL (use analytic p-value).}
+
+\item{boot_nonzero}{Logical. Default \code{FALSE}: classical bootstrap
+inference - the SD of the bootstrap replicates is used directly as the
+standard error of each metric, so p-values are invariant to
+\code{n_boot}. \code{TRUE} restores the legacy behavior
+(\code{se = sd/sqrt(n_boot)}), which tests whether the mean of the
+boot distribution is nonzero and mechanically shrinks p-values as
+\code{n_boot} grows.}
 
 \item{seed}{Integer. Random seed for reproducibility.}
 }

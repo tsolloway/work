@@ -22,6 +22,102 @@
 #'   level by jointly setting all IVs within each community. Default FALSE.
 #' @param community_assignment Optional data frame with \code{id} and
 #'   \code{community_name} columns mapping IVs to communities.
+#' @param community_impact_attributes Character vector or NULL. Battery names
+#'   (variable-name prefixes, e.g. \code{"q14a"}) whose attributes are included
+#'   when computing community-level impacts. An IV's battery is its variable
+#'   name with the trailing \code{"_<number>"} suffix removed
+#'   (\code{q14a_1} -> \code{"q14a"}). Default NULL includes all attributes.
+#'   Errors if a declared battery matches no IV in the community assignment.
+#'   Applies to every community metric (lift, maxVmin, MI, base); ignored when
+#'   \code{do_community = FALSE}.
+#' @param impact_readoff Character. Where the per-level DV expectation
+#'   E\[DV | IV = level\] used by the lift metrics comes from.
+#'   \code{"empirical"} (default): weighted conditional means computed
+#'   directly from the (resampled) data - deterministic, no inference
+#'   queries. \code{"model"}: the fitted network's conditional via
+#'   \code{gRain::querygrain()} / \code{bnlearn::cpquery()} - this was the
+#'   methodology used prior to 2026-07-28. In networks built with direct
+#'   DV connections (\code{all_ivs_connect_to_dv = TRUE}) the two are
+#'   numerically near-identical; they can diverge when IVs connect to the
+#'   DV only through other nodes. \code{"empirical"} and \code{"model"} do
+#'   not affect the maxVmin family (see \code{max_impact_anchor}) or MI.
+#'
+#'   \code{"empirical_brand_control"}: as \code{"empirical"}, but holds the
+#'   \code{brand} column's composition fixed - the back-door adjustment for
+#'   stacked designs. In stacked data an exposure-type IV (a touchpoint
+#'   battery: where the respondent encountered this brand) doubles as a
+#'   marker for WHICH brand a row describes, because brands differ in where
+#'   they are encountered. Its pooled conditional therefore inherits the DV
+#'   level of the brands it attaches to, and can carry the wrong sign
+#'   entirely. This read-off replaces every conditional with its
+#'   brand-standardized counterpart, \eqn{\sum_b \pi_b E[DV | IV, brand=b]}
+#'   with \eqn{\pi_b} the scope's observed (weighted) brand shares, so the
+#'   brand mix is held at its observed margins while the IV shifts.
+#'   Applies to the lift family, the observed-anchor maxVmin read-offs
+#'   (including community anchor selection), and pins the brand margins in
+#'   the joint community rake. MI and theoretical-anchor maxVmin are
+#'   unaffected. Requires \code{brand}. Note this is a global switch: it
+#'   also removes the brand-level component of PERCEPTION batteries, where
+#'   brand is partly upstream of the perception rather than a pure
+#'   confounder - a fixed-effects stance on the whole workbook, not a
+#'   correction to exposure batteries alone.
+#' @param community_lift Character. How community-level lift columns are
+#'   computed. \code{"joint"} (default): theme effect - rake (IPF) the
+#'   observed rows' weights so every member attribute's marginal matches its
+#'   shifted target simultaneously, then read the DV change under the raked
+#'   weights; preserves the observed correlation structure among members and
+#'   only ever places mass on observed joint profiles. The rake's read-off
+#'   is inherently empirical; paired with \code{impact_readoff = "model"}
+#'   the attribute lifts and anchor values stay model-based while the
+#'   community lift columns are empirical (\code{bn_impacts()} warns once
+#'   about the mix). \code{"average"}: arithmetic mean
+#'   of the members' individually-computed lifts - this was the methodology
+#'   used prior to 2026-07-28. Attribute-level runs and the maxVmin / MI /
+#'   base columns are unaffected.
+#' @param max_impact_anchor Character. How the Best-vs-Worst (maxVmin) family
+#'   (\code{dv_max_value}, \code{dv_min_value}, \code{maxVmin_*}) is
+#'   anchored. \code{"observed"} (default): anchors must be observed with at
+#'   least \code{max_impact_min_support} respondents - for a single
+#'   attribute, the max/min scale levels among supported levels (sign
+#'   semantics preserved); for a community, the observed joint member
+#'   profiles with the highest/lowest empirical weighted E\[DV\]. Anchor
+#'   selection is always empirical; the anchor VALUES are then read per
+#'   \code{impact_readoff} (\code{"model"} queries the network at the two
+#'   chosen observed anchors). \code{"theoretical"}: hypothetical
+#'   all-max / all-min evidence configurations - this was the methodology
+#'   used prior to 2026-07-28; for multi-member communities those
+#'   configurations are mostly unobserved, so values there lean on CPT
+#'   smoothing (extrapolation).
+#' @param max_impact_min_support Integer. Minimum respondent count for an
+#'   anchor candidate under \code{max_impact_anchor = "observed"}. Falls
+#'   back to all observed candidates if fewer than two clear the threshold.
+#'   Default 5.
+#' @param max_impact_shrinkage Numeric >= 0. Empirical-Bayes prior weight
+#'   used under \code{max_impact_anchor = "observed"}: each anchor
+#'   candidate's E\[DV\] is shrunk toward the scope mean with this many
+#'   pseudo-respondents before ranking (and, under
+#'   \code{impact_readoff = "empirical"}, before reading the anchor
+#'   values). Guards the Best-vs-Worst argmax against winner's curse -
+#'   with a binary DV and raw means, the best observed profile is
+#'   otherwise routinely a small all-top-box cell at exactly 1.0.
+#'   \code{0} disables shrinkage. Default 20.
+#' @param min_boot_coverage Numeric in (0, 1]. Minimum share of bootstrap
+#'   replicates that must yield a value for a metric cell to be reported.
+#'   Cells below the threshold - e.g. joint community shifts that are
+#'   infeasible in most resamples of a small subgroup, or brand scopes
+#'   flickering around \code{min_base_for_lift} - have their value, sd, CI,
+#'   and p-value blanked rather than silently averaging the surviving
+#'   replicates (a selection-biased subset). Cells that pass use the
+#'   feasible-replicate count for the se / t degrees of freedom. Only
+#'   applies when \code{n_boot > 1}. Default 0.9.
+#' @param boot_inference_legacy Logical. \code{TRUE} reproduces the
+#'   bootstrap bookkeeping used prior to 2026-07-29, retained for
+#'   replicating historical deliverables only - it is known to overstate
+#'   significance for cells with incomplete replicate sets: the se / t
+#'   degrees of freedom always assume all \code{n_boot} replicates, the
+#'   \code{min_boot_coverage} blackout is disabled, and (empirical
+#'   read-off) replicates that drop a rare level return NA and are
+#'   silently excluded from the mean/sd. Default \code{FALSE}.
 #' @param lift Numeric scalar or vector. Target percentage lift(s) for
 #'   distribution-aware impact. Uses \code{bn_freq_prob_shift()} to shift each
 #'   IV's observed distribution by each fraction (e.g., 0.10 = 10 percent),
@@ -31,10 +127,13 @@
 #'   E_(-5 percent). A scalar produces a single \code{lift} column; a vector
 #'   (e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
 #'   \code{lift_10}. Default \code{c(0, 0.1)}.
-#' @param min_base_for_lift Integer. Minimum sample size (frequency count)
-#'   required to compute a lift value. If the distribution has fewer than this
-#'   many observations, the lift cell returns \code{NA}. Applied per-brand when
-#'   \code{brand} is set. Default \code{75}.
+#' @param min_base_for_lift Integer. Minimum sample size required to compute a
+#'   lift value; scopes below it return \code{NA}. Applied per-brand when
+#'   \code{brand} is set. The count compared against it follows \code{id}: with
+#'   \code{id} set it is DISTINCT RESPONDENTS on the un-resampled scope - the
+#'   same number the cell reports as its \code{base} - and with \code{id = NULL}
+#'   it is the stacked-record frequency total (sum of weights when \code{weight}
+#'   is supplied), the pre-2026-09-09 behaviour. Default \code{75}.
 #' @param type Character. Estimation method:
 #'   \itemize{
 #'     \item \code{"gr"} (default): exact junction-tree inference via \code{gRain}.
@@ -48,15 +147,19 @@
 #'   value across all DV levels (works with any scale: 3-point, 5-point,
 #'   7-point, etc.). \code{"top_box"} uses \code{P(DV_max | IV=v)} — the
 #'   probability of the highest DV level.
-#' @param impact_shift_type Character. How \code{lift} values are interpreted
-#'   when shifting IV distributions:
-#'   \code{"proportional"} (default) shifts the IV's mean by a fraction of its
-#'   current value (e.g., 0.10 = 10 percent of current mean);
-#'   \code{"absolute"} shifts the IV's mean by a fixed number of scale points
-#'   (e.g., 0.10 = add 0.10 to the mean regardless of starting value);
-#'   \code{"headroom"} shifts the mean by \code{lift} times the room
-#'   remaining toward the requested boundary — see
-#'   \code{bn_freq_prob_shift()} for details.
+#' @param impact_shift_type Character vector. How \code{lift} values are
+#'   interpreted when shifting IV distributions: \code{"proportional"}
+#'   (fraction of the current mean), \code{"absolute"} (fixed scale points),
+#'   \code{"headroom"} (fraction of the room toward the boundary), and
+#'   \code{"range"} (fraction of the theoretical scale range) — see
+#'   \code{bn_freq_prob_shift()}. When several values are supplied (the
+#'   default: all four), a single pass computes every variant and the lift
+#'   columns carry \code{_propshift_} / \code{_absshift_} /
+#'   \code{_headshift_} / \code{_rangeshift_} tags; the boot loop, MI,
+#'   maxVmin, and base are computed once. Supplying a single value
+#'   reproduces the legacy untagged single-variant output (prior to
+#'   2026-07-28 \code{bn_impact()} ran the engine once per variant and
+#'   merged afterwards).
 #' @section Outcome-display variants:
 #'   Both proportional and absolute variants of the DV-outcome metrics are
 #'   always emitted as separate columns, so downstream writers (e.g., the
@@ -94,6 +197,22 @@
 #' @param brand_names Character vector or NULL. When provided, only compute
 #'   brand-specific lift for these brand levels. Brands not in this vector are
 #'   skipped. Market-level lift is always computed. Default NULL (all brands).
+#' @param id Character or \code{NULL}. Column in \code{df} identifying the
+#'   respondent. Default \code{"uuid"}. Base counts are reported as DISTINCT
+#'   RESPONDENTS rather than stacked records: in a stacked design one
+#'   respondent contributes one row per brand rated, so a record count
+#'   overstates the base a client reads (Danone TH: 1763 records vs 682
+#'   respondents). Errors if the column is absent. Brand-focus bases keep
+#'   essentially the same values - a respondent appears at most once per
+#'   brand - but become EXACT scope counts: under \code{n_boot > 1} the
+#'   record-count path reports each brand's mean resampled count, which
+#'   wobbles around the true count and carries spurious CI columns. All
+#'   bases are counted on the un-resampled scope so the value is invariant
+#'   across bootstrap replicates. \code{NULL} restores stacked-record
+#'   counts (the pre-2026-08-10 behaviour). Since 2026-09-09 this also
+#'   governs \code{min_base_for_lift}, which gates on the same
+#'   distinct-respondent count it reports rather than on records - so a
+#'   thin scope is blanked on the number the client actually reads.
 #' @param weight Character or NULL. Column name in \code{df} containing
 #'   observation weights. When provided, frequency distributions used for
 #'   lift calculations are weighted. Default NULL.
@@ -104,6 +223,13 @@
 #'   composite factor has too many levels relative to sample size. Bootstrap
 #'   p-value is the proportion of replicates with MI at or below zero.
 #'   Default NULL (use analytic p-value).
+#' @param boot_nonzero Logical. Default \code{FALSE}: classical bootstrap
+#'   inference - the SD of the bootstrap replicates is used directly as the
+#'   standard error of each metric, so p-values are invariant to
+#'   \code{n_boot}. \code{TRUE} restores the legacy behavior
+#'   (\code{se = sd/sqrt(n_boot)}), which tests whether the mean of the
+#'   boot distribution is nonzero and mechanically shrinks p-values as
+#'   \code{n_boot} grows.
 #' @param seed Integer. Random seed for reproducibility.
 #'
 #' @details
@@ -210,6 +336,14 @@ bn_impact_engine <- function(
     ivs = NULL,
     do_community = FALSE,
     community_assignment = NULL,
+    community_impact_attributes = NULL,
+    impact_readoff = c("empirical", "model", "empirical_brand_control"),
+    community_lift = c("joint", "average"),
+    max_impact_anchor = c("observed", "theoretical"),
+    max_impact_min_support = 5,
+    max_impact_shrinkage = 20,
+    min_boot_coverage = 0.9,
+    boot_inference_legacy = FALSE,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
     type = c("gr", "cp", "mi"),
@@ -222,15 +356,39 @@ bn_impact_engine <- function(
     brand = NULL,
     brand_names = NULL,
     weight = NULL,
+    id = "uuid",
     mi_boot = NULL,
     scale_ranges = NULL,
+    boot_nonzero = FALSE,
     seed = 1
 ){
 
   type <- match.arg(type)
   index_by <- match.arg(index_by)
-  impact_shift_type <- match.arg(impact_shift_type)
+  impact_shift_type <- match.arg(impact_shift_type, several.ok = TRUE)
   dv_metric <- match.arg(dv_metric)
+  impact_readoff <- match.arg(impact_readoff)
+  community_lift <- match.arg(community_lift)
+  max_impact_anchor <- match.arg(max_impact_anchor)
+  # "empirical_brand_control" is an empirical read-off with the brand mix
+  # held fixed, so every empirical branch below keys off readoff_empirical
+  # and only the standardization steps key off brand_control.
+  brand_control <- impact_readoff == "empirical_brand_control"
+  readoff_empirical <- impact_readoff %in% c("empirical", "empirical_brand_control")
+  work::assert_positive_integer(max_impact_min_support, "max_impact_min_support")
+  if (!is.numeric(max_impact_shrinkage) || length(max_impact_shrinkage) != 1 ||
+      is.na(max_impact_shrinkage) || max_impact_shrinkage < 0) {
+    stop("'max_impact_shrinkage' must be a single non-negative number.")
+  }
+  if (!is.numeric(min_boot_coverage) || length(min_boot_coverage) != 1 ||
+      is.na(min_boot_coverage) || min_boot_coverage <= 0 || min_boot_coverage > 1) {
+    stop("'min_boot_coverage' must be a single number in (0, 1].")
+  }
+  if (!is.logical(boot_inference_legacy) || length(boot_inference_legacy) != 1 ||
+      is.na(boot_inference_legacy)) {
+    stop("'boot_inference_legacy' must be TRUE or FALSE.")
+  }
+
   ivs <- ivs %>% unlist() %>% setNames(NULL)
 
   # ---------------------------
@@ -243,9 +401,29 @@ bn_impact_engine <- function(
     stop("'brand' column '", brand, "' not found in df. Available columns: ",
          paste(head(names(df), 20), collapse = ", "))
   }
+  if (brand_control) {
+    if (is.null(brand)) {
+      stop("impact_readoff = \"empirical_brand_control\" requires 'brand' - ",
+           "there is no column whose composition to hold fixed.")
+    }
+    if (anyNA(df[[brand]])) {
+      stop("'brand' column '", brand, "' contains NA - the back-door ",
+           "adjustment needs every row assigned to a brand.")
+    }
+  }
   if (!is.null(weight) && !weight %in% names(df)) {
     stop("'weight' column '", weight, "' not found in df. Available columns: ",
          paste(head(names(df), 20), collapse = ", "))
+  }
+  if (!is.null(id)) {
+    if (!is.character(id) || length(id) != 1) {
+      stop("'id' must be NULL or a single column name.")
+    }
+    if (!id %in% names(df)) {
+      stop("'id' column '", id, "' not found in df. Base counts DISTINCT ",
+           "RESPONDENTS, so a respondent identifier is required. Pass ",
+           "id = NULL to count stacked records instead (the pre-2026-08-10 behaviour).")
+    }
   }
 
   # Ensure DV and IV(s) are provided
@@ -289,7 +467,11 @@ bn_impact_engine <- function(
     fit <- obj
   } else if (inherits(obj, "bn")) {
     bn <- obj
-    fit <- bnlearn::bn.fit(bn, df, method = "bayes")
+    # Brand/weight columns are not network nodes (weight may be numeric,
+    # which the "bayes" estimator rejects), so exclude them from the fitting data
+    exclude_cols <- c(brand, weight, id)
+    fit_data <- if (length(exclude_cols) > 0) df[, setdiff(names(df), exclude_cols), drop = FALSE] else df
+    fit <- bnlearn::bn.fit(bn, fit_data, method = "bayes")
   } else {
     stop("'obj' must be a 'bnlearn::bn', 'bnlearn::bn.fit', or a list returned from bn_engine().")
   }
@@ -297,7 +479,7 @@ bn_impact_engine <- function(
 
   df <- df %>%
     dplyr::select(dplyr::all_of(
-      c(dv, ivs, brand, weight) %>% unlist() %>% setNames(NULL)
+      c(dv, ivs, brand, weight, id) %>% unlist() %>% unique() %>% setNames(NULL)
     )) %>%
     as.data.frame()
 
@@ -315,7 +497,20 @@ bn_impact_engine <- function(
 
   if(do_community){
     community_assignment <- community_assignment %>%
-      dplyr::filter(id %in% ivs) %>%
+      dplyr::filter(id %in% ivs)
+
+    # Restrict community membership to the declared batteries. Runs BEFORE
+    # the list conversion below so every community metric downstream (lift,
+    # maxVmin, MI, base) sees the same filtered membership.
+    if(!is.null(community_impact_attributes)){
+      keep_ids <- .bn_community_impact_ids(
+        community_assignment[["id"]], community_impact_attributes
+      )
+      community_assignment <- community_assignment %>%
+        dplyr::filter(id %in% keep_ids)
+    }
+
+    community_assignment <- community_assignment %>%
       dplyr::select(community_name, id) %>%
       dplyr::group_split(community_name) %>%
       setNames(
@@ -443,13 +638,42 @@ bn_impact_engine <- function(
 
     if(!is.null(indices)) dat_boot <- data[indices, , drop = FALSE] else dat_boot <- data
 
-    # Exclude brand column from model fitting data
-    exclude_cols <- c(brand, weight)
+    # Exclude brand/weight columns from model fitting data
+    exclude_cols <- c(brand, weight, id)
     fit_data <- if (length(exclude_cols) > 0) dat_boot[, setdiff(names(dat_boot), exclude_cols), drop = FALSE] else dat_boot
+
+    # brand_control: back-door adjustment scaffolding shared by the maxVmin
+    # and lift blocks. In a stacked design an exposure-type IV doubles as a
+    # marker for WHICH brand a row describes (brands differ in where they are
+    # encountered), so the pooled conditional E[DV | IV] inherits the DV level
+    # of the brands the IV attaches to. Standardizing over the brand column
+    # - Sum_b pi_b * E[DV | IV, brand = b], with pi_b the scope's observed
+    # (weighted) brand shares - holds the brand mix fixed while the IV
+    # shifts: the back-door formula, computed per replicate so the bootstrap
+    # sees the adjusted statistic. Shares are recomputed from dat_boot so
+    # resampled brand composition flows through.
+    if (brand_control) {
+      ctrl_vec <- as.character(dat_boot[[brand]])
+      w_ctrl <- if (!is.null(weight)) dat_boot[[weight]] else rep(1, nrow(dat_boot))
+      ctrl_pi <- tapply(w_ctrl, ctrl_vec, sum)
+      ctrl_pi <- ctrl_pi / sum(ctrl_pi)
+      ctrl_levels <- names(ctrl_pi)
+    }
 
     if(type != "mi"){
 
-      if(is.null(fit)) fit_boot <- bnlearn::bn.fit(bn, fit_data, method = "bayes") else fit_boot <- fit
+      # The fitted network / compiled junction tree are only needed when a
+      # model read-off or theoretical anchoring is in play. Under the
+      # defaults (empirical read-off + observed anchors) both are skipped -
+      # the main per-replicate cost of the bootstrap.
+      need_model <- impact_readoff == "model" || max_impact_anchor == "theoretical"
+      need_fit   <- need_model || type == "cp"
+
+      if(is.null(fit)) {
+        fit_boot <- if (need_fit) bnlearn::bn.fit(bn, fit_data, method = "bayes") else NULL
+      } else {
+        fit_boot <- fit
+      }
 
       if(!all(purrr::map_lgl(ivs, ~ ivs_max[[.x]] %in% dat_boot[[.x]]))){
         iv_boot_max <- dat_boot %>% dplyr::summarise(dplyr::across(dplyr::all_of(ivs), ~as.character(.x) %>% as.numeric() %>% max(na.rm = TRUE))) %>% as.list()
@@ -484,7 +708,7 @@ bn_impact_engine <- function(
         iv_boot_max <- iv_boot_max %>% lapply(as.character)
         iv_boot_min <- iv_boot_min %>% lapply(as.character)
 
-        grain_bn <- bnlearn::as.grain(fit_boot) %>% gRain:::compile.grain()
+        grain_bn <- if (need_model) bnlearn::as.grain(fit_boot) %>% gRain:::compile.grain() else NULL
 
       }
     }
@@ -494,25 +718,154 @@ bn_impact_engine <- function(
 
       if(!is.null(community_assignment)) temp_ivs <- community_assignment else temp_ivs <- ivs %>% setNames(ivs)
 
+      if (max_impact_anchor == "observed") {
 
-      results <- temp_ivs %>%
-        purrr::imap(
-          ~engine_diff_single_attribute(
-            fit_boot = fit_boot,
-            grain_bn = grain_bn,
-            dv = dv,
-            iv = .y,
-            attr_iv_boot_max = iv_boot_max[.x],
-            attr_iv_boot_min = iv_boot_min[.x],
-            attr_dv_boot_max = dv_boot_max,
-            type = type,
-            n_querry = n_querry,
-            dv_metric = dv_metric,
-            seed = seed
-          )
-        ) %>%
-        dplyr::bind_rows() %>%
-        dplyr::as_tibble()
+        # Observed anchoring ("theoretical" all-max/all-min evidence was the
+        # pre-2026-07-28 methodology). Anchors are restricted to what the
+        # (resampled) data actually contains with >= max_impact_min_support
+        # respondents: single attributes keep their max/min SCALE levels
+        # (so negative relationships keep their sign) but only among
+        # supported levels; communities anchor at the observed joint member
+        # profiles with the highest/lowest empirical weighted E[DV] - the
+        # place where theoretical configurations are mostly unobserved and
+        # values would otherwise lean on CPT smoothing. Anchor selection is
+        # empirical; anchor values are read per impact_readoff.
+        w_anchor <- if (!is.null(weight)) dat_boot[[weight]] else rep(1, nrow(dat_boot))
+        dv_anchor_num <- dat_boot[[dv]] %>% as.character() %>% as.numeric()
+        dv_anchor_y <- if (dv_metric == "top_box") {
+          as.numeric(dv_anchor_num == max(dv_anchor_num, na.rm = TRUE))
+        } else {
+          dv_anchor_num
+        }
+        scope_mean <- stats::weighted.mean(dv_anchor_y, w_anchor)
+
+        # Empirical-Bayes shrunk E[DV] for one anchor candidate: prior =
+        # scope mean with max_impact_shrinkage pseudo-respondents. Used for
+        # ranking and for the empirical read-off, so a 5-person all-top-box
+        # cell can't win the argmax at a saturated 1.0.
+        shrunk_mean <- function(m) {
+          (sum(dv_anchor_y[m] * w_anchor[m]) + max_impact_shrinkage * scope_mean) /
+            (sum(w_anchor[m]) + max_impact_shrinkage)
+        }
+
+        # brand_control: brand-standardized anchor read-off. Each anchor
+        # cell's E[DV] is the pi-weighted average of its per-brand
+        # shrunk means (same EB prior per cell); a (cell x brand) slice the
+        # resample never observes falls back to the pooled shrunk mean, so
+        # thin cells degrade toward the unadjusted read rather than to NA.
+        ctrl_shrunk_mean <- function(m) {
+          per_b <- vapply(ctrl_levels, function(b) {
+            mb <- m & ctrl_vec == b
+            if (!any(mb)) return(NA_real_)
+            shrunk_mean(mb)
+          }, numeric(1))
+          pooled <- shrunk_mean(m)
+          sum(ifelse(is.na(per_b), pooled, per_b) * ctrl_pi)
+        }
+        anchor_read <- if (brand_control) ctrl_shrunk_mean else shrunk_mean
+
+        model_read <- function(ev) {
+          if (type == "gr") {
+            dist <- gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE)
+            if (dv_metric == "top_box") {
+              dist %>% dplyr::select(dplyr::last_col()) %>% unlist() %>% setNames(NULL)
+            } else {
+              sum(as.numeric(names(dist)) * as.numeric(dist))
+            }
+          } else {
+            ev_txt <- paste0("list(", paste0(names(ev), " = '", unlist(ev), "'", collapse = ", "), ")")
+            if (dv_metric == "top_box") {
+              if (!is.null(seed)) set.seed(seed)
+              eval(parse(text = glue::glue(
+                "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{dv_boot_max}'), evidence = {ev_txt}, n = {n_querry}, method = 'lw')"
+              )))
+            } else {
+              dv_scale <- fit_boot[[dv]] %>% dimnames() %>% .[[1]] %>% as.numeric()
+              purrr::map_dbl(dv_scale, function(d) {
+                if (!is.null(seed)) set.seed(seed)
+                eval(parse(text = glue::glue(
+                  "bnlearn::cpquery(fitted = fit_boot, event = ({dv} == '{d}'), evidence = {ev_txt}, n = {n_querry}, method = 'lw')"
+                )))
+              }) %>% { sum(dv_scale * .) }
+            }
+          }
+        }
+
+        results <- temp_ivs %>%
+          purrr::imap(function(iv_vars, iv_name) {
+
+            key <- if (length(iv_vars) == 1) {
+              as.character(dat_boot[[iv_vars]])
+            } else {
+              apply(dat_boot[iv_vars], 1, paste0, collapse = "\r")
+            }
+            counts <- table(key)
+            eligible <- names(counts)[counts >= max_impact_min_support]
+            if (length(eligible) < 2) eligible <- names(counts)
+
+            if (length(iv_vars) == 1) {
+              lev_num <- suppressWarnings(as.numeric(eligible))
+              anchor_max <- eligible[which.max(lev_num)]
+              anchor_min <- eligible[which.min(lev_num)]
+            } else {
+              # Community anchors are chosen by empirical E[DV] - under
+              # brand_control the adjusted read also drives selection, so the
+              # argmax can't be won by a profile that merely marks a
+              # high-preference brand mix.
+              prof_means <- vapply(eligible, function(k) anchor_read(key == k), numeric(1))
+              anchor_max <- eligible[which.max(prof_means)]
+              anchor_min <- eligible[which.min(prof_means)]
+            }
+
+            # Under "empirical_brand_control" this is the brand-standardized
+            # read; the model branch is unreachable for that read-off by
+            # construction (brand is not a network node, so model
+            # conditionals could not hold it fixed).
+            read_at <- function(k) {
+              m <- key == k
+              if (readoff_empirical) {
+                anchor_read(m)
+              } else {
+                ridx <- which(m)[1]
+                ev <- lapply(dat_boot[ridx, iv_vars, drop = FALSE], as.character)
+                model_read(ev)
+              }
+            }
+            p1 <- read_at(anchor_max)
+            p0 <- read_at(anchor_min)
+
+            data.frame(
+              variable            = iv_name,
+              dv_max_value        = p1,
+              dv_min_value        = p0,
+              maxVmin_propdisplay = (p1 - p0) / p0,
+              maxVmin_absdisplay  = p1 - p0
+            )
+          }) %>%
+          dplyr::bind_rows() %>%
+          dplyr::as_tibble()
+
+      } else {
+
+        results <- temp_ivs %>%
+          purrr::imap(
+            ~engine_diff_single_attribute(
+              fit_boot = fit_boot,
+              grain_bn = grain_bn,
+              dv = dv,
+              iv = .y,
+              attr_iv_boot_max = iv_boot_max[.x],
+              attr_iv_boot_min = iv_boot_min[.x],
+              attr_dv_boot_max = dv_boot_max,
+              type = type,
+              n_querry = n_querry,
+              dv_metric = dv_metric,
+              seed = seed
+            )
+          ) %>%
+          dplyr::bind_rows() %>%
+          dplyr::as_tibble()
+      }
 
     }
 
@@ -529,50 +882,62 @@ bn_impact_engine <- function(
 
       if(!is.null(community_assignment)) temp_ivs_r <- community_assignment else temp_ivs_r <- ivs %>% setNames(ivs)
 
+      # impact_readoff = "empirical": the DV as a per-respondent numeric
+      # outcome (scale value, or top-box indicator), read once for the whole
+      # lift block. Conditional means over this vector replace the
+      # querygrain/cpquery model conditionals ("model" = pre-2026-07-28
+      # methodology). The joint community rake always needs this vector -
+      # its read-off is inherently empirical - so it is also built when a
+      # community run pairs community_lift = "joint" with the model
+      # read-off (attribute lifts and anchor values stay model-based;
+      # bn_impacts() warns once about the mixed semantics).
+      if (readoff_empirical ||
+          (!is.null(community_assignment) && community_lift == "joint")) {
+        dv_emp_num <- dat_boot[[dv]] %>% as.character() %>% as.numeric()
+        dv_emp_y <- if (dv_metric == "top_box") {
+          as.numeric(dv_emp_num == max(dv_emp_num, na.rm = TRUE))
+        } else {
+          dv_emp_num
+        }
+      }
+
       multi_lift <- length(lift) > 1
       lift_labels_base <- if (multi_lift) paste0("lift_", round(lift * 100)) else "lift"
-      # Emit both outcome-display variants per lift percent. Order per lift
-      # percent is (propdisplay, absdisplay); this must line up with the
-      # interleaved output of compute_lift_vals below.
-      lift_labels <- as.vector(rbind(
-        paste0(lift_labels_base, "_propdisplay"),
-        paste0(lift_labels_base, "_absdisplay")
-      ))
+      # One-pass shift variants: when impact_shift_type carries several
+      # values (the default since 2026-07-28), a single engine pass emits
+      # every requested shift variant with its `_propshift_`-style tag baked
+      # into the column names, so the boot loop, MI, maxVmin, and base are
+      # computed once instead of once per variant. A single value reproduces
+      # the legacy untagged output (previously the wrapper ran the engine
+      # once per variant and tagged/merged afterwards).
+      shift_key_map <- c(proportional = "propshift", absolute = "absshift",
+                         headroom = "headshift", range = "rangeshift")
+      one_pass_shifts <- length(impact_shift_type) > 1
+      shift_tag <- function(st) if (one_pass_shifts) paste0("_", shift_key_map[[st]]) else ""
+      # Emit both outcome-display variants per lift percent, interleaved as
+      # (propdisplay, absdisplay) — must line up with compute_lift_vals.
+      # Within each shift block market columns come first, then per-brand
+      # columns; name format "lift_N_{brand}_{shift}_{display}" — brand goes
+      # BEFORE the shift tag (the Excel / HTML dashboards' column-name
+      # formulas assume `{sg}_{lift_N}_{brand}_{shift}_{display}`). Blocks
+      # concatenate in impact_shift_type order, mirroring the legacy
+      # prop/abs/head/range merge order.
+      labels_for <- function(st, b = NULL) {
+        mid <- if (is.null(b)) "" else paste0("_", b)
+        as.vector(rbind(
+          paste0(lift_labels_base, mid, shift_tag(st), "_propdisplay"),
+          paste0(lift_labels_base, mid, shift_tag(st), "_absdisplay")
+        ))
+      }
       brand_levels <- if (!is.null(brand)) sort(unique(as.character(dat_boot[[brand]]))) else NULL
       if (!is.null(brand_levels) && !is.null(brand_names)) {
         brand_levels <- intersect(brand_levels, brand_names)
         if (length(brand_levels) == 0) brand_levels <- NULL
       }
-
-      # Build column names — market lift always included.
-      market_lift_col_names <- lift_labels
-      if (is.null(brand_levels)) {
-        lift_col_names <- lift_labels
-      } else {
-        # Per-brand columns follow the same 2× outcome-display expansion.
-        # Name format: "lift_N_{brand}_{display}" — brand goes BEFORE the
-        # display tag so that (a) Pass-B's `.insert_shift_suffix` regex
-        # (anchored to trailing `_propdisplay`/`_absdisplay`) also renames
-        # brand cols, and (b) the Excel / HTML dashboards' column-name
-        # formulas (which assume `{sg}_{lift_N}_{brand}_{shift}_{display}`)
-        # resolve correctly. Do NOT change to `_{display}_{brand}` — it
-        # silently breaks both dashboards.
-        #
-        # Build the name by explicit split-and-concatenate (no sub backref)
-        # so we sidestep R's `\1` / `\\1` string-escape subtlety entirely.
-        brand_lift_col_names <- expand.grid(
-          lift_label = lift_labels,
-          brand = brand_levels,
-          stringsAsFactors = FALSE
-        ) %>%
-          with(mapply(function(ll, b) {
-            # ll is always "...<base>_propdisplay" or "...<base>_absdisplay"
-            disp <- if (endsWith(ll, "_propdisplay")) "propdisplay" else "absdisplay"
-            base <- substr(ll, 1, nchar(ll) - nchar(disp) - 1L)  # drop "_<disp>"
-            paste0(base, "_", b, "_", disp)
-          }, lift_label, brand, USE.NAMES = FALSE))
-        lift_col_names <- c(lift_labels, brand_lift_col_names)
-      }
+      lift_col_names <- unlist(lapply(impact_shift_type, function(st) {
+        c(labels_for(st),
+          unlist(lapply(brand_levels, function(b) labels_for(st, b))))
+      }))
 
       # Helper: weighted frequency table (falls back to table() when weight is NULL)
       wtd_table <- function(x, w = NULL, levels = NULL) {
@@ -581,27 +946,79 @@ bn_impact_engine <- function(
         tapply(w, x, sum) %>% { ifelse(is.na(.), 0, .) }
       }
 
+      # Helper: the scope count `min_base_for_lift` gates on when `id` is set -
+      # DISTINCT RESPONDENTS rather than stacked records. Mirrors the
+      # base_results convention below exactly (same `data`, same NA filter, same
+      # brand filter), so a cell is blanked on the very number the client reads
+      # in its `base` column instead of on a record count that overstates it in
+      # a stacked design (Danone TH: 1763 records vs 682 respondents).
+      #
+      # Counted on `data` - the un-resampled scope - not `dat_boot`: a distinct
+      # respondent count on a bootstrap resample recovers only ~63% of the true
+      # value, so gating on the resample would blank scopes that comfortably
+      # clear the threshold. Counting on `data` also makes the gate decision
+      # invariant across replicates, which removes the brand-scope "flickering
+      # around min_base_for_lift" that min_boot_coverage otherwise has to mop up.
+      #
+      # Weights are deliberately ignored here: a respondent count is a count.
+      # The id = NULL branches below keep passing sum(freq) / sum(w_s), so the
+      # legacy record path stays weighted exactly as before.
+      resp_base <- function(single_iv, brand_level = NULL) {
+        keep <- !is.na(data[[single_iv]])
+        if (!is.null(brand_level)) {
+          keep <- keep & !is.na(data[[brand]]) & data[[brand]] == brand_level
+        }
+        dplyr::n_distinct(data[[id]][keep])
+      }
+
       # Helper: compute lift values for a single freq distribution.
       # Returns a numeric vector of length 2 * length(lift), interleaved as
       # (propdisplay, absdisplay) for each lift percent. Order must match
       # `lift_labels` above so the final column naming lines up.
       # `iv_name` is used to look up an optional scale_range override.
-      compute_lift_vals <- function(freq, dv_probs, iv_name = NULL) {
-        if (sum(freq) < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
+      # `base_n` is the count gated against min_base_for_lift: distinct
+      # respondents when `id` is set, otherwise sum(freq) (the record /
+      # weight-sum count this gate has always used).
+      compute_lift_vals <- function(freq, dv_probs, iv_name = NULL, st,
+                                    unsupported = NULL, base_n = NULL) {
+        if (is.null(base_n)) base_n <- sum(freq)
+        # An empty scope has no distribution to shift regardless of the
+        # threshold - guarded separately so that a threshold of 0 (how
+        # override_min_base_for_lift disables the gate) still returns NA here
+        # rather than dividing by a zero total.
+        if (sum(freq) <= 0) return(rep(NA_real_, length(lift) * 2L))
+        if (base_n < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
         p_observed <- as.numeric(freq) / sum(freq)
         observed_expected <- sum(dv_probs * p_observed)
         sr <- if (!is.null(scale_ranges) && !is.null(iv_name)) scale_ranges[[iv_name]] else NULL
+        # `unsupported` marks levels whose empirical DV conditional does not
+        # exist (zero rows in this resample - e.g. a rare bottom level the
+        # draw missed; dv_probs was zero-filled there). bn_freq_prob_shift
+        # floors empty cells at ~1e-6, so negligible mass there is stripped
+        # and the target renormalized; a shift that demands REAL mass (> 1%)
+        # on an unsupported level is empirically unestimable for this
+        # replicate - clean_shift returns NULL and the lift records NA.
+        clean_shift <- function(p) {
+          p <- as.numeric(p)
+          if (is.null(unsupported) || !any(unsupported)) return(p)
+          excess <- sum(p[unsupported])
+          if (!is.finite(excess) || excess > 0.01) return(NULL)
+          p[unsupported] <- 0
+          p / sum(p)
+        }
         purrr::map(lift, function(l) {
           use_sym <- (l == 0)
           if (use_sym) {
-            p_up   <- bn_freq_prob_shift(freq, type = "exponential", lift = 0.05,
-              impact_shift_type = impact_shift_type, scale_range = sr)
-            p_down <- bn_freq_prob_shift(freq, type = "exponential", lift = -0.05,
-              impact_shift_type = impact_shift_type, scale_range = sr)
+            p_up   <- clean_shift(bn_freq_prob_shift(freq, type = "exponential", lift = 0.05,
+              impact_shift_type = st, scale_range = sr))
+            p_down <- clean_shift(bn_freq_prob_shift(freq, type = "exponential", lift = -0.05,
+              impact_shift_type = st, scale_range = sr))
+            if (is.null(p_up) || is.null(p_down)) return(c(NA_real_, NA_real_))
             lift_abs <- sum(dv_probs * p_up) - sum(dv_probs * p_down)
           } else {
-            p_shifted <- bn_freq_prob_shift(freq, type = "exponential", lift = l,
-              impact_shift_type = impact_shift_type, scale_range = sr)
+            p_shifted <- clean_shift(bn_freq_prob_shift(freq, type = "exponential", lift = l,
+              impact_shift_type = st, scale_range = sr))
+            if (is.null(p_shifted)) return(c(NA_real_, NA_real_))
             lift_abs <- sum(dv_probs * p_shifted) - observed_expected
           }
           # Proportional display = absolute lift scaled by the observed
@@ -616,8 +1033,134 @@ bn_impact_engine <- function(
         }) %>% unlist()
       }
 
+      # community_lift = "joint": theme effect for one community and one
+      # focus scope (market rows or a brand's rows). Rake the scope's weights
+      # so every member's marginal hits its bn_freq_prob_shift target
+      # simultaneously, then read the DV change empirically under the raked
+      # weights. Targets are zeroed and renormalized on levels the scope
+      # never observes, so mass only moves across observed joint profiles
+      # (support blackout). Requires impact_readoff = "empirical" (enforced
+      # up front); "average" below was the pre-2026-07-28 methodology.
+      # `brand_level` names the focus scope the mask selects (NULL = market) so
+      # the base can be recounted on the un-resampled `data`; the mask itself
+      # indexes dat_boot and cannot be reused for that.
+      compute_joint_lift_vals <- function(iv_vars, mask, brand_level = NULL) {
+        w_all <- if (!is.null(weight)) dat_boot[[weight]] else rep(1, nrow(dat_boot))
+        w_s <- w_all[mask]
+        # Community base = mean of its members' scope bases, matching the
+        # community row's reported `base` (base_results averages per-IV bases
+        # the same way).
+        base_n <- if (is.null(id)) {
+          sum(w_s)
+        } else {
+          mean(vapply(iv_vars, resp_base, numeric(1), brand_level = brand_level))
+        }
+        if (sum(w_s) <= 0) {
+          return(lapply(impact_shift_type, function(st) rep(NA_real_, length(lift) * 2L)))
+        }
+        if (base_n < min_base_for_lift) {
+          return(lapply(impact_shift_type, function(st) rep(NA_real_, length(lift) * 2L)))
+        }
+        members <- dat_boot[mask, iv_vars, drop = FALSE]
+        freqs <- lapply(iv_vars, function(v) {
+          wtd_table(members[[v]], w = if (is.null(weight)) NULL else w_s)
+        }) %>% setNames(iv_vars)
+        dv_s <- dv_emp_y[mask]
+        e_obs <- stats::weighted.mean(dv_s, w_s)
+
+        # Level indices are identical for every rake in this scope (targets
+        # are always named by names(freqs[[v]])) - build once, reuse across
+        # all shift variants and lifts.
+        rake_idx <- lapply(iv_vars, function(v) {
+          match(as.character(members[[v]]), names(freqs[[v]]))
+        }) %>% setNames(iv_vars)
+
+        # brand_control: pin the brand margins. The rake must hit every
+        # member's shifted target while the scope's brand mix stays
+        # at its OBSERVED margins - the back-door counterpart for joint
+        # community lifts. Without the pin, reweighting rows toward the
+        # shifted member targets drags the brand composition along (members
+        # correlate with brand), importing brand-level DV differences into
+        # the community lift. Within a single-brand focus scope the pinned
+        # margin is a one-level no-op.
+        ctrl_tgt <- NULL
+        if (brand_control) {
+          ctrl_s <- ctrl_vec[mask]
+          ctrl_freq <- wtd_table(ctrl_s, w = if (is.null(weight)) NULL else w_s)
+          ctrl_tgt <- as.numeric(ctrl_freq) / sum(ctrl_freq)
+          names(ctrl_tgt) <- names(ctrl_freq)
+          rake_idx[[brand]] <- match(ctrl_s, names(ctrl_tgt))
+        }
+
+        # Returns NULL when any member's shifted target is undefined for
+        # this (resampled) scope - e.g. bn_freq_prob_shift returns NA for an
+        # unshiftable distribution, or all target mass lands on unsupported
+        # levels. The scope's joint lift is then NA for this replicate,
+        # mirroring how the averaging path degrades to NA member lifts.
+        targets_for <- function(l, st) {
+          out <- lapply(iv_vars, function(v) {
+            fr <- freqs[[v]]
+            sr <- if (!is.null(scale_ranges)) scale_ranges[[v]] else NULL
+            tgt <- suppressWarnings(as.numeric(
+              bn_freq_prob_shift(fr, type = "exponential", lift = l,
+                impact_shift_type = st, scale_range = sr)
+            ))
+            if (length(tgt) != length(fr) || anyNA(tgt)) return(NULL)
+            tgt <- setNames(tgt, names(fr))
+            tgt[as.numeric(fr) <= 0] <- 0
+            tot <- sum(tgt)
+            if (!is.finite(tot) || tot <= 0) return(NULL)
+            tgt / tot
+          }) %>% setNames(iv_vars)
+          if (any(vapply(out, is.null, logical(1)))) return(NULL)
+          out
+        }
+        e_raked <- function(l, st) {
+          tg <- targets_for(l, st)
+          if (is.null(tg)) return(NA_real_)
+          if (!is.null(ctrl_tgt)) tg[[brand]] <- ctrl_tgt
+          r <- .bn_ipf_rake(members, w_s, tg, idx = rake_idx)
+          if (is.null(r)) return(NA_real_)
+          stats::weighted.mean(dv_s, r)
+        }
+
+        # One list element per shift variant (freqs / dv_s / e_obs shared);
+        # each element interleaves (propdisplay, absdisplay) per lift.
+        lapply(impact_shift_type, function(st) {
+          purrr::map(lift, function(l) {
+            lift_abs <- if (l == 0) e_raked(0.05, st) - e_raked(-0.05, st) else e_raked(l, st) - e_obs
+            lift_prop <- if (is.finite(e_obs) && e_obs != 0) lift_abs / e_obs else NA_real_
+            c(lift_prop, lift_abs)   # (propdisplay, absdisplay)
+          }) %>% unlist()
+        })
+      }
+
       lift_results <- temp_ivs_r %>%
         purrr::imap(function(iv_vars, iv_name) {
+
+          if (!is.null(community_assignment) && community_lift == "joint") {
+            # Rake each focus scope once (per shift variant, inside), then
+            # assemble shift-block-major to match lift_col_names order: market
+            # scope first, then one per brand. Scope labels ride alongside the
+            # masks so the gate can recount the base on the un-resampled data
+            # (NULL = market).
+            scope_masks <- c(
+              list(rep(TRUE, nrow(dat_boot))),
+              if (is.null(brand_levels)) NULL else
+                lapply(brand_levels, function(b) dat_boot[[brand]] %in% b)
+            )
+            scope_labels <- c(list(NULL), as.list(brand_levels))
+            per_scope <- purrr::map2(scope_masks, scope_labels, function(m, b) {
+              compute_joint_lift_vals(iv_vars, m, brand_level = b)
+            })
+            vals <- unlist(lapply(seq_along(impact_shift_type), function(si) {
+              unlist(lapply(per_scope, function(ps) ps[[si]]))
+            }))
+            return(dplyr::bind_cols(
+              data.frame(variable = iv_name),
+              as.data.frame(t(setNames(vals, lift_col_names)))
+            ))
+          }
 
           # Matrix: rows = iv_vars, cols = lift_col_names
           per_iv_mat <- purrr::map(iv_vars, function(single_iv) {
@@ -625,10 +1168,63 @@ bn_impact_engine <- function(
             freq_full <- wtd_table(dat_boot[[single_iv]], w = w_vec)
             levels_v <- names(freq_full)
 
-            # Query DV distribution per IV level (shared across brands)
+            # DV expectation per IV level (shared across brands)
             # dv_metric = "top_box": P(DV_max | IV=v)
             # dv_metric = "mean":    E[DV | IV=v] = Σ d × P(DV=d | IV=v)
-            if (type == "gr") {
+            # "empirical_brand_control" also lands here; the pooled
+            # conditionals computed in this branch then get brand-standardized
+            # immediately below.
+            if (readoff_empirical) {
+              dv_probs <- purrr::map_dbl(levels_v, function(v) {
+                mask <- dat_boot[[single_iv]] == v
+                if (is.null(w_vec)) {
+                  mean(dv_emp_y[mask])
+                } else {
+                  stats::weighted.mean(dv_emp_y[mask], w_vec[mask])
+                }
+              })
+              # A retained factor level with zero rows in this resample
+              # (rare bottom levels under bootstrap) yields mean(empty) =
+              # NaN, and 0 * NaN would poison every lift sum even though
+              # the level carries no mass. Zero-fill and remember which
+              # levels are unsupported; compute_lift_vals NAs only the
+              # shifts that put real target mass on them. Model read-off
+              # never hits this (smoothed conditionals exist everywhere).
+              # Under boot_inference_legacy the NaN propagates as it did
+              # prior to 2026-07-29 (replicate silently excluded).
+              if (boot_inference_legacy) {
+                unsupported_lv <- rep(FALSE, length(dv_probs))
+              } else {
+                unsupported_lv <- !is.finite(dv_probs)
+                dv_probs[unsupported_lv] <- 0
+              }
+
+              # brand_control: replace each pooled conditional with its
+              # brand-standardized (back-door) counterpart -
+              # Sum_b pi_b * E[DV | IV=v, brand=b]. A (level x brand) cell
+              # with zero rows in this resample falls back to the pooled
+              # conditional for that level, so thin cells degrade toward the
+              # unadjusted read rather than to NA. Unsupported levels keep
+              # their zero-fill (mask never matches). Every downstream lift -
+              # all shift variants, market and brand focus - inherits the
+              # adjusted conditionals through compute_lift_vals unchanged.
+              if (brand_control) {
+                dv_probs <- purrr::map_dbl(seq_along(levels_v), function(vi) {
+                  mask_v <- dat_boot[[single_iv]] == levels_v[vi]
+                  if (!any(mask_v)) return(dv_probs[vi])
+                  per_b <- vapply(ctrl_levels, function(b) {
+                    mb <- mask_v & ctrl_vec == b
+                    if (!any(mb)) return(NA_real_)
+                    if (is.null(w_vec)) {
+                      mean(dv_emp_y[mb])
+                    } else {
+                      stats::weighted.mean(dv_emp_y[mb], w_vec[mb])
+                    }
+                  }, numeric(1))
+                  sum(ifelse(is.na(per_b), dv_probs[vi], per_b) * ctrl_pi)
+                })
+              }
+            } else if (type == "gr") {
               dv_probs <- purrr::map_dbl(levels_v, function(v) {
                 ev <- stats::setNames(list(v), single_iv)
                 dist <- gRain::querygrain(grain_bn, nodes = dv, evidence = ev, simplify = TRUE)
@@ -662,22 +1258,38 @@ bn_impact_engine <- function(
               }
             }
 
-            # Market lift: always computed on full distribution
-            market_vals <- compute_lift_vals(freq_full, dv_probs, iv_name = single_iv)
+            # Brand frequency tables are shift-independent — build once,
+            # reuse across every shift variant.
+            brand_freqs <- if (is.null(brand_levels)) NULL else lapply(brand_levels, function(b) {
+              brand_mask <- dat_boot[[brand]] == b
+              w_b <- if (!is.null(weight)) dat_boot[[weight]][brand_mask] else NULL
+              wtd_table(dat_boot[[single_iv]][brand_mask], w = w_b, levels = levels_v)
+            })
 
-            if (is.null(brand_levels)) {
-              market_vals
-            } else {
-              # Per-brand lift appended after market lift
-              brand_vals <- purrr::map(brand_levels, function(b) {
-                brand_mask <- dat_boot[[brand]] == b
-                w_b <- if (!is.null(weight)) dat_boot[[weight]][brand_mask] else NULL
-                freq_b <- wtd_table(dat_boot[[single_iv]][brand_mask], w = w_b, levels = levels_v)
-                compute_lift_vals(freq_b, dv_probs, iv_name = single_iv)
-              }) %>%
-                unlist()
-              c(market_vals, brand_vals)
+            # Gate counts, one per lift scope. Shift-independent like the
+            # brand freq tables above, so resolved once per IV: with `id` set
+            # these are distinct respondents on the un-resampled scope, with
+            # id = NULL they fall through to the freq totals the gate has
+            # always used (sum of weights when weighted).
+            market_base_n <- if (is.null(id)) NULL else resp_base(single_iv)
+            brand_base_n <- if (is.null(brand_levels) || is.null(id)) NULL else {
+              vapply(brand_levels, resp_base, numeric(1), single_iv = single_iv)
             }
+
+            # Per shift variant: market lift on the full distribution, then
+            # per-brand lifts — matching lift_col_names block order.
+            unsup <- if (readoff_empirical) unsupported_lv else NULL
+            unlist(lapply(impact_shift_type, function(st) {
+              market_vals <- compute_lift_vals(freq_full, dv_probs, iv_name = single_iv,
+                                               st = st, unsupported = unsup,
+                                               base_n = market_base_n)
+              if (is.null(brand_levels)) return(market_vals)
+              c(market_vals, unlist(purrr::imap(brand_freqs, function(freq_b, bi) {
+                compute_lift_vals(freq_b, dv_probs, iv_name = single_iv,
+                                  st = st, unsupported = unsup,
+                                  base_n = if (is.null(brand_base_n)) NULL else brand_base_n[[bi]])
+              })))
+            }))
           }) %>%
             do.call(rbind, .)
 
@@ -694,13 +1306,36 @@ bn_impact_engine <- function(
       if (include_base) {
         base_results <- temp_ivs_r %>%
           purrr::imap(function(iv_vars, iv_name) {
+            # With `id` supplied, bases are DISTINCT RESPONDENTS rather than
+            # stacked records. In a stacked design one respondent contributes
+            # one row per brand rated, so a record count overstates the base a
+            # client reads (Danone TH: 1763 records vs 682 respondents). Brand-
+            # focus bases keep essentially the same values - a respondent
+            # appears at most once per brand - but become exact scope counts
+            # instead of per-replicate resample counts, whose boot means
+            # wobble around the true count with spurious CI columns.
+            #
+            # Counted on `data` (the un-resampled scope) rather than `dat_boot`:
+            # a distinct-respondent count on a bootstrap resample returns only
+            # ~63% of the true value, and downstream consumers assume base is
+            # invariant across replicates (see the pivot's base note). The
+            # record-count branch still reads dat_boot, so id = NULL is
+            # bit-identical to the pre-2026-08-10 behaviour.
             per_iv_bases <- purrr::map(iv_vars, function(single_iv) {
-              market_base <- c(base = sum(table(dat_boot[[single_iv]])))
+              market_base <- c(base = if (is.null(id)) {
+                sum(table(dat_boot[[single_iv]]))
+              } else {
+                dplyr::n_distinct(data[[id]][!is.na(data[[single_iv]])])
+              })
               if (is.null(brand_levels)) {
                 market_base
               } else {
                 brand_bases <- purrr::map_dbl(brand_levels, function(b) {
-                  sum(dat_boot[[brand]] == b, na.rm = TRUE)
+                  if (is.null(id)) {
+                    sum(dat_boot[[brand]] == b, na.rm = TRUE)
+                  } else {
+                    dplyr::n_distinct(data[[id]][!is.na(data[[brand]]) & data[[brand]] == b])
+                  }
                 }) %>%
                   setNames(paste0("base_", brand_levels))
                 c(market_base, brand_bases)
@@ -725,16 +1360,31 @@ bn_impact_engine <- function(
       results_mi <- temp_ivs %>%
         purrr::imap(
           ~{
-            xmi <- bnlearn::ci.test(
-              apply(fit_data[.x], 1, paste0, collapse = "_") %>% as.factor(),
-              fit_data[[dv]], test = "mi"
-            )
+            composite <- apply(fit_data[.x], 1, paste0, collapse = "_") %>% as.factor()
 
-            dplyr::tibble(
-              "variable" = .y,
-              "mi" = xmi$statistic / (2 * nrow(dat_boot)),
-              "p_val" = xmi$p.value
-            )
+            # A bootstrap resample can leave the composite (or the DV) with a
+            # single observed level - e.g. a near-constant binary q19a item in
+            # a skewed subgroup, where the resample misses the handful of rows
+            # on the rare level. as.factor() on the pasted values keeps only
+            # OBSERVED levels, so ci.test()'s check.data() hard-errors with
+            # "variable x in the data must have at least two levels". A
+            # constant variable carries exactly zero mutual information, so
+            # return mi = 0 for this draw instead of crashing the boot.
+            if (nlevels(composite) < 2 || dplyr::n_distinct(fit_data[[dv]]) < 2) {
+              dplyr::tibble(
+                "variable" = .y,
+                "mi" = 0,
+                "p_val" = 1
+              )
+            } else {
+              xmi <- bnlearn::ci.test(composite, fit_data[[dv]], test = "mi")
+
+              dplyr::tibble(
+                "variable" = .y,
+                "mi" = xmi$statistic / (2 * nrow(dat_boot)),
+                "p_val" = xmi$p.value
+              )
+            }
           }
         ) %>%
         dplyr::bind_rows()
@@ -747,10 +1397,17 @@ bn_impact_engine <- function(
 
         mi_boot_results <- temp_ivs %>%
           purrr::imap(function(iv_vars, comm_name) {
+            # Paste the community composite ONCE over the outer replicate's
+            # rows; each nested resample just indexes into it. The row-wise
+            # apply(paste) was rebuilt per nested replicate and dominated the
+            # community boot cost. RNG-neutral (only sample() draws), so
+            # mi_boot values are bit-identical to the per-replicate paste.
+            composite_full <- apply(fit_data[iv_vars], 1, paste0, collapse = "_")
+            dv_full <- fit_data[[dv]]
             boot_mi <- replicate(n_mi_boot, {
               boot_idx <- sample(n_obs, replace = TRUE)
-              boot_data <- fit_data[boot_idx, , drop = FALSE]
-              composite <- apply(boot_data[iv_vars], 1, paste0, collapse = "_") %>% as.factor()
+              composite <- factor(composite_full[boot_idx])
+              dv_b <- dv_full[boot_idx]
               # Suppress bnlearn "variable X has levels that are not observed
               # in the data" warnings from ci.test().
               #
@@ -768,10 +1425,18 @@ bn_impact_engine <- function(
               # unaffected in the aggregate. The warning is purely cosmetic
               # at this scope, and with n_mi_boot >> 1 it fires repeatedly
               # for the same root cause and drowns out anything meaningful.
-              xmi <- suppressWarnings(
-                bnlearn::ci.test(composite, boot_data[[dv]], test = "mi")
-              )
-              xmi$statistic / (2 * n_obs)
+              if (nlevels(composite) < 2 || dplyr::n_distinct(dv_b) < 2) {
+                # A replicate where the composite (or the DV) is constant
+                # carries zero mutual information by definition - contribute 0
+                # rather than letting check.data() error out (same guard as
+                # the attribute-MI block above).
+                0
+              } else {
+                xmi <- suppressWarnings(
+                  bnlearn::ci.test(composite, dv_b, test = "mi")
+                )
+                xmi$statistic / (2 * n_obs)
+              }
             })
 
             # P-value: proportion of bootstrap replicates at or below zero
@@ -813,6 +1478,10 @@ bn_impact_engine <- function(
   # ---------------------------
 
   if (n_boot > 1) {
+    # Seed the resample draw - without this the boot indices depend on ambient
+    # RNG state and boot p-values are not reproducible across runs, despite
+    # the documented `seed` parameter.
+    if (!is.null(seed)) set.seed(seed)
     index_sets <- replicate(n_boot, sample(seq_len(nrow(df)), replace = TRUE), simplify = FALSE)
 
     result <- index_sets %>%
@@ -832,19 +1501,39 @@ bn_impact_engine <- function(
       tidyr::pivot_longer(cols = !variable, names_to = "metric") %>%
       dplyr::group_by(variable, metric) %>%
       dplyr::summarise(
+        n_ok = sum(!is.na(value)),
         mean = mean(value, na.rm = TRUE),
         sd   = sd(value,   na.rm = TRUE),
         .groups = "drop"
       ) %>%
       dplyr::mutate(
-        se      = sd / sqrt(pmax(n_boot, 1)),
+        # Coverage blackout: a cell whose value exists in fewer than
+        # min_boot_coverage of the replicates (infeasible joint rakes in
+        # small subgroups, brand scopes flickering around
+        # min_base_for_lift) is blanked entirely - the surviving
+        # replicates are a selection-biased subset, and averaging them
+        # silently would report a conditional estimand with an overstated
+        # df. Cells that pass use n_ok for the effective df, so fully
+        # feasible cells (n_ok == n_boot) reproduce the previous
+        # statistics exactly.
+        blackout = if (boot_inference_legacy) FALSE else n_ok < min_boot_coverage * n_boot,
+        n_eff    = if (boot_inference_legacy) n_boot else n_ok,
+        mean     = ifelse(blackout, NA_real_, mean),
+        sd       = ifelse(blackout, NA_real_, sd),
+        # boot_nonzero = FALSE (default): classical bootstrap inference - the
+        # SD of the bootstrap replicates IS the standard-error estimate of the
+        # statistic, so p-values are invariant to n_boot.
+        # boot_nonzero = TRUE: legacy behavior - se = sd/sqrt(n_boot), which
+        # tests whether the MEAN of the boot distribution is nonzero and
+        # therefore mechanically shrinks p-values as n_boot grows.
+        se      = if (boot_nonzero) sd / sqrt(pmax(n_eff, 1)) else sd,
         t       = mean / se,
-        tcrit   = stats::qt(0.975, df = pmax(n_boot - 1, 1)),
+        tcrit   = stats::qt(0.975, df = pmax(n_eff - 1, 1)),
         ci_low  = mean - tcrit * se,
         ci_high = mean + tcrit * se,
-        p_value = 2 * stats::pt(-abs(t), df = pmax(n_boot - 1, 1)) %>% round(4)
+        p_value = 2 * stats::pt(-abs(t), df = pmax(n_eff - 1, 1)) %>% round(4)
       ) %>%
-      dplyr::select(-tcrit) %>%   # housekeeping
+      dplyr::select(-tcrit, -n_ok, -n_eff, -blackout) %>%   # housekeeping
       tidyr::pivot_wider(
         id_cols = variable,
         names_from = metric,
@@ -912,6 +1601,11 @@ bn_impact_engine <- function(
       lift_cols <- lift_cols[!grepl("_mean$|_sd$|_ci_lo$|_ci_hi$", lift_cols)]
       # Market lift only (no brand suffix), absolute-display variant.
       market_lift_cols <- lift_cols[grep("^lift(_\\d+)?_absdisplay$", lift_cols)]
+      if (length(market_lift_cols) == 0) {
+        # One-pass tagged output: index on the propshift variant (matches
+        # the legacy behavior of indexing on the proportional-shift pass).
+        market_lift_cols <- lift_cols[grep("^lift(_\\d+)?_propshift_absdisplay$", lift_cols)]
+      }
       if (length(market_lift_cols) == 0) market_lift_cols <- lift_cols
       if (length(market_lift_cols) == 0) {
         warning("index_by = '", index_by, "': no lift columns found. Skipping index.")
@@ -945,5 +1639,94 @@ bn_impact_engine <- function(
   }
 
   return(result)
+}
+
+
+#' Resolve community-impact attribute ids from declared battery names
+#'
+#' An IV's battery is its variable name with the trailing "_<number>" suffix
+#' removed (q14a_1 -> "q14a"); ids without a numeric suffix are their own
+#' battery. Returns the subset of `ids` whose battery is declared. Stops if
+#' any declared battery matches no id, listing the batteries that are
+#' available.
+#'
+#' @noRd
+.bn_community_impact_ids <- function(ids, community_impact_attributes) {
+
+  if (!is.character(community_impact_attributes) ||
+      length(community_impact_attributes) == 0 ||
+      anyNA(community_impact_attributes)) {
+    stop("'community_impact_attributes' must be a character vector of battery names (or NULL).")
+  }
+
+  id_batteries <- sub("_[0-9]+$", "", ids)
+  available <- unique(id_batteries)
+  unidentified <- setdiff(community_impact_attributes, available)
+
+  if (length(unidentified) > 0) {
+    stop(
+      "'community_impact_attributes' declares unidentified batter",
+      if (length(unidentified) > 1) "ies: " else "y: ",
+      paste0("'", unidentified, "'", collapse = ", "),
+      ". Available batteries: ",
+      paste0("'", sort(available), "'", collapse = ", "), "."
+    )
+  }
+
+  ids[id_batteries %in% community_impact_attributes]
+}
+
+
+#' Iterative proportional fitting of row weights to per-member marginal targets
+#'
+#' member_df holds one column per community member (factor/character), w the
+#' starting weights, targets a named list (per member) of target proportions
+#' named by that member's observed levels. Cycles members, scaling weights so
+#' each member's weighted marginal matches its target, until the worst
+#' marginal gap is below tol or max_iter is hit (correlated members can make
+#' the margins jointly infeasible - the weights then sit at the closest
+#' reachable point, which is the intended support-respecting behavior).
+#' Deterministic; no RNG.
+#'
+#' @noRd
+.bn_ipf_rake <- function(member_df, w, targets, tol = 1e-4, max_iter = 50L,
+                         idx = NULL) {
+
+  r <- as.numeric(w)
+  # idx: precomputed per-member level indices (match of each row's level into
+  # that member's target names). Callers raking the same members repeatedly
+  # (one rake per shift variant x lift) should build this once and pass it -
+  # rebuilding match() per rake was a measurable share of the rake cost.
+  if (is.null(idx)) {
+    idx <- lapply(names(targets), function(v) {
+      match(as.character(member_df[[v]]), names(targets[[v]]))
+    }) %>% setNames(names(targets))
+  }
+
+  for (i in seq_len(max_iter)) {
+    max_gap <- 0
+    for (v in names(targets)) {
+      # Saturated targets on several correlated members can zero out every
+      # row (no observed joint profile carries the demanded mass). That is
+      # an infeasible joint shift for this scope - return NULL and let the
+      # caller record NA rather than dividing by a zero total.
+      sr <- sum(r)
+      if (!is.finite(sr) || sr <= 0) return(NULL)
+      tgt <- targets[[v]]
+      ix <- idx[[v]]
+      cur <- numeric(length(tgt))
+      rs <- rowsum(r, ix)
+      cur[as.integer(rownames(rs))] <- rs[, 1]
+      cur_p <- cur / sr
+      max_gap <- max(max_gap, max(abs(cur_p - tgt)))
+      ratio <- ifelse(cur_p > 0, tgt / cur_p, 0)
+      r <- r * ratio[ix]
+    }
+    if (!is.finite(max_gap)) return(NULL)
+    if (max_gap < tol) break
+  }
+  if (!is.finite(sum(r)) || sum(r) <= 0) return(NULL)
+
+  r
 }
 

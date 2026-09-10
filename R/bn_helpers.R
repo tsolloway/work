@@ -31,29 +31,130 @@
   impacts
 }
 
-# --- internal: assert per-table column count fits Excel's per-sheet cap ---
-# Excel's hard limit is 16,384 columns per sheet (column XFD). When the
-# caller opts out of `trim_wb` and an impact table would overflow, fail
-# loudly here rather than letting openxlsx emit a corrupt workbook. The
-# threshold is also used as a uniform sanity gate by bn_report — at that
-# scale the embedded JSON payload becomes pathological even though HTML
-# itself has no column limit.
-.bn_impact_assert_column_cap <- function(impacts, fn_label = "bn_write",
-                                         cap = 16384L) {
+# --- internal: drop per-brand focus columns, keeping the Market view ---
+# Brand focuses are ~86% of an impact table's width (one block of lift
+# columns plus a base column per brand), so dropping them is what makes a
+# many-subgroup workbook fit Excel's 16,384-column ceiling. Both dashboard
+# writers derive the Focus dropdown from the COLUMNS (see
+# append_bn_impact_dynamic's brand_lift_suffixes and the html prep's
+# brand_lift_bases), so removing the columns collapses the control to
+# "Market" on its own; the meta fields are cleared too so the guide text
+# doesn't advertise a Focus dropdown that isn't there.
+.bn_impact_keep_market_focus <- function(impacts) {
+  if (is.null(impacts)) return(impacts)
+
+  tbls <- c("table_attribute", "table_attribute_weighted",
+            "table_community", "table_community_weighted")
+
+  brands <- impacts[["meta"]][["brand_names"]]
+  if (is.null(brands) || length(brands) == 0L) {
+    # Fall back to reading the brand names out of the column names, the same
+    # way the writers do: market lift is `lift_<n>_<shift>shift_<display>`,
+    # a brand block inserts the name before the shift token.
+    nm <- unique(unlist(lapply(tbls, function(k) names(impacts[[k]]))))
+    mt <- regmatches(nm, regexec(
+      "_lift_?\\d*_(.+?)_(prop|abs|head|range)shift_", nm, perl = TRUE))
+    mt <- mt[lengths(mt) > 0]
+    brands <- unique(vapply(mt, `[`, character(1), 2L))
+  }
+  if (length(brands) == 0L) return(impacts)
+
+  for (k in tbls) {
+    tbl <- impacts[[k]]
+    if (is.null(tbl)) next
+    nm <- names(tbl)
+    drop <- rep(FALSE, length(nm))
+    for (b in brands) {
+      # fixed = TRUE throughout: brand labels carry regex metacharacters
+      # ("Enfa A+ C-Biome", "S-26 SMA/ Promill").
+      drop <- drop |
+        grepl(paste0("_", b, "_"), nm, fixed = TRUE) |
+        endsWith(nm, paste0("_base_", b))
+    }
+    impacts[[k]] <- tbl[, !drop, drop = FALSE]
+  }
+
+  impacts[["meta"]][["brand"]] <- NULL
+  impacts[["meta"]][["brand_names"]] <- NULL
+  impacts
+}
+
+# --- internal: warn when an HTML report's embedded payload gets large ---
+# HTML has no column limit - Excel's 16,384 does not apply here, and gating
+# bn_report on it would reject reports that render fine (a ~34 MB report
+# ships today). What does degrade is browser parse time on open, which
+# tracks the payload's byte size, so warn on the estimate instead. The
+# ~55 bytes/value constant is measured from generated reports: a 12-subgroup
+# all-focus payload (370k values) lands ~21 MB, a 58-subgroup market-only
+# one (223k values) ~9 MB. Boot columns dominate - they carry a p-value and
+# full double precision per metric.
+.bn_impact_payload_warn <- function(impacts, fn_label = "bn_report",
+                                    warn_mb = 20) {
   if (is.null(impacts)) return(invisible(NULL))
+  est <- 0
   for (k in c("table_attribute", "table_attribute_weighted",
               "table_community", "table_community_weighted")) {
     tbl <- impacts[[k]]
-    if (!is.null(tbl) && ncol(tbl) > cap) {
-      stop(sprintf(
-        "%s: impacts$%s has %d columns, exceeding the %d-column cap. ",
-        fn_label, k, ncol(tbl), cap
-      ),
-      "Set `trim_wb = TRUE` (the default) to strip the 5 unused boot ",
-      "stats (`_sd`, `_se`, `_t`, `_ci_low`, `_ci_high`) — only `_mean` ",
-      "and `_p_value` are consumed downstream.",
-      call. = FALSE)
+    if (!is.null(tbl)) est <- est + ncol(tbl) * nrow(tbl) * 55 / 1e6
+  }
+  if (est <= warn_mb) return(invisible(NULL))
+
+  n_sg <- length(impacts[["meta"]][["subgroups"]] %||% character(0))
+  cli::cli_warn(c(
+    "!" = paste0(fn_label, ": embedded impact payload is roughly ",
+                 round(est), " MB",
+                 if (n_sg > 0) paste0(" (", n_sg, " subgroups)") else "", "."),
+    "i" = "The report will render, but may be slow to open in a browser.",
+    "i" = "Reduce it with {.code only_market_focus = TRUE} (drops the per-brand focus columns) or fewer subgroups."
+  ))
+  invisible(NULL)
+}
+
+# --- internal: assert per-table column count fits Excel's per-sheet cap ---
+# Excel's hard limit is 16,384 columns per sheet (column XFD). openxlsx
+# writes past it WITHOUT complaint; the failure only surfaces later as
+# openxlsx2's opaque "Column exceeds valid range" when bn_write round-trips
+# through wb_load to attach deferred network images / chart XML (and would
+# otherwise ship a workbook Excel refuses to open). So this must run on
+# whatever table is actually written — trimming the 5 unused boot stats only
+# halves the width, which is not enough past ~42 subgroups. The threshold is
+# also used as a uniform sanity gate by bn_report — at that scale the
+# embedded JSON payload becomes pathological even though HTML itself has no
+# column limit.
+.bn_impact_assert_column_cap <- function(impacts, fn_label = "bn_write",
+                                         cap = 16384L, trimmed = FALSE) {
+  if (is.null(impacts)) return(invisible(NULL))
+  n_sg <- length(impacts[["meta"]][["subgroups"]] %||% character(0))
+  for (k in c("table_attribute", "table_attribute_weighted",
+              "table_community", "table_community_weighted")) {
+    tbl <- impacts[[k]]
+    if (is.null(tbl) || ncol(tbl) <= cap) next
+
+    fix <- if (isTRUE(trimmed)) {
+      # trim_wb is already on — the only remaining levers are fewer
+      # subgroups or fewer brand focuses per workbook.
+      per_sg <- if (n_sg > 0) ceiling(ncol(tbl) / n_sg) else NA_integer_
+      paste0(
+        "`trim_wb = TRUE` is already applied. ",
+        if (!is.na(per_sg)) sprintf(
+          "This run has %d subgroups at ~%d columns each; about %d fit. ",
+          n_sg, per_sg, max(1L, floor(cap / per_sg))) else "",
+        "Set `only_market_focus = TRUE` to drop the per-brand focus columns ",
+        "(usually the large majority of the width), or split the subgroups ",
+        "across several workbooks by calling bn_write() on subsets."
+      )
+    } else {
+      paste0(
+        "Set `trim_wb = TRUE` (the default) to strip the 5 unused boot ",
+        "stats (`_sd`, `_se`, `_t`, `_ci_low`, `_ci_high`) — only `_mean` ",
+        "and `_p_value` are consumed downstream."
+      )
     }
+
+    stop(sprintf(
+      "%s: impacts$%s has %d columns, exceeding Excel's %d-column-per-sheet limit. ",
+      fn_label, k, ncol(tbl), cap
+    ), fix, call. = FALSE)
   }
   invisible(NULL)
 }
@@ -210,6 +311,7 @@
   meta <- impacts[["meta"]] %||% list()
   has_weights <- !is.null(tbl_w)
   min_base_for_lift <- meta[["min_base_for_lift"]] %||% 75L
+  sig_highlight_threshold <- meta[["sig_highlight_threshold"]] %||% 0.1
 
   all_cols <- names(tbl)
   sgs <- meta[["subgroups"]]
@@ -329,6 +431,7 @@
     meta                = meta,
     has_weights         = has_weights,
     min_base_for_lift   = min_base_for_lift,
+    sig_highlight_threshold = sig_highlight_threshold,
     is_dichotomous_dv   = is_dichotomous_dv,
     sgs                 = sgs,
     metric_info         = metric_info,
@@ -443,7 +546,7 @@
       vapply(x$rows, function(r) r$dv_estimate %||% NA_real_, numeric(1))
     }))
     dv_vals <- dv_vals[!is.na(dv_vals)]
-    length(dv_vals) > 0 && min(dv_vals) >= -1e-6 && max(dv_vals) <= 1 + 1e-6
+    length(dv_vals) > 0 && min(dv_vals) >= -1e-4 && max(dv_vals) <= 1 + 1e-4
   }
 
   list(
@@ -1212,6 +1315,7 @@
   meta                <- m$meta
   has_weights         <- m$has_weights
   min_base_for_lift   <- m$min_base_for_lift
+  sig_highlight_threshold <- m$sig_highlight_threshold %||% 0.1
   is_dichotomous_dv   <- m$is_dichotomous_dv
   sgs                 <- m$sgs
   metric_info         <- m$metric_info
@@ -1297,6 +1401,7 @@
     # of the static MI chi-squared p_val.
     boot_applied      = any(grepl("_p_value$", all_cols)),
     min_base_for_lift = as.integer(min_base_for_lift),
+    sig_highlight_threshold = sig_highlight_threshold,
     qc_mode           = isTRUE(qc_mode),
     rows_unweighted   = .flatten(tbl),
     rows_weighted     = if (has_weights) .flatten(tbl_w) else NULL
@@ -1588,8 +1693,15 @@
     '  </div>',
     '  <div class="impact-footer">',
     '    <p class="index-note"></p>',
+    # Conditionally visible: only while the Best-vs-Worst metric is
+    # active (toggled in the dashboard update JS, step 8). Flags the
+    # Total Impact figure as a theoretical ceiling under that metric.
+    '    <p class="muted ti-max-note" style="display:none;">Under Best-vs-Worst, ',
+    'Total Impact averages each attribute&#8217;s maximum possible effect. Those ',
+    'maxima are not simultaneously achievable, so read it as a theoretical ',
+    'upper bound &#8212; not an expected outcome.</p>',
     '    <p class="muted">Bold italicized red index means a negative relationship. ',
-    'Black cells mean an insignificant relationship (p &gt; 0.10). ',
+    'Black cells mean an insignificant relationship (p &gt; ', sig_highlight_threshold, '). ',
     'Lift impacts are not calculated when the base is below ', min_base_for_lift, '.</p>',
     '  </div>',
     if (is.null(shared_data_id)) {
@@ -3006,6 +3118,12 @@
     '  var data;',
     '  try { data = JSON.parse(dataScript.textContent); } catch (e) { return; }',
     '',
+    '  // The enclosing tab-panel carries data-result / data-view. Needed both',
+    '  // to address this result\'s map iframes and to find the sibling layout',
+    '  // tabs holding the other copies of this dashboard.',
+    '  var impPanel = root.matches(".tab-panel[data-result]")',
+    '    ? root : root.closest(".tab-panel[data-result]");',
+    '',
     '  function currentValue(dim) {',
     '    var sel = root.querySelector(\'.impact-ctrl[data-dim="\' + dim + \'"]\');',
     '    return sel ? sel.value : null;',
@@ -3047,7 +3165,8 @@
     '    } else {',
     '      pv = sgData.p_val;',
     '    }',
-    '    return (pv != null && pv > 0.10);',
+    '    var sigThr = (data.sig_highlight_threshold != null) ? data.sig_highlight_threshold : 0.10;',
+    '    return (pv != null && pv > sigThr);',
     '  }',
     '',
     '  function getRaw(row, sg, focus) {',
@@ -3148,13 +3267,16 @@
     '        });',
     '      }',
     '',
-    '      // 4. Total Impact = sum(|raw|) / count (only for lift-type metrics)',
+    '      // 4. Total Impact = sum(|raw|) / count. Shown for lift metrics',
+    '      // AND maxVmin (the latter with a theoretical-ceiling footnote —',
+    '      // see the .ti-max-note toggle in step 8); blank only for mi,',
+    '      // where a mean of information scores is not an outcome change.',
     '      // Outcome-aware format: Point Change ("absdisplay") -> decimal',
     '      // (e.g. "0.10"), % Change ("propdisplay") -> percent ("3.5%").',
     '      // Mirrors the Excel dashboard total_impact behavior.',
     '      var tiCell = root.querySelector(\'td.ti-cell[data-sg="\' + sg + \'"]\');',
     '      if (tiCell) {',
-    '        if (mkey && (mkey === "maxVmin" || mkey === "mi")) {',
+    '        if (mkey && mkey === "mi") {',
     '          tiCell.textContent = "";',
     '        } else if (sum === 0 || rows.length === 0) {',
     '          tiCell.textContent = "";',
@@ -3264,6 +3386,42 @@
     '    if (note) {',
     '      var desc = metricDescription(mkey, shiftVal);',
     '      note.textContent = desc;',
+    '    }',
+    '',
+    '    // Theoretical-ceiling footnote for Total Impact — visible only',
+    '    // while the Best-vs-Worst metric is active.',
+    '    var tiNote = root.querySelector(".ti-max-note");',
+    '    if (tiNote) {',
+    '      tiNote.style.display = (mkey === "maxVmin") ? "" : "none";',
+    '    }',
+    '',
+    '    // 9. Size the network map dots to the index this table is now showing.',
+    '    //    Two deliberate departures from the table:',
+    '    //      - First subgroup only. The table shows every subgroup as its',
+    '    //        own column, but a node can only carry one size.',
+    '    //      - Unfiltered denominator. Index By narrows the table, while the',
+    '    //        map still draws every node, so a battery-scoped mean would',
+    '    //        inflate every dot on the map.',
+    '    if (impPanel && data.subgroups && data.subgroups.length > 0) {',
+    '      var sizeSg = data.subgroups[0];',
+    '      var sizeAbs = allRows.map(function(r) {',
+    '        var v = getRaw(r, sizeSg, focus);',
+    '        return v == null ? 0 : Math.abs(v);',
+    '      });',
+    '      var sizeSum = sizeAbs.reduce(function(a, b) { return a + b; }, 0);',
+    '      var sizeMean = sizeAbs.length > 0 ? (sizeSum / sizeAbs.length) : 0;',
+    '      var sizes = {};',
+    '      if (sizeMean > 0) {',
+    '        allRows.forEach(function(r) {',
+    '          var v = getRaw(r, sizeSg, focus);',
+    '          if (v == null) return;',
+    '          sizes[r.id] = Math.abs(v) / sizeMean * 100;',
+    '        });',
+    '      }',
+    '      ndrPushNodeSizes(',
+    '        impPanel.getAttribute("data-result"),',
+    '        (impPanel.getAttribute("data-view") === "impact_comm") ? "community" : "attribute",',
+    '        sizes);',
     '    }',
     '  }',
     '',
@@ -3441,6 +3599,9 @@
     '        syncAssessFromControls();',
     '      }',
     '      update();',
+    '      // Selection is per result, not per layout tab — carry it to the',
+    '      // other layouts so all four maps agree on dot size.',
+    '      ndrMirrorImpactControls(impPanel);',
     '    });',
     '  });',
     '',
@@ -3534,6 +3695,14 @@
     '      document.addEventListener("mouseup", onUp);',
     '    });',
     '  });',
+    '',
+    '  // Publish this copy so the other layout tabs can mirror onto it.',
+    '  // refresh() deliberately does not mirror back — only change handlers do.',
+    '  if (impPanel && impPanel.id) {',
+    '    window.__ndrImpactDash[impPanel.id] = {',
+    '      refresh: function() { applyAssessVisualState(); update(); }',
+    '    };',
+    '  }',
     '',
     '  update();',
     '',
@@ -4450,6 +4619,74 @@
     '  });',
     '}',
     '',
+    '/* --- Impact-driven node sizing ---------------------------------- */',
+    '/* The impact dashboard is plain DOM in this document; the network map',
+    '   sits in a sibling tab-panel inside a sandboxed iframe with no',
+    '   allow-same-origin, so sizes can only travel by postMessage.',
+    '',
+    '   Sizes are cached per result+view because map iframes hydrate lazily.',
+    '   A map whose accordion is still closed missed every push, so it has to',
+    '   be handed the current sizes when it announces iframeReady. */',
+    'window.__ndrNodeSizes = window.__ndrNodeSizes || {};',
+    'window.__ndrImpactDash = window.__ndrImpactDash || {};',
+    '',
+    'function ndrSizeKey(resultName, view) {',
+    '  return (resultName || "_default") + "|" + view;',
+    '}',
+    '',
+    'function ndrSendNodeSizes(win, resultName, view) {',
+    '  var sizes = window.__ndrNodeSizes[ndrSizeKey(resultName, view)];',
+    '  if (!sizes || !win) return;',
+    '  try { win.postMessage({ type: "nodeSizeUpdate", sizes: sizes }, "*"); } catch(e) {}',
+    '}',
+    '',
+    '/* Fan out to every layout tab of this result, not just the visible one,',
+    '   or the gravity and charge maps end up sized differently. */',
+    'function ndrPushNodeSizes(resultName, view, sizes) {',
+    '  window.__ndrNodeSizes[ndrSizeKey(resultName, view)] = sizes;',
+    '  var cls = (view === "community") ? "comm-panel" : "attr-panel";',
+    '  var want = resultName || "_default";',
+    '  document.querySelectorAll(".tab-panel[data-result]").forEach(function(tp) {',
+    '    if (!tp.classList.contains(cls)) return;',
+    '    if ((tp.getAttribute("data-result") || "_default") !== want) return;',
+    '    var f = tp.querySelector("iframe");',
+    '    if (!f || !f.contentWindow) return;',
+    '    try { f.contentWindow.postMessage({ type: "nodeSizeUpdate", sizes: sizes }, "*"); } catch(e) {}',
+    '  });',
+    '}',
+    '',
+    '/* Copy one dashboard\'s control state onto the other layout tabs\' copies',
+    '   of the same dashboard and re-render them, so the selection is per',
+    '   result rather than per layout. Only ever called from the change',
+    '   handlers, never from update(), so mirroring cannot recurse. */',
+    'function ndrMirrorImpactControls(srcPanel) {',
+    '  if (!srcPanel) return;',
+    '  var want = srcPanel.getAttribute("data-result") || "_default";',
+    '  var view = srcPanel.getAttribute("data-view") || "";',
+    '  if (!view) return;',
+    '  var vals = {};',
+    '  // Assess falls back to a .priort-ctrl in some panels — mirror both so',
+    '  // the preset travels alongside metric/shift.',
+    '  srcPanel.querySelectorAll(".impact-ctrl, .priort-ctrl[data-dim=assess]").forEach(function(sel) {',
+    '    vals[sel.getAttribute("data-dim")] = sel.value;',
+    '  });',
+    '  document.querySelectorAll(".tab-panel[data-result]").forEach(function(tp) {',
+    '    if (tp === srcPanel) return;',
+    '    if ((tp.getAttribute("data-result") || "_default") !== want) return;',
+    '    if ((tp.getAttribute("data-view") || "") !== view) return;',
+    '    var entry = window.__ndrImpactDash[tp.id];',
+    '    if (!entry) return;',
+    '    var changed = false;',
+    '    tp.querySelectorAll(".impact-ctrl, .priort-ctrl[data-dim=assess]").forEach(function(sel) {',
+    '      var d = sel.getAttribute("data-dim");',
+    '      if (vals[d] === undefined || sel.value === vals[d]) return;',
+    '      sel.value = vals[d];',
+    '      changed = true;',
+    '    });',
+    '    if (changed) entry.refresh();',
+    '  });',
+    '}',
+    '',
     'window.addEventListener("message", function(evt) {',
     '  if (!evt.data) return;',
     '  if (evt.data.type === "snapshotPush" && evt.data.nsKey) {',
@@ -4474,6 +4711,14 @@
     '      try {',
     '        evt.source.postMessage({ type: "syncEdits", legend: rEdits, nodeLabels: nodeLabelEdits }, "*");',
     '      } catch(e) {}',
+    '    }',
+    '',
+    '    // Replay impact-driven dot sizes last: this iframe may have mounted',
+    '    // long after the dashboard last recomputed, and the snapshot load',
+    '    // above restores baseline sizes that would otherwise win.',
+    '    var nsView = nsKey.split("|")[2] || "";',
+    '    if (nsView === "attribute" || nsView === "community") {',
+    '      ndrSendNodeSizes(evt.source, rName, nsView);',
     '    }',
     '  }',
     '});',
@@ -4637,6 +4882,9 @@
     '    var rName = panel.getAttribute("data-result") || "_default";',
     '    var merged = mergeEditsIntoSnapshot(data, rName);',
     '    iframe.contentWindow.postMessage({ type: "applyReportLoad", snapshot: merged }, "*");',
+    '    // The snapshot carries baseline sizes, so re-assert whatever the',
+    '    // impact dashboard is currently showing.',
+    '    ndrSendNodeSizes(iframe.contentWindow, rName, panel.getAttribute("data-view") || "");',
     '  } catch(ex) {}',
     '}',
     '',

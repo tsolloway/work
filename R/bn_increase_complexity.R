@@ -15,7 +15,8 @@
 #' @param algorithm Structure learning algorithm: `"tabu"`, `"hc"`, `"tree.bayes"`.
 #' @param score Scoring function for structure learning: `"bic"` or `"aic"`.
 #' @param threshold Minimum strength to retain arcs or `"auto"`.
-#' @param auto_threshold_ratio Proportion of arcs to retain if threshold = "auto".
+#' @param auto_threshold_ratio Proportion of new candidate arcs to retain per layer
+#'   if threshold = "auto" (rank-based; ties at the cutoff are not all kept).
 #' @param strength_min Minimum bootstrap strength below which arcs are removed.
 #' @param align_direction Logical; if TRUE, arcs are oriented to match majority direction.
 #' @param return_strength Logical; if TRUE, include `strength` column in each layer output.

@@ -35,7 +35,8 @@ bn_impact_write(
   add_guide = TRUE,
   add_images = TRUE,
   add_impacts_by_battery = TRUE,
-  color_gradient_resondex = TRUE
+  color_gradient_resondex = TRUE,
+  sig_highlight_threshold = 0.1
 )
 }
 \arguments{
@@ -169,6 +170,10 @@ dashboard's warning text reads from \code{--ndr-danger} / \code{--ndr-muted}.
 When FALSE, falls back to the legacy red / yellow / green Material
 scale and \verb{#FF0000} / \verb{#888888} warning text. Forwarded to
 \code{append_bn_impact()} and \code{append_bn_impact_dynamic()}.}
+
+\item{sig_highlight_threshold}{Numeric. P-value above which impact cells
+are highlighted as insignificant (black-cell blackout in the Excel
+dashboards and HTML report, and the footnote text). Default 0.1.}
 }
 \value{
 Workbook object (invisibly).

@@ -15,7 +15,8 @@ append_bn_impact(
   variable_width = 20,
   label_width = "auto",
   index_by = "lift_first",
-  color_gradient_resondex = TRUE
+  color_gradient_resondex = TRUE,
+  sig_highlight_threshold = 0.1
 )
 }
 \arguments{
@@ -48,6 +49,10 @@ gradient matches the in-app reactable and bn_report HTML cells. When
 FALSE, falls back to the original red / yellow / green Material-style
 scale (\code{#f66a6e, #feea8a, #66bd7d}). Pass FALSE for legacy
 workbooks where stakeholders expect the old colour treatment.}
+
+\item{sig_highlight_threshold}{Numeric. P-value above which impact cells
+are highlighted as insignificant (black-cell blackout in the Excel
+dashboards and HTML report, and the footnote text). Default 0.1.}
 }
 \value{
 Modified workbook object.

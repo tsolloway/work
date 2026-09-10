@@ -37,9 +37,11 @@ imap_progress <- function(
     options(progressr.handlers = old_handlers)
   }, add = TRUE)
 
-  # Activate handlers
+  # Activate handlers. global = TRUE errors when any calling handler is
+  # active (e.g. called inside tryCatch/suppressMessages); progress still
+  # reports via with_progress() below, so degrade silently.
   options(progressr.handlers = .handlers)
-  progressr::handlers(global = TRUE)
+  tryCatch(progressr::handlers(global = TRUE), error = function(e) NULL)
 
   # Graceful fallback if no plan is set
   if (.parallel && inherits(future::plan(), "sequential")) {

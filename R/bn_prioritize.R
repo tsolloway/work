@@ -32,6 +32,13 @@
 #' @param min_base_for_boot Integer. Minimum sample size required to run
 #'   bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
 #'   skipped. Default 75.
+#' @param id Character or \code{NULL}. Column in \code{df} identifying the
+#'   respondent. When supplied, \code{n_obs} - the base gated against
+#'   \code{min_base_for_boot}, attached to the result and displayed next to the
+#'   Focus dropdown - counts DISTINCT RESPONDENTS rather than stacked records,
+#'   matching the bases \code{bn_impacts()} reports. Errors if the column is
+#'   absent. Default \code{NULL} (stacked-record counts, the pre-2026-09-09
+#'   behaviour).
 #' @param dv_metric Character. \code{"mean"} (default) computes the expected DV
 #'   value; \code{"top_box"} uses the probability of the highest DV level.
 #' @param impact_shift_type Character. How \code{lift} is interpreted when
@@ -87,6 +94,7 @@ bn_prioritize <- function(
     search = c("greedy", "exhaustive"),
     lift = 0.10,
     min_base_for_boot = 75,
+    id = NULL,
     dv_metric = c("mean", "top_box"),
     impact_shift_type = c("headroom", "proportional", "absolute", "range"),
     impact_result = NULL,
@@ -106,6 +114,17 @@ bn_prioritize <- function(
   search <- match.arg(search)
   dv_metric <- match.arg(dv_metric)
   impact_shift_type <- match.arg(impact_shift_type)
+
+  if (!is.null(id)) {
+    if (!is.character(id) || length(id) != 1L) {
+      stop("'id' must be NULL or a single column name.")
+    }
+    if (!id %in% names(df)) {
+      stop("'id' column '", id, "' not found in df. Base counts DISTINCT ",
+           "RESPONDENTS when 'id' is supplied; pass id = NULL for ",
+           "stacked-record counts.")
+    }
+  }
 
   # Preserve named dv for display, strip for bnlearn
   dv <- unname(dv)
@@ -416,7 +435,13 @@ bn_prioritize <- function(
   # Replays the combos from the result on bootstrapped data. Compares each
   # step's marginal gain to the noise floor (average gain of the tail steps).
   # ---------------------------------------------------------------------------
-  n_obs <- nrow(df)
+  # Base for the min_base_for_boot gate, and the base reported alongside this
+  # slice downstream. With `id` supplied this is DISTINCT RESPONDENTS: in a
+  # stacked design one respondent contributes a row per brand rated, so a
+  # record count overstates the base a client reads and lets slices through
+  # the gate on rows rather than people. The bootstrap itself still resamples
+  # rows - only the gate and the reported base change.
+  n_obs <- if (is.null(id)) nrow(df) else dplyr::n_distinct(df[[id]])
   if (!is.null(n_boot_final) && n_boot_final > 1 && n_obs >= min_base_for_boot) {
     if (verbose) cli::cli_alert_info("Bootstrapping {n_boot_final} replicates for p-values (n = {n_obs})")
 

@@ -15,6 +15,7 @@ bn_prioritize(
   search = c("greedy", "exhaustive"),
   lift = 0.1,
   min_base_for_boot = 75,
+  id = NULL,
   dv_metric = c("mean", "top_box"),
   impact_shift_type = c("headroom", "proportional", "absolute", "range"),
   impact_result = NULL,
@@ -67,6 +68,14 @@ Interpretation depends on \code{impact_shift_type}. Default 0.10.}
 \item{min_base_for_boot}{Integer. Minimum sample size required to run
 bootstrap p-values. When \code{n_obs < min_base_for_boot}, p-values are
 skipped. Default 75.}
+
+\item{id}{Character or \code{NULL}. Column in \code{df} identifying the
+respondent. When supplied, \code{n_obs} - the base gated against
+\code{min_base_for_boot}, attached to the result and displayed next to the
+Focus dropdown - counts DISTINCT RESPONDENTS rather than stacked records,
+matching the bases \code{bn_impacts()} reports. Errors if the column is
+absent. Default \code{NULL} (stacked-record counts, the pre-2026-09-09
+behaviour).}
 
 \item{dv_metric}{Character. \code{"mean"} (default) computes the expected DV
 value; \code{"top_box"} uses the probability of the highest DV level.}

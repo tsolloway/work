@@ -29,7 +29,20 @@
 #'   is added to each result tibble after \code{variable}.
 #' @param lift Numeric. Distribution shift for lift strategy. Default 0.10.
 #' @param min_base_for_boot Integer. Minimum sample size to run bootstrap
-#'   p-values and to include a brand-subgroup slice as a task. Default 75.
+#'   p-values and to include a brand-subgroup slice as a task. Counted as
+#'   distinct respondents when \code{id} is set, otherwise as stacked records.
+#'   Default 75.
+#' @param id Character or \code{NULL}. Column in \code{df} identifying the
+#'   respondent. When supplied, the bases gated against
+#'   \code{min_base_for_boot} - and reported next to the Focus dropdown -
+#'   count DISTINCT RESPONDENTS rather than stacked records, matching the
+#'   bases \code{bn_impacts()} reports. Errors if the column is absent.
+#'   Default \code{NULL} (stacked-record counts).
+#' @param override_min_base_for_boot Character vector or NULL. Subgroup names
+#'   exempted from \code{min_base_for_boot}: their brand slices are run
+#'   however thin, and their bootstrap p-values are computed rather than
+#'   skipped. Slices with no rows at all are still skipped - there is nothing
+#'   to prioritize. Default NULL (no exemptions).
 #' @param dv_metric Character. \code{"mean"} (default) or \code{"top_box"}.
 #' @param impact_shift_type Character. How \code{lift} is interpreted when
 #'   shifting IV distributions: \code{"headroom"} (default, fraction of
@@ -96,6 +109,8 @@ bn_prioritizations <- function(
     community_assignment = NULL,
     lift = 0.10,
     min_base_for_boot = 75,
+    id = NULL,
+    override_min_base_for_boot = NULL,
     dv_metric = c("mean", "top_box"),
     impact_shift_type = c("headroom", "proportional", "absolute", "range"),
     impact_result = NULL,
@@ -116,6 +131,32 @@ bn_prioritizations <- function(
 
   dv_metric <- match.arg(dv_metric)
   impact_shift_type <- match.arg(impact_shift_type)
+
+  if (!is.null(id)) {
+    if (!is.character(id) || length(id) != 1L) {
+      stop("'id' must be NULL or a single column name.")
+    }
+    if (!id %in% names(df)) {
+      stop("'id' column '", id, "' not found in df. Bases count DISTINCT ",
+           "RESPONDENTS when 'id' is supplied; pass id = NULL for ",
+           "stacked-record counts.")
+    }
+  }
+
+  # Base of a slice: distinct respondents when `id` is set, else stacked
+  # records. Mirrors bn_prioritize()'s own n_obs so the gate here and the
+  # bootstrap gate there agree on what a base is.
+  .slice_base <- function(d) {
+    if (is.null(id)) nrow(d) else dplyr::n_distinct(d[[id]])
+  }
+
+  # An exempted subgroup gets the threshold dropped to 0 rather than a flag
+  # threaded downstream - both gates are plain `< min_base_for_boot` tests, so
+  # 0 disables them while the empty-slice guard below still holds.
+  .min_base_for <- function(sg_name) {
+    if (!is.null(override_min_base_for_boot) &&
+        sg_name %in% override_min_base_for_boot) 0 else min_base_for_boot
+  }
 
   # ---------------------------------------------------------------------------
   # Resolve subgroups
@@ -158,10 +199,15 @@ bn_prioritizations <- function(
       sg_df <- as.data.frame(df)
     }
 
+    # Threshold in force for every task built from this subgroup - 0 when the
+    # subgroup is exempted via override_min_base_for_boot.
+    sg_min_base <- .min_base_for(sg_name)
+
     # Greedy max
     tasks[[paste0("max__", sg_name)]] <- list(
       type = "max", sg_name = sg_name, brand_name = NULL,
       sg_obj = sg_obj, sg_df = sg_df, strategy = "max", wt = NULL,
+      min_base = sg_min_base,
       subtract_baseline = TRUE
     )
 
@@ -172,6 +218,7 @@ bn_prioritizations <- function(
       tasks[[paste0("max_deprecated__", sg_name)]] <- list(
         type = "max_deprecated", sg_name = sg_name, brand_name = NULL,
         sg_obj = sg_obj, sg_df = sg_df, strategy = "max", wt = NULL,
+      min_base = sg_min_base,
         subtract_baseline = FALSE
       )
     }
@@ -179,14 +226,16 @@ bn_prioritizations <- function(
     # Greedy lift (unweighted)
     tasks[[paste0("lift__", sg_name)]] <- list(
       type = "lift", sg_name = sg_name, brand_name = NULL,
-      sg_obj = sg_obj, sg_df = sg_df, strategy = "lift", wt = NULL
+      sg_obj = sg_obj, sg_df = sg_df, strategy = "lift", wt = NULL,
+      min_base = sg_min_base
     )
 
     # Greedy lift (weighted)
     if (!is.null(weight)) {
       tasks[[paste0("lift_weighted__", sg_name)]] <- list(
         type = "lift_weighted", sg_name = sg_name, brand_name = NULL,
-        sg_obj = sg_obj, sg_df = sg_df, strategy = "lift", wt = weight
+        sg_obj = sg_obj, sg_df = sg_df, strategy = "lift", wt = weight,
+        min_base = sg_min_base
       )
     }
 
@@ -194,21 +243,25 @@ bn_prioritizations <- function(
     if (!is.null(brands_to_run)) {
       for (b in brands_to_run) {
         brand_df <- sg_df[sg_df[[brand]] == b, , drop = FALSE]
+        brand_base <- .slice_base(brand_df)
 
-        if (nrow(brand_df) < min_base_for_boot) {
+        # A slice with no rows is skipped whatever the threshold - an exempted
+        # subgroup drops sg_min_base to 0, which would otherwise admit an empty
+        # slice that bn_prioritize() has nothing to run on.
+        if (nrow(brand_df) == 0L || brand_base < sg_min_base) {
           # Record the slice so downstream writers can surface the base/warning
           # even when no task actually ran for this focus.
           skipped_slices[[length(skipped_slices) + 1L]] <- list(
             sg_name    = sg_name,
             brand_name = b,
-            n_obs      = nrow(brand_df),
+            n_obs      = brand_base,
             weighted   = FALSE
           )
           if (!is.null(weight)) {
             skipped_slices[[length(skipped_slices) + 1L]] <- list(
               sg_name    = sg_name,
               brand_name = b,
-              n_obs      = nrow(brand_df),
+              n_obs      = brand_base,
               weighted   = TRUE
             )
           }
@@ -217,14 +270,16 @@ bn_prioritizations <- function(
 
         tasks[[paste0("brand__", b, "__", sg_name)]] <- list(
           type = "brand", sg_name = sg_name, brand_name = b,
-          sg_obj = sg_obj, sg_df = brand_df, strategy = "lift", wt = NULL
+          sg_obj = sg_obj, sg_df = brand_df, strategy = "lift", wt = NULL,
+          min_base = sg_min_base
         )
 
         # Per-brand lift (weighted)
         if (!is.null(weight)) {
           tasks[[paste0("brand_weighted__", b, "__", sg_name)]] <- list(
             type = "brand_weighted", sg_name = sg_name, brand_name = b,
-            sg_obj = sg_obj, sg_df = brand_df, strategy = "lift", wt = weight
+            sg_obj = sg_obj, sg_df = brand_df, strategy = "lift", wt = weight,
+            min_base = sg_min_base
           )
         }
       }
@@ -248,7 +303,8 @@ bn_prioritizations <- function(
         impact_shift_type = impact_shift_type,
         threshold = threshold, max_rounds = max_rounds,
         n_boot_final = n_boot_final, noise_tail = noise_tail,
-        min_base_for_boot = min_base_for_boot,
+        min_base_for_boot = task$min_base %||% min_base_for_boot,
+        id = id,
         weight = task$wt, dictionary = dictionary,
         subtract_baseline = task$subtract_baseline %||% TRUE,
         scale_ranges = scale_ranges,
@@ -376,6 +432,11 @@ bn_prioritizations <- function(
     impact_shift_type = impact_shift_type,
     base_sizes = base_sizes,
     min_base_for_boot = min_base_for_boot,
+    # Subgroups the threshold above was waived for, plus the id column that
+    # decides whether the bases in base_sizes / skipped_slices are respondents
+    # or stacked records - both needed for writers to caveat these bases.
+    override_min_base_for_boot = override_min_base_for_boot,
+    id = id,
     n_boot_final = n_boot_final,
     noise_tail = noise_tail,
     threshold = threshold,

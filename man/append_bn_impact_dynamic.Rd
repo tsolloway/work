@@ -26,7 +26,9 @@ append_bn_impact_dynamic(
   write_helper_sheets = TRUE,
   outcome_display = c("absolute", "proportional"),
   shift_type = c("absolute", "proportional", "headroom", "range"),
-  color_gradient_resondex = TRUE
+  color_gradient_resondex = TRUE,
+  sort_rows = TRUE,
+  sig_highlight_threshold = 0.1
 )
 }
 \arguments{
@@ -61,6 +63,10 @@ dashboard's focus / weight warning text reads from \code{--ndr-danger}
 / \code{--ndr-muted}. When FALSE, falls back to the legacy red /
 yellow / green Material scale and \verb{#FF0000} / \verb{#888888} warning
 text.}
+
+\item{sig_highlight_threshold}{Numeric. P-value above which impact cells
+are highlighted as insignificant (black-cell blackout in the Excel
+dashboards and HTML report, and the footnote text). Default 0.1.}
 }
 \value{
 The modified workbook object (invisibly).

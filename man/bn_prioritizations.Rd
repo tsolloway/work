@@ -15,6 +15,8 @@ bn_prioritizations(
   community_assignment = NULL,
   lift = 0.1,
   min_base_for_boot = 75,
+  id = NULL,
+  override_min_base_for_boot = NULL,
   dv_metric = c("mean", "top_box"),
   impact_shift_type = c("headroom", "proportional", "absolute", "range"),
   impact_result = NULL,
@@ -65,7 +67,22 @@ is added to each result tibble after \code{variable}.}
 \item{lift}{Numeric. Distribution shift for lift strategy. Default 0.10.}
 
 \item{min_base_for_boot}{Integer. Minimum sample size to run bootstrap
-p-values and to include a brand-subgroup slice as a task. Default 75.}
+p-values and to include a brand-subgroup slice as a task. Counted as
+distinct respondents when \code{id} is set, otherwise as stacked records.
+Default 75.}
+
+\item{id}{Character or \code{NULL}. Column in \code{df} identifying the
+respondent. When supplied, the bases gated against
+\code{min_base_for_boot} - and reported next to the Focus dropdown -
+count DISTINCT RESPONDENTS rather than stacked records, matching the
+bases \code{bn_impacts()} reports. Errors if the column is absent.
+Default \code{NULL} (stacked-record counts).}
+
+\item{override_min_base_for_boot}{Character vector or NULL. Subgroup names
+exempted from \code{min_base_for_boot}: their brand slices are run
+however thin, and their bootstrap p-values are computed rather than
+skipped. Slices with no rows at all are still skipped - there is nothing
+to prioritize. Default NULL (no exemptions).}
 
 \item{dv_metric}{Character. \code{"mean"} (default) or \code{"top_box"}.}
 

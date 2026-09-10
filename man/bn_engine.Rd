@@ -112,10 +112,13 @@ prior to direction alignment and layering.}
 \value{
 A list with elements:
 \itemize{
-\item \code{bn}: the learned \code{bnlearn} network.
+\item \code{bn}: the learned \code{bnlearn} network. When \code{connections_max > 1}, this
+(and \code{fit}, \code{viz_prep}, \code{summary}) is the final, most-complex layer.
 \item \code{fit}: the fitted parameters (\code{bn.fit}).
 \item \code{viz_prep}: visualization-prep object from \code{bn_to_netviz_prep()}.
-\item \code{summary}: model summary list from \code{bn_summary_statistics()}.
+\item \code{summary}: model summary list from \code{bn_summary_statistics()}. When
+\code{connections_max > 1}, also carries \verb{$layers}, the combined per-layer
+model-summary table.
 \item \code{results_layers} (optional): list with two components when layering was used:
 \itemize{
 \item \code{layers}: list of per-layer results (bn, fit, viz_prep, summary).

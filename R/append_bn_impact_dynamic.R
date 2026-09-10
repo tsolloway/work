@@ -25,6 +25,9 @@
 #'   yellow / green Material scale and `#FF0000` / `#888888` warning
 #'   text.
 #'
+#' @param sig_highlight_threshold Numeric. P-value above which impact cells
+#'   are highlighted as insignificant (black-cell blackout in the Excel
+#'   dashboards and HTML report, and the footnote text). Default 0.1.
 #' @return The modified workbook object (invisibly).
 #'
 #' @keywords internal
@@ -80,7 +83,9 @@ append_bn_impact_dynamic <- function(
     # already sorted. Only the row-write order changes — the Results
     # sheet and all ID-keyed formulas are order-independent. FALSE keeps
     # the impact table's incoming row order.
-    sort_rows = TRUE
+    sort_rows = TRUE,
+    sig_highlight_threshold = 0.1
+
 ) {
 
   outcome_display <- match.arg(outcome_display)
@@ -368,26 +373,14 @@ append_bn_impact_dynamic <- function(
   # ID-keyed formula are position-independent, which is the same property
   # that makes manual in-Excel sorting safe.
   if (isTRUE(sort_rows) && nrow(table) > 1L) {
-    sort_base  <- if (has_assess) preset_metric_keys[1] else metric_keys[1]
-    sort_shift <- if (has_assess) preset_shift_keys[1] else {
-      switch(shift_type,
-        "absolute"     = "absshift",
-        "proportional" = "propshift",
-        "headroom"     = "headshift",
-        "range"        = "rangeshift"
-      )
-    }
-    sort_disp <- if (outcome_display == "absolute") "absdisplay" else "propdisplay"
-    sg_prefix <- if (!is.null(sg1)) paste0(sg1, "_") else ""
-    # Candidates in decreasing tag specificity: lift metrics carry
-    # _<shift>_<display>, maxVmin carries _<display> only, mi carries
-    # neither. First existing column wins.
-    sort_candidates <- c(
-      paste0(sg_prefix, sort_base, "_", sort_shift, "_", sort_disp),
-      paste0(sg_prefix, sort_base, "_", sort_disp),
-      paste0(sg_prefix, sort_base)
+    # Shared with append_bn_network_maps() so the PNG dot sizes and this
+    # opening ranking always resolve to the same raw metric column.
+    sort_col <- bn_default_index_column(
+      col_names       = names(table),
+      subgroup        = sg1,
+      outcome_display = outcome_display,
+      shift_type      = shift_type
     )
-    sort_col <- intersect(sort_candidates, names(table))[1]
     if (!is.na(sort_col)) {
       table <- table[order(-abs(table[[sort_col]]), na.last = TRUE), , drop = FALSE]
     }
@@ -1620,7 +1613,7 @@ append_bn_impact_dynamic <- function(
     startRow = footer_start, startCol = col_data_start)
   openxlsx::writeData(wb, dash_sheet, "Bold italicized red index means a negative relationship",
     startRow = footer_start + 1, startCol = col_data_start)
-  openxlsx::writeData(wb, dash_sheet, "Black cells mean an insignificant relationship",
+  openxlsx::writeData(wb, dash_sheet, paste0("Black cells mean an insignificant relationship (p > ", sig_highlight_threshold, ")"),
     startRow = footer_start + 2, startCol = col_data_start)
 
   if (!is.null(min_base_for_lift)) {
@@ -1653,7 +1646,7 @@ append_bn_impact_dynamic <- function(
 
     # Blackout for insignificant p-value
     pval_col_let <- num2let(pval_col)
-    p_formula <- paste0(pval_col_let, data_rows[1], ">0.1")
+    p_formula <- paste0(pval_col_let, data_rows[1], ">", sig_highlight_threshold)
     openxlsx::conditionalFormatting(wb, dash_sheet, cols = i, rows = data_rows,
       style = styles$insig, type = "expression", rule = p_formula)
 

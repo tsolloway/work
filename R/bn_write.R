@@ -89,6 +89,19 @@
 #'   are written as-is, and any table exceeding 16,384 columns aborts with
 #'   an error rather than producing a corrupt workbook.
 #'
+#' @param only_market_focus Logical. When \code{TRUE}, only the Market focus
+#'   is written - every per-brand focus column (its lift block and its base
+#'   column) is dropped and the dashboards' Focus dropdown collapses to
+#'   "Market". Brand focuses are the bulk of an impact table's width
+#'   (~33 columns per brand per subgroup against ~55 for Market and the
+#'   shared metrics), so this is the lever for fitting a many-subgroup run
+#'   under Excel's 16,384-column-per-sheet limit. Filters the already
+#'   computed tables - no re-estimation - so the underlying object is
+#'   unchanged and can still be written in full elsewhere. Default
+#'   \code{FALSE}.
+#' @param sig_highlight_threshold Numeric. P-value above which impact cells
+#'   are highlighted as insignificant (black-cell blackout in the Excel
+#'   dashboards and HTML report, and the footnote text). Default 0.1.
 #' @return A list (invisibly) with:
 #'   * `path` — full path of the written `.xlsx` file.
 #'   * `obj` — the `bn_finalize_network()` object that was passed in (pass-through
@@ -167,18 +180,24 @@ bn_write <- function(
     # Forwarded to bn_impact_write.
     color_gradient_resondex = TRUE,
     path = ".",
-    trim_wb = TRUE
+    trim_wb = TRUE,
+    only_market_focus = FALSE,
+    sig_highlight_threshold = 0.1
+
 ) {
 
   wb_type <- match.arg(wb_type)
   shift_type <- match.arg(shift_type)
 
   impacts <- obj[["impacts"]]
-  if (isTRUE(trim_wb)) {
-    impacts <- .bn_impact_drop_unused_boot_stats(impacts)
-  } else {
-    .bn_impact_assert_column_cap(impacts, fn_label = "bn_write")
-  }
+  if (isTRUE(trim_wb)) impacts <- .bn_impact_drop_unused_boot_stats(impacts)
+  if (isTRUE(only_market_focus)) impacts <- .bn_impact_keep_market_focus(impacts)
+  # Always assert against the table that will actually be written: trimming
+  # only halves the width, so a wide-subgroup run can still overflow and
+  # openxlsx would emit it silently (surfacing as openxlsx2's "Column
+  # exceeds valid range" at save time, or a workbook Excel won't open).
+  .bn_impact_assert_column_cap(impacts, fn_label = "bn_write",
+                               trimmed = isTRUE(trim_wb))
   prioritizations <- obj[["prioritizations"]]
 
   # impact_outcome_display is passed through to bn_impact_write, which owns
@@ -246,6 +265,7 @@ bn_write <- function(
 
   if (has_impacts) {
     wb <- bn_impact_write(
+      sig_highlight_threshold = sig_highlight_threshold,
       bn_impact_result   = impacts,
       bn_obj             = obj,
       df                 = df,
@@ -318,7 +338,11 @@ bn_write <- function(
       wb = wb, bn_full = obj, network_type = network_type,
       defer_images = TRUE,
       attribute_font_size = attribute_map_font_size,
-      community_font_size = community_map_font_size
+      community_font_size = community_map_font_size,
+      # Size the dots by whatever view the Drivers sheets open on, so the
+      # map and the table rank attributes the same way.
+      impact_outcome_display = impact_outcome_display,
+      shift_type = shift_type
     )
   }
 

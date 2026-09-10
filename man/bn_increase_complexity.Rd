@@ -44,7 +44,8 @@ bn_increase_complexity(
 
 \item{threshold}{Minimum strength to retain arcs or \code{"auto"}.}
 
-\item{auto_threshold_ratio}{Proportion of arcs to retain if threshold = "auto".}
+\item{auto_threshold_ratio}{Proportion of new candidate arcs to retain per layer
+if threshold = "auto" (rank-based; ties at the cutoff are not all kept).}
 
 \item{strength_min}{Minimum bootstrap strength below which arcs are removed.}
 

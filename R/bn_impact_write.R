@@ -106,6 +106,9 @@
 #'   scale and `#FF0000` / `#888888` warning text. Forwarded to
 #'   `append_bn_impact()` and `append_bn_impact_dynamic()`.
 #'
+#' @param sig_highlight_threshold Numeric. P-value above which impact cells
+#'   are highlighted as insignificant (black-cell blackout in the Excel
+#'   dashboards and HTML report, and the footnote text). Default 0.1.
 #' @return Workbook object (invisibly).
 #'
 #' @export
@@ -155,7 +158,9 @@ bn_impact_write <- function(
     # matches the in-app reactable and bn_report HTML. FALSE falls back
     # to the legacy red / yellow / green Material scale — pass FALSE for
     # legacy workbooks where stakeholders expect the old treatment.
-    color_gradient_resondex = TRUE
+    color_gradient_resondex = TRUE,
+    sig_highlight_threshold = 0.1
+
 ){
 
   wb_type <- match.arg(wb_type)
@@ -398,6 +403,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     main_table <- .reindex_main_table(main_table)
 
     wb <- append_bn_impact(
+      sig_highlight_threshold = sig_highlight_threshold,
       analysis_table = main_table,
       subgroups = subgroups,
       wb = wb,
@@ -433,6 +439,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
           paste0("Attribute Drivers — ", b_name, " (within-battery index)")
         }
         wb <- append_bn_impact(
+          sig_highlight_threshold = sig_highlight_threshold,
           analysis_table = b_tbl,
           subgroups = subgroups,
           wb = wb,
@@ -464,6 +471,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
           paste0("Attribute Drivers — ", g_name, " (within-group index)")
         }
         wb <- append_bn_impact(
+          sig_highlight_threshold = sig_highlight_threshold,
           analysis_table = g_tbl,
           subgroups = subgroups,
           wb = wb,
@@ -492,6 +500,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       }
 
       wb <- append_bn_impact(
+        sig_highlight_threshold = sig_highlight_threshold,
         analysis_table = comm_table,
         subgroups = subgroups,
         wb = wb,
@@ -606,6 +615,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
     # per-group tabs reference those columns and won't get a chance to
     # write them themselves — write_helper_sheets = FALSE there).
     wb <- append_bn_impact_dynamic(
+      sig_highlight_threshold = sig_highlight_threshold,
       wb = wb, table = table, subgroups = subgroups,
       dash_sheet = sheet_name, results_sheet = "Results", lookup_sheet = "_lookup",
       title = title, sub_title = sub_title, engine_footer = engine_footer,
@@ -638,6 +648,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
           paste0("Attribute Drivers — ", b_name, " (within-battery index)")
         }
         wb <- append_bn_impact_dynamic(
+          sig_highlight_threshold = sig_highlight_threshold,
           wb = wb, table = table, subgroups = subgroups,
           dash_sheet = b_sheet, results_sheet = "Results", lookup_sheet = "_lookup",
           title = b_title, sub_title = sub_title, engine_footer = engine_footer,
@@ -673,6 +684,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
           paste0("Attribute Drivers — ", g_name, " (within-group index)")
         }
         wb <- append_bn_impact_dynamic(
+          sig_highlight_threshold = sig_highlight_threshold,
           wb = wb, table = table, subgroups = subgroups,
           dash_sheet = g_sheet, results_sheet = "Results", lookup_sheet = "_lookup",
           title = g_title, sub_title = sub_title, engine_footer = engine_footer,
@@ -703,6 +715,7 @@ dv_display <- if (!is.null(names(dv))) names(dv) else dv
       comm_sheet <- "Community Drivers"
 
       wb <- append_bn_impact_dynamic(
+        sig_highlight_threshold = sig_highlight_threshold,
         wb = wb, table = comm_table, subgroups = subgroups,
         dash_sheet = comm_sheet, results_sheet = "Results_Community",
         lookup_sheet = "_lookup_community",
