@@ -127,10 +127,13 @@
 #'   E_(-5 percent). A scalar produces a single \code{lift} column; a vector
 #'   (e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
 #'   \code{lift_10}. Default \code{c(0, 0.1)}.
-#' @param min_base_for_lift Integer. Minimum sample size (frequency count)
-#'   required to compute a lift value. If the distribution has fewer than this
-#'   many observations, the lift cell returns \code{NA}. Applied per-brand when
-#'   \code{brand} is set. Default \code{75}.
+#' @param min_base_for_lift Integer. Minimum sample size required to compute a
+#'   lift value; scopes below it return \code{NA}. Applied per-brand when
+#'   \code{brand} is set. The count compared against it follows \code{id}: with
+#'   \code{id} set it is DISTINCT RESPONDENTS on the un-resampled scope - the
+#'   same number the cell reports as its \code{base} - and with \code{id = NULL}
+#'   it is the stacked-record frequency total (sum of weights when \code{weight}
+#'   is supplied), the pre-2026-09-09 behaviour. Default \code{75}.
 #' @param type Character. Estimation method:
 #'   \itemize{
 #'     \item \code{"gr"} (default): exact junction-tree inference via \code{gRain}.
@@ -206,8 +209,10 @@
 #'   wobbles around the true count and carries spurious CI columns. All
 #'   bases are counted on the un-resampled scope so the value is invariant
 #'   across bootstrap replicates. \code{NULL} restores stacked-record
-#'   counts (the pre-2026-08-10 behaviour). Does not affect
-#'   \code{min_base_for_lift}, which still gates on records.
+#'   counts (the pre-2026-08-10 behaviour). Since 2026-09-09 this also
+#'   governs \code{min_base_for_lift}, which gates on the same
+#'   distinct-respondent count it reports rather than on records - so a
+#'   thin scope is blanked on the number the client actually reads.
 #' @param weight Character or NULL. Column name in \code{df} containing
 #'   observation weights. When provided, frequency distributions used for
 #'   lift calculations are weighted. Default NULL.
@@ -941,14 +946,48 @@ bn_impact_engine <- function(
         tapply(w, x, sum) %>% { ifelse(is.na(.), 0, .) }
       }
 
+      # Helper: the scope count `min_base_for_lift` gates on when `id` is set -
+      # DISTINCT RESPONDENTS rather than stacked records. Mirrors the
+      # base_results convention below exactly (same `data`, same NA filter, same
+      # brand filter), so a cell is blanked on the very number the client reads
+      # in its `base` column instead of on a record count that overstates it in
+      # a stacked design (Danone TH: 1763 records vs 682 respondents).
+      #
+      # Counted on `data` - the un-resampled scope - not `dat_boot`: a distinct
+      # respondent count on a bootstrap resample recovers only ~63% of the true
+      # value, so gating on the resample would blank scopes that comfortably
+      # clear the threshold. Counting on `data` also makes the gate decision
+      # invariant across replicates, which removes the brand-scope "flickering
+      # around min_base_for_lift" that min_boot_coverage otherwise has to mop up.
+      #
+      # Weights are deliberately ignored here: a respondent count is a count.
+      # The id = NULL branches below keep passing sum(freq) / sum(w_s), so the
+      # legacy record path stays weighted exactly as before.
+      resp_base <- function(single_iv, brand_level = NULL) {
+        keep <- !is.na(data[[single_iv]])
+        if (!is.null(brand_level)) {
+          keep <- keep & !is.na(data[[brand]]) & data[[brand]] == brand_level
+        }
+        dplyr::n_distinct(data[[id]][keep])
+      }
+
       # Helper: compute lift values for a single freq distribution.
       # Returns a numeric vector of length 2 * length(lift), interleaved as
       # (propdisplay, absdisplay) for each lift percent. Order must match
       # `lift_labels` above so the final column naming lines up.
       # `iv_name` is used to look up an optional scale_range override.
+      # `base_n` is the count gated against min_base_for_lift: distinct
+      # respondents when `id` is set, otherwise sum(freq) (the record /
+      # weight-sum count this gate has always used).
       compute_lift_vals <- function(freq, dv_probs, iv_name = NULL, st,
-                                    unsupported = NULL) {
-        if (sum(freq) < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
+                                    unsupported = NULL, base_n = NULL) {
+        if (is.null(base_n)) base_n <- sum(freq)
+        # An empty scope has no distribution to shift regardless of the
+        # threshold - guarded separately so that a threshold of 0 (how
+        # override_min_base_for_lift disables the gate) still returns NA here
+        # rather than dividing by a zero total.
+        if (sum(freq) <= 0) return(rep(NA_real_, length(lift) * 2L))
+        if (base_n < min_base_for_lift) return(rep(NA_real_, length(lift) * 2L))
         p_observed <- as.numeric(freq) / sum(freq)
         observed_expected <- sum(dv_probs * p_observed)
         sr <- if (!is.null(scale_ranges) && !is.null(iv_name)) scale_ranges[[iv_name]] else NULL
@@ -1002,10 +1041,24 @@ bn_impact_engine <- function(
       # never observes, so mass only moves across observed joint profiles
       # (support blackout). Requires impact_readoff = "empirical" (enforced
       # up front); "average" below was the pre-2026-07-28 methodology.
-      compute_joint_lift_vals <- function(iv_vars, mask) {
+      # `brand_level` names the focus scope the mask selects (NULL = market) so
+      # the base can be recounted on the un-resampled `data`; the mask itself
+      # indexes dat_boot and cannot be reused for that.
+      compute_joint_lift_vals <- function(iv_vars, mask, brand_level = NULL) {
         w_all <- if (!is.null(weight)) dat_boot[[weight]] else rep(1, nrow(dat_boot))
         w_s <- w_all[mask]
-        if (sum(w_s) < min_base_for_lift) {
+        # Community base = mean of its members' scope bases, matching the
+        # community row's reported `base` (base_results averages per-IV bases
+        # the same way).
+        base_n <- if (is.null(id)) {
+          sum(w_s)
+        } else {
+          mean(vapply(iv_vars, resp_base, numeric(1), brand_level = brand_level))
+        }
+        if (sum(w_s) <= 0) {
+          return(lapply(impact_shift_type, function(st) rep(NA_real_, length(lift) * 2L)))
+        }
+        if (base_n < min_base_for_lift) {
           return(lapply(impact_shift_type, function(st) rep(NA_real_, length(lift) * 2L)))
         }
         members <- dat_boot[mask, iv_vars, drop = FALSE]
@@ -1087,13 +1140,19 @@ bn_impact_engine <- function(
 
           if (!is.null(community_assignment) && community_lift == "joint") {
             # Rake each focus scope once (per shift variant, inside), then
-            # assemble shift-block-major to match lift_col_names order.
+            # assemble shift-block-major to match lift_col_names order: market
+            # scope first, then one per brand. Scope labels ride alongside the
+            # masks so the gate can recount the base on the un-resampled data
+            # (NULL = market).
             scope_masks <- c(
               list(rep(TRUE, nrow(dat_boot))),
               if (is.null(brand_levels)) NULL else
                 lapply(brand_levels, function(b) dat_boot[[brand]] %in% b)
             )
-            per_scope <- lapply(scope_masks, function(m) compute_joint_lift_vals(iv_vars, m))
+            scope_labels <- c(list(NULL), as.list(brand_levels))
+            per_scope <- purrr::map2(scope_masks, scope_labels, function(m, b) {
+              compute_joint_lift_vals(iv_vars, m, brand_level = b)
+            })
             vals <- unlist(lapply(seq_along(impact_shift_type), function(si) {
               unlist(lapply(per_scope, function(ps) ps[[si]]))
             }))
@@ -1207,16 +1266,28 @@ bn_impact_engine <- function(
               wtd_table(dat_boot[[single_iv]][brand_mask], w = w_b, levels = levels_v)
             })
 
+            # Gate counts, one per lift scope. Shift-independent like the
+            # brand freq tables above, so resolved once per IV: with `id` set
+            # these are distinct respondents on the un-resampled scope, with
+            # id = NULL they fall through to the freq totals the gate has
+            # always used (sum of weights when weighted).
+            market_base_n <- if (is.null(id)) NULL else resp_base(single_iv)
+            brand_base_n <- if (is.null(brand_levels) || is.null(id)) NULL else {
+              vapply(brand_levels, resp_base, numeric(1), single_iv = single_iv)
+            }
+
             # Per shift variant: market lift on the full distribution, then
             # per-brand lifts — matching lift_col_names block order.
             unsup <- if (readoff_empirical) unsupported_lv else NULL
             unlist(lapply(impact_shift_type, function(st) {
               market_vals <- compute_lift_vals(freq_full, dv_probs, iv_name = single_iv,
-                                               st = st, unsupported = unsup)
+                                               st = st, unsupported = unsup,
+                                               base_n = market_base_n)
               if (is.null(brand_levels)) return(market_vals)
-              c(market_vals, unlist(lapply(brand_freqs, function(freq_b) {
+              c(market_vals, unlist(purrr::imap(brand_freqs, function(freq_b, bi) {
                 compute_lift_vals(freq_b, dv_probs, iv_name = single_iv,
-                                  st = st, unsupported = unsup)
+                                  st = st, unsupported = unsup,
+                                  base_n = if (is.null(brand_base_n)) NULL else brand_base_n[[bi]])
               })))
             }))
           }) %>%

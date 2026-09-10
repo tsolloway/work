@@ -38,7 +38,23 @@
 #'   Default \code{"mean"}.
 #' @param min_base_for_calc Integer. Minimum sample size for brand lift
 #'   calculations in \code{bn_impacts()} and for bootstrap p-values in
-#'   \code{bn_prioritizations()}. Default 100.
+#'   \code{bn_prioritizations()}. The count compared against it follows
+#'   \code{id}: with \code{id} set it is DISTINCT RESPONDENTS - the same number
+#'   the cell reports as its base - and with \code{id = NULL} it is stacked
+#'   records, which in a stacked design overstates the base a client reads and
+#'   lets cells through the gate on rows rather than people (Danone TH: 1763
+#'   records vs 682 respondents). Records were the only behaviour before
+#'   2026-09-09. Default 100.
+#' @param override_min_base_for_calc Character vector or NULL. Subgroup names
+#'   exempted from \code{min_base_for_calc}. Inside an exempted subgroup every
+#'   impact lift cell is computed however thin its base (market and brand focus
+#'   alike), every brand slice is run as a prioritization task, and bootstrap
+#'   p-values are computed rather than skipped. For a must-report audience cut
+#'   whose base the client has already accepted. Names must appear in
+#'   \code{subgroups} (or be \code{"Total"} when \code{subgroups} is NULL);
+#'   unmatched names error rather than silently doing nothing. Scopes with no
+#'   observations at all still return \code{NA} - an exemption cannot conjure a
+#'   distribution to shift. Default NULL (no exemptions).
 #' @param mi_n_boot Integer. Bootstrap replicates for the nested
 #'   community-MI bootstrap in \code{bn_impacts()} (the
 #'   \code{mi_boot_lower} / \code{mi_boot_upper} CI columns) and for
@@ -191,6 +207,7 @@ bn_finalize_network <- function(
     # --- Model ---
     dv_metric = c("mean", "top_box"),
     min_base_for_calc = 100,
+    override_min_base_for_calc = NULL,
     mi_n_boot = 100,
     # --- Impact ---
     do_impacts = TRUE,
@@ -444,6 +461,26 @@ bn_finalize_network <- function(
     if(!"Total" %in% names(df)) df[["Total"]] <- 1L
   }
 
+  # --- min_base_for_calc exemptions ---
+  # Validated once the subgroup list is known. A typo'd name would otherwise be
+  # a silent no-op: the run completes, the thin cells stay blank, and nothing
+  # says the exemption never matched.
+  if (!is.null(override_min_base_for_calc)) {
+    if (!is.character(override_min_base_for_calc)) {
+      stop("'override_min_base_for_calc' must be NULL or a character vector ",
+           "of subgroup names.")
+    }
+    unknown <- setdiff(override_min_base_for_calc, subgroups)
+    if (length(unknown) > 0) {
+      stop("'override_min_base_for_calc' names subgroup(s) not in `subgroups`: ",
+           paste(unknown, collapse = ", "), ". Available: ",
+           paste(subgroups, collapse = ", "), ".")
+    }
+    cli::cli_alert_warning(
+      "Waiving min_base_for_calc ({min_base_for_calc}) for subgroup{?s} {.val {override_min_base_for_calc}}"
+    )
+  }
+
 
   ###############################
   # final model
@@ -563,6 +600,7 @@ bn_finalize_network <- function(
       brand = brand,
       brand_names = brand_names,
       min_base_for_lift = min_base_for_calc,
+      override_min_base_for_lift = override_min_base_for_calc,
       include_base = impact_include_base,
       dv_metric = dv_metric,
       weight = weight,
@@ -602,6 +640,8 @@ bn_finalize_network <- function(
       sig_threshold = prioritize_sig_threshold,
       marginal_threshold = prioritize_marginal_threshold,
       min_base_for_boot = min_base_for_calc,
+      override_min_base_for_boot = override_min_base_for_calc,
+      id = id,
       dictionary = dictionary,
       community_assignment = attribute_nodes,
       use_parallel = impact_parallel,

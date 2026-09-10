@@ -174,10 +174,13 @@ E_(-5 percent). A scalar produces a single \code{lift} column; a vector
 (e.g., \code{c(0, 0.05, 0.10)}) produces \code{lift_0}, \code{lift_5},
 \code{lift_10}. Default \code{c(0, 0.1)}.}
 
-\item{min_base_for_lift}{Integer. Minimum sample size (frequency count)
-required to compute a lift value. If the distribution has fewer than this
-many observations, the lift cell returns \code{NA}. Applied per-brand when
-\code{brand} is set. Default \code{75}.}
+\item{min_base_for_lift}{Integer. Minimum sample size required to compute a
+lift value; scopes below it return \code{NA}. Applied per-brand when
+\code{brand} is set. The count compared against it follows \code{id}: with
+\code{id} set it is DISTINCT RESPONDENTS on the un-resampled scope - the
+same number the cell reports as its \code{base} - and with \code{id = NULL}
+it is the stacked-record frequency total (sum of weights when \code{weight}
+is supplied), the pre-2026-09-09 behaviour. Default \code{75}.}
 
 \item{type}{Character. Estimation method:
 \itemize{
@@ -251,8 +254,10 @@ record-count path reports each brand's mean resampled count, which
 wobbles around the true count and carries spurious CI columns. All
 bases are counted on the un-resampled scope so the value is invariant
 across bootstrap replicates. \code{NULL} restores stacked-record
-counts (the pre-2026-08-10 behaviour). Does not affect
-\code{min_base_for_lift}, which still gates on records.}
+counts (the pre-2026-08-10 behaviour). Since 2026-09-09 this also
+governs \code{min_base_for_lift}, which gates on the same
+distinct-respondent count it reports rather than on records - so a
+thin scope is blanked on the number the client actually reads.}
 
 \item{mi_boot}{Integer or NULL. When set and \code{do_community = TRUE},
 bootstraps the MI calculation this many times to derive a p-value from the

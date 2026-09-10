@@ -129,7 +129,16 @@
 #'   Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size required for a brand
 #'   subgroup to compute lift estimates. Brands below this threshold are
-#'   excluded. Default 75.
+#'   excluded. Counted as distinct respondents when \code{id} is set, otherwise
+#'   as stacked records - see \code{\link{bn_impact_engine}}. Default 75.
+#' @param override_min_base_for_lift Character vector or NULL. Subgroup names
+#'   exempted from \code{min_base_for_lift}: every lift cell inside them is
+#'   computed however thin its base, market and brand focus alike. For a
+#'   must-report audience cut whose base the client has already accepted.
+#'   Matched against the names of \code{obj} when \code{process_subgroups =
+#'   TRUE}; when \code{FALSE} the single run is treated as \code{"Total"}.
+#'   Truly empty scopes still return \code{NA} - there is no distribution to
+#'   shift. Default NULL (no exemptions).
 #' @param type Character. Engine type: \code{"gr"} (gRain exact inference,
 #'   default), \code{"cp"} (cpdist sampling), or \code{"mi"} (mutual
 #'   information).
@@ -264,6 +273,7 @@ bn_impact <- function(
     boot_inference_legacy = FALSE,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
+    override_min_base_for_lift = NULL,
     type = c("gr", "cp", "mi"),
     dv_metric = c("mean", "top_box"),
     include_base = TRUE,
@@ -292,6 +302,15 @@ bn_impact <- function(
   # Preserve named dv for meta, strip for bnlearn
   dv_original <- dv
   dv <- unname(dv)
+
+  # An exempted subgroup gets the engine's threshold dropped to 0 rather than a
+  # flag threaded through the engine: the gate is a single `base_n <
+  # min_base_for_lift` test, so 0 disables it outright while the engine's
+  # separate empty-scope guard still blanks scopes with nothing to shift.
+  .min_base_for <- function(sg_name) {
+    if (!is.null(override_min_base_for_lift) &&
+        sg_name %in% override_min_base_for_lift) 0 else min_base_for_lift
+  }
 
   # Run the engine ONCE with all four shift variants (proportional +
   # absolute + headroom + range). Since 2026-07-28 the engine computes every
@@ -354,7 +373,7 @@ bn_impact <- function(
         lift = lift,
         brand = brand,
         brand_names = brand_names,
-        min_base_for_lift = min_base_for_lift,
+        min_base_for_lift = .min_base_for(.y),
         include_base = include_base,
         dv_metric = dv_metric,
         weight = weight,
@@ -409,7 +428,7 @@ bn_impact <- function(
       lift = lift,
       brand = brand,
       brand_names = brand_names,
-      min_base_for_lift = min_base_for_lift,
+      min_base_for_lift = .min_base_for("Total"),
       include_base = include_base,
       dv_metric = dv_metric,
       weight = weight,
@@ -516,6 +535,12 @@ bn_impact <- function(
       brand = brand,
       brand_names = brand_names_resolved,
       min_base_for_lift = min_base_for_lift,
+      # Subgroups the threshold above was waived for, so writers can caveat
+      # their cells rather than presenting them as having cleared the base.
+      override_min_base_for_lift = override_min_base_for_lift,
+      # Respondent-level id column (or NULL). Governs whether min_base_for_lift
+      # and the reported bases count respondents or stacked records.
+      id = id,
       # Survey-weight column name (or NULL). Retained so downstream writers
       # (e.g. append_bn_simulator) can use the same weight without having
       # to re-thread it through every caller.

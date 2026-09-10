@@ -23,6 +23,7 @@ bn_impacts(
   boot_inference_legacy = FALSE,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
+  override_min_base_for_lift = NULL,
   type = c("gr", "cp", "mi"),
   dv_metric = c("mean", "top_box"),
   include_base = TRUE,
@@ -117,6 +118,12 @@ significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.}
 \item{lift}{Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.}
 
 \item{min_base_for_lift}{Integer. Minimum sample size for brand lift.
+Counted as distinct respondents when \code{id} is set, otherwise as
+stacked records. See \code{\link{bn_impact_engine}}.}
+
+\item{override_min_base_for_lift}{Character vector or NULL. Subgroup
+names exempted from \code{min_base_for_lift} - every lift cell inside
+them is computed however thin its base. Default NULL.
 Default 75.}
 
 \item{type}{Character. Impact type: \code{"gr"}, \code{"cp"}, or

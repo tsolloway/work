@@ -21,6 +21,7 @@ bn_finalize_network(
   id = "uuid",
   dv_metric = c("mean", "top_box"),
   min_base_for_calc = 100,
+  override_min_base_for_calc = NULL,
   mi_n_boot = 100,
   do_impacts = TRUE,
   impact_type = c("gr", "cp", "mi"),
@@ -109,7 +110,24 @@ Default \code{"mean"}.}
 
 \item{min_base_for_calc}{Integer. Minimum sample size for brand lift
 calculations in \code{bn_impacts()} and for bootstrap p-values in
-\code{bn_prioritizations()}. Default 100.}
+\code{bn_prioritizations()}. The count compared against it follows
+\code{id}: with \code{id} set it is DISTINCT RESPONDENTS - the same number
+the cell reports as its base - and with \code{id = NULL} it is stacked
+records, which in a stacked design overstates the base a client reads and
+lets cells through the gate on rows rather than people (Danone TH: 1763
+records vs 682 respondents). Records were the only behaviour before
+2026-09-09. Default 100.}
+
+\item{override_min_base_for_calc}{Character vector or NULL. Subgroup names
+exempted from \code{min_base_for_calc}. Inside an exempted subgroup every
+impact lift cell is computed however thin its base (market and brand focus
+alike), every brand slice is run as a prioritization task, and bootstrap
+p-values are computed rather than skipped. For a must-report audience cut
+whose base the client has already accepted. Names must appear in
+\code{subgroups} (or be \code{"Total"} when \code{subgroups} is NULL);
+unmatched names error rather than silently doing nothing. Scopes with no
+observations at all still return \code{NA} - an exemption cannot conjure a
+distribution to shift. Default NULL (no exemptions).}
 
 \item{mi_n_boot}{Integer. Bootstrap replicates for the nested
 community-MI bootstrap in \code{bn_impacts()} (the

@@ -23,6 +23,7 @@ bn_impact(
   boot_inference_legacy = FALSE,
   lift = c(0, 0.1),
   min_base_for_lift = 75,
+  override_min_base_for_lift = NULL,
   type = c("gr", "cp", "mi"),
   dv_metric = c("mean", "top_box"),
   include_base = TRUE,
@@ -130,7 +131,17 @@ Default \code{c(0, 0.1)}.}
 
 \item{min_base_for_lift}{Integer. Minimum sample size required for a brand
 subgroup to compute lift estimates. Brands below this threshold are
-excluded. Default 75.}
+excluded. Counted as distinct respondents when \code{id} is set, otherwise
+as stacked records - see \code{\link{bn_impact_engine}}. Default 75.}
+
+\item{override_min_base_for_lift}{Character vector or NULL. Subgroup names
+exempted from \code{min_base_for_lift}: every lift cell inside them is
+computed however thin its base, market and brand focus alike. For a
+must-report audience cut whose base the client has already accepted.
+Matched against the names of \code{obj} when \code{process_subgroups =
+TRUE}; when \code{FALSE} the single run is treated as \code{"Total"}.
+Truly empty scopes still return \code{NA} - there is no distribution to
+shift. Default NULL (no exemptions).}
 
 \item{type}{Character. Engine type: \code{"gr"} (gRain exact inference,
 default), \code{"cp"} (cpdist sampling), or \code{"mi"} (mutual

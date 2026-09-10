@@ -64,6 +64,11 @@
 #'   significance. Default \code{FALSE}. See \code{\link{bn_impact_engine}}.
 #' @param lift Numeric vector. Lift fractions. Default \code{c(0, 0.1)}.
 #' @param min_base_for_lift Integer. Minimum sample size for brand lift.
+#'   Counted as distinct respondents when \code{id} is set, otherwise as
+#'   stacked records. See \code{\link{bn_impact_engine}}.
+#' @param override_min_base_for_lift Character vector or NULL. Subgroup
+#'   names exempted from \code{min_base_for_lift} - every lift cell inside
+#'   them is computed however thin its base. Default NULL.
 #'   Default 75.
 #' @param type Character. Impact type: \code{"gr"}, \code{"cp"}, or
 #'   \code{"mi"}. Default \code{"gr"}.
@@ -131,6 +136,7 @@ bn_impacts <- function(
     boot_inference_legacy = FALSE,
     lift = c(0, 0.1),
     min_base_for_lift = 75,
+    override_min_base_for_lift = NULL,
     type = c("gr", "cp", "mi"),
     dv_metric = c("mean", "top_box"),
     include_base = TRUE,
@@ -222,6 +228,7 @@ bn_impacts <- function(
     lift = lift,
     brand = brand, brand_names = brand_names,
     min_base_for_lift = min_base_for_lift,
+    override_min_base_for_lift = override_min_base_for_lift,
     include_base = include_base,
     dv_metric = dv_metric,
     weight = NULL,
@@ -255,6 +262,7 @@ bn_impacts <- function(
       lift = lift,
       brand = brand, brand_names = brand_names,
       min_base_for_lift = min_base_for_lift,
+      override_min_base_for_lift = override_min_base_for_lift,
       include_base = include_base,
       dv_metric = dv_metric,
       weight = weight,
@@ -293,6 +301,7 @@ bn_impacts <- function(
       lift = lift,
       brand = brand, brand_names = brand_names,
       min_base_for_lift = min_base_for_lift,
+      override_min_base_for_lift = override_min_base_for_lift,
       include_base = include_base,
       dv_metric = dv_metric,
       weight = NULL,
@@ -327,6 +336,7 @@ bn_impacts <- function(
         lift = lift,
         brand = brand, brand_names = brand_names,
         min_base_for_lift = min_base_for_lift,
+        override_min_base_for_lift = override_min_base_for_lift,
         include_base = include_base,
         dv_metric = dv_metric,
         weight = weight,
