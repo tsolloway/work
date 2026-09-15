@@ -65,10 +65,17 @@
     nm <- names(tbl)
     drop <- rep(FALSE, length(nm))
     for (b in brands) {
-      # fixed = TRUE throughout: brand labels carry regex metacharacters
-      # ("Enfa A+ C-Biome", "S-26 SMA/ Promill").
+      # A brand token only marks a focus block when it sits between the
+      # `_lift_<n>_` prefix and the shift token. Matching a bare `_<brand>_`
+      # anywhere also hits the SUBGROUP prefix, which silently emptied every
+      # subgroup named after a brand (Mums_Aptamil_maxVmin_absdisplay contains
+      # "_Aptamil_"). Swap the brand for a placeholder with fixed = TRUE first,
+      # so brand labels carrying regex metacharacters ("Enfa A+ C-Biome",
+      # "S-26 SMA/ Promill") never reach the regex; `_base_<brand>` stays a
+      # fixed suffix test.
+      nm_tagged <- gsub(paste0("_", b, "_"), "_\u0001BRAND\u0001_", nm, fixed = TRUE)
       drop <- drop |
-        grepl(paste0("_", b, "_"), nm, fixed = TRUE) |
+        grepl("_lift_[0-9]+_\u0001BRAND\u0001_(prop|abs|head|range)shift_", nm_tagged) |
         endsWith(nm, paste0("_base_", b))
     }
     impacts[[k]] <- tbl[, !drop, drop = FALSE]
