@@ -38,8 +38,7 @@ seg_get_spec <- function(seg, spec_path = NULL, execute = TRUE, execute_debug = 
   # internal functions
   #########################
 
-  clean_sheets <- function(spec_path, sheet = c("Polars", "Profiles"), startRow = 3){
-    sheet <- match.arg(sheet)
+  clean_sheets <- function(spec_path, sheet = "Polars", startRow = 3){
 
     sheet <- openxlsx::loadWorkbook(spec_path) %>%
       openxlsx::readWorkbook(sheet = sheet, startRow = 3) %>%
@@ -101,9 +100,27 @@ seg_get_spec <- function(seg, spec_path = NULL, execute = TRUE, execute_debug = 
   }
 
 
+  # A spec may carry one "Profiles" sheet or several ("Profiles - Person",
+  # "Profiles - Grid"). Multiple sheets are an organisational split for review;
+  # they all execute against the same frame, so they are read and bound into a
+  # single profiles table here.
+  profile_sheets <- openxlsx::getSheetNames(spec_path) %>%
+    grep("^Profiles", ., value = TRUE)
+
+  if(length(profile_sheets) == 0){
+    stop("No sheet named 'Profiles' (or 'Profiles - ...') in the spec.", call. = FALSE)
+  }
+
+  if(length(profile_sheets) > 1){
+    message("Reading ", length(profile_sheets), " profile sheets: ",
+            paste(profile_sheets, collapse = ", "))
+  }
+
   seg[["spec"]] <- list(
-    "polars" = spec_path %>% clean_sheets("Polars"),
-    "profiles" = spec_path %>% clean_sheets("Profiles")
+    "polars"   = spec_path %>% clean_sheets("Polars"),
+    "profiles" = profile_sheets %>%
+      lapply(function(sh) spec_path %>% clean_sheets(sh)) %>%
+      dplyr::bind_rows()
   )
 
 

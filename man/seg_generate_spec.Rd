@@ -17,7 +17,10 @@ seg_generate_spec(
 
 \item{polar_blocks}{list of polar block definitions (from \code{\link{seg_create_polar_block}})}
 
-\item{profile_blocks}{list of profile block definitions (from \code{\link{seg_create_profile_block}})}
+\item{profile_blocks}{Either a flat list of profile blocks, written to a
+single "Profiles" sheet, or a NAMED list of block lists, written as one
+sheet per name ("Profiles - Person", "Profiles - Grid"). Block numbering
+chains across the sheets in the order given.}
 
 \item{version}{integer, label format version (1 = parenthetical, 2 = double-pipe). Default 1.}
 

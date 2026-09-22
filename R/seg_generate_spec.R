@@ -5,7 +5,10 @@
 #'
 #' @param project_name character, project display name (appears in header)
 #' @param polar_blocks list of polar block definitions (from \code{\link{seg_create_polar_block}})
-#' @param profile_blocks list of profile block definitions (from \code{\link{seg_create_profile_block}})
+#' @param profile_blocks Either a flat list of profile blocks, written to a
+#'   single "Profiles" sheet, or a NAMED list of block lists, written as one
+#'   sheet per name ("Profiles - Person", "Profiles - Grid"). Block numbering
+#'   chains across the sheets in the order given.
 #' @param version integer, label format version (1 = parenthetical, 2 = double-pipe). Default 1.
 #' @param output_path character, file path for output xlsx. Default: \code{project_name - Specs.xlsx} in working directory.
 #' @return output path (invisibly)
@@ -24,10 +27,30 @@ seg_generate_spec <- function(
 
 
 
+  # profile_blocks is either a flat list of blocks (one "Profiles" sheet, the
+  # historical shape) or a NAMED list of block lists, which writes one sheet per
+  # name as "Profiles - <name>". Numbering chains across the sheets in order.
+  multi <- !is.null(names(profile_blocks)) && all(nzchar(names(profile_blocks)))
+
+  sheet_specs <- if (multi) {
+    stats::setNames(profile_blocks, paste0("Profiles - ", names(profile_blocks)))
+  } else {
+    list("Profiles" = profile_blocks)
+  }
+
   wb <- oxl_create_workbook()
-  .write_polars_sheet(wb, polar_blocks, version)
-  .write_profiles_sheet(wb, profile_blocks, project_name)
+  .write_polars_sheet(wb, polar_blocks, version, first_profile_sheet = names(sheet_specs)[1])
+
+  prev <- "Polars"
+  for (nm in names(sheet_specs)) {
+    .write_profiles_sheet(wb, sheet_specs[[nm]], project_name,
+                          sheet = nm, prev_sheet = prev)
+    prev <- nm
+  }
+
   openxlsx::saveWorkbook(wb, output_path, overwrite = TRUE)
+
+  profile_blocks <- unlist(sheet_specs, recursive = FALSE, use.names = FALSE)
 
   total_polars   <- sum(vapply(polar_blocks, function(b) nrow(b$pairs), integer(1)))
   total_profiles <- sum(vapply(profile_blocks, function(b) nrow(b$items), integer(1)))
@@ -107,7 +130,7 @@ seg_generate_spec <- function(
 }
 
 
-.write_polars_sheet <- function(wb, polar_blocks, version) {
+.write_polars_sheet <- function(wb, polar_blocks, version, first_profile_sheet = "Profiles") {
   sheet <- "Polars"
   openxlsx::addWorksheet(wb, sheet)
 
@@ -123,7 +146,8 @@ seg_generate_spec <- function(
   s_bold_c  <- openxlsx::createStyle(textDecoration = "Bold", halign = "center", valign = "center")
 
   # Row 1: title link + version toggle
-  openxlsx::writeFormula(wb, sheet, x = "Profiles!F1", startRow = 1, startCol = 6)
+  openxlsx::writeFormula(wb, sheet, x = paste0("'", first_profile_sheet, "'!F1"),
+                         startRow = 1, startCol = 6)
   openxlsx::addStyle(wb, sheet, s_bold_14, rows = 1, cols = 6)
   openxlsx::writeData(wb, sheet, x = "version", startRow = 1, startCol = 7, colNames = FALSE)
   openxlsx::addStyle(wb, sheet, s_center, rows = 1, cols = 7)
@@ -222,8 +246,8 @@ seg_generate_spec <- function(
 }
 
 
-.write_profiles_sheet <- function(wb, profile_blocks, project_name) {
-  sheet <- "Profiles"
+.write_profiles_sheet <- function(wb, profile_blocks, project_name,
+                                  sheet = "Profiles", prev_sheet = "Polars") {
   openxlsx::addWorksheet(wb, sheet)
 
   openxlsx::setColWidths(wb, sheet, cols = 1:10,
@@ -259,7 +283,7 @@ seg_generate_spec <- function(
 
     # Block number: first references Polars, rest auto-increment
     if (block_idx == 1) {
-      openxlsx::writeFormula(wb, sheet, x = "MAX(Polars!C4:C350)+1",
+      openxlsx::writeFormula(wb, sheet, x = paste0("MAX('", prev_sheet, "'!C4:C350)+1"),
                    startRow = row, startCol = 3)
     } else {
       openxlsx::writeFormula(wb, sheet, x = paste0("MAX($C$4:$C", row - 1, ")+1"),
