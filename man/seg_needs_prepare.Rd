@@ -4,7 +4,12 @@
 \alias{seg_needs_prepare}
 \title{seg_needs_prepare}
 \usage{
-seg_needs_prepare(seg, scale = c("item", "none"), center = c("none", "grid"))
+seg_needs_prepare(
+  seg,
+  scale = c("item", "none"),
+  center = c("none", "grid"),
+  rescale = c("unit", "none")
+)
 }
 \arguments{
 \item{seg}{A seg object after \code{\link[=seg_needs_stack]{seg_needs_stack()}}.}
@@ -14,6 +19,11 @@ seg_needs_prepare(seg, scale = c("item", "none"), center = c("none", "grid"))
 
 \item{center}{Character. \code{"none"} (default), or \code{"grid"} to also grid-centre
 before scaling. Only meaningful for the clustering path.}
+
+\item{rescale}{Character. \code{"unit"} (default) maps the answer codes onto 0-1
+across all items together, so item values, person means and grid intensity
+are all bounded and read as a proportion of the scale. \code{"none"} keeps the
+raw codes.}
 }
 \value{
 The seg object with the derived columns on
@@ -24,7 +34,7 @@ Builds the derived bases on the stacked frame and the person
 means that profile them. Writes four families of columns:
 
 \describe{
-\item{\code{need01..}}{as answered (already present from the stack)}
+\item{\code{need01..}}{the answers, rescaled to 0-1 unless \code{rescale = "none"}}
 \item{\code{needc01..}}{grid-centred - each item minus its own grid's mean}
 \item{\code{needs01..}}{item-scaled - each item z-scored across all grids}
 \item{\code{pneed01..}}{the respondent's mean per item, on every one of their rows}

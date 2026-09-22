@@ -4,7 +4,7 @@
 #'   means that profile them. Writes four families of columns:
 #'
 #'   \describe{
-#'     \item{`need01..`}{as answered (already present from the stack)}
+#'     \item{`need01..`}{the answers, rescaled to 0-1 unless `rescale = "none"`}
 #'     \item{`needc01..`}{grid-centred - each item minus its own grid's mean}
 #'     \item{`needs01..`}{item-scaled - each item z-scored across all grids}
 #'     \item{`pneed01..`}{the respondent's mean per item, on every one of their rows}
@@ -36,15 +36,23 @@
 #'   `"none"` leaves the raw values.
 #' @param center Character. `"none"` (default), or `"grid"` to also grid-centre
 #'   before scaling. Only meaningful for the clustering path.
+#' @param rescale Character. `"unit"` (default) maps the answer codes onto 0-1
+#'   across all items together, so item values, person means and grid intensity
+#'   are all bounded and read as a proportion of the scale. `"none"` keeps the
+#'   raw codes.
 #'
 #' @return The seg object with the derived columns on
 #'   `seg[["data"]][["stacked"]]` and their names in `seg[["needs"]][["vars"]]`.
 #'
 #' @export
-seg_needs_prepare <- function(seg, scale = c("item", "none"), center = c("none", "grid")){
+seg_needs_prepare <- function(seg,
+                              scale   = c("item", "none"),
+                              center  = c("none", "grid"),
+                              rescale = c("unit", "none")){
 
-  scale  <- match.arg(scale)
-  center <- match.arg(center)
+  scale   <- match.arg(scale)
+  center  <- match.arg(center)
+  rescale <- match.arg(rescale)
 
   stacked <- seg[["data"]][["stacked"]]
   items   <- seg[["needs"]][["vars"]][["raw"]]
@@ -53,9 +61,32 @@ seg_needs_prepare <- function(seg, scale = c("item", "none"), center = c("none",
     stop("No stacked frame. Run seg_needs_stack() first.", call. = FALSE)
   }
 
-  n       <- length(items)
-  M       <- as.matrix(stacked[items])
-  row_mu  <- rowMeans(M)
+  n <- length(items)
+  M <- as.matrix(stacked[items])
+
+  # Map the answer codes onto 0-1 before anything else, so every downstream
+  # quantity - the item values, the person means, the grid intensity - is
+  # bounded and reads as a proportion of the scale rather than as a raw code.
+  # On a 3-point scale that is 1 -> 0, 2 -> 0.5, 3 -> 1.
+  #
+  # The range is taken across ALL items together, not per item: the 20 needs
+  # share one scale, so rescaling each on its own observed range would stretch
+  # a need nobody rated at the floor and destroy comparability between them.
+  if(rescale == "unit"){
+
+    lo <- min(M, na.rm = TRUE)
+    hi <- max(M, na.rm = TRUE)
+
+    if(hi <= lo) stop("Items have no range to rescale.", call. = FALSE)
+
+    M <- (M - lo) / (hi - lo)
+    stacked[items] <- as.data.frame(M)
+
+    message("Items rescaled to 0-1 from the ", hi - lo + 1, "-point scale (",
+            lo, "->0 ... ", hi, "->1)")
+  }
+
+  row_mu <- rowMeans(M)
 
   centred <- M - row_mu
   colnames(centred) <- sprintf("needc%02d", seq_len(n))
@@ -76,7 +107,7 @@ seg_needs_prepare <- function(seg, scale = c("item", "none"), center = c("none",
   # person read, so a needs project needs only one workbook.
   pnames <- sprintf("pneed%02d", seq_len(n))
   tnames <- sprintf("ptop%02d",  seq_len(n))
-  top_code <- max(M, na.rm = TRUE)
+  top_code <- max(M, na.rm = TRUE)   # 1 after a unit rescale
 
   person_summary <- stacked %>%
     dplyr::group_by(.data$person_id) %>%
@@ -104,8 +135,10 @@ seg_needs_prepare <- function(seg, scale = c("item", "none"), center = c("none",
   seg[["needs"]][["vars"]][["intensity"]] <- "grid_intensity"
 
   message(
-    "Basis prepared (center = ", center, ", scale = ", scale, "). ",
-    "Typing basis: ", colnames(basis)[1], "..", colnames(basis)[n]
+    "Basis prepared (rescale = ", rescale, ", center = ", center,
+    ", scale = ", scale, "). Items: ", items[1], "..", items[n],
+    if(scale != "none" || center != "none")
+      paste0(" | transformed copy: ", colnames(basis)[1], "..", colnames(basis)[n]) else ""
   )
 
   seg
