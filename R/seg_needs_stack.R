@@ -50,6 +50,14 @@ seg_needs_stack <- function(
     stop("No person-level data found. Run seg_get_data() first.", call. = FALSE)
   }
 
+  if(identical(seg[["meta"]][["unit"]], "grid")){
+    stop(
+      "The unit is already set to grid, so seg$data$original is the stacked ",
+      "frame. Run seg_needs_set_unit('person') before stacking again.",
+      call. = FALSE
+    )
+  }
+
   if(!id_var %in% names(df)){
     stop("id_var '", id_var, "' is not a column on the data.", call. = FALSE)
   }
