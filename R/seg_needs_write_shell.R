@@ -42,10 +42,34 @@ seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person")
   }
 
   if(level == "person"){
+
     if(!"person_id" %in% names(df)){
       stop("person_id is not on the executed frame - was the stacked file loaded?",
            call. = FALSE)
     }
+
+    # Keeping one row per person is only valid for columns that are CONSTANT
+    # within a person. A grid-level column varies down a respondent's rows, so
+    # collapsing would silently report whichever context sorted first as though
+    # it were a person attribute. Detect them rather than keep a list: a column
+    # that is not constant within person_id has no person-level meaning.
+    varying <- vapply(
+      setdiff(names(df), "person_id"),
+      function(v) any(tapply(df[[v]], df$person_id,
+                             function(x) dplyr::n_distinct(x) > 1)),
+      logical(1)
+    )
+
+    dropped <- names(varying)[varying]
+
+    if(length(dropped) > 0){
+      message(
+        "Dropping ", length(dropped), " grid-level column(s) with no person-level ",
+        "meaning (e.g. ", paste(utils::head(dropped, 4), collapse = ", "), ")"
+      )
+      df <- df[setdiff(names(df), dropped)]
+    }
+
     df <- dplyr::distinct(df, .data$person_id, .keep_all = TRUE)
   }
 
