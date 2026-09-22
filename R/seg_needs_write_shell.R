@@ -15,7 +15,7 @@
 #'   respondent contributing three contexts is in the base three times. Say so
 #'   on the deliverable.
 #'
-#' @param seg A seg object after [seg_needs_stack()].
+#' @param seg A seg object after [seg_get_spec()] has executed the spec.
 #' @param solution_var Character. The variable to cut by. On the grid frame
 #'   `"context"` is the natural means check; on the person frame use a
 #'   demographic.
@@ -29,14 +29,24 @@ seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person")
 
   level <- match.arg(level)
 
-  df <- switch(
-    level,
-    grid   = seg[["data"]][["stacked"]],
-    person = dplyr::distinct(seg[["data"]][["stacked"]], .data$person_id, .keep_all = TRUE)
-  )
+  # Subset the SPEC-EXECUTED frame, not the raw stacked one - with_shell is
+  # what carries the spec variables the shell is built from. Falling back to
+  # the stacked frame would silently drop every spec column.
+  df <- seg[["data"]][["with_shell"]]
 
   if(!is.data.frame(df)){
-    stop("No stacked frame. Run seg_needs_stack() first.", call. = FALSE)
+    stop(
+      "No executed spec found. Run seg_get_spec() before seg_needs_write_shell().",
+      call. = FALSE
+    )
+  }
+
+  if(level == "person"){
+    if(!"person_id" %in% names(df)){
+      stop("person_id is not on the executed frame - was the stacked file loaded?",
+           call. = FALSE)
+    }
+    df <- dplyr::distinct(df, .data$person_id, .keep_all = TRUE)
   }
 
   if(!solution_var %in% names(df)){

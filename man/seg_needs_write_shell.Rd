@@ -7,7 +7,7 @@
 seg_needs_write_shell(seg, solution_var, level = c("grid", "person"), ...)
 }
 \arguments{
-\item{seg}{A seg object after \code{\link[=seg_needs_stack]{seg_needs_stack()}}.}
+\item{seg}{A seg object after \code{\link[=seg_get_spec]{seg_get_spec()}} has executed the spec.}
 
 \item{solution_var}{Character. The variable to cut by. On the grid frame
 \code{"context"} is the natural means check; on the person frame use a
