@@ -8,6 +8,8 @@
 #'     \item{`needc01..`}{grid-centred - each item minus its own grid's mean}
 #'     \item{`needs01..`}{item-scaled - each item z-scored across all grids}
 #'     \item{`pneed01..`}{the respondent's mean per item, on every one of their rows}
+#'     \item{`ptop01..`}{1 where the respondent gave that item the top code in
+#'       any context they saw}
 #'   }
 #'
 #'   plus `grid_intensity`, the grid's mean across items.
@@ -66,16 +68,26 @@ seg_needs_prepare <- function(seg, scale = c("item", "none"), center = c("none",
     dplyr::mutate(grid_intensity = row_mu) %>%
     dplyr::bind_cols(as.data.frame(centred), as.data.frame(basis))
 
-  # person mean per item, carried onto every row - profiles the grids, never
-  # defines them
+  # person-level summaries of the loop, carried onto every row. These profile
+  # the grids, they never define them. Two families:
+  #   pneed*  the respondent's mean per item across the contexts they saw
+  #   ptop*   1 if they gave the item the top code in ANY context they saw
+  # ptop is what lets a single spec carry both the continuous and the top-box
+  # person read, so a needs project needs only one workbook.
   pnames <- sprintf("pneed%02d", seq_len(n))
+  tnames <- sprintf("ptop%02d",  seq_len(n))
+  top_code <- max(M, na.rm = TRUE)
 
-  person_mean <- stacked %>%
+  person_summary <- stacked %>%
     dplyr::group_by(.data$person_id) %>%
-    dplyr::summarise(dplyr::across(dplyr::all_of(items), mean), .groups = "drop") %>%
-    rlang::set_names(c("person_id", pnames))
+    dplyr::summarise(
+      dplyr::across(dplyr::all_of(items), mean,                           .names = "mean_{.col}"),
+      dplyr::across(dplyr::all_of(items), ~ as.integer(any(.x == top_code)), .names = "top_{.col}"),
+      .groups = "drop"
+    ) %>%
+    rlang::set_names(c("person_id", pnames, tnames))
 
-  stacked <- stacked %>% dplyr::left_join(person_mean, by = "person_id")
+  stacked <- stacked %>% dplyr::left_join(person_summary, by = "person_id")
 
 
   stopifnot(
@@ -88,6 +100,7 @@ seg_needs_prepare <- function(seg, scale = c("item", "none"), center = c("none",
   seg[["needs"]][["vars"]][["centred"]]   <- colnames(centred)
   seg[["needs"]][["vars"]][["scaled"]]    <- colnames(basis)
   seg[["needs"]][["vars"]][["person"]]    <- pnames
+  seg[["needs"]][["vars"]][["person_top"]] <- tnames
   seg[["needs"]][["vars"]][["intensity"]] <- "grid_intensity"
 
   message(

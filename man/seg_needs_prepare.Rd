@@ -28,6 +28,8 @@ means that profile them. Writes four families of columns:
 \item{\code{needc01..}}{grid-centred - each item minus its own grid's mean}
 \item{\code{needs01..}}{item-scaled - each item z-scored across all grids}
 \item{\code{pneed01..}}{the respondent's mean per item, on every one of their rows}
+\item{\code{ptop01..}}{1 where the respondent gave that item the top code in
+any context they saw}
 }
 
 plus \code{grid_intensity}, the grid's mean across items.
