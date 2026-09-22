@@ -12,7 +12,8 @@ drivers(
   subgroups = NULL,
   dictionary = NULL,
   shift_percentage = 0.05,
-  weight = NULL
+  weight = NULL,
+  id = NULL
 )
 }
 \arguments{
@@ -37,6 +38,12 @@ the DV has exactly 2 unique non-NA values, linear otherwise.}
 \item{shift_percentage}{Numeric. Passed to logistic engine (default 0.05).}
 
 \item{weight}{Character or NULL. Weight column name.}
+
+\item{id}{Character or NULL. Respondent identifier column, passed to
+\code{driver_impact()}. When supplied, the written Base row counts distinct
+respondents instead of model observations. Pass it for stacked
+(respondent x brand) data, where one respondent spans several rows; leave
+NULL for flat data, where a row already is a respondent.}
 }
 \value{
 A list with two elements:

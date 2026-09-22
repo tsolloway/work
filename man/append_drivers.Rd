@@ -45,6 +45,6 @@ Modified workbook object.
 }
 \description{
 Appends a formatted driver analysis sheet to a workbook.
-Handles the "Total Impact" summary row, column hiding, conditional
-formatting, and styling.
+Handles the "Total Impact" summary row, the "Base" row beneath it,
+column hiding, conditional formatting, and styling.
 }

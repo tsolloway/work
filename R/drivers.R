@@ -18,6 +18,11 @@
 #'   (keyed by IV-set name) for label lookup.
 #' @param shift_percentage Numeric. Passed to logistic engine (default 0.05).
 #' @param weight Character or NULL. Weight column name.
+#' @param id Character or NULL. Respondent identifier column, passed to
+#'   \code{driver_impact()}. When supplied, the written Base row counts distinct
+#'   respondents instead of model observations. Pass it for stacked
+#'   (respondent x brand) data, where one respondent spans several rows; leave
+#'   NULL for flat data, where a row already is a respondent.
 #'
 #' @return A list with two elements:
 #'   \itemize{
@@ -37,8 +42,13 @@ drivers <- function(
     subgroups = NULL,
     dictionary = NULL,
     shift_percentage = 0.05,
-    weight = NULL
+    weight = NULL,
+    id = NULL
 ){
+
+  if (!is.null(id) && !id %in% names(df)) {
+    stop("'id' column '", id, "' not found in 'df'.")
+  }
 
   # Normalize inputs
   if (is.null(names(dv))) names(dv) <- dv
@@ -92,7 +102,8 @@ drivers <- function(
         subgroups = subgroups,
         dictionary = xdictionary,
         shift_percentage = shift_percentage,
-        weight = weight
+        weight = weight,
+        id = id
       )
     })
   }) %>%
@@ -106,7 +117,8 @@ drivers <- function(
       shift_percentage = shift_percentage,
       subgroups = subgroups,
       dv = dv,
-      ivs = ivs
+      ivs = ivs,
+      id = id
     )
   )
 }

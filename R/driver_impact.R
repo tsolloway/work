@@ -16,6 +16,11 @@
 #' @param shift_percentage Numeric. Fraction of IV range for logistic prob shift
 #'   (default 0.05). Ignored for linear engine.
 #' @param weight Character or NULL. Column name for weights.
+#' @param id Character or NULL. Respondent identifier column. When supplied, a
+#'   \code{base} column holding \code{n_distinct(id)} per subgroup is added to
+#'   the table, so the written Base row counts respondents rather than rows.
+#'   Required for stacked (respondent x brand) data, where model \code{n} counts
+#'   stacked records. When NULL, one row is assumed to be one respondent.
 #'
 #' @return A list with two elements:
 #'   \itemize{
@@ -33,10 +38,15 @@ driver_impact <- function(
     subgroups = NULL,
     dictionary = NULL,
     shift_percentage = 0.05,
-    weight = NULL
+    weight = NULL,
+    id = NULL
 ){
 
   engine <- match.arg(engine)
+
+  if (!is.null(id) && !id %in% names(df)) {
+    stop("'id' column '", id, "' not found in 'df'.")
+  }
 
   # If no subgroups, run on total
   if (is.null(subgroups)) {
@@ -67,7 +77,16 @@ driver_impact <- function(
       result <- run_engine(sub_df)
       all_fits[[.y]] <<- result[["fits"]]
 
-      result[["table"]] %>%
+      sub_table <- result[["table"]]
+
+      # Distinct respondents in this subgroup. Counted on the subgroup slice
+      # itself, so it is an exact scope count independent of any per-IV fit
+      # (model `n` counts stacked records, which overstates people).
+      if (!is.null(id)) {
+        sub_table[["base"]] <- dplyr::n_distinct(sub_df[[id]])
+      }
+
+      sub_table %>%
         rlang::set_names(glue::glue("{.y}_{names(.)}"))
     }
   ) %>%

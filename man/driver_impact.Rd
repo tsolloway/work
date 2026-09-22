@@ -12,7 +12,8 @@ driver_impact(
   subgroups = NULL,
   dictionary = NULL,
   shift_percentage = 0.05,
-  weight = NULL
+  weight = NULL,
+  id = NULL
 )
 }
 \arguments{
@@ -35,6 +36,12 @@ lookup. Joined to output on \code{Variable}.}
 (default 0.05). Ignored for linear engine.}
 
 \item{weight}{Character or NULL. Column name for weights.}
+
+\item{id}{Character or NULL. Respondent identifier column. When supplied, a
+\code{base} column holding \code{n_distinct(id)} per subgroup is added to
+the table, so the written Base row counts respondents rather than rows.
+Required for stacked (respondent x brand) data, where model \code{n} counts
+stacked records. When NULL, one row is assumed to be one respondent.}
 }
 \value{
 A list with two elements:

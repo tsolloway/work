@@ -1,8 +1,8 @@
 #' append_drivers
 #'
 #' @description Appends a formatted driver analysis sheet to a workbook.
-#'   Handles the "Total Impact" summary row, column hiding, conditional
-#'   formatting, and styling.
+#'   Handles the "Total Impact" summary row, the "Base" row beneath it,
+#'   column hiding, conditional formatting, and styling.
 #'
 #' @param analysis_table Tibble from \code{driver_impact()$table}.
 #' @param subgroups Character vector or NULL. Subgroup names used to identify
@@ -49,6 +49,9 @@ append_drivers <- function(
     center        = openxlsx::createStyle(numFmt = "0", halign = "center"),
     left          = openxlsx::createStyle(halign = "left"),
     total_impact  = openxlsx::createStyle(numFmt = "0.0%", halign = "center"),
+    # Base row mirrors bn_write's: integer, centred, brand grey
+    base          = openxlsx::createStyle(numFmt = "0", halign = "center",
+                                          fontColour = resondex_brand()$colors$accent),
     separator     = openxlsx::createStyle(fgFill = "black"),
     # fontColour matches the HTML dashboards' .rdx-neg danger red so the
     # "Bold italicized red index" footer note holds across deliverables.
@@ -72,6 +75,29 @@ append_drivers <- function(
     if (sg %in% names(analysis_table) && metric_col %in% names(analysis_table)) {
       total_row[[sg]] <- mean(abs(analysis_table[[metric_col]]), na.rm = TRUE)
     }
+  }
+
+  # Base row. `{subgroup}_base` is the distinct-respondent count driver_impact()
+  # records when given an `id` column, and is what bn_write displays. Without
+  # an `id` it is absent and the model's observation count `{subgroup}_n`
+  # stands in - correct for flat data, but an overcount of people on stacked
+  # (respondent x brand) data, where one respondent spans several rows.
+  # Either way the value is constant across IVs, so the first non-NA one
+  # stands for the subgroup; a failed fit leaves NA in `_n`, which is why this
+  # is not simply row 1 as in bn_write.
+  base_row_data <- analysis_table[1, ]
+  base_row_data[1, ] <- NA
+  base_row_data[["Variable"]] <- "Base"
+
+  for (sg in subgroups) {
+    if (!sg %in% names(analysis_table)) next
+
+    base_col <- paste0(sg, "_base")
+    if (!base_col %in% names(analysis_table)) base_col <- paste0(sg, "_n")
+    if (!base_col %in% names(analysis_table)) next
+
+    base_vals <- stats::na.omit(analysis_table[[base_col]])
+    if (length(base_vals) > 0) base_row_data[[sg]] <- base_vals[[1]]
   }
 
   first_index_col <- subgroups[[1]]
@@ -102,6 +128,7 @@ append_drivers <- function(
   driver_rows <- (seq(nrow(analysis_table)) + row_data_start)[-nrow(analysis_table)]
   separator_row <- max(driver_rows) + 1
   total_impact_row <- separator_row + 1
+  base_row <- total_impact_row + 1
 
 
   # ---------------------------------------------------------------------------
@@ -140,9 +167,10 @@ append_drivers <- function(
   openxlsx::setRowHeights(wb, sheet_name, rows = separator_row, heights = 0)
 
   openxlsx::writeData(wb, sheet_name, write_total, startRow = total_impact_row, startCol = col_data_start, colNames = FALSE)
-  openxlsx::writeData(wb, sheet_name, footer, startRow = total_impact_row + 1, startCol = col_data_start)
-  openxlsx::writeData(wb, sheet_name, "Bold italicized red index means a negative relationship", startRow = total_impact_row + 2, startCol = col_data_start)
-  openxlsx::writeData(wb, sheet_name, "Black cells mean an insignificant relationship", startRow = total_impact_row + 3, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, base_row_data, startRow = base_row, startCol = col_data_start, colNames = FALSE)
+  openxlsx::writeData(wb, sheet_name, footer, startRow = base_row + 1, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, "Bold italicized red index means a negative relationship", startRow = base_row + 2, startCol = col_data_start)
+  openxlsx::writeData(wb, sheet_name, "Black cells mean an insignificant relationship", startRow = base_row + 3, startCol = col_data_start)
   openxlsx::setColWidths(wb, sheet_name, cols = cols_to_hide, widths = 8.43, hidden = rep(TRUE, length(cols_to_hide)))
 
 
@@ -169,6 +197,11 @@ append_drivers <- function(
   # Total impact row
   openxlsx::addStyle(wb, sheet_name, style = styles$total_impact,
     rows = total_impact_row, cols = cols_all, gridExpand = TRUE, stack = TRUE
+  )
+
+  # Base row
+  openxlsx::addStyle(wb, sheet_name, style = styles$base,
+    rows = base_row, cols = cols_all, gridExpand = TRUE, stack = TRUE
   )
 
 
@@ -225,9 +258,9 @@ append_drivers <- function(
     borderStyle = "medium"
   )
 
-  # Total impact box
+  # Total impact + Base box
   oxl_outer_box(wb, sheet_name,
-    row_start = total_impact_row, row_end = total_impact_row,
+    row_start = total_impact_row, row_end = base_row,
     col_start = col_first, col_end = col_last,
     borderStyle = "medium"
   )
