@@ -135,12 +135,22 @@ seg_generate_spec <- function(
   # rescaled item 0 is a real answer rather than an absence. Zero-filling still
   # applies afterwards when Zero-filled is 1.
   #
+  # With a comma-separated source it becomes the MEAN of the recoded columns,
+  # which is how a person-level summary of a loop battery is stated: recode each
+  # occasion, then average the ones that were asked. Zero-filled 0 averages only
+  # the answered occasions (na.rm); 1 scores the unasked ones as 0.
+  #
   # Sits outside the zero-filled split - the two trees are already 6 IFs deep
-  # and Excel has repaired openxlsx formulas past about 10.
+  # and Excel has repaired openxlsx formulas past about 10. This branch is
+  # shallower than they are, so the deepest path does not grow.
   mapped <- paste0(
-    "IF(I", r, "=1,",
-      "E", r, "&\" = replace_na(recode_values(\"&G", r, "&\", \"&H", r, "&\", default = NA), 0)\",",
-      "E", r, "&\" = recode_values(\"&G", r, "&\", \"&H", r, "&\", default = NA)\")"
+    "IF(", hc, ",",
+      "IF(I", r, "=1,",
+        "E", r, "&\" = rowMeans(across(c(\"&G", r, "&\"), ~ replace_na(recode_values(.x, \"&H", r, "&\", default = NA), 0)))\",",
+        "E", r, "&\" = rowMeans(across(c(\"&G", r, "&\"), ~ recode_values(.x, \"&H", r, "&\", default = NA)), na.rm = TRUE)\"),",
+      "IF(I", r, "=1,",
+        "E", r, "&\" = replace_na(recode_values(\"&G", r, "&\", \"&H", r, "&\", default = NA), 0)\",",
+        "E", r, "&\" = recode_values(\"&G", r, "&\", \"&H", r, "&\", default = NA)\"))"
   )
 
   paste0(

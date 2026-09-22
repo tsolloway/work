@@ -85,7 +85,11 @@ seg_needs_stack <- function(
   }
 
 
-  person_vars <- setdiff(names(df), unlist(lapply(seq_len(n_contexts), grid_cols)))
+  # Keep the raw loop columns on the stacked frame. They are person-level (the
+  # whole battery, all contexts) and the spec needs them to state a person-level
+  # summary column-wise - rowMeans across a respondent's occasion columns. Drop
+  # them and that summary can only be produced in R, outside the document.
+  person_vars <- names(df)
 
   stacked <- lapply(seq_len(n_contexts), function(j){
 
