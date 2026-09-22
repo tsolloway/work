@@ -84,7 +84,7 @@ seg_needs_prepare <- function(seg,
     lo <- min(M, na.rm = TRUE)
     hi <- max(M, na.rm = TRUE)
     if(hi <= lo) stop("Items have no range to rescale.", call. = FALSE)
-    M <- (M - lo) / (hi - lo)
+    M <- rescale_unit(M, c(lo, hi))
     message("Analysis quantities on 0-1 (", lo, "->0 ... ", hi, "->1). ",
             "Item columns keep the raw codes - the spec rescales those itself.")
   }

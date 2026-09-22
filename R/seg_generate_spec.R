@@ -126,25 +126,26 @@ seg_generate_spec <- function(
       "E", r, "&\" = as.integer(if_any(c(\"&G", r, "&\"), ~ .x %in% \"&H", r, "&\"))\",",
     "E", r, "&\" = recode_values(\"&G", r, "&\", \"&H", r, "&\" ~ 1, NA ~ NA, default = 0)\"))))))")
 
-  # Linear rescale branch, e.g. Value = "unit 1:3" -> rescale_unit(src, 1:3).
-  # It sits OUTSIDE the zero-filled split rather than inside both trees: the
-  # trees are already 6 IFs deep and Excel starts throwing repair dialogs past
-  # about 10, so widening them is the expensive place to add a branch.
-  args <- paste0("MID(H", r, ",6,LEN(H", r, "))")
-
-  resc <- paste0(
-    "IF(", hc, ",",
-      "IF(I", r, "=1,",
-        "E", r, "&\" = rescale_unit(rowMeans(across(c(\"&G", r, "&\"), ~ replace_na(.x, 0))), \"&", args, "&\")\",",
-        "E", r, "&\" = rescale_unit(rowMeans(across(c(\"&G", r, "&\")), na.rm = TRUE), \"&", args, "&\")\"),",
-      "IF(I", r, "=1,",
-        "E", r, "&\" = rescale_unit(replace_na(\"&G", r, "&\", 0), \"&", args, "&\")\",",
-        "E", r, "&\" = rescale_unit(\"&G", r, "&\", \"&", args, "&\")\"))"
+  # Explicit value-map branch. A Value containing "~" is a full mapping, e.g.
+  # "1 ~ 0, 2 ~ 0.5, 3 ~ 1" -> recode_values(need01, 1 ~ 0, 2 ~ 0.5, 3 ~ 1).
+  # The spec states the recode outright rather than naming a helper the reader
+  # would have to go and look up, which is the point of the document.
+  #
+  # default = NA, not 0: an unmapped code is an error to notice, and on a
+  # rescaled item 0 is a real answer rather than an absence. Zero-filling still
+  # applies afterwards when Zero-filled is 1.
+  #
+  # Sits outside the zero-filled split - the two trees are already 6 IFs deep
+  # and Excel has repaired openxlsx formulas past about 10.
+  mapped <- paste0(
+    "IF(I", r, "=1,",
+      "E", r, "&\" = replace_na(recode_values(\"&G", r, "&\", \"&H", r, "&\", default = NA), 0)\",",
+      "E", r, "&\" = recode_values(\"&G", r, "&\", \"&H", r, "&\", default = NA)\")"
   )
 
   paste0(
     "IF(G", r, "=\"\",\"\",",
-      "IF(LEFT(H", r, ",5)=\"unit \",", resc, ",",
+      "IF(IFERROR(FIND(\"~\",H", r, "),FALSE),", mapped, ",",
         "IF(I", r, "=1,", zf, ",", nozf, ")))"
   )
 }
