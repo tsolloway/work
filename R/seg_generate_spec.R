@@ -126,7 +126,27 @@ seg_generate_spec <- function(
       "E", r, "&\" = as.integer(if_any(c(\"&G", r, "&\"), ~ .x %in% \"&H", r, "&\"))\",",
     "E", r, "&\" = recode_values(\"&G", r, "&\", \"&H", r, "&\" ~ 1, NA ~ NA, default = 0)\"))))))")
 
-  paste0("IF(G", r, "=\"\",\"\",IF(I", r, "=1,", zf, ",", nozf, "))")
+  # Linear rescale branch, e.g. Value = "unit 1:3" -> rescale_unit(src, 1:3).
+  # It sits OUTSIDE the zero-filled split rather than inside both trees: the
+  # trees are already 6 IFs deep and Excel starts throwing repair dialogs past
+  # about 10, so widening them is the expensive place to add a branch.
+  args <- paste0("MID(H", r, ",6,LEN(H", r, "))")
+
+  resc <- paste0(
+    "IF(", hc, ",",
+      "IF(I", r, "=1,",
+        "E", r, "&\" = rescale_unit(rowMeans(across(c(\"&G", r, "&\"), ~ replace_na(.x, 0))), \"&", args, "&\")\",",
+        "E", r, "&\" = rescale_unit(rowMeans(across(c(\"&G", r, "&\")), na.rm = TRUE), \"&", args, "&\")\"),",
+      "IF(I", r, "=1,",
+        "E", r, "&\" = rescale_unit(replace_na(\"&G", r, "&\", 0), \"&", args, "&\")\",",
+        "E", r, "&\" = rescale_unit(\"&G", r, "&\", \"&", args, "&\")\"))"
+  )
+
+  paste0(
+    "IF(G", r, "=\"\",\"\",",
+      "IF(LEFT(H", r, ",5)=\"unit \",", resc, ",",
+        "IF(I", r, "=1,", zf, ",", nozf, ")))"
+  )
 }
 
 

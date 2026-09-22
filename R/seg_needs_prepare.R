@@ -4,7 +4,7 @@
 #'   means that profile them. Writes four families of columns:
 #'
 #'   \describe{
-#'     \item{`need01..`}{the answers, rescaled to 0-1 unless `rescale = "none"`}
+#'     \item{`need01..`}{the survey answers, untouched - the spec rescales these}
 #'     \item{`needc01..`}{grid-centred - each item minus its own grid's mean}
 #'     \item{`needs01..`}{item-scaled - each item z-scored across all grids}
 #'     \item{`pneed01..`}{the respondent's mean per item, on every one of their rows}
@@ -36,10 +36,13 @@
 #'   `"none"` leaves the raw values.
 #' @param center Character. `"none"` (default), or `"grid"` to also grid-centre
 #'   before scaling. Only meaningful for the clustering path.
-#' @param rescale Character. `"unit"` (default) maps the answer codes onto 0-1
-#'   across all items together, so item values, person means and grid intensity
-#'   are all bounded and read as a proportion of the scale. `"none"` keeps the
-#'   raw codes.
+#' @param rescale Character. `"unit"` (default) puts the ANALYSIS quantities -
+#'   the centred and scaled bases, the person means, the grid intensity - on
+#'   0-1 across all items together. It never rewrites the item columns
+#'   themselves: those are the survey answers the spec names as its source, and
+#'   the spec does its own rescale via `Value = "unit 1:3"`. Preparing
+#'   variables for analysis and preparing them for the client shell are
+#'   separate jobs.
 #'
 #' @return The seg object with the derived columns on
 #'   `seg[["data"]][["stacked"]]` and their names in `seg[["needs"]][["vars"]]`.
@@ -72,18 +75,18 @@ seg_needs_prepare <- function(seg,
   # The range is taken across ALL items together, not per item: the 20 needs
   # share one scale, so rescaling each on its own observed range would stretch
   # a need nobody rated at the floor and destroy comparability between them.
+  # NEVER write back to the item columns. need01..N are the survey answers and
+  # the spec's source column points at them, so mutating them here would mean
+  # the spec documents a recode of something other than what it names. The
+  # rescale for the SHELL belongs in the spec (Value = "unit 1:3"); this one is
+  # for the analysis quantities below and stays inside this function.
   if(rescale == "unit"){
-
     lo <- min(M, na.rm = TRUE)
     hi <- max(M, na.rm = TRUE)
-
     if(hi <= lo) stop("Items have no range to rescale.", call. = FALSE)
-
     M <- (M - lo) / (hi - lo)
-    stacked[items] <- as.data.frame(M)
-
-    message("Items rescaled to 0-1 from the ", hi - lo + 1, "-point scale (",
-            lo, "->0 ... ", hi, "->1)")
+    message("Analysis quantities on 0-1 (", lo, "->0 ... ", hi, "->1). ",
+            "Item columns keep the raw codes - the spec rescales those itself.")
   }
 
   row_mu <- rowMeans(M)
@@ -109,10 +112,15 @@ seg_needs_prepare <- function(seg,
   tnames <- sprintf("ptop%02d",  seq_len(n))
   top_code <- max(M, na.rm = TRUE)   # 1 after a unit rescale
 
-  person_summary <- stacked %>%
+  # built from M (rescaled), not from the raw item columns
+  summ_src <- as.data.frame(M) %>%
+    rlang::set_names(items) %>%
+    dplyr::mutate(person_id = stacked$person_id)
+
+  person_summary <- summ_src %>%
     dplyr::group_by(.data$person_id) %>%
     dplyr::summarise(
-      dplyr::across(dplyr::all_of(items), mean,                           .names = "mean_{.col}"),
+      dplyr::across(dplyr::all_of(items), mean,                              .names = "mean_{.col}"),
       dplyr::across(dplyr::all_of(items), ~ as.integer(any(.x == top_code)), .names = "top_{.col}"),
       .groups = "drop"
     ) %>%
