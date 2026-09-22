@@ -4,7 +4,14 @@
 \alias{seg_create_profile_block}
 \title{seg_create_profile_block}
 \usage{
-seg_create_profile_block(prefix, name, label, source_var, value)
+seg_create_profile_block(
+  prefix,
+  name,
+  label,
+  source_var,
+  value,
+  zero_filled = NULL
+)
 }
 \arguments{
 \item{prefix}{character, variable prefix (e.g. "AC")}
@@ -16,6 +23,16 @@ seg_create_profile_block(prefix, name, label, source_var, value)
 \item{source_var}{character vector, SPSS variable names}
 
 \item{value}{character vector, value coding ("1", ">= 4", "mean", etc.)}
+
+\item{zero_filled}{Zero-filled flag written to column I, recycled over the
+items. \code{1} turns NAs into 0; \code{0} lets them propagate. Default \code{NULL} picks
+per item: \code{0} where \code{value} is blank, \code{1} otherwise.
+
+A blank \code{value} sends the row down the mean / direct-copy branch of the
+Syntax formula. Zero-filling there scores an unanswered source as 0 rather
+than leaving it missing, which silently drags a mean down by however many
+sources the respondent was never shown - on a looped battery that is most
+of them. Blank-value rows therefore default to 0.}
 }
 \value{
 A list with elements \code{prefix}, \code{block_name}, and \code{items} (data.frame).

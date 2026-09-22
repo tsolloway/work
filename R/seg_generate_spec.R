@@ -34,6 +34,15 @@ seg_generate_spec <- function(
   message("Spec file saved to: ", output_path)
   message("Total polar items: ", total_polars, " across ", length(polar_blocks), " blocks")
   message("Total profile items: ", total_profiles, " across ", length(profile_blocks), " blocks")
+
+  n_zf0 <- sum(vapply(
+    profile_blocks,
+    function(b) if (is.null(b$items$zero_filled)) 0L else sum(b$items$zero_filled == 0L),
+    integer(1)
+  ))
+  if (n_zf0 > 0) {
+    message("Zero-filled = 0 on ", n_zf0, " row(s) (mean / direct copy - NAs propagate)")
+  }
   message("Grand total: ", total_polars + total_profiles, " variables")
 
   invisible(output_path)
@@ -278,7 +287,10 @@ seg_generate_spec <- function(
       openxlsx::writeData(wb, sheet, x = items$source_var[i], startRow = r, startCol = 7, colNames = FALSE)
       openxlsx::writeData(wb, sheet, x = items$value[i],     startRow = r, startCol = 8, colNames = FALSE)
       openxlsx::addStyle(wb, sheet, s_center, rows = r, cols = 8)
-      openxlsx::writeData(wb, sheet, x = 1L,                 startRow = r, startCol = 9, colNames = FALSE)
+      # Zero-filled: from the block when present, else the historical default
+      # of 1 so blocks built by an older seg_create_profile_block() still work.
+      zf_i <- if (!is.null(items$zero_filled)) as.integer(items$zero_filled[i]) else 1L
+      openxlsx::writeData(wb, sheet, x = zf_i,               startRow = r, startCol = 9, colNames = FALSE)
       openxlsx::addStyle(wb, sheet, s_center, rows = r, cols = 9)
 
       # E: Var formula

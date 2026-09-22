@@ -21,8 +21,12 @@ current working directory). Three subfolders are created beneath it:
 \item{project_number}{Character. Project number used in file naming and
 metadata.}
 
-\item{force}{Logical. If \code{TRUE}, deletes existing project subfolders before
-recreating them. Errors if folders exist and \code{force = FALSE} (default).}
+\item{force}{Logical. If \code{TRUE}, DELETES the three project subfolders and
+everything in them before recreating them - specs, syntax and solutions
+included - and warns with a file count first. If \code{FALSE} (default) and the
+folders already exist, attaches to them without touching their contents, so
+a project can be re-entered safely. An existing spec at the template path
+is never overwritten in either case of attaching.}
 }
 \value{
 A seg object (list with class \code{"analytic_segmentation"}) containing
