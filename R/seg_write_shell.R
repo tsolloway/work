@@ -1196,6 +1196,7 @@
     wb,
     shell_tables,
     solution_var,
+    file_label = NULL,
     add_key = FALSE,
     seg_n = NULL,
     row_data_start = 15,
@@ -1415,7 +1416,7 @@
   }else if(!segment_specific){
     openxlsx::writeData(
       wb, sheet_name,
-      x = glue::glue("Solution - {solution_var}"),
+      x = glue::glue("Solution{if(is.null(file_label)) '' else paste0(' ', file_label)} - {solution_var}"),
       colNames = FALSE,
       startRow = row_data_start - 4,
       startCol = col_start + 1
@@ -1813,6 +1814,7 @@
 seg_write_shell <- function(
     seg,
     solution_var,
+    file_label = NULL,
     key = NULL,
     add_key = FALSE,
     label_width = 75,
@@ -1936,6 +1938,7 @@ seg_write_shell <- function(
 
   .seg_append_sheet(
     wb = wb,
+    file_label = file_label,
     shell_tables = shell_tables,
     solution_var = solution_var,
     setting_polar_threshold = setting_polar_threshold,
@@ -1955,6 +1958,7 @@ seg_write_shell <- function(
   if(add_key){
     .seg_append_sheet(
       wb = wb,
+      file_label = file_label,
       shell_tables = shell_tables,
       solution_var = solution_var,
       add_key = TRUE,
@@ -1972,6 +1976,7 @@ seg_write_shell <- function(
     shell_tables[["segment_tables"]] %>% length() %>% seq(),
     ~.seg_append_sheet(
       wb = wb,
+      file_label = file_label,
       shell_tables = shell_tables,
       solution_var = solution_var,
       seg_n = .x,
@@ -1993,10 +1998,12 @@ seg_write_shell <- function(
   batch$flush(wb)
 
 
+  stem <- glue::glue("Solution{if(is.null(file_label)) '' else paste0(' ', file_label)} - {solution_var}")
+
   if(truncate){
-    file_name <- glue::glue("{where}/Solution - {solution_var} (Truncate).xlsx")
+    file_name <- glue::glue("{where}/{stem} (Truncate).xlsx")
   }else{
-    file_name <- glue::glue("{where}/Solution - {solution_var}.xlsx")
+    file_name <- glue::glue("{where}/{stem}.xlsx")
   }
 
 

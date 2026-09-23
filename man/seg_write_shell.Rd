@@ -7,6 +7,7 @@
 seg_write_shell(
   seg,
   solution_var,
+  file_label = NULL,
   key = NULL,
   add_key = FALSE,
   label_width = 75,

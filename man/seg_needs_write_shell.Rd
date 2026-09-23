@@ -4,7 +4,13 @@
 \alias{seg_needs_write_shell}
 \title{seg_needs_write_shell}
 \usage{
-seg_needs_write_shell(seg, solution_var, level = c("grid", "person"), ...)
+seg_needs_write_shell(
+  seg,
+  solution_var,
+  level = c("grid", "person"),
+  verbose = FALSE,
+  ...
+)
 }
 \arguments{
 \item{seg}{A seg object after \code{\link[=seg_get_spec]{seg_get_spec()}} has executed the spec.}
@@ -14,6 +20,10 @@ seg_needs_write_shell(seg, solution_var, level = c("grid", "person"), ...)
 demographic.}
 
 \item{level}{Character. \code{"grid"} (default) or \code{"person"}.}
+
+\item{verbose}{Logical. Report the column and block bookkeeping behind the
+level choice. Off by default - the one-line summary says what the shell
+contains, and the detail only matters when something is out of step.}
 
 \item{...}{Passed through to \code{\link[=seg_write_shell]{seg_write_shell()}}.}
 }

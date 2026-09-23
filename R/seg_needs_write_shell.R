@@ -20,17 +20,19 @@
 #'   `"context"` is the natural means check; on the person frame use a
 #'   demographic.
 #' @param level Character. `"grid"` (default) or `"person"`.
+#' @param verbose Logical. Report the column and block bookkeeping behind the
+#'   level choice. Off by default - the one-line summary says what the shell
+#'   contains, and the detail only matters when something is out of step.
 #' @param ... Passed through to [seg_write_shell()].
 #'
 #' @return Whatever [seg_write_shell()] returns, invisibly.
 #'
 #' @export
-seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person"), ...){
+seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person"),
+                                  verbose = FALSE, ...){
 
   level <- match.arg(level)
 
-  # Subset the SPEC-EXECUTED frame, not the raw stacked one - with_shell is what
-  # carries the spec variables the shell is built from.
   df <- seg[["data"]][["with_shell"]]
 
   if(!is.data.frame(df)){
@@ -38,85 +40,107 @@ seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person")
          call. = FALSE)
   }
 
+  if(!"person_id" %in% names(df)){
+    stop("person_id is not on the executed frame - was the stacked file loaded?",
+         call. = FALSE)
+  }
+
   seg_local <- seg
+
+  # A column is GRID-level when it differs down a respondent's rows. That is the
+  # whole distinction: such a column has no single value for a person, so it can
+  # neither be collapsed to a person row nor read as a person attribute.
+  # Detected rather than listed, so it stays correct if the blocks change.
+  varying <- vapply(
+    setdiff(names(df), "person_id"),
+    function(v) any(tapply(df[[v]], df$person_id, function(x) dplyr::n_distinct(x) > 1)),
+    logical(1)
+  )
+  grid_cols <- names(varying)[varying]
+
+  # A block is grid-level when every one of its variables is
+  is_grid_block <- function(tbl){
+    if(is.null(tbl) || !"vars" %in% names(tbl)) return(logical(0))
+    vapply(tbl[["vars"]], function(v){
+      if(is.null(v) || !"var" %in% names(v)) return(FALSE)
+      vv <- stats::na.omit(v[["var"]])
+      length(vv) > 0 && all(vv %in% grid_cols)
+    }, logical(1))
+  }
+
+  prof_spec  <- seg[["spec"]][["profiles"]]
+  prof_shell <- seg[["shell"]][["profiles"]]
+  gb         <- is_grid_block(prof_shell)
+  grid_blocks <- if(length(gb)) prof_shell[["prefix"]][gb] else character(0)
+
+  n_polar <- if(is.null(seg[["shell"]][["polars"]])) 0L else nrow(seg[["shell"]][["polars"]])
+  n_prof  <- if(is.null(prof_shell)) 0L else nrow(prof_shell)
 
   if(level == "person"){
 
-    if(!"person_id" %in% names(df)){
-      stop("person_id is not on the executed frame - was the stacked file loaded?",
-           call. = FALSE)
-    }
+    # Drop the grid-level columns and the blocks made of them, from the frame,
+    # the spec and the shell - all three hold a copy of the variable list and
+    # seg_write_shell() fails if they disagree.
+    df <- dplyr::distinct(df[setdiff(names(df), grid_cols)], .data$person_id, .keep_all = TRUE)
 
-    # Collapsing to one row per person is only valid for columns that are
-    # CONSTANT within a person. A grid-level column varies down a respondent's
-    # rows, so collapsing would report whichever context sorted first as though
-    # it were a person attribute. Detect them rather than keep a list.
-    varying <- vapply(
-      setdiff(names(df), "person_id"),
-      function(v) any(tapply(df[[v]], df$person_id,
-                             function(x) dplyr::n_distinct(x) > 1)),
-      logical(1)
+    if(length(gb))                 seg_local[["shell"]][["profiles"]] <- prof_shell[!gb, , drop = FALSE]
+    if(length(is_grid_block(prof_spec))) seg_local[["spec"]][["profiles"]] <- prof_spec[!is_grid_block(prof_spec), , drop = FALSE]
+
+    kept <- n_polar + sum(!gb)
+
+    message(
+      "Person shell: ", kept, " of ", n_polar + n_prof, " blocks",
+      if(length(grid_blocks))
+        paste0(". Excludes ", paste(grid_blocks, collapse = ", "),
+               " - these vary by occasion and have no person-level value")
+      else "",
+      ". Base = ", format(nrow(df), big.mark = ","), " respondents."
     )
 
-    dropped <- names(varying)[varying]
-
-    if(length(dropped) > 0){
-      message("Dropping ", length(dropped), " grid-level column(s) with no ",
-              "person-level meaning (e.g. ",
-              paste(utils::head(dropped, 4), collapse = ", "), ")")
-      df <- df[setdiff(names(df), dropped)]
+    if(verbose){
+      message("  columns removed: ", length(grid_cols),
+              " (e.g. ", paste(utils::head(grid_cols, 4), collapse = ", "), ")")
     }
 
-    df <- dplyr::distinct(df, .data$person_id, .keep_all = TRUE)
+  } else {
 
-    # seg_write_shell() builds its tables from seg$shell, which seg_do_spec()
-    # derives from the spec - so both have to be trimmed to what survives on the
-    # person frame, or it asks for columns that were deliberately removed.
-    # Blocks left with nothing are dropped whole.
-    trim <- function(tbl, what){
-
-      if(is.null(tbl) || !"vars" %in% names(tbl)) return(tbl)
-
-      tbl[["vars"]] <- lapply(tbl[["vars"]], function(v){
-        if(is.null(v) || !"var" %in% names(v)) return(v)
-        v[is.na(v[["var"]]) | v[["var"]] %in% names(df), , drop = FALSE]
-      })
-
-      keep <- vapply(tbl[["vars"]], function(v) nrow(v) > 0, logical(1))
-
-      if(any(!keep)){
-        message("Dropping ", sum(!keep), " grid-level block(s) from the person ",
-                what, ": ", paste(tbl[["prefix"]][!keep], collapse = ", "))
+    # Grid shell keeps everything, but reads better with the occasion-specific
+    # blocks up front next to the polars rather than trailing after
+    # demographics.
+    if(length(gb) && any(gb)){
+      seg_local[["shell"]][["profiles"]] <- rbind(prof_shell[gb, , drop = FALSE],
+                                                  prof_shell[!gb, , drop = FALSE])
+      gs <- is_grid_block(prof_spec)
+      if(length(gs) && any(gs)){
+        seg_local[["spec"]][["profiles"]] <- rbind(prof_spec[gs, , drop = FALSE],
+                                                    prof_spec[!gs, , drop = FALSE])
       }
-
-      tbl[keep, , drop = FALSE]
     }
 
-    seg_local[["spec"]][["profiles"]]  <- trim(seg[["spec"]][["profiles"]],  "spec")
-    seg_local[["shell"]][["profiles"]] <- trim(seg[["shell"]][["profiles"]], "shell")
+    message(
+      "Grid shell: ", n_polar + n_prof, " blocks",
+      if(length(grid_blocks))
+        paste0(", with ", paste(grid_blocks, collapse = ", "), " ordered first")
+      else "",
+      ". Base = ", format(nrow(df), big.mark = ","), " occasion-grids, not people."
+    )
   }
 
-  # ---- guard: frame, spec and shell must name the same variables -----------
-  # seg_write_shell() takes its variable list from seg$shell and selects it with
-  # all_of(), which is strict by design - a shell silently losing rows because a
-  # column vanished would be worse than a crash. But it fails ~30 frames deep,
-  # naming the variables and not the block they came from, and there are three
-  # copies of that list (the frame, seg$spec, seg$shell) so knowing NS01 is
-  # absent does not say which pair is out of step. Check it here instead.
-  missing_from_frame <- function(tbl){
-    if(is.null(tbl) || !"vars" %in% names(tbl)) return(NULL)
-    Map(function(v, pref){
-      if(is.null(v) || !"var" %in% names(v)) return(NULL)
-      m <- stats::na.omit(v[["var"]])
-      m <- setdiff(m, names(df))
-      if(length(m)) stats::setNames(list(m), pref) else NULL
-    }, tbl[["vars"]], tbl[["prefix"]]) |> unlist(recursive = FALSE)
-  }
-
-  gaps <- c(
-    missing_from_frame(seg_local[["shell"]][["polars"]]),
-    missing_from_frame(seg_local[["shell"]][["profiles"]])
-  )
+  # Guard: the frame, the spec and the shell must name the same variables.
+  # seg_write_shell() selects with all_of(), which is strict by design, but
+  # fails ~30 frames deep naming variables rather than the block they came from.
+  gaps <- unlist(lapply(
+    list(seg_local[["shell"]][["polars"]], seg_local[["shell"]][["profiles"]]),
+    function(tbl){
+      if(is.null(tbl) || !"vars" %in% names(tbl)) return(NULL)
+      Map(function(v, pref){
+        if(is.null(v) || !"var" %in% names(v)) return(NULL)
+        m <- setdiff(stats::na.omit(v[["var"]]), names(df))
+        if(length(m)) stats::setNames(list(m), pref) else NULL
+      }, tbl[["vars"]], tbl[["prefix"]])
+    }
+  ), recursive = FALSE)
+  gaps <- gaps[!vapply(gaps, is.null, logical(1))]
 
   if(length(gaps) > 0){
     stop(
@@ -128,19 +152,16 @@ seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person")
                       if(length(v) > 3) paste0(" ... (", length(v), " total)") else ""),
                character(1)),
              collapse = "\n"),
-      "\nThe frame, the spec and the shell are out of step. At ", level,
-      " level the grid-level blocks should be dropped from all three.",
+      "\nThe frame, the spec and the shell are out of step.",
       call. = FALSE
     )
   }
 
-  base_label <- if(level == "grid") "grids" else "respondents"
-
-  message("Writing ", level, "-level shell cut by ", solution_var,
-          " (base = ", nrow(df), " ", base_label, ").")
-
   seg_local[["data"]][["with_shell"]] <- df
   seg_local[["meta"]][["shell_level"]] <- level
 
-  invisible(seg_write_shell(seg_local, solution_var = solution_var, ...))
+  invisible(
+    seg_write_shell(seg_local, solution_var = solution_var,
+                    file_label = if(level == "grid") "Grid" else "Person", ...)
+  )
 }
