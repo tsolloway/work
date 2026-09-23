@@ -42,9 +42,23 @@ seg_do_spec <- function(seg, debug = FALSE){
       ) %>%
       remove_empty()
 
-    # Split into rowwise (%in%, mean) vs vectorized (everything else)
-    # Users can manually override syntax, so keep rowwise for both
-    needs_rowwise <- grepl("%in%|mean\\(", x)
+    # Split into rowwise vs vectorised.
+    #
+    # rowwise() is only needed where an expression COLLAPSES a vector to one
+    # value per row - any(c(a, b)), mean(c(a, b, c)) and friends. Those are
+    # forms a user can hand-write into a Syntax cell; the generator does not
+    # emit them.
+    #
+    # It is NOT needed for if_any() / if_all() / rowMeans() / rowSums(), which
+    # are row-wise in semantics but vectorised in implementation. The pattern
+    # used to catch "%in%", which fires on every if_any() net the generator
+    # writes and made them ~750x slower for no change in result.
+    #
+    # \\b keeps this off the row-aware and prefixed forms for free: there is no
+    # word boundary inside "if_any(" or "rowMeans(", and the row* variants are
+    # capitalised besides.
+    collapsing <- "\\b(any|all|sum|mean|median|max|min|sd|var|prod)\\("
+    needs_rowwise <- grepl(collapsing, x)
     x_vec <- x[!needs_rowwise]
     x_row <- x[needs_rowwise]
 
