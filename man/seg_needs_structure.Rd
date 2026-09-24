@@ -7,7 +7,6 @@
 seg_needs_structure(
   seg,
   level = c("grid", "person"),
-  model = c("pca", "fa"),
   nfactors = 4,
   rotation = "equamax",
   congruence = TRUE,
@@ -22,10 +21,9 @@ seg_needs_structure(
 \item{level}{Character. \code{"grid"} (default) or \code{"person"} - which unit to
 write the review workbook for.}
 
-\item{model}{Character. \code{"pca"} (default, matches the suite) or \code{"fa"}.}
-
-\item{nfactors}{Integer vector of factor counts to compare in the congruence
-check (default \code{4}).}
+\item{nfactors}{Integer vector of factor counts (default \code{4}). Each gets a
+sheet in the workbook and a line in the congruence check. Must lie between
+3 and the number of needs minus 2 - the range \code{\link[=pca_analysis]{pca_analysis()}} fits.}
 
 \item{rotation}{Rotation passed through to the engine.}
 
@@ -42,7 +40,8 @@ The seg object with the workbook path in
 Factors the needs and writes the rotation workbook for review,
 using the same engine and output format as the rest of the suite
 (\code{\link[=pca_analysis]{pca_analysis()}} / \code{\link[=pca_write]{pca_write()}}), so the winner is picked the same way as
-on a standard segmentation and read back with \code{\link[=seg_get_fa_winner]{seg_get_fa_winner()}}.
+on a standard segmentation. It is read back with \code{\link[=seg_needs_themes]{seg_needs_themes()}}
+(\verb{winner =}); \code{\link[=seg_get_fa_winner]{seg_get_fa_winner()}} is the polar path.
 
 Two things it adds over calling \code{\link[=seg_pca]{seg_pca()}} directly.
 
@@ -57,10 +56,15 @@ factors, the themes are a property of the needs rather than an artifact of
 how the loop was aggregated, and either unit can be used downstream. On the
 Kadro hearables data congruence was 0.98-1.00 across all four factors.
 
-\strong{On \code{model}.} The suite's default is \code{\link[psych:principal]{psych::principal()}} with
-equamax, and that is kept as the default so a needs project reviews the
-same way as any other. Be aware the choice is not cosmetic for theme
-assignment: on Kadro, PCA-equamax and FA-oblimin agreed at only ARI 0.61 at
-the person level, and they disagreed about whether a focus/motivation theme
-exists at all. Run both and pick on interpretability.
+\strong{PCA only.} Both the workbook and the congruence check run
+\code{\link[psych:principal]{psych::principal()}}, the suite's engine, so what is reviewed and what is
+compared are the same model. The choice is not cosmetic: on Kadro,
+PCA-equamax and FA-oblimin agreed at only ARI 0.61 at the person level and
+disagreed about whether a focus/motivation theme exists at all - so the
+rotation is worth reviewing, and a factor that only appears under one
+rotation is a fragile one.
+
+\strong{Only the requested solutions are written.} \code{nfactors} sets both
+the congruence check and the sheets in the workbook, so the review covers
+exactly the solutions in contention.
 }

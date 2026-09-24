@@ -43,8 +43,8 @@
 #'   (default `0.40`).
 #' @param cross_gap Numeric. A runner-up loading within this of the best marks
 #'   a cross-loader (default `0.10`).
-#' @param level,model,rotation Used only with `nfactors`; as in
-#'   [seg_needs_structure()].
+#' @param level,rotation Used only with `nfactors`; as in
+#'   [seg_needs_structure()]. The fit is PCA, matching the workbook.
 #' @param file_location Character. Rotation workbook to read with `winner`.
 #' @param row_header Integer. Header row of the workbook sheet (default `4`).
 #'
@@ -62,14 +62,12 @@ seg_needs_themes <- function(
     min_loading   = 0.40,
     cross_gap     = 0.10,
     level         = c("person", "grid"),
-    model         = c("pca", "fa"),
     rotation      = "equamax",
     file_location = NULL,
     row_header    = 4
 ){
 
   level <- match.arg(level)
-  model <- match.arg(model)
 
   if(!inherits(seg, "analytic_needs")){
     stop("Run seg_needs_init() first.", call. = FALSE)
@@ -127,18 +125,14 @@ seg_needs_themes <- function(
 
   } else if(!is.null(nfactors)){
 
-    source_desc <- paste0(toupper(model), " ", rotation, ", ", nfactors, " factors, ", level, " level")
+    source_desc <- paste0("PCA ", rotation, ", ", nfactors, " factors, ", level, " level")
 
     df <- seg[["data"]][["stacked"]]
     if(level == "person") df <- dplyr::distinct(df, .data$person_id, .keep_all = TRUE)
     vars <- if(level == "person") seg[["needs"]][["vars"]][["person"]] else items
     X <- as.matrix(df[vars])
 
-    fit <- if(model == "pca"){
-      psych::principal(X, nfactors = nfactors, rotate = rotation)
-    } else {
-      psych::fa(X, nfactors = nfactors, rotate = rotation, fm = "minres")
-    }
+    fit <- psych::principal(X, nfactors = nfactors, rotate = rotation)
     L <- unclass(fit[["loadings"]])
 
   } else {

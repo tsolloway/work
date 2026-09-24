@@ -14,7 +14,6 @@ seg_needs_themes(
   min_loading = 0.4,
   cross_gap = 0.1,
   level = c("person", "grid"),
-  model = c("pca", "fa"),
   rotation = "equamax",
   file_location = NULL,
   row_header = 4
@@ -44,8 +43,8 @@ out of every theme). Applied after the source.}
 \item{cross_gap}{Numeric. A runner-up loading within this of the best marks
 a cross-loader (default \code{0.10}).}
 
-\item{level, model, rotation}{Used only with \code{nfactors}; as in
-\code{\link[=seg_needs_structure]{seg_needs_structure()}}.}
+\item{level, rotation}{Used only with \code{nfactors}; as in
+\code{\link[=seg_needs_structure]{seg_needs_structure()}}. The fit is PCA, matching the workbook.}
 
 \item{file_location}{Character. Rotation workbook to read with \code{winner}.}
 
