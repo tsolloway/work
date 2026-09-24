@@ -144,9 +144,15 @@ bn_summary_statistics <- function(
     if (compare_to_naive) {
 
       if(!is.null(seed)) set.seed(seed)
+      # `naive.bayes()` returns an UNFITTED structure (class bn.naive/bn).
+      # bnlearn <= 5.1 let predict() fit it on the fly; 5.2.1's
+      # predict.bn.naive calls check.fit() and errors ("object must be an
+      # object of class 'bn.fit'"), so fit it explicitly. Keep the structure
+      # too: bnlearn::score() below wants the bn, not the bn.fit.
       fit_naive <- bnlearn::naive.bayes(df, training = dv)
+      fit_naive_fitted <- bnlearn::bn.fit(fit_naive, df, method = "bayes")
 
-      df_predict_naive <- predict(fit_naive, data = df) %>%
+      df_predict_naive <- predict(fit_naive_fitted, data = df) %>%
         dplyr::bind_cols(df[[dv]]) %>%
         setNames(c("predicted", "actual")) %>%
         suppressMessages()
