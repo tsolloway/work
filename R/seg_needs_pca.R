@@ -1,7 +1,8 @@
-#' seg_needs_structure
+#' seg_needs_pca
 #'
-#' @description Factors the needs and writes the rotation workbook for review,
-#'   using the same engine and output format as the rest of the suite
+#' @description The needs path's counterpart to [seg_pca()]: runs PCA on the
+#'   needs and writes the rotation workbook for review, using the same engine
+#'   and output format as the rest of the suite
 #'   ([pca_analysis()] / [pca_write()]), so the winner is picked the same way as
 #'   on a standard segmentation. It is read back with [seg_needs_themes()]
 #'   (`winner =`); [seg_get_fa_winner()] is the polar path.
@@ -46,7 +47,7 @@
 #'   `seg[["paths"]][["files"]][["pca"]]`.
 #'
 #' @export
-seg_needs_structure <- function(
+seg_needs_pca <- function(
     seg,
     level      = c("grid", "person"),
     nfactors   = 4,

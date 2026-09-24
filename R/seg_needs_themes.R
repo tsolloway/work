@@ -10,7 +10,7 @@
 #'     \item{`manual`}{a named list, theme name -> items. Replaces the loadings
 #'       outright.}
 #'     \item{`winner`}{the sheet of the rotation workbook written by
-#'       [seg_needs_structure()] - the solution that was actually reviewed. This
+#'       [seg_needs_pca()] - the solution that was actually reviewed. This
 #'       is the normal route.}
 #'     \item{`nfactors`}{fit the structure here. Equamax has local optima, so a
 #'       fresh fit can move a marginal item relative to the workbook; prefer
@@ -46,7 +46,7 @@
 #' @param cross_gap Numeric. A runner-up loading within this of the best marks
 #'   a cross-loader (default `0.10`).
 #' @param level,rotation Used only with `nfactors`; as in
-#'   [seg_needs_structure()]. The fit is PCA, matching the workbook.
+#'   [seg_needs_pca()]. The fit is PCA, matching the workbook.
 #' @param file_location Character. Rotation workbook to read with `winner`.
 #' @param row_header Integer. Header row of the workbook sheet (default `4`).
 #'
@@ -107,7 +107,7 @@ seg_needs_themes <- function(
 
     if(is.null(file_location)) file_location <- seg[["paths"]][["files"]][["pca"]]
     if(is.null(file_location) || is.na(file_location) || !file.exists(file_location)){
-      stop("No rotation workbook found. Run seg_needs_structure() or pass file_location.",
+      stop("No rotation workbook found. Run seg_needs_pca() or pass file_location.",
            call. = FALSE)
     }
     source_desc <- paste0("workbook sheet ", winner, " (", basename(file_location), ")")

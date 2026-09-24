@@ -46,7 +46,7 @@ factors. Defaults to the factor names \code{\link[=pca_write]{pca_write()}} gave
 a cross-loader (default \code{0.10}).}
 
 \item{level, rotation}{Used only with \code{nfactors}; as in
-\code{\link[=seg_needs_structure]{seg_needs_structure()}}. The fit is PCA, matching the workbook.}
+\code{\link[=seg_needs_pca]{seg_needs_pca()}}. The fit is PCA, matching the workbook.}
 
 \item{file_location}{Character. Rotation workbook to read with \code{winner}.}
 
@@ -67,7 +67,7 @@ Three sources, in order of precedence:
 \item{\code{manual}}{a named list, theme name -> items. Replaces the loadings
 outright.}
 \item{\code{winner}}{the sheet of the rotation workbook written by
-\code{\link[=seg_needs_structure]{seg_needs_structure()}} - the solution that was actually reviewed. This
+\code{\link[=seg_needs_pca]{seg_needs_pca()}} - the solution that was actually reviewed. This
 is the normal route.}
 \item{\code{nfactors}}{fit the structure here. Equamax has local optima, so a
 fresh fit can move a marginal item relative to the workbook; prefer
