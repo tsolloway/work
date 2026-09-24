@@ -101,7 +101,7 @@ seg_needs_write_cut <- function(seg, file_label = "Needs Cut", min_n = 30, ...){
            " across the contexts observed - they show at least that many ", unit, "s, not exactly that many."),
     paste0("Near-ties (",
            if(is_states) paste0("within ", 100 * typing[["tie_margin"]], "% of equidistant between two states")
-           else paste0("top two themes within ", typing[["tie_margin"]]), "): ",
+           else paste0("top two themes within ", sprintf("%.2f", typing[["tie_margin"]])), "): ",
            if(isTRUE(cut[["decisive_only"]])) "left out of the cut - only clearly typed contexts count." else
              switch(typing[["ties"]],
                     flag    = paste0("assigned to the leading ", unit, "."),

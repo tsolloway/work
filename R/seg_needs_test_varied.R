@@ -232,23 +232,31 @@ seg_needs_test_varied <- function(seg, hypotheses = NULL, duration_var = NULL,
   is_art <- v_of("near_tie_artifact")
   is_low <- v_of("low_engagement")
   is_ver <- v_of("versatility")
-  # Artifact outranks versatility: if most of the cell only exists because of
-  # how close calls fell, "versatile" describes a minority of it at best.
+  # Artifact outranks versatility only when most of the cell is fragile - if
+  # most of it only exists because of how close calls fell, "versatile"
+  # describes a minority of it at best. Closer-than-average calls alone do not
+  # make the cell an artifact.
   yes <- c("SUPPORTED", "PARTLY SUPPORTED")
-  artifact <- is_art %in% yes || mean(fragile) > 0.5
   cat("\n")
   if(is_low %in% yes){
     cat("  The varied cell shows signs of low engagement - check it before presenting it as a segment.\n")
-  } else if(artifact){
+  } else if(mean(fragile) > 0.5){
     cat("  The varied cell is mostly a near-tie artifact: ", round(100 * mean(fragile)),
         "% of it would not be varied if\n  its close calls fell the other way.",
         if(is_low %in% c("CONTRADICTED", "NOT SUPPORTED")) " It is not disengagement." else "",
         "\n  Re-cut with decisive_only = TRUE to find the core that is varied on clear calls,\n",
         "  and test that.\n", sep = "")
-  } else if(is_ver %in% yes){
-    cat("  The varied cell reads as genuinely versatile - keep it as a segment.\n")
   } else {
-    cat("  No single reading dominates - describe the cell by its profile, not by a story.\n")
+    if(is_ver %in% yes){
+      cat("  The varied cell reads as genuinely versatile - keep it as a segment.\n")
+    } else {
+      cat("  No single reading dominates - describe the cell by its profile, not by a story.\n")
+    }
+    if(is_art %in% yes){
+      cat("  Its calls are closer than the rest's, but only ", round(100 * mean(fragile)),
+          "% of it would stop being varied if\n  its close calls fell the other way - most of the cell holds.\n",
+          sep = "")
+    }
   }
   cat("\n")
 

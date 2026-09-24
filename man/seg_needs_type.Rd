@@ -7,7 +7,7 @@
 seg_needs_type(
   seg,
   ties = c("flag", "exclude", "first"),
-  tie_margin = 0.15,
+  tie_margin = NULL,
   flat = c("exclude", "type"),
   flat_sd = 0
 )
@@ -17,8 +17,15 @@ seg_needs_type(
 
 \item{ties}{Character. How to treat near-ties - see above.}
 
-\item{tie_margin}{Numeric. Top-two gap, in theme-score units (mean item
-z-score), below which a grid is a near-tie (default \code{0.15}).}
+\item{tie_margin}{Numeric or \code{NULL}. Top-two gap, in theme-score units
+(mean item z-score), below which a grid is a near-tie. \code{NULL} (default)
+sets it at the 10th percentile of the margins of the differentiated
+grids, so the closest-called 10\% are flagged whatever the scale or the
+number of themes. Grids ON that percentile are flagged too: a 3-point
+scale produces many identical margins (489 Kadro grids share one), and a
+block of identical calls cannot be split - so the default flags at least
+10\%, 12.9\% on Kadro. The cut-off, the share flagged and the margin
+quartiles are printed and stored in the typing.}
 
 \item{flat}{Character. \code{"exclude"} (default) leaves grids with no spread
 untyped; \code{"type"} types them like any other, for comparison only.}
@@ -54,11 +61,13 @@ row constant from every theme score, so it cannot change which theme wins -
 and combined with scaling it doubled the association between rating style
 and theme (eta-squared 0.08 -> 0.16).
 
-\strong{Near-ties are a first-class outcome.} On Kadro a third of grids
-have their top two themes within 0.15 of each other. Those grids do not
-have a dominant theme; they have two. Counting them or not moves the
-single-theme share of respondents from 39\% to 56\%, so how they are handled
-has to be a decision, not a side effect of \code{which.max()}:
+\strong{Near-ties are a first-class outcome.} A grid whose top two themes
+are nearly level does not have a dominant theme; it has two. On Kadro one
+answer moved one step shifts a theme score by 0.23-0.41, so a gap below
+that is a call one answer could reverse. How those grids are handled moves
+every person-level number - counting them or not took the single-theme
+share of respondents from 40\% to 58\% at a 0.15 cut-off - so it has to be a
+decision, not a side effect of \code{which.max()}:
 
 \describe{
 \item{\code{"flag"}}{(default) type to the top theme and mark the grid as a

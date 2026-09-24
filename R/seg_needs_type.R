@@ -19,11 +19,13 @@
 #'   and combined with scaling it doubled the association between rating style
 #'   and theme (eta-squared 0.08 -> 0.16).
 #'
-#'   \strong{Near-ties are a first-class outcome.} On Kadro a third of grids
-#'   have their top two themes within 0.15 of each other. Those grids do not
-#'   have a dominant theme; they have two. Counting them or not moves the
-#'   single-theme share of respondents from 39% to 56%, so how they are handled
-#'   has to be a decision, not a side effect of `which.max()`:
+#'   \strong{Near-ties are a first-class outcome.} A grid whose top two themes
+#'   are nearly level does not have a dominant theme; it has two. On Kadro one
+#'   answer moved one step shifts a theme score by 0.23-0.41, so a gap below
+#'   that is a call one answer could reverse. How those grids are handled moves
+#'   every person-level number - counting them or not took the single-theme
+#'   share of respondents from 40% to 58% at a 0.15 cut-off - so it has to be a
+#'   decision, not a side effect of `which.max()`:
 #'
 #'   \describe{
 #'     \item{`"flag"`}{(default) type to the top theme and mark the grid as a
@@ -49,8 +51,15 @@
 #'
 #' @param seg A seg object after [seg_needs_themes()].
 #' @param ties Character. How to treat near-ties - see above.
-#' @param tie_margin Numeric. Top-two gap, in theme-score units (mean item
-#'   z-score), below which a grid is a near-tie (default `0.15`).
+#' @param tie_margin Numeric or `NULL`. Top-two gap, in theme-score units
+#'   (mean item z-score), below which a grid is a near-tie. `NULL` (default)
+#'   sets it at the 10th percentile of the margins of the differentiated
+#'   grids, so the closest-called 10% are flagged whatever the scale or the
+#'   number of themes. Grids ON that percentile are flagged too: a 3-point
+#'   scale produces many identical margins (489 Kadro grids share one), and a
+#'   block of identical calls cannot be split - so the default flags at least
+#'   10%, 12.9% on Kadro. The cut-off, the share flagged and the margin
+#'   quartiles are printed and stored in the typing.
 #' @param flat Character. `"exclude"` (default) leaves grids with no spread
 #'   untyped; `"type"` types them like any other, for comparison only.
 #' @param flat_sd Numeric. Within-grid SD of the answers at or below which a
@@ -66,7 +75,7 @@
 #' @export
 seg_needs_type <- function(seg,
                            ties       = c("flag", "exclude", "first"),
-                           tie_margin = 0.15,
+                           tie_margin = NULL,
                            flat       = c("exclude", "type"),
                            flat_sd    = 0){
 
@@ -107,9 +116,19 @@ seg_needs_type <- function(seg,
 
   spread  <- apply(M, 1, stats::sd)
   is_flat <- spread <= flat_sd
-  # a flat grid's margin measures the item means, not the respondent, so it
-  # is never a near-tie - it is its own outcome
-  near    <- margin < tie_margin & !is_flat
+
+  # The cut-off and the quartiles are read on differentiated grids only: a flat
+  # grid's margin measures the item means, not the respondent.
+  margin_q <- stats::quantile(margin[!is_flat], c(.25, .5, .75), names = FALSE)
+  names(margin_q) <- c("q25", "median", "q75")
+  tie_rule <- if(is.null(tie_margin)) "closest 10% of differentiated grids" else "set"
+  if(is.null(tie_margin)) tie_margin <- stats::quantile(margin[!is_flat], 0.10, names = FALSE)
+
+  # a flat grid is never a near-tie - it is its own outcome. The derived
+  # cut-off includes its boundary (with float tolerance) so a block of
+  # identical margins lands on one side together.
+  near <- if(tie_rule == "set") margin < tie_margin else margin <= tie_margin + 1e-9
+  near <- near & !is_flat
 
   theme <- top
   if(ties == "exclude") theme[near]    <- NA_integer_
@@ -161,9 +180,11 @@ seg_needs_type <- function(seg,
     cat("; scoring alone would put ", round(100 * max(ft) / sum(ft)), "% of them in ",
         tnames[which.max(ft)], sep = "")
   }
-  cat("\n  margin to second place (quartiles): ",
-      paste(sprintf("%.2f", stats::quantile(margin[inf], c(.25, .5, .75))), collapse = " / "), "\n", sep = "")
-  cat("  near-ties (< ", tie_margin, "): ", round(100 * mean(near[inf]), 1), "% of differentiated grids -> ",
+  cat("\n  margin to second place: bottom quartile ", sprintf("%.2f", margin_q[["q25"]]),
+      " | median ", sprintf("%.2f", margin_q[["median"]]),
+      " | top quartile ", sprintf("%.2f", margin_q[["q75"]]), "\n", sep = "")
+  cat("  near-tie threshold: ", sprintf("%.2f", tie_margin), " (", tie_rule, ")\n", sep = "")
+  cat("  near-ties: ", round(100 * mean(near[inf]), 1), "% of differentiated grids -> ",
       switch(ties,
              flag    = "typed to the top theme and flagged",
              exclude = "left untyped",
@@ -223,6 +244,9 @@ seg_needs_type <- function(seg,
     source      = "themes",
     ties        = ties,
     tie_margin  = tie_margin,
+    tie_rule    = tie_rule,
+    tie_share   = mean(near[!is_flat]),
+    margins     = margin_q,
     flat        = flat,
     theme_names = tnames,
     describe    = describe,
