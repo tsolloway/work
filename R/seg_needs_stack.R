@@ -136,6 +136,8 @@ seg_needs_stack <- function(
   seg[["data"]][["stacked"]]      <- stacked
   seg[["needs"]][["loop"]][["stem"]]   <- stem
   seg[["needs"]][["loop"]][["id_var"]] <- id_var
+  # kept so seg_needs_context_blocks() can write the per-context blocks
+  seg[["needs"]][["loop"]][["context_vars"]] <- if(is.null(context_vars)) character(0) else context_vars
   seg[["needs"]][["vars"]][["raw"]]    <- item_names
 
   message(

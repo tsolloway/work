@@ -39,7 +39,8 @@ seg_needs_init <- function(seg, item_labels, context_labels){
       "item_labels"    = item_labels,
       "context_labels" = context_labels,
       "n_items"        = length(item_labels),
-      "n_contexts"     = length(context_labels)
+      "n_contexts"     = length(context_labels),
+      "context_vars"   = character(0)
     ),
 
     # column names of the derived bases, filled by seg_needs_prepare()
