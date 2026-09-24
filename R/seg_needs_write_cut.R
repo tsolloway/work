@@ -131,8 +131,8 @@ seg_needs_write_cut <- function(seg, file_label = "Needs Cut", level = c("both",
              if(identical(typing[["flat"]], "type")) "typed like any other." else
                paste0("not typed - they carry no lean toward any ", unit, "."),
              if(any(cells$type == "flat"))
-               paste0(" Respondents flat in every context form the ",
-                      paste(cells$label[cells$type == "flat"], collapse = " and "),
+               paste0(" Respondents flat in every context, or in most with too few typed contexts to place on",
+                      " needs, form the ", paste(cells$label[cells$type == "flat"], collapse = " and "),
                       " cells, split by the level they rated at - a rating level rather than a need.")
              else "")
     )

@@ -26,8 +26,9 @@ anything broader is "Varied" (default \code{2}).}
 
 \item{min_n}{Integer. Cells smaller than this are flagged (default \code{30}).}
 
-\item{flat_cells}{Logical. Give respondents flat in every context their own
-cells by rating level (default \code{TRUE}). \code{FALSE} leaves them unclassified.}
+\item{flat_cells}{Logical. Give respondents flat in every context - or in
+most, with fewer than two typed - their own cells by rating level
+(default \code{TRUE}). \code{FALSE} leaves them unclassified.}
 
 \item{flat_labels}{Character, the two flat cells' labels:
 \code{top} (every need at the top code) and \code{other}.}
@@ -65,11 +66,19 @@ grids carry no need shape, so no typing can place them - but they are
 real respondents with one clear, consistent answer, and on Kadro every one
 of them answered at the same level in every context. With
 \code{flat_cells = TRUE} they are split by that level: every need at the top
-code is "Everything matters" (111 on Kadro); any lower level is "Nothing
-stands out" (22). They are level segments, not needs segments, and they
-ran faster than the sample, so profile them before presenting them. A
-respondent with some flat and fewer than two typed contexts stays
-unclassified.
+code is "Everything matters"; any lower level is "Nothing stands out".
+They are level segments, not needs segments, and they ran faster than the
+sample, so profile them before presenting them.
+
+A respondent who is flat in MOST contexts and has fewer than two typed
+joins them, by the level of their flat contexts. On Kadro those were 76
+respondents with two flat contexts and one typed, and the one typed context
+went to Smart Utility 71\% of the time against 26\% overall - the near-flat
+pull, typing a nearly straight-lined grid by rating level. So they are
+level respondents with one near-flat context, and a "Smart Utility only"
+cell would be the wrong home. With this the Kadro flat cells hold 209
+respondents (133 flat everywhere, 76 flat in most) and none are left
+unclassified. \code{flat_basis} on the person table records which applied.
 
 Breadth is censored: a "single" respondent is single on the contexts
 observed. Label deliverables accordingly.

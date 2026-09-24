@@ -27,11 +27,19 @@
 #'   real respondents with one clear, consistent answer, and on Kadro every one
 #'   of them answered at the same level in every context. With
 #'   `flat_cells = TRUE` they are split by that level: every need at the top
-#'   code is "Everything matters" (111 on Kadro); any lower level is "Nothing
-#'   stands out" (22). They are level segments, not needs segments, and they
-#'   ran faster than the sample, so profile them before presenting them. A
-#'   respondent with some flat and fewer than two typed contexts stays
-#'   unclassified.
+#'   code is "Everything matters"; any lower level is "Nothing stands out".
+#'   They are level segments, not needs segments, and they ran faster than the
+#'   sample, so profile them before presenting them.
+#'
+#'   A respondent who is flat in MOST contexts and has fewer than two typed
+#'   joins them, by the level of their flat contexts. On Kadro those were 76
+#'   respondents with two flat contexts and one typed, and the one typed context
+#'   went to Smart Utility 71% of the time against 26% overall - the near-flat
+#'   pull, typing a nearly straight-lined grid by rating level. So they are
+#'   level respondents with one near-flat context, and a "Smart Utility only"
+#'   cell would be the wrong home. With this the Kadro flat cells hold 209
+#'   respondents (133 flat everywhere, 76 flat in most) and none are left
+#'   unclassified. `flat_basis` on the person table records which applied.
 #'
 #'   Breadth is censored: a "single" respondent is single on the contexts
 #'   observed. Label deliverables accordingly.
@@ -44,8 +52,9 @@
 #' @param max_themes Integer. Largest theme combination given its own cells;
 #'   anything broader is "Varied" (default `2`).
 #' @param min_n Integer. Cells smaller than this are flagged (default `30`).
-#' @param flat_cells Logical. Give respondents flat in every context their own
-#'   cells by rating level (default `TRUE`). `FALSE` leaves them unclassified.
+#' @param flat_cells Logical. Give respondents flat in every context - or in
+#'   most, with fewer than two typed - their own cells by rating level
+#'   (default `TRUE`). `FALSE` leaves them unclassified.
 #' @param flat_labels Character, the two flat cells' labels:
 #'   `top` (every need at the top code) and `other`.
 #'
@@ -139,12 +148,14 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
       .groups = "drop"
     )
 
-  # the level a flat-throughout respondent rated at: every grid at the top
-  # code, or anything lower
+  # the level a flat respondent rated at, read on their flat grids: every one
+  # at the top code, or anything lower
   stacked  <- seg[["data"]][["stacked"]]
   M        <- as.matrix(stacked[seg[["needs"]][["vars"]][["raw"]]])
   top_code <- max(M, na.rm = TRUE)
-  flat_top <- tapply(apply(M, 1, stats::sd) == 0 & M[, 1] == top_code, stacked$person_id, all)
+  is_flat  <- apply(M, 1, stats::sd) == 0
+  flat_top <- tapply(ifelse(is_flat, M[, 1] == top_code, NA), stacked$person_id,
+                     function(x) all(x, na.rm = TRUE))
 
   persons <- diag %>%
     dplyr::left_join(per,    by = "person_id") %>%
@@ -153,16 +164,22 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
       n_typed  = dplyr::coalesce(.data$n_typed, 0L),
       n_themes = dplyr::coalesce(.data$n_themes, 0L),
       all_flat = .data$n_flat == .data$n_asked,
+      # flat in most contexts and too few typed to classify on needs - their
+      # one typed context is usually nearly flat too, so the level is the answer
+      most_flat  = !.data$all_flat & .data$n_typed < 2 & .data$n_flat > .data$n_typed,
+      flat_basis = dplyr::case_when(.data$all_flat  ~ "every context",
+                                    .data$most_flat ~ "most contexts",
+                                    .default        = NA_character_),
       flat_top = as.vector(flat_top[as.character(.data$person_id)]),
       key      = dplyr::case_when(
-        flat_cells & .data$all_flat & .data$flat_top ~ "flat_top",
-        flat_cells & .data$all_flat                  ~ "flat_other",
+        flat_cells & !is.na(.data$flat_basis) & .data$flat_top ~ "flat_top",
+        flat_cells & !is.na(.data$flat_basis)                  ~ "flat_other",
         .data$n_typed < 2                            ~ NA_character_,
         .data$n_themes > max_themes                  ~ "varied",
         .default                                     = .data$key
       )
     ) %>%
-    dplyr::select(-"flat_top") %>%
+    dplyr::select(-"flat_top", -"most_flat") %>%
     dplyr::left_join(cells[c("key", "code", "label", "type")], by = "key") %>%
     dplyr::rename(cell = "code", cell_label = "label", cell_type = "type") %>%
     dplyr::mutate(
@@ -196,8 +213,10 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
         " (", sum(persons$n_flat[is.na(persons$cell)] > 0), " of them because of flat grids)\n", sep = "")
   }
   if(flat_cells){
-    cat("  flat in every context: ", sum(persons$all_flat), " respondent(s), in the ",
-        paste(flat_labels, collapse = " / "), " cells - a rating level, not a need shape\n", sep = "")
+    cat("  in the ", paste(flat_labels, collapse = " / "), " cells: ",
+        sum(persons$flat_basis %in% "every context"), " flat in every context, ",
+        sum(persons$flat_basis %in% "most contexts"), " flat in most (too few typed to place on needs)",
+        " - a rating level, not a need shape\n", sep = "")
   }
 
   small <- sum(cells$n < min_n)
