@@ -223,7 +223,7 @@ seg_needs_test_varied <- function(seg, hypotheses = NULL, duration_var = NULL,
 
   cat("\n  fragile membership: ", sum(fragile), " of ", length(fragile), " (",
       round(100 * mean(fragile)), "%) varied respondents would fall within ", max_themes,
-      " themes\n  if their near-tie grids took the runner-up theme\n", sep = "")
+      " ", needs_unit(seg), "s\n  if their near-tie grids took the runner-up ", needs_unit(seg), "\n", sep = "")
 
   cat("\n=== Verdict ===\n")
   for(h in names(verdict)) cat(sprintf("  %-20s %s\n", h, verdict[[h]]))

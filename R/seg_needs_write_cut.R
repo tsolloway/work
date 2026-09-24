@@ -84,28 +84,32 @@ seg_needs_write_cut <- function(seg, file_label = "Needs Cut", min_n = 30, ...){
     check.names = FALSE
   )
 
-  themes <- seg[["needs"]][["themes"]]
-  theme_key <- data.frame(
-    Theme = typing[["theme_names"]],
-    Needs = vapply(seq_along(typing[["theme_names"]]), function(k){
-      paste(themes$label[!is.na(themes$theme) & themes$theme == k], collapse = "; ")
-    }, character(1))
-  )
+  is_states <- identical(typing[["source"]], "states")
+  theme_key <- data.frame(typing[["theme_names"]], typing[["describe"]])
+  names(theme_key) <- if(is_states) c("Need state", "Over-indexes on") else c("Theme", "Needs")
+  unit <- if(is_states) "state" else "theme"
 
   notes <- c(
     paste0("Base: ", format(n_class, big.mark = ","), " respondents classified. ",
            format(n_uncl, big.mark = ","), " not classified - fewer than 2 of their contexts could be typed."),
-    "Each context a respondent rated is typed to the theme its needs lean toward most. A respondent's cell is the set of themes across their typed contexts.",
-    paste0("Breadth is censored: respondents rated a few of the contexts they do, so 'only' means one theme across the contexts observed ",
-           "- they show at least that many themes, not exactly that many."),
-    paste0("Near-ties (top two themes within ", typing[["tie_margin"]], "): ",
+    if(is_states)
+      paste0("Each context a respondent rated is assigned to the nearest of ", typing[["k"]],
+             " need states, clustered on the shape of the need profile. A respondent's cell is the set of states across their typed contexts.")
+    else
+      "Each context a respondent rated is typed to the theme its needs lean toward most. A respondent's cell is the set of themes across their typed contexts.",
+    paste0("Breadth is censored: respondents rated a few of the contexts they do, so 'only' means one ", unit,
+           " across the contexts observed - they show at least that many ", unit, "s, not exactly that many."),
+    paste0("Near-ties (",
+           if(is_states) paste0("within ", 100 * typing[["tie_margin"]], "% of equidistant between two states")
+           else paste0("top two themes within ", typing[["tie_margin"]]), "): ",
            if(isTRUE(cut[["decisive_only"]])) "left out of the cut - only clearly typed contexts count." else
              switch(typing[["ties"]],
-                    flag    = "typed to the leading theme.",
+                    flag    = paste0("assigned to the leading ", unit, "."),
                     exclude = "left untyped.",
-                    first   = "typed to the leading theme.")),
+                    first   = paste0("assigned to the leading ", unit, "."))),
     paste0("Flat contexts (every need rated the same): ",
-           if(identical(typing[["flat"]], "type")) "typed like any other." else "not typed - they carry no lean toward any theme.")
+           if(identical(typing[["flat"]], "type")) "typed like any other." else
+             paste0("not typed - they carry no lean toward any ", unit, "."))
   )
 
   wb <- openxlsx::loadWorkbook(path)

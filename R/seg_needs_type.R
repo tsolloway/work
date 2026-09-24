@@ -212,32 +212,22 @@ seg_needs_type <- function(seg,
 
 
   # ---- write back -----------------------------------------------------------
-  typing_cols <- setdiff(names(grids), c("person_id", "context"))
+  describe <- vapply(seq_len(K), function(k){
+    paste(themes$label[!is.na(themes$theme) & themes$theme == k], collapse = "; ")
+  }, character(1))
 
-  attach_typing <- function(df){
-    if(!is.data.frame(df) || !all(c("person_id", "context") %in% names(df))) return(df)
-    df <- df[setdiff(names(df), c(typing_cols, grep("^need_theme_score", names(df), value = TRUE)))]
-    dplyr::left_join(df, grids, by = c("person_id", "context"))
-  }
-
-  seg[["data"]][["stacked"]] <- attach_typing(seg[["data"]][["stacked"]])
-  if(identical(seg[["meta"]][["unit"]], "grid")){
-    seg[["data"]][["original"]]   <- attach_typing(seg[["data"]][["original"]])
-    seg[["data"]][["with_shell"]] <- attach_typing(seg[["data"]][["with_shell"]])
-  }
+  seg <- needs_attach_typing(seg, grids)
 
   seg[["needs"]][["typing"]] <- list(
-    grids       = dplyr::rename(grids, theme = "need_theme", top = "need_theme_top",
-                                second = "need_theme_second", margin = "need_theme_margin",
-                                near_tie = "need_theme_near_tie", flat = "need_theme_flat") %>%
-                    dplyr::mutate(near_tie = .data$near_tie == 1L, flat = .data$flat == 1L),
+    grids       = needs_typing_table(grids),
+    source      = "themes",
     ties        = ties,
     tie_margin  = tie_margin,
     flat        = flat,
     theme_names = tnames,
+    describe    = describe,
     eta2        = eta2
   )
-  seg[["needs"]][["cut"]] <- NA
 
   seg
 }

@@ -45,6 +45,7 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
   all_g  <- seg[["needs"]][["typing"]][["grids"]]
   tnames <- seg[["needs"]][["typing"]][["theme_names"]]
   K      <- length(tnames)
+  unit   <- needs_unit(seg)
 
   if(max_themes < 1) stop("max_themes must be at least 1.", call. = FALSE)
 
@@ -58,7 +59,7 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
   combos <- unlist(lapply(seq_len(max_themes), function(m) utils::combn(K, m, simplify = FALSE)),
                    recursive = FALSE)
 
-  type_name <- function(m) if(m <= 4) c("single", "pair", "triple", "quad")[m] else paste0(m, "-theme")
+  type_name <- function(m) if(m <= 4) c("single", "pair", "triple", "quad")[m] else paste0(m, "-", unit)
 
   cells <- dplyr::tibble(
     code   = seq_along(combos),
@@ -74,7 +75,7 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
       code  = nrow(cells) + 1L,
       key   = "varied",
       type  = "varied",
-      label = paste0("Varied (", max_themes + 1, "+ themes)")
+      label = paste0("Varied (", max_themes + 1, "+ ", unit, "s)")
     ))
   }
 
@@ -165,7 +166,7 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
     cat("  ", small, " of ", nrow(cells), " cells hold fewer than ", min_n,
         " respondents - read them as directional,\n  or lower max_themes.\n", sep = "")
   }
-  cat("  'single' means one theme across the contexts OBSERVED - breadth is censored.\n\n")
+  cat("  'single' means one ", unit, " across the contexts OBSERVED - breadth is censored.\n\n", sep = "")
 
   seg[["needs"]][["cut"]] <- list(
     persons       = persons,

@@ -256,8 +256,9 @@ seg_needs_themes <- function(
   seg[["needs"]][["theme_names"]] <- theme_names
 
   # a new assignment invalidates the typing and the cut built on the old one
-  seg[["needs"]][["typing"]] <- NA
-  seg[["needs"]][["cut"]]    <- NA
+  seg[["needs"]][["typing"]]        <- NA
+  seg[["needs"]][["typing_themes"]] <- NULL
+  seg[["needs"]][["cut"]]           <- NA
 
   seg
 }

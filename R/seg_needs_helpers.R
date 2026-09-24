@@ -114,3 +114,58 @@ needs_basis_vars <- function(seg){
 
   specs$var[from_loop]
 }
+
+
+# Join a grid typing onto every frame that holds grids, replacing any earlier
+# typing. The stacked frame always; seg$data$original and with_shell only when
+# the grid is the unit, since only then are they grid frames.
+needs_attach_typing <- function(seg, grids){
+
+  cols <- setdiff(names(grids), c("person_id", "context"))
+
+  attach <- function(df){
+    if(!is.data.frame(df) || !all(c("person_id", "context") %in% names(df))) return(df)
+    df <- df[setdiff(names(df), c(cols, grep("^need_theme", names(df), value = TRUE)))]
+    dplyr::left_join(df, grids, by = c("person_id", "context"))
+  }
+
+  seg[["data"]][["stacked"]] <- attach(seg[["data"]][["stacked"]])
+  if(identical(seg[["meta"]][["unit"]], "grid")){
+    seg[["data"]][["original"]]   <- attach(seg[["data"]][["original"]])
+    seg[["data"]][["with_shell"]] <- attach(seg[["data"]][["with_shell"]])
+  }
+
+  # a new typing invalidates any cut built on the old one
+  seg[["needs"]][["cut"]] <- NA
+  seg
+}
+
+
+# The typing as the person-layer stages read it: short names, logical flags.
+needs_typing_table <- function(grids){
+  grids %>%
+    dplyr::rename(theme = "need_theme", top = "need_theme_top", second = "need_theme_second",
+                  margin = "need_theme_margin", near_tie = "need_theme_near_tie",
+                  flat = "need_theme_flat") %>%
+    dplyr::mutate(near_tie = .data$near_tie == 1L, flat = .data$flat == 1L)
+}
+
+
+# Adjusted Rand index between two partitions of the same grids.
+needs_ari <- function(a, b){
+  ok <- !is.na(a) & !is.na(b)
+  t  <- table(a[ok], b[ok])
+  n  <- sum(t)
+  s  <- sum(choose(t, 2))
+  sa <- sum(choose(rowSums(t), 2))
+  sb <- sum(choose(colSums(t), 2))
+  e  <- sa * sb / choose(n, 2)
+  (s - e) / ((sa + sb) / 2 - e)
+}
+
+
+# What a typed grid is called in output - "theme" or "state" - so the person
+# layer reads right whichever typing it was built on.
+needs_unit <- function(seg){
+  if(identical(seg[["needs"]][["typing"]][["source"]], "states")) "state" else "theme"
+}

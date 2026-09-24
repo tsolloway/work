@@ -100,6 +100,7 @@ seg_needs_breadth <- function(seg,
     stop("No typing found. Run seg_needs_type() first.", call. = FALSE)
   }
   can_split <- !identical(typing[["ties"]], "first")
+  unit <- needs_unit(seg)
 
   main  <- run(decisive_only)
   other <- if(can_split) run(!decisive_only) else NULL
@@ -110,7 +111,8 @@ seg_needs_breadth <- function(seg,
   cat("\n=== Needs breadth: ", format(main$n_person, big.mark = ","), " respondents with 2+ typed contexts (",
       basis, ") ===\n\n", sep = "")
   tbl <- main$table
-  tbl$themes <- paste(tbl$themes, ifelse(tbl$themes == 1, "theme", "themes"))
+  names(tbl)[1] <- paste0(unit, "s")
+  tbl[[1]] <- paste(tbl[[1]], ifelse(tbl[[1]] == 1, unit, paste0(unit, "s")))
   print(tbl, row.names = FALSE)
 
   if(main$n_short > 0){
@@ -123,12 +125,12 @@ seg_needs_breadth <- function(seg,
   s_glo <- main$table$chance_global[1]
   s_ctx <- main$table$chance_context[1]
 
-  cat("\n  single-theme: ", s_obs, "% vs ", s_glo, "% by chance (", s_ctx,
+  cat("\n  single-", unit, ": ", s_obs, "% vs ", s_glo, "% by chance (", s_ctx,
       "% keeping each respondent's contexts)\n", sep = "")
 
   if(!is.null(other)){
     cat("  on ", if(decisive_only) "all typed grids" else "decisive grids only", ": ",
-        other$table$observed[1], "% single-theme vs ", other$table$chance_global[1],
+        other$table$observed[1], "% single-", unit, " vs ", other$table$chance_global[1],
         "% by chance, ", format(other$n_person, big.mark = ","), " respondents\n", sep = "")
   }
 
@@ -174,16 +176,17 @@ seg_needs_breadth <- function(seg,
 
   cat("\n=== Verdict ===\n")
   if(main$p_single_context < 0.01){
-    cat("  People are LOCKED to their themes: ", s_obs, "% single-theme against ", s_ctx,
+    cat("  People are LOCKED to their ", unit, "s: ", s_obs, "% single-", unit, " against ", s_ctx,
         "% if their contexts alone\n  decided it (reshuffle p < 0.01). The typology is about people, not occasions.\n",
         sep = "")
   } else if(main$p_single_global < 0.01){
     cat("  More consistent than a random draw, but no more than their contexts explain -\n",
         "  the lock is the context mix, not the person.\n", sep = "")
   } else {
-    cat("  No person lock: single-theme share is what chance gives. Themes move with context.\n")
+    cat("  No person lock: single-", unit, " share is what chance gives. ", tools::toTitleCase(unit),
+        "s move with context.\n", sep = "")
   }
-  cat("  Breadth is censored - report it as 'at least N themes', never 'exactly N'.\n\n")
+  cat("  Breadth is censored - report it as 'at least N ", unit, "s', never 'exactly N'.\n\n", sep = "")
 
   seg[["needs"]][["reports"]][["breadth"]] <- list(
     decisive_only = decisive_only,
