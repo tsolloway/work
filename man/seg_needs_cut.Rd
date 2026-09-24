@@ -4,7 +4,14 @@
 \alias{seg_needs_cut}
 \title{seg_needs_cut}
 \usage{
-seg_needs_cut(seg, decisive_only = FALSE, max_themes = 2, min_n = 30)
+seg_needs_cut(
+  seg,
+  decisive_only = FALSE,
+  max_themes = 2,
+  min_n = 30,
+  flat_cells = TRUE,
+  flat_labels = c(top = "Everything matters", other = "Nothing stands out")
+)
 }
 \arguments{
 \item{seg}{A seg object after \code{\link[=seg_needs_type]{seg_needs_type()}}.}
@@ -18,6 +25,12 @@ themes, so more respondents fall to unclassified - read
 anything broader is "Varied" (default \code{2}).}
 
 \item{min_n}{Integer. Cells smaller than this are flagged (default \code{30}).}
+
+\item{flat_cells}{Logical. Give respondents flat in every context their own
+cells by rating level (default \code{TRUE}). \code{FALSE} leaves them unclassified.}
+
+\item{flat_labels}{Character, the two flat cells' labels:
+\code{top} (every need at the top code) and \code{other}.}
 }
 \value{
 The seg object with \code{seg[["needs"]][["cut"]]}: \code{persons} (one row
@@ -46,6 +59,17 @@ themes: 25), so check the sizes this prints before committing.
 A respondent with fewer than two typed contexts cannot show consistency
 either way and is left unclassified (code \code{NA}), which is how
 \code{\link[=seg_write_shell]{seg_write_shell()}} drops a respondent from a solution.
+
+\strong{Respondents flat in every context get cells of their own.} Their
+grids carry no need shape, so no typing can place them - but they are
+real respondents with one clear, consistent answer, and on Kadro every one
+of them answered at the same level in every context. With
+\code{flat_cells = TRUE} they are split by that level: every need at the top
+code is "Everything matters" (111 on Kadro); any lower level is "Nothing
+stands out" (22). They are level segments, not needs segments, and they
+ran faster than the sample, so profile them before presenting them. A
+respondent with some flat and fewer than two typed contexts stays
+unclassified.
 
 Breadth is censored: a "single" respondent is single on the contexts
 observed. Label deliverables accordingly.

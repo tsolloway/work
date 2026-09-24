@@ -109,7 +109,12 @@ seg_needs_write_cut <- function(seg, file_label = "Needs Cut", min_n = 30, ...){
                     first   = paste0("assigned to the leading ", unit, "."))),
     paste0("Flat contexts (every need rated the same): ",
            if(identical(typing[["flat"]], "type")) "typed like any other." else
-             paste0("not typed - they carry no lean toward any ", unit, "."))
+             paste0("not typed - they carry no lean toward any ", unit, "."),
+           if(any(cells$type == "flat"))
+             paste0(" Respondents flat in every context form the ",
+                    paste(cells$label[cells$type == "flat"], collapse = " and "),
+                    " cells, split by the level they rated at - a rating level rather than a need.")
+           else "")
   )
 
   wb <- openxlsx::loadWorkbook(path)

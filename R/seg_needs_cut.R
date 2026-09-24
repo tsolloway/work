@@ -22,6 +22,17 @@
 #'   either way and is left unclassified (code `NA`), which is how
 #'   [seg_write_shell()] drops a respondent from a solution.
 #'
+#'   \strong{Respondents flat in every context get cells of their own.} Their
+#'   grids carry no need shape, so no typing can place them - but they are
+#'   real respondents with one clear, consistent answer, and on Kadro every one
+#'   of them answered at the same level in every context. With
+#'   `flat_cells = TRUE` they are split by that level: every need at the top
+#'   code is "Everything matters" (111 on Kadro); any lower level is "Nothing
+#'   stands out" (22). They are level segments, not needs segments, and they
+#'   ran faster than the sample, so profile them before presenting them. A
+#'   respondent with some flat and fewer than two typed contexts stays
+#'   unclassified.
+#'
 #'   Breadth is censored: a "single" respondent is single on the contexts
 #'   observed. Label deliverables accordingly.
 #'
@@ -33,13 +44,19 @@
 #' @param max_themes Integer. Largest theme combination given its own cells;
 #'   anything broader is "Varied" (default `2`).
 #' @param min_n Integer. Cells smaller than this are flagged (default `30`).
+#' @param flat_cells Logical. Give respondents flat in every context their own
+#'   cells by rating level (default `TRUE`). `FALSE` leaves them unclassified.
+#' @param flat_labels Character, the two flat cells' labels:
+#'   `top` (every need at the top code) and `other`.
 #'
 #' @return The seg object with `seg[["needs"]][["cut"]]`: `persons` (one row
 #'   per respondent) and `cells` (the cell key). Prints the cell sizes and a
 #'   verdict.
 #'
 #' @export
-seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30){
+seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30,
+                          flat_cells = TRUE,
+                          flat_labels = c(top = "Everything matters", other = "Nothing stands out")){
 
   g      <- needs_typed_grids(seg, decisive_only = decisive_only)
   all_g  <- seg[["needs"]][["typing"]][["grids"]]
@@ -79,6 +96,15 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
     ))
   }
 
+  if(flat_cells){
+    cells <- dplyr::bind_rows(cells, dplyr::tibble(
+      code  = nrow(cells) + 1:2,
+      key   = c("flat_top", "flat_other"),
+      type  = "flat",
+      label = unname(flat_labels[c("top", "other")])
+    ))
+  }
+
 
   # ---- place each respondent ------------------------------------------------
   per <- g %>%
@@ -113,18 +139,30 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
       .groups = "drop"
     )
 
+  # the level a flat-throughout respondent rated at: every grid at the top
+  # code, or anything lower
+  stacked  <- seg[["data"]][["stacked"]]
+  M        <- as.matrix(stacked[seg[["needs"]][["vars"]][["raw"]]])
+  top_code <- max(M, na.rm = TRUE)
+  flat_top <- tapply(apply(M, 1, stats::sd) == 0 & M[, 1] == top_code, stacked$person_id, all)
+
   persons <- diag %>%
     dplyr::left_join(per,    by = "person_id") %>%
     dplyr::left_join(shares, by = "person_id") %>%
     dplyr::mutate(
       n_typed  = dplyr::coalesce(.data$n_typed, 0L),
       n_themes = dplyr::coalesce(.data$n_themes, 0L),
+      all_flat = .data$n_flat == .data$n_asked,
+      flat_top = as.vector(flat_top[as.character(.data$person_id)]),
       key      = dplyr::case_when(
-        .data$n_typed < 2             ~ NA_character_,
-        .data$n_themes > max_themes   ~ "varied",
-        .default                      = .data$key
+        flat_cells & .data$all_flat & .data$flat_top ~ "flat_top",
+        flat_cells & .data$all_flat                  ~ "flat_other",
+        .data$n_typed < 2                            ~ NA_character_,
+        .data$n_themes > max_themes                  ~ "varied",
+        .default                                     = .data$key
       )
     ) %>%
+    dplyr::select(-"flat_top") %>%
     dplyr::left_join(cells[c("key", "code", "label", "type")], by = "key") %>%
     dplyr::rename(cell = "code", cell_label = "label", cell_type = "type") %>%
     dplyr::mutate(
@@ -157,14 +195,23 @@ seg_needs_cut <- function(seg, decisive_only = FALSE, max_themes = 2, min_n = 30
     cat("  unclassified: ", n_uncl, " respondent(s) with fewer than 2 typed contexts",
         " (", sum(persons$n_flat[is.na(persons$cell)] > 0), " of them because of flat grids)\n", sep = "")
   }
+  if(flat_cells){
+    cat("  flat in every context: ", sum(persons$all_flat), " respondent(s), in the ",
+        paste(flat_labels, collapse = " / "), " cells - a rating level, not a need shape\n", sep = "")
+  }
 
   small <- sum(cells$n < min_n)
   cat("\n=== Verdict ===\n")
   if(small == 0){
     cat("  All ", nrow(cells), " cells hold at least ", min_n, " respondents.\n", sep = "")
   } else {
+    small_types <- unique(cells$type[cells$n < min_n])
+    fix <- c(
+      if(any(small_types != "flat")) "lower max_themes",
+      if("flat" %in% small_types) "set flat_cells = FALSE to leave the flat respondents unclassified"
+    )
     cat("  ", small, " of ", nrow(cells), " cells hold fewer than ", min_n,
-        " respondents - read them as directional,\n  or lower max_themes.\n", sep = "")
+        " respondents - read them as directional,\n  or ", paste(fix, collapse = ", or "), ".\n", sep = "")
   }
   cat("  'single' means one ", unit, " across the contexts OBSERVED - breadth is censored.\n\n", sep = "")
 
