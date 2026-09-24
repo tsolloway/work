@@ -8,6 +8,7 @@ seg_needs_write_shell(
   seg,
   solution_var,
   level = c("grid", "person"),
+  file_label = NULL,
   verbose = FALSE,
   ...
 )
@@ -20,6 +21,9 @@ seg_needs_write_shell(
 demographic.}
 
 \item{level}{Character. \code{"grid"} (default) or \code{"person"}.}
+
+\item{file_label}{Character. Stamped into the file name. Defaults to
+\code{"Grid"} or \code{"Person"} from \code{level}, so the base is always visible.}
 
 \item{verbose}{Logical. Report the column and block bookkeeping behind the
 level choice. Off by default - the one-line summary says what the shell

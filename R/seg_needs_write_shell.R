@@ -20,6 +20,8 @@
 #'   `"context"` is the natural means check; on the person frame use a
 #'   demographic.
 #' @param level Character. `"grid"` (default) or `"person"`.
+#' @param file_label Character. Stamped into the file name. Defaults to
+#'   `"Grid"` or `"Person"` from `level`, so the base is always visible.
 #' @param verbose Logical. Report the column and block bookkeeping behind the
 #'   level choice. Off by default - the one-line summary says what the shell
 #'   contains, and the detail only matters when something is out of step.
@@ -29,9 +31,10 @@
 #'
 #' @export
 seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person"),
-                                  verbose = FALSE, ...){
+                                  file_label = NULL, verbose = FALSE, ...){
 
   level <- match.arg(level)
+  if(is.null(file_label)) file_label <- if(level == "grid") "Grid" else "Person"
 
   df <- seg[["data"]][["with_shell"]]
 
@@ -45,18 +48,16 @@ seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person")
          call. = FALSE)
   }
 
+  if(!solution_var %in% names(df)){
+    stop("solution_var '", solution_var, "' is not on the executed frame.", call. = FALSE)
+  }
+
   seg_local <- seg
 
-  # A column is GRID-level when it differs down a respondent's rows. That is the
-  # whole distinction: such a column has no single value for a person, so it can
-  # neither be collapsed to a person row nor read as a person attribute.
-  # Detected rather than listed, so it stays correct if the blocks change.
-  varying <- vapply(
-    setdiff(names(df), "person_id"),
-    function(v) any(tapply(df[[v]], df$person_id, function(x) dplyr::n_distinct(x) > 1)),
-    logical(1)
-  )
-  grid_cols <- names(varying)[varying]
+  # A column is GRID-level when it differs down a respondent's rows - it has no
+  # single value for a person. Shared with the other person-level reads so the
+  # definition cannot drift between them.
+  grid_cols <- needs_grid_cols(df)
 
   # A block is grid-level when every one of its variables is
   is_grid_block <- function(tbl){
@@ -94,7 +95,10 @@ seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person")
         paste0(". Excludes ", paste(grid_blocks, collapse = ", "),
                " - these vary by occasion and have no person-level value")
       else "",
-      ". Base = ", format(nrow(df), big.mark = ","), " respondents."
+      ". Base = ", format(sum(!is.na(df[[solution_var]])), big.mark = ","), " respondents",
+      if(anyNA(df[[solution_var]])) paste0(" (", sum(is.na(df[[solution_var]])), " without a ",
+                                           solution_var, " are left out)") else "",
+      "."
     )
 
     if(verbose){
@@ -122,7 +126,7 @@ seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person")
       if(length(grid_blocks))
         paste0(", with ", paste(grid_blocks, collapse = ", "), " ordered first")
       else "",
-      ". Base = ", format(nrow(df), big.mark = ","), " occasion-grids, not people."
+      ". Base = ", format(sum(!is.na(df[[solution_var]])), big.mark = ","), " occasion-grids, not people."
     )
   }
 
@@ -161,7 +165,6 @@ seg_needs_write_shell <- function(seg, solution_var, level = c("grid", "person")
   seg_local[["meta"]][["shell_level"]] <- level
 
   invisible(
-    seg_write_shell(seg_local, solution_var = solution_var,
-                    file_label = if(level == "grid") "Grid" else "Person", ...)
+    seg_write_shell(seg_local, solution_var = solution_var, file_label = file_label, ...)
   )
 }
