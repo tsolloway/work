@@ -30,6 +30,7 @@ seg_write_shell(
   setting_type = c("diff", "pvalue"),
   setting_color = c("bw", "color"),
   where = NULL,
+  seg_labels = NULL,
   verbose = FALSE
 )
 }
@@ -40,6 +41,14 @@ weight variable if one is present (\code{seg$meta$weight_variable}); when
 \code{FALSE}, everything is computed unweighted regardless of the weight
 variable. Weighted and unweighted runs are both fully supported; the
 unweighted path is byte-identical to the pre-weighting behavior.}
+
+\item{seg_labels}{Character or \code{NULL}. Names for the segments, in code
+order, used for the segment column headers and sheet names in place of
+"Seg 1", "Seg 2", ... (default \code{NULL} keeps those). Made safe for Excel
+sheet names: \verb{[ ] : * ? / \\\\} become "-", and names are cut to 31
+characters and kept unique.
+
+[ ]: R:\%20}
 }
 \value{
 Invisibly returns \code{NULL}. Writes the solution workbook to disk.

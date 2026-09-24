@@ -234,7 +234,7 @@
 
 
 #' @keywords internal
-.seg_do_shell_tables <- function(seg, solution_var, df, key = NULL, var_weight = NULL){
+.seg_do_shell_tables <- function(seg, solution_var, df, key = NULL, var_weight = NULL, seg_labels = NULL){
 
   result <- list()
 
@@ -322,7 +322,15 @@
 
 
 
-  names(solution_frequency) <- glue::glue("Seg {seq(ncol(solution_frequency))}")
+  names(solution_frequency) <- if(is.null(seg_labels)){
+    glue::glue("Seg {seq(ncol(solution_frequency))}")
+  } else {
+    if(length(seg_labels) != ncol(solution_frequency)){
+      stop("seg_labels has ", length(seg_labels), " labels for ", ncol(solution_frequency),
+           " segments.", call. = FALSE)
+    }
+    .seg_sheet_safe(seg_labels)
+  }
 
   names(segment_tables) <- names(solution_frequency)
 
@@ -1341,7 +1349,9 @@
         class(temp[, y]) <- "percentage"
       }
     }else if(!segment_specific){
-      for(y in c("mean", "range", "p_value", str_scrub(seg_names))){
+      # the summary columns are always seg_1..seg_K, whatever the segments are
+      # labelled - str_scrub(seg_names) only matched them while labels were "Seg k"
+      for(y in c("mean", "range", "p_value", paste0("seg_", seq_len(seg_count)))){
         class(temp[, y]) <- "percentage"
       }
     }
@@ -1801,6 +1811,11 @@
 #'   `addStyle` calls to reduce S4 dispatch overhead. Produces identical output.
 #'
 #' @inheritParams seg_write_shell
+#' @param seg_labels Character or `NULL`. Names for the segments, in code
+#'   order, used for the segment column headers and sheet names in place of
+#'   "Seg 1", "Seg 2", ... (default `NULL` keeps those). Made safe for Excel
+#'   sheet names: `[ ] : * ? / \\` become "-", and names are cut to 31
+#'   characters and kept unique.
 #' @param weighted Logical. Master weighting switch (default `TRUE`). When
 #'   `TRUE`, both the displayed means and the significance test use the project
 #'   weight variable if one is present (`seg$meta$weight_variable`); when
@@ -1837,6 +1852,7 @@ seg_write_shell <- function(
     setting_type = c("diff", "pvalue"),
     setting_color = c("bw", "color"),
     where = NULL,
+    seg_labels = NULL,
     verbose = FALSE
 ){
 
@@ -1887,7 +1903,7 @@ seg_write_shell <- function(
 
   shell_tables <- .seg_do_shell_tables(
     seg = seg, solution_var = solution_var,
-    df = df, key = key, var_weight = var_weight
+    df = df, key = key, var_weight = var_weight, seg_labels = seg_labels
   )
 
 
@@ -2013,4 +2029,15 @@ seg_write_shell <- function(
 
   if(verbose) message(glue::glue("Written: {solution_var}"))
 
+}
+
+
+# Segment labels double as sheet names, so they have to be legal ones: Excel
+# rejects [ ] : * ? / \ in a sheet name and anything over 31 characters, and the
+# workbook already holds "Summary" and "Key".
+.seg_sheet_safe <- function(x){
+  x <- gsub("[\\[\\]:*?/\\\\]", "-", as.character(x), perl = TRUE)
+  x <- trimws(substr(x, 1, 31))
+  x <- make.unique(c("Summary", "Key", x), sep = " ")[-(1:2)]
+  substr(x, 1, 31)
 }

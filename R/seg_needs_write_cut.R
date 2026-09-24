@@ -6,13 +6,16 @@
 #'     \item{person}{the person-level shell with one column per cell of
 #'       [seg_needs_cut()] - base respondents, grid-level blocks left off}
 #'     \item{grid}{the grid-level shell with one column per theme (or need
-#'       state) - base occasion-grids, the occasion blocks first so each theme
+#'       state), headed and sheeted by its name, plus the flat grids as
+#'       "Everything matters" / "Nothing stands out" by the level they were
+#'       rated at - base occasion-grids, the occasion blocks first so each theme
 #'       reads with the occasions it happens in}
 #'   }
 #'
-#'   Each workbook opens on a key sheet. The shell numbers segments 1..N; the
-#'   key is what turns "Seg 7" into "Escape + Smart Utility", so it is not
-#'   optional. It also carries the caveats a reader would not otherwise see:
+#'   Each workbook opens on a key sheet. On the person shell the cells are
+#'   numbered and the key is what turns "Seg 7" into "Escape + Smart Utility",
+#'   so it is not optional; on the grid shell it gives each group's size and
+#'   definition. It also carries the caveats a reader would not otherwise see:
 #'   breadth is censored (a "single" respondent is single on the contexts
 #'   observed), how near-ties and flat grids were treated, how many could not
 #'   be classified, and - on the grid shell - that the base is occasions, not
@@ -151,38 +154,76 @@ seg_needs_write_cut <- function(seg, file_label = "Needs Cut", level = c("both",
     g      <- typing[["grids"]]
     K      <- length(typing[["theme_names"]])
     typed  <- !is.na(g$theme)
-    n_grid <- tabulate(g$theme[typed], nbins = K)
+
+    # Flat grids have no theme, but they are one clear answer - every need at
+    # one level - so, as in the person cut, they are shown by that level
+    # rather than dropped: every need at the top code, or any lower level.
+    # The labels follow the cut's flat cells when it has them.
+    flat_lab <- cut[["cells"]]$label[cut[["cells"]]$type == "flat"]
+    if(length(flat_lab) != 2) flat_lab <- c("Everything matters", "Nothing stands out")
+    stacked  <- seg[["data"]][["stacked"]]
+    M        <- as.matrix(stacked[seg[["needs"]][["vars"]][["raw"]]])
+    top_flat <- g$flat & M[match(paste(g$person_id, g$context), paste(stacked$person_id, stacked$context)), 1] ==
+      max(M, na.rm = TRUE)
+
+    code <- g$theme
+    code[g$flat &  top_flat] <- K + 1L
+    code[g$flat & !top_flat] <- K + 2L
+    labels <- c(typing[["theme_names"]], flat_lab)
+
+    # seg_write_shell() numbers seq(max()), so an empty flat group would still
+    # get a column - renumber to the groups that have grids
+    n_all  <- tabulate(code, nbins = K + 2)
+    keep_g <- which(n_all > 0)
+    code   <- match(code, keep_g)
+    labels <- labels[keep_g]
+
+    seg_g <- seg
+    df_g  <- df
+    df_g[["needs_grid"]] <- NULL
+    seg_g[["data"]][["with_shell"]] <- dplyr::left_join(
+      df_g, dplyr::tibble(person_id = g$person_id, context = g$context, needs_grid = code),
+      by = c("person_id", "context")
+    )
 
     label_g <- paste(file_label, "Grid")
-    seg_needs_write_shell(seg, solution_var = "need_theme", level = "grid", file_label = label_g, ...)
-    path_g <- .needs_shell_path(seg, label_g, "need_theme", list(...))
+    seg_needs_write_shell(seg_g, solution_var = "needs_grid", level = "grid", file_label = label_g,
+                          seg_labels = labels, ...)
+    path_g <- .needs_shell_path(seg, label_g, "needs_grid", list(...))
+
+    is_flat_group <- keep_g > K
+    near_pct <- vapply(keep_g, function(j){
+      if(j > K) return(NA_real_)
+      round(100 * mean(g$near_tie[typed & g$theme == j]), 1)
+    }, numeric(1))
+    defined <- c(typing[["describe"]],
+                 "every need rated at the top of the scale - a rating level, not a need",
+                 "every need rated at one lower level - a rating level, not a need")[keep_g]
 
     key <- data.frame(
-      Segment       = paste("Seg", seq_len(K)),
-      x             = typing[["theme_names"]],
-      Grids         = n_grid,
-      `% of typed`  = round(100 * n_grid / sum(n_grid), 1),
-      `% near-tie`  = round(100 * vapply(seq_len(K), function(k) mean(g$near_tie[typed & g$theme == k]),
-                                         numeric(1)), 1),
-      y             = typing[["describe"]],
+      x             = .seg_sheet_safe(labels),
+      Grids         = n_all[keep_g],
+      `% of grids`  = round(100 * n_all[keep_g] / sum(n_all), 1),
+      `% near-tie`  = near_pct,
+      y             = defined,
       check.names = FALSE
     )
-    names(key)[c(2, 6)] <- c(Unit, if(is_states) "Over-indexes on" else "Needs")
+    names(key)[c(1, 5)] <- c(Unit, if(is_states) "Over-indexes on" else "Needs")
 
     notes <- c(
-      paste0("Base: ", format(sum(typed), big.mark = ","), " occasion-grids, not people - a respondent ",
+      paste0("Base: ", format(sum(n_all), big.mark = ","), " occasion-grids, not people - a respondent ",
              "who rated three contexts is in the base up to three times."),
       if(is_states)
         paste0("Each grid is assigned to the nearest of ", K, " need states, clustered on the shape of its need profile.")
       else
         "Each grid is typed to the theme its needs lean toward most, on needs standardised across all grids.",
       paste0(tie_note, "included, typed to their leading ", unit, "."),
-      paste0("Flat grids (every need rated the same): ", sum(g$flat), " left out - they carry no lean toward any ",
-             unit, ".")
+      paste0("Flat grids (every need rated the same, ", sum(g$flat), "): no ", unit, " - shown as ",
+             paste(flat_lab, collapse = " and "), " by the level they were rated at.")
     )
 
     .needs_write_key(path_g, "Grid Key", paste0("Needs by grid - ", unit, " key"), list(key), notes,
-                     widths = c(10, 30, 10, 12, 12, 90))
+                     widths = c(32, 10, 12, 12, 90))
     paths["grid"] <- path_g
   }
 

@@ -36,13 +36,16 @@ Writes the needs solution as a deliverable at both units:
 \item{person}{the person-level shell with one column per cell of
 \code{\link[=seg_needs_cut]{seg_needs_cut()}} - base respondents, grid-level blocks left off}
 \item{grid}{the grid-level shell with one column per theme (or need
-state) - base occasion-grids, the occasion blocks first so each theme
+state), headed and sheeted by its name, plus the flat grids as
+"Everything matters" / "Nothing stands out" by the level they were
+rated at - base occasion-grids, the occasion blocks first so each theme
 reads with the occasions it happens in}
 }
 
-Each workbook opens on a key sheet. The shell numbers segments 1..N; the
-key is what turns "Seg 7" into "Escape + Smart Utility", so it is not
-optional. It also carries the caveats a reader would not otherwise see:
+Each workbook opens on a key sheet. On the person shell the cells are
+numbered and the key is what turns "Seg 7" into "Escape + Smart Utility",
+so it is not optional; on the grid shell it gives each group's size and
+definition. It also carries the caveats a reader would not otherwise see:
 breadth is censored (a "single" respondent is single on the contexts
 observed), how near-ties and flat grids were treated, how many could not
 be classified, and - on the grid shell - that the base is occasions, not
