@@ -15,7 +15,7 @@
 #'   pass a list of character vectors in the same order as the results. Each
 #'   vector must match the number of communities in its corresponding engine.
 #'   Default NULL (use Claude).
-#' @param model Character. Claude model ID (default `"claude-sonnet-4-5-20250929"`).
+#' @param model Character. Claude model ID (default `"claude-opus-5-5"`).
 #' @param max_words Integer. Maximum words per group name (default 3).
 #' @param min_words Integer. Minimum words per group name (default 1).
 #' @param api_key Character or NULL. Anthropic API key. If NULL, reads from
@@ -29,7 +29,7 @@
 #' @export
 bn_name_groups <- function(results,
                            manual_names = NULL,
-                           model = "claude-sonnet-4-5-20250929",
+                           model = "claude-opus-5-5",
                            max_words = 3,
                            min_words = 1,
                            api_key = NULL,
@@ -213,7 +213,15 @@ bn_name_groups <- function(results,
     httr::content(resp, as = "text", encoding = "UTF-8"),
     simplifyVector = FALSE
   )
-  parsed$content[[1]]$text
+
+  if (identical(parsed$stop_reason, "refusal")) {
+    cli::cli_abort("Claude declined the naming request ({parsed$stop_details$category %||% 'no category'}).")
+  }
+
+  # Opus 5.5 always thinks, and the thinking block comes first - read the
+  # text blocks rather than the first block, or the answer is an empty string
+  texts <- purrr::keep(parsed$content, ~ identical(.x$type, "text"))
+  paste(purrr::map_chr(texts, "text"), collapse = "")
 }
 
 #' Parse Claude's response into a named list
