@@ -34,7 +34,9 @@ variable name (\code{need01}, \code{pneed01}, \code{needs01}) or label.}
 \item{move}{Named character, item -> theme name (or \code{NA} to leave the item
 out of every theme). Applied after the source.}
 
-\item{theme_names}{Character, one per theme in factor order. Defaults to
+\item{theme_names}{Character, one per theme in factor order. Positional, so
+re-check it whenever the workbook is rewritten - a re-run can reorder the
+factors. Defaults to the factor names \code{\link[=pca_write]{pca_write()}} gave the sheet, else
 \code{"Theme 1"}, \code{"Theme 2"}, ...}
 
 \item{min_loading}{Numeric. Below this an item loads on no theme

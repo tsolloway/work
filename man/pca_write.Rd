@@ -9,7 +9,12 @@ pca_write(
   clean_max = 0.25,
   file_name = "Factor Analysis",
   where = NULL,
-  return_location = TRUE
+  return_location = TRUE,
+  name_factors = TRUE,
+  min_words = 1,
+  max_words = 3,
+  model = "claude-opus-5",
+  api_key = NULL
 )
 }
 \arguments{
@@ -24,6 +29,16 @@ pca_write(
 
 \item{return_location}{Logical. If \code{TRUE} (default), returns the file path
 instead of the workbook object.}
+
+\item{name_factors}{Logical. Name the factor groups with Claude
+(default \code{TRUE}).}
+
+\item{min_words, max_words}{Integer. Length of each name (default 1 to 3).}
+
+\item{model}{Character. Claude model ID (default \code{"claude-opus-5"}).}
+
+\item{api_key}{Character or \code{NULL}. Anthropic API key; \code{NULL} reads
+\code{ANTHROPIC_API_KEY} via \code{\link[=get_environment_key]{get_environment_key()}}.}
 }
 \value{
 The saved file path (if \code{return_location = TRUE}) or the workbook
@@ -33,4 +48,12 @@ object.
 Writes a PCA analysis object to a formatted Excel workbook with
 one sheet per factor solution, including loading tables, variance explained,
 and color-coded formatting.
+
+Each factor's rows are grouped under one merged Name cell. With
+\code{name_factors = TRUE} that cell carries a 1-3 word name from Claude
+instead of "Factor N" - one call names every factor of every solution,
+giving the same group of items the same name across solutions. The names
+are what \code{\link[=seg_get_fa_winner]{seg_get_fa_winner()}} reads as \code{fa_name} and what
+\code{\link[=seg_needs_themes]{seg_needs_themes()}} uses as theme names. If naming fails the workbook is
+still written, with "Factor N" and a warning.
 }

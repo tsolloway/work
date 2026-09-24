@@ -37,7 +37,9 @@
 #'   variable name (`need01`, `pneed01`, `needs01`) or label.
 #' @param move Named character, item -> theme name (or `NA` to leave the item
 #'   out of every theme). Applied after the source.
-#' @param theme_names Character, one per theme in factor order. Defaults to
+#' @param theme_names Character, one per theme in factor order. Positional, so
+#'   re-check it whenever the workbook is rewritten - a re-run can reorder the
+#'   factors. Defaults to the factor names [pca_write()] gave the sheet, else
 #'   `"Theme 1"`, `"Theme 2"`, ...
 #' @param min_loading Numeric. Below this an item loads on no theme
 #'   (default `0.40`).
@@ -122,6 +124,17 @@ seg_needs_themes <- function(
 
     L <- matrix(0, n, length(fcols))
     L[needs_resolve_items(seg, wb[["Variable"]]), ] <- Lw
+
+    # When pca_write() named the factors, those names travel with the factors,
+    # so they are safer defaults than positional theme_names, which go stale
+    # whenever a re-run reorders the factors. Merged Name cells read back as
+    # one value and blanks, hence the fill.
+    if(is.null(theme_names) && "Name" %in% names(wb)){
+      nm <- wb[["Name"]]
+      for(i in seq_along(nm)[-1]) if(is.na(nm[i])) nm[i] <- nm[i - 1]
+      nm <- nm[match(seq_along(fcols), wb[["Factor"]])]
+      if(!anyNA(nm) && !all(grepl("^Factor [0-9]+$", nm))) theme_names <- nm
+    }
 
   } else if(!is.null(nfactors)){
 
