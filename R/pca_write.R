@@ -22,7 +22,10 @@
 #' @param name_factors Logical. Name the factor groups with Claude
 #'   (default `TRUE`).
 #' @param min_words,max_words Integer. Length of each name (default 1 to 3).
-#' @param model Character. Claude model ID (default `"claude-opus-5"`).
+#' @param model Character. Claude model ID (default `"claude-haiku-4-5"`). On
+#'   the Kadro needs data Haiku named a full 168-factor workbook in 10s for
+#'   $0.016, against 25s / $0.10 for Opus 5.5 and 48s / $0.09 for Sonnet 5,
+#'   with names of comparable quality.
 #' @param api_key Character or `NULL`. Anthropic API key; `NULL` reads
 #'   `ANTHROPIC_API_KEY` via [get_environment_key()].
 #'
@@ -32,7 +35,7 @@
 #' @export
 pca_write <- function(
     pca_analysis_object, clean_max = .25, file_name = "Factor Analysis",  where = NULL, return_location = TRUE,
-    name_factors = TRUE, min_words = 1, max_words = 3, model = "claude-opus-5", api_key = NULL
+    name_factors = TRUE, min_words = 1, max_words = 3, model = "claude-haiku-4-5", api_key = NULL
 ){
 
   if(is.null(where)){

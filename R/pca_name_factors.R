@@ -6,7 +6,7 @@
 
 #' @keywords internal
 .pca_name_factors <- function(pca_tables, min_words = 1, max_words = 3,
-                              model = "claude-opus-5", api_key = NULL){
+                              model = "claude-haiku-4-5", api_key = NULL){
 
   if(is.null(api_key)) api_key <- get_environment_key("ANTHROPIC_API_KEY")
 
@@ -81,14 +81,22 @@
     messages = list(list(role = "user", content = prompt))
   )
 
+  # Haiku 4.5 rejects effort (400) and has no server-side fallback, so both
+  # are sent only to the models that take them
+  haiku <- grepl("haiku", model)
+  if(haiku){
+    body$output_config$effort <- NULL
+    body$fallbacks <- NULL
+  }
+
   resp <- httr::POST(
     url = "https://api.anthropic.com/v1/messages",
-    httr::add_headers(
+    httr::add_headers(.headers = c(
       `x-api-key`         = api_key,
       `anthropic-version` = "2023-06-01",
-      `anthropic-beta`    = "server-side-fallback-2026-07-01",
-      `content-type`      = "application/json"
-    ),
+      `content-type`      = "application/json",
+      if(!haiku) c(`anthropic-beta` = "server-side-fallback-2026-07-01")
+    )),
     body   = jsonlite::toJSON(body, auto_unbox = TRUE),
     encode = "raw",
     httr::timeout(300)

@@ -13,7 +13,7 @@ pca_write(
   name_factors = TRUE,
   min_words = 1,
   max_words = 3,
-  model = "claude-opus-5",
+  model = "claude-haiku-4-5",
   api_key = NULL
 )
 }
@@ -35,7 +35,10 @@ instead of the workbook object.}
 
 \item{min_words, max_words}{Integer. Length of each name (default 1 to 3).}
 
-\item{model}{Character. Claude model ID (default \code{"claude-opus-5"}).}
+\item{model}{Character. Claude model ID (default \code{"claude-haiku-4-5"}). On
+the Kadro needs data Haiku named a full 168-factor workbook in 10s for
+$0.016, against 25s / $0.10 for Opus 5.5 and 48s / $0.09 for Sonnet 5,
+with names of comparable quality.}
 
 \item{api_key}{Character or \code{NULL}. Anthropic API key; \code{NULL} reads
 \code{ANTHROPIC_API_KEY} via \code{\link[=get_environment_key]{get_environment_key()}}.}
