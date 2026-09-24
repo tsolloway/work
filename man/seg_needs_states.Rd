@@ -10,7 +10,7 @@ seg_needs_states(
   adopt = NULL,
   state_names = NULL,
   basis = c("centred", "centred_scaled", "scaled"),
-  tie_margin = 0.1,
+  tie_margin = NULL,
   nstart = 20,
   iter_max = 100,
   seed = 1
@@ -31,8 +31,10 @@ a placeholder naming the need each state over-indexes on most.}
 \code{"centred_scaled"} also z-scores each item; \code{"scaled"} only z-scores -
 kept for comparison, and it clusters on rating level.}
 
-\item{tie_margin}{Numeric. Relative margin below which a grid is a near-tie
-(default \code{0.10}).}
+\item{tie_margin}{Numeric or \code{NULL}. Relative margin below which a grid is
+a near-tie. \code{NULL} (default) takes the 10th percentile of the margins for
+each k, as \code{\link[=seg_needs_type]{seg_needs_type()}} does. The cut-off, share flagged and margin
+quartiles are printed on adopt and stored in the typing.}
 
 \item{nstart, iter_max, seed}{Passed to \code{\link[=cluster_kmeans]{cluster_kmeans()}}.}
 }
@@ -69,8 +71,11 @@ land together in whichever state sits nearest the origin.
 \strong{Near-ties.} A grid almost equidistant between two centroids is
 the state analogue of a near-tie. The margin is \code{1 - d1 / d2}, the nearest
 centroid distance over the second-nearest: 0 is equidistant, 1 is on the
-centroid. Below \code{tie_margin} a grid is flagged, and \code{decisive_only}
-downstream reads the same flag as it does for themes.
+centroid. The cut-off follows the same rule as \code{\link[=seg_needs_type]{seg_needs_type()}}: by
+default the closest-called 10\% of grids are flagged, so a "close call"
+means the same share of grids for states as for themes and the
+\code{decisive_only} readings of the two are comparable. (A fixed 0.10 flagged
+a third of Kadro grids at k = 4, against an eighth for the themes.)
 
 There is no natural k. On the Kadro partial, silhouette beat a null with
 the same covariance by a flat margin at every k from 2 to 8, so k is chosen

@@ -119,16 +119,13 @@ seg_needs_type <- function(seg,
 
   # The cut-off and the quartiles are read on differentiated grids only: a flat
   # grid's margin measures the item means, not the respondent.
-  margin_q <- stats::quantile(margin[!is_flat], c(.25, .5, .75), names = FALSE)
-  names(margin_q) <- c("q25", "median", "q75")
-  tie_rule <- if(is.null(tie_margin)) "closest 10% of differentiated grids" else "set"
-  if(is.null(tie_margin)) tie_margin <- stats::quantile(margin[!is_flat], 0.10, names = FALSE)
+  tc         <- needs_tie_cutoff(margin[!is_flat], tie_margin)
+  tie_margin <- tc$cutoff
+  tie_rule   <- tc$rule
+  margin_q   <- tc$margins
 
-  # a flat grid is never a near-tie - it is its own outcome. The derived
-  # cut-off includes its boundary (with float tolerance) so a block of
-  # identical margins lands on one side together.
-  near <- if(tie_rule == "set") margin < tie_margin else margin <= tie_margin + 1e-9
-  near <- near & !is_flat
+  # a flat grid is never a near-tie - it is its own outcome
+  near <- needs_is_near(margin, tc) & !is_flat
 
   theme <- top
   if(ties == "exclude") theme[near]    <- NA_integer_

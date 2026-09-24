@@ -100,7 +100,8 @@ seg_needs_write_cut <- function(seg, file_label = "Needs Cut", min_n = 30, ...){
     paste0("Breadth is censored: respondents rated a few of the contexts they do, so 'only' means one ", unit,
            " across the contexts observed - they show at least that many ", unit, "s, not exactly that many."),
     paste0("Near-ties (",
-           if(is_states) paste0("within ", 100 * typing[["tie_margin"]], "% of equidistant between two states")
+           if(is_states) paste0("within ", sprintf("%.1f", 100 * typing[["tie_margin"]]),
+                                "% of equidistant between two states")
            else paste0("top two themes within ", sprintf("%.2f", typing[["tie_margin"]])), "): ",
            if(isTRUE(cut[["decisive_only"]])) "left out of the cut - only clearly typed contexts count." else
              switch(typing[["ties"]],
