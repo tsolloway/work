@@ -245,6 +245,7 @@ seg_needs_type <- function(seg,
     tie_share   = mean(near[!is_flat]),
     margins     = margin_q,
     flat        = flat,
+    flat_sd     = flat_sd,
     theme_names = tnames,
     describe    = describe,
     eta2        = eta2

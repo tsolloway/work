@@ -4,34 +4,50 @@
 \alias{seg_needs_write_cut}
 \title{seg_needs_write_cut}
 \usage{
-seg_needs_write_cut(seg, file_label = "Needs Cut", min_n = 30, ...)
+seg_needs_write_cut(
+  seg,
+  file_label = "Needs Cut",
+  level = c("both", "person", "grid"),
+  min_n = 30,
+  ...
+)
 }
 \arguments{
 \item{seg}{A seg object after \code{\link[=seg_needs_cut]{seg_needs_cut()}} and \code{\link[=seg_get_spec]{seg_get_spec()}}.}
 
-\item{file_label}{Character. Stamped into the file name
-(default \code{"Needs Cut"}).}
+\item{file_label}{Character. Stamped into the file names, followed by
+"Person" / "Grid" (default \code{"Needs Cut"}).}
 
-\item{min_n}{Integer. Cells smaller than this are warned about - they will
-still be written (default \code{30}).}
+\item{level}{Character. \code{"both"} (default), \code{"person"} or \code{"grid"}.}
+
+\item{min_n}{Integer. Person cells smaller than this are warned about - they
+are still written (default \code{30}).}
 
 \item{...}{Passed through to \code{\link[=seg_write_shell]{seg_write_shell()}} (e.g. \code{where}, \code{truncate}).}
 }
 \value{
-The path of the written workbook, invisibly.
+The paths of the written workbooks, invisibly, named \code{person} /
+\code{grid}.
 }
 \description{
-Writes the needs cut as a deliverable: the person-level shell
-with one column per cell of \code{\link[=seg_needs_cut]{seg_needs_cut()}}, plus a \verb{Cut Key} sheet up
-front saying what each numbered segment is and how the cut was built.
+Writes the needs solution as a deliverable at both units:
 
-The shell itself is \code{\link[=seg_needs_write_shell]{seg_needs_write_shell()}} at \code{level = "person"}, so the
-base is respondents and every grid-level block is left off. The shell
-numbers segments 1..N; the key is what turns "Seg 7" into
-"Escape + Smart Utility", so it is not optional.
+\describe{
+\item{person}{the person-level shell with one column per cell of
+\code{\link[=seg_needs_cut]{seg_needs_cut()}} - base respondents, grid-level blocks left off}
+\item{grid}{the grid-level shell with one column per theme (or need
+state) - base occasion-grids, the occasion blocks first so each theme
+reads with the occasions it happens in}
+}
 
-The key also carries the caveats a reader of this cut needs and would not
-otherwise see: that breadth is censored (a "single" respondent is single on
-the contexts observed), how near-ties and flat grids were treated, and how
-many respondents could not be classified.
+Each workbook opens on a key sheet. The shell numbers segments 1..N; the
+key is what turns "Seg 7" into "Escape + Smart Utility", so it is not
+optional. It also carries the caveats a reader would not otherwise see:
+breadth is censored (a "single" respondent is single on the contexts
+observed), how near-ties and flat grids were treated, how many could not
+be classified, and - on the grid shell - that the base is occasions, not
+people.
+
+To write every solution side by side - the themes and each cluster
+solution - use \code{\link[=seg_needs_write_solutions]{seg_needs_write_solutions()}}, which calls this for each.
 }
