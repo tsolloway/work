@@ -7,7 +7,7 @@
 seg_needs_state_lock(seg, decisive_only = FALSE, top_contexts = NULL)
 }
 \arguments{
-\item{seg}{A seg object after \code{\link[=seg_needs_type]{seg_needs_type()}} or \code{\link[=seg_needs_states]{seg_needs_states()}}.}
+\item{seg}{A seg object after \code{\link[=seg_needs_type]{seg_needs_type()}} or \code{\link[=seg_needs_cluster]{seg_needs_cluster()}}.}
 
 \item{decisive_only}{Logical. Use only grids that are not near-ties
 (default \code{FALSE}).}
@@ -22,7 +22,7 @@ The seg object, invisibly, with the tables in
 \description{
 Whether states belong to people or to contexts. Two readings,
 on whatever typing is current - adopted states or themes - and, when
-\code{\link[=seg_needs_states]{seg_needs_states()}} has been run, across every stored k so the lock can
+\code{\link[=seg_needs_cluster]{seg_needs_cluster()}} has been run, across every stored k so the lock can
 inform the choice of k.
 
 \describe{

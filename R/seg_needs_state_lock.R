@@ -2,7 +2,7 @@
 #'
 #' @description Whether states belong to people or to contexts. Two readings,
 #'   on whatever typing is current - adopted states or themes - and, when
-#'   [seg_needs_states()] has been run, across every stored k so the lock can
+#'   [seg_needs_cluster()] has been run, across every stored k so the lock can
 #'   inform the choice of k.
 #'
 #'   \describe{
@@ -22,7 +22,7 @@
 #'   premise of a needs segmentation - two people doing the same thing want
 #'   different things, and each wants much the same thing wherever they are.
 #'
-#' @param seg A seg object after [seg_needs_type()] or [seg_needs_states()].
+#' @param seg A seg object after [seg_needs_type()] or [seg_needs_cluster()].
 #' @param decisive_only Logical. Use only grids that are not near-ties
 #'   (default `FALSE`).
 #' @param top_contexts Integer. Contexts to list in the over-index table
@@ -36,7 +36,7 @@ seg_needs_state_lock <- function(seg, decisive_only = FALSE, top_contexts = NULL
 
   typing <- seg[["needs"]][["typing"]]
   if(!is.list(typing) || !is.data.frame(typing[["grids"]])){
-    stop("No typing found. Run seg_needs_type() or seg_needs_states(adopt = ) first.", call. = FALSE)
+    stop("No typing found. Run seg_needs_type() or seg_needs_cluster(adopt = ) first.", call. = FALSE)
   }
   ctx_labels <- seg[["needs"]][["loop"]][["context_labels"]]
 

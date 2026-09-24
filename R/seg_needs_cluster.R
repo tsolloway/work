@@ -1,4 +1,4 @@
-#' seg_needs_states
+#' seg_needs_cluster
 #'
 #' @description The richer alternative to theme typing: cluster the grids into
 #'   k need states on their whole need profile, rather than typing each grid to
@@ -28,11 +28,14 @@
 #'   \strong{Near-ties.} A grid almost equidistant between two centroids is
 #'   the state analogue of a near-tie. The margin is `1 - d1 / d2`, the nearest
 #'   centroid distance over the second-nearest: 0 is equidistant, 1 is on the
-#'   centroid. The cut-off follows the same rule as [seg_needs_type()]: by
-#'   default the closest-called 10% of grids are flagged, so a "close call"
-#'   means the same share of grids for states as for themes and the
-#'   `decisive_only` readings of the two are comparable. (A fixed 0.10 flagged
-#'   a third of Kadro grids at k = 4, against an eighth for the themes.)
+#'   centroid. The cut-off follows the theme typing, so a "close call" means
+#'   the same share of grids for states as for themes and the `decisive_only`
+#'   readings of the two are comparable. (A fixed 0.10 flagged a third of Kadro
+#'   grids at k = 4, against an eighth for the themes.) By default the
+#'   closest-called 10% are flagged. When [seg_needs_type()] was given its own
+#'   `tie_margin`, that value's SHARE is inherited, not the value itself: the
+#'   two margins are on different scales, so 0.15 on themes (30% of Kadro
+#'   grids) would flag about half the grids as a state distance.
 #'
 #'   There is no natural k. On the Kadro partial, silhouette beat a null with
 #'   the same covariance by a flat margin at every k from 2 to 8, so k is chosen
@@ -48,8 +51,10 @@
 #'   `"centred_scaled"` also z-scores each item; `"scaled"` only z-scores -
 #'   kept for comparison, and it clusters on rating level.
 #' @param tie_margin Numeric or `NULL`. Relative margin below which a grid is
-#'   a near-tie. `NULL` (default) takes the 10th percentile of the margins for
-#'   each k, as [seg_needs_type()] does. The cut-off, share flagged and margin
+#'   a near-tie. `NULL` (default) flags the same share of grids as the theme
+#'   typing - the closest 10%, or the share a `tie_margin` passed to
+#'   [seg_needs_type()] flagged - taking that percentile of the margins at each
+#'   k. A value set here overrides it. The cut-off, share flagged and margin
 #'   quartiles are printed on adopt and stored in the typing.
 #' @param nstart,iter_max,seed Passed to [cluster_kmeans()].
 #'
@@ -57,7 +62,7 @@
 #'   with `adopt`, the typing replaced. Prints a comparison and a verdict.
 #'
 #' @export
-seg_needs_states <- function(
+seg_needs_cluster <- function(
     seg,
     k           = 4:8,
     adopt       = NULL,
@@ -136,6 +141,20 @@ seg_needs_states <- function(
     seg[["needs"]][["typing_themes"]]
   }
 
+  # The share to flag. A theme typing run on the default rule means "closest
+  # 10%" here too; one run on a set tie_margin passes on the share that value
+  # flagged - the number itself is on a different scale.
+  tie_share <- 0.10
+  tie_rule  <- NULL
+  if(is.null(tie_margin) && is.list(themes_typing) && identical(themes_typing[["tie_rule"]], "set") &&
+     !is.null(themes_typing[["tie_share"]])){
+    tie_share <- themes_typing[["tie_share"]]
+    tie_rule  <- paste0("closest ", round(100 * tie_share, 1),
+                        "% - the share the theme typing's tie_margin = ",
+                        sprintf("%.2f", themes_typing[["tie_margin"]]), " flagged")
+  }
+  tie_cut <- function(m) needs_tie_cutoff(m, tie_margin, share = tie_share, rule = tie_rule)
+
   assignment <- function(kk){
     fit <- fits$cluster_fit[[match(kk, fits$n)]]
     D <- vapply(seq_len(nrow(fit$centers)), function(j){
@@ -153,7 +172,7 @@ seg_needs_states <- function(
 
     cmp <- lapply(k, function(kk){
       a <- assignment(kk)
-      tc <- needs_tie_cutoff(a$margin, tie_margin)
+      tc <- tie_cut(a$margin)
       shares <- tabulate(a$state, nbins = kk) / length(a$state)
       row <- data.frame(
         k             = kk,
@@ -175,7 +194,7 @@ seg_needs_states <- function(
         " (", sum(!keep), " flat grids left out) ===\n\n", sep = "")
     print(cmp, row.names = FALSE)
     cat("\n  tie_cutoff = the relative margin under which a grid is a close call (",
-        if(is.null(tie_margin)) "closest 10% of grids" else "set", ");\n", sep = "")
+        tie_cut(assignment(k[1])$margin)$rule, ");\n", sep = "")
     cat("  intensity_eta = share of rating intensity explained by state; lda_accuracy = how well a\n",
         "  grid's raw answers recover its state (a typing tool); agree_themes = adjusted Rand\n",
         "  index with the theme typing.\n", sep = "")
@@ -222,7 +241,7 @@ seg_needs_states <- function(
   n <- nrow(stacked)
   full <- function(x, fill = NA) { out <- rep(fill, n); out[keep] <- x; out }
 
-  tc   <- needs_tie_cutoff(a$margin, tie_margin)
+  tc   <- tie_cut(a$margin)
   near_k <- needs_is_near(a$margin, tc)
   near <- full(near_k, FALSE)
   D_full <- matrix(NA_real_, n, kk); D_full[keep, ] <- a$D

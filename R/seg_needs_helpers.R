@@ -173,17 +173,20 @@ needs_unit <- function(seg){
 
 # The near-tie rule, shared by the theme typing and the need states so a
 # "close call" means the same thing in both. `m` is the margins of the
-# differentiated grids only. A NULL tie_margin takes the 10th percentile, so
-# the closest-called 10% are flagged; grids ON that percentile are flagged
-# too, because a block of identical margins cannot be split. A set value keeps
-# its strict "below" meaning.
-needs_tie_cutoff <- function(m, tie_margin = NULL){
+# differentiated grids only. A NULL tie_margin takes the `share` percentile
+# (10th by default), so the closest-called share are flagged; grids ON that
+# percentile are flagged too, because a block of identical margins cannot be
+# split. A set value keeps its strict "below" meaning.
+needs_tie_cutoff <- function(m, tie_margin = NULL, share = 0.10, rule = NULL){
   derived <- is.null(tie_margin)
-  cutoff  <- if(derived) stats::quantile(m, 0.10, names = FALSE) else tie_margin
+  cutoff  <- if(derived) stats::quantile(m, share, names = FALSE) else tie_margin
   q <- stats::quantile(m, c(.25, .5, .75), names = FALSE)
+  if(is.null(rule)){
+    rule <- if(derived) paste0("closest ", round(100 * share, 1), "% of differentiated grids") else "set"
+  }
   list(
     cutoff  = cutoff,
-    rule    = if(derived) "closest 10% of differentiated grids" else "set",
+    rule    = rule,
     derived = derived,
     margins = c(q25 = q[1], median = q[2], q75 = q[3])
   )
